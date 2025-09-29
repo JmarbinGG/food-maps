@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Dispatch Center - Food Maps Logistics</title>
+    <meta name="description" content="AI-powered logistics dispatch system for optimized food distribution routing and real-time delivery management">
+    <meta name="keywords" content="AI dispatch, logistics optimization, food distribution, route planning">
+
+    <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+    <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.css' type='text/css' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.min.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.0/mapbox-gl-geocoder.css' type='text/css' />
+    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.js'></script>
+    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.4.3/mapbox-gl-draw.css' type='text/css' />
+
+    <style type="text/tailwindcss">
+    @layer theme {
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #eff6ff;
+            --accent-color: #1d4ed8;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --background: #ffffff;
+        }
+    }
+
+    @layer base {
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
+        
+        .mapboxgl-map {
+            width: 100% !important;
+            height: 100% !important;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        
+        .mapboxgl-canvas-container {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .mapboxgl-canvas {
+            width: 100% !important;
+            height: 100% !important;
+        }
+        
+        .mapboxgl-ctrl-group {
+            box-shadow: 0 0 0 2px rgba(0,0,0,.1);
+        }
+        
+        .mapboxgl-ctrl-zoom-in,
+        .mapboxgl-ctrl-zoom-out {
+            background-color: #ffffff;
+            border: none;
+        }
+    }
+
+    @layer components {
+        .dispatch-card {
+            @apply bg-white rounded-lg shadow-sm border border-gray-200 p-3 hover:shadow-md transition-all hover:border-blue-200;
+        }
+        
+        .dispatch-sidebar {
+            @apply w-80 bg-white shadow-lg border-r border-gray-200 flex flex-col;
+        }
+        
+        .dispatch-main {
+            @apply flex-1 relative overflow-hidden;
+        }
+        
+        .full-map-container {
+            @apply absolute inset-0 w-full h-full;
+        }
+        
+        .status-active {
+            @apply bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .status-pending {
+            @apply bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .status-offline {
+            @apply bg-gray-100 text-gray-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .status-available {
+            @apply bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .priority-critical {
+            @apply bg-red-100 text-red-800 px-2 py-1 rounded-full text-xs font-bold;
+        }
+        
+        .priority-high {
+            @apply bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .priority-medium {
+            @apply bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .priority-low {
+            @apply bg-green-100 text-green-800 px-2 py-1 rounded-full text-xs font-medium;
+        }
+        
+        .route-progress {
+            @apply w-full bg-gray-200 rounded-full h-3;
+        }
+        
+        .progress-bar {
+            @apply h-3 rounded-full transition-all duration-500 bg-gradient-to-r from-blue-500 to-blue-600;
+        }
+        
+        .metric-card {
+            @apply bg-gradient-to-br from-white to-gray-50 rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md transition-all;
+        }
+        
+        .sidebar-section {
+            @apply border-b border-gray-100 p-4;
+        }
+        
+        .sidebar-scroll {
+            @apply flex-1 overflow-y-auto;
+        }
+    }
+
+    .mapboxgl-popup-content {
+        border-radius: 12px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        padding: 0;
+        border: 1px solid #e5e7eb;
+        max-width: 320px;
+    }
+    
+    .mapboxgl-popup-tip {
+        border-top-color: #ffffff;
+    }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="root"></div>
+    
+    <script type="text/babel" src="utils/mockData.js"></script>
+    <script type="text/babel" src="utils/mapbox.js"></script>
+    <script type="text/babel" src="utils/agentAPI.js"></script>
+    <script type="text/babel" src="utils/logistics.js"></script>
+    <script type="text/babel" src="utils/directionsAPI.js"></script>
+    <script type="text/babel" src="utils/geofencing.js"></script>
+    <script type="text/babel" src="utils/routeOptimization.js"></script>
+    <script type="text/babel" src="utils/trafficAPI.js"></script>
+    <script type="text/babel" src="components/DispatchHeader.js"></script>
+    <script type="text/babel" src="components/LogisticsMap.js"></script>
+    <script type="text/babel" src="components/RouteOptimizer.js"></script>
+    <script type="text/babel" src="components/DriverDashboard.js"></script>
+    <script type="text/babel" src="components/AILogisticsEngine.js"></script>
+    <script type="text/babel" src="components/VehicleTracker.js"></script>
+    <script type="text/babel" src="components/DeliveryZones.js"></script>
+    <script type="text/babel" src="components/RealTimeAlerts.js"></script>
+    <script type="text/babel" src="components/PerformanceMetrics.js"></script>
+    <script type="text/babel" src="components/RoutePlanner.js"></script>
+    <script type="text/babel" src="components/PredictiveAnalytics.js"></script>
+    <script type="text/babel" src="components/AutonomousCoordinator.js"></script>
+    <script type="text/babel" src="components/SmartCityIntegration.js"></script>
+    <script type="text/babel" src="components/AdvancedDispatchControls.js"></script>
+    <script type="text/babel" src="dispatch-app.js"></script>
+</body>
+</html>
