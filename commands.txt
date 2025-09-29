@@ -1,0 +1,21 @@
+start uvicorn in background:
+python3 -m uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload &
+
+nginx config file:
+/etc/nginx/conf.d/myapp.conf
+/etc/nginx/nginx.conf
+
+to stop the uvicorn process
+ps aux | grep uvicorn
+kill {process_id}
+
+
+test pages:
+curl 127.0.0.0:8000/{route to test locally}
+
+nginx:
+sudo systemctl reload nginx
+sudo nginx -t
+
+nginx error log:
+sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log
