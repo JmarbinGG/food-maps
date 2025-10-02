@@ -354,6 +354,40 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     return 'personal';
   };
 
+  // Resolve coordinates from many possible shapes:
+  // - listing.coords = { lat, lng }
+  // - listing.coordinates = [lng, lat]
+  // - listing.coords_lat / listing.coords_lng (flat DB columns)
+  const resolveCoords = (listing) => {
+    if (!listing) return null;
+    try {
+      if (listing.coords && (listing.coords.lat || listing.coords.lng)) {
+        const lat = parseFloat(listing.coords.lat);
+        const lng = parseFloat(listing.coords.lng);
+        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+      }
+
+      if (listing.coordinates && Array.isArray(listing.coordinates) && listing.coordinates.length >= 2) {
+        const lng = parseFloat(listing.coordinates[0]);
+        const lat = parseFloat(listing.coordinates[1]);
+        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+      }
+
+      // Support flat DB columns commonly named coords_lat / coords_lng
+      const latKey = listing.coords_lat !== undefined ? 'coords_lat' : (listing.lat !== undefined ? 'lat' : null);
+      const lngKey = listing.coords_lng !== undefined ? 'coords_lng' : (listing.lng !== undefined ? 'lng' : null);
+      if (latKey && lngKey) {
+        const lat = parseFloat(listing[latKey]);
+        const lng = parseFloat(listing[lngKey]);
+        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+      }
+
+      return null;
+    } catch (err) {
+      return null;
+    }
+  };
+
   // Create custom marker element with donor type color coding
   const createMarkerElement = (listing) => {
     const el = document.createElement('div');
@@ -476,36 +510,70 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-    // Get current listings - prioritize window.mockListings
-    const currentListings = window.mockListings || safeListings || [];
+  // Get current listings - use synchronous snapshot helper for UI rendering
+  const currentListings = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (safeListings || []));
     console.log('Updating markers with listings:', currentListings.length);
+
+    // Schedule geocoding for listings that lack coordinates.
+    // Use a small in-memory in-flight map on the map instance to avoid duplicates.
+    try {
+      if (!map.current._geocodeInFlight) map.current._geocodeInFlight = new Map();
+      if (!map.current._lastGeocodeTrigger) map.current._lastGeocodeTrigger = 0;
+
+      currentListings.forEach(listing => {
+        if (!resolveCoords(listing) && listing && listing.address) {
+          const key = listing.id || listing.objectId || listing.title || listing.address;
+          if (!map.current._geocodeInFlight.has(key)) {
+            map.current._geocodeInFlight.set(key, true);
+            window.geocodeAddressCached(listing.address).then(result => {
+              map.current._geocodeInFlight.delete(key);
+              if (result && result.coordinates && Array.isArray(result.coordinates)) {
+                const lat = parseFloat(result.coordinates[1]);
+                const lng = parseFloat(result.coordinates[0]);
+                if (!isNaN(lat) && !isNaN(lng)) {
+                  // Update snapshot on window.databaseService if present
+                  try {
+                    if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+                      const idx = window.databaseService.listings.findIndex(l => (l.id && l.id === listing.id) || (l.objectId && l.objectId === listing.objectId) || (l.title && l.title === listing.title && l.address === listing.address));
+                      if (idx !== -1) {
+                        window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], coords: { lat, lng } };
+                      }
+                    }
+                  } catch (e) { /* ignore */ }
+
+                  // Update the passed-in listing object as well
+                  try { listing.coords = { lat, lng }; } catch (e) { /* ignore */ }
+
+                  // Debounced refresh of markers
+                  const now = Date.now();
+                  if (now - map.current._lastGeocodeTrigger > 300) {
+                    map.current._lastGeocodeTrigger = now;
+                    setTimeout(() => {
+                      try { updateMarkers(); fitMapToListings(); } catch (e) { /* ignore */ }
+                    }, 250);
+                  }
+                }
+              }
+            }).catch(err => {
+              map.current._geocodeInFlight.delete(key);
+              console.error('Geocode failed for', listing.address, err);
+            });
+          }
+        }
+      });
+    } catch (e) { console.error('Geocode scheduling error:', e); }
 
     // Add new markers for each listing - with safe coordinate access
     currentListings
-      .filter(listing => {
-        // Check for both coordinate formats
-        const hasCoords = listing && (
-          (listing.coords && listing.coords.lat && listing.coords.lng) ||
-          (listing.coordinates && Array.isArray(listing.coordinates) && listing.coordinates.length >= 2)
-        );
-        return hasCoords;
-      })
+      .filter(listing => resolveCoords(listing) !== null)
       .forEach(listing => {
-        console.log('Adding marker for listing:', listing.title);
+        const coords = resolveCoords(listing);
+        if (!coords) return;
+        console.log('Adding marker for listing:', listing.title || listing.id || '(no title)');
         const markerElement = createMarkerElement(listing);
-        
-        // Handle both coordinate formats safely
-        let lng, lat;
-        if (listing.coords) {
-          lng = listing.coords.lng;
-          lat = listing.coords.lat;
-        } else if (listing.coordinates && Array.isArray(listing.coordinates)) {
-          lng = listing.coordinates[0];
-          lat = listing.coordinates[1];
-        }
-        
+
         const marker = new mapboxgl.Marker(markerElement)
-          .setLngLat([lng, lat])
+          .setLngLat([coords.lng, coords.lat])
           .addTo(map.current);
 
         // Add click handler to marker
@@ -607,7 +675,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             closeOnClick: false,
             className: 'food-listing-popup'
           })
-            .setLngLat([listing.coords.lng, listing.coords.lat])
+            .setLngLat([coords.lng, coords.lat])
             .setHTML(popupHTML)
             .addTo(map.current);
 
@@ -639,19 +707,9 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             popup.remove();
             const selectedListing = currentListings.find(l => l.id === listingId);
             if (selectedListing) {
-              // Handle both coordinate formats safely
-              let destLat, destLng;
-              if (selectedListing.coords) {
-                destLat = selectedListing.coords.lat;
-                destLng = selectedListing.coords.lng;
-              } else if (selectedListing.coordinates && Array.isArray(selectedListing.coordinates)) {
-                destLng = selectedListing.coordinates[0];
-                destLat = selectedListing.coordinates[1];
-              }
-              
-              if (destLat && destLng) {
-                // Open directions in new tab using Google Maps
-                const url = `https://www.google.com/maps/dir/?api=1&destination=${destLat},${destLng}&travelmode=driving`;
+              const dest = resolveCoords(selectedListing);
+              if (dest && dest.lat && dest.lng) {
+                const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
                 window.open(url, '_blank');
               }
             }
@@ -873,14 +931,16 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         markersRef.current.push(marker);
       });
 
-    // Add new markers for each listing
+    // Add new markers for each listing (fallback/supplemental path)
     safeListings
-      .filter(listing => listing && listing.coords)
+      .filter(listing => resolveCoords(listing) !== null)
       .forEach(listing => {
+        const coords = resolveCoords(listing);
+        if (!coords) return;
         const markerElement = createMarkerElement(listing);
-        
+
         const marker = new mapboxgl.Marker(markerElement)
-          .setLngLat([listing.coords.lng, listing.coords.lat])
+          .setLngLat([coords.lng, coords.lat])
           .addTo(map.current);
 
         // Add click handler to marker
@@ -1068,7 +1128,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             closeOnClick: false,
             className: 'food-listing-popup'
           })
-            .setLngLat([listing.coords.lng, listing.coords.lat])
+            .setLngLat([coords.lng, coords.lat])
             .setHTML(popupHTML)
             .addTo(map.current);
 
@@ -1121,7 +1181,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
   // Fit map to show all listings, distribution centers, stores and kiosks
   const fitMapToListings = () => {
-    const currentListings = window.mockListings || safeListings || [];
+    const currentListings = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (safeListings || []));
     const currentCenters = window.mockDistributionCenters || distributionCenters || [];
     const currentStores = window.mockDoGoodsStores || doGoodsStores || [];
     const currentKiosks = window.mockDoGoodsKiosks || doGoodsKiosks || [];
@@ -1145,19 +1205,9 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     
     // Include food listings - priority for positioning
     currentListings.forEach(listing => {
-      let lng, lat;
-      
-      // Handle both coordinate formats safely
-      if (listing.coords && listing.coords.lat && listing.coords.lng) {
-        lng = listing.coords.lng;
-        lat = listing.coords.lat;
-      } else if (listing.coordinates && Array.isArray(listing.coordinates) && listing.coordinates.length >= 2) {
-        lng = listing.coordinates[0];
-        lat = listing.coordinates[1];
-      }
-      
-      if (lng && lat) {
-        bounds.extend([lng, lat]);
+      const coords = resolveCoords(listing);
+      if (coords && coords.lat && coords.lng) {
+        bounds.extend([coords.lng, coords.lat]);
         hasValidBounds = true;
       }
     });
@@ -1208,8 +1258,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
     console.log('Updating markers on map:', safeListings.length, 'listings,', distributionCenters.length, 'centers,', doGoodsStores.length, 'stores,', doGoodsKiosks.length, 'kiosks');
     
-    // Get latest data from window globals
-    const currentListings = window.mockListings || safeListings;
+  // Get latest data from window globals (snapshot)
+  const currentListings = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (safeListings || []));
     const currentCenters = window.mockDistributionCenters || distributionCenters;
     const currentStores = window.mockDoGoodsStores || doGoodsStores;
     const currentKiosks = window.mockDoGoodsKiosks || doGoodsKiosks;
@@ -1236,8 +1286,9 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     let hasFitted = false;
     
     const checkForData = () => {
-      if (window.mockListings && window.mockListings.length > 0 && mapLoaded && !hasFitted) {
-        console.log('Found window.mockListings:', window.mockListings.length);
+      const snapshot = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []);
+      if (snapshot && snapshot.length > 0 && mapLoaded && !hasFitted) {
+        console.log('Found listings snapshot:', snapshot.length);
         updateMarkers();
         // Only auto-fit on initial data load, not after user interaction
         if (!map.current.userHasInteracted || !map.current.userHasInteracted()) {

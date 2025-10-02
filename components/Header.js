@@ -179,16 +179,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       Admin Panel
                     </div>
                   </button>
-          <button 
-            onClick={() => {
-              setShowAuth(true);
-              // Scroll to top to show the map
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="btn-secondary"
-          >
-            Sign In
-          </button>
+                  <button
+                    onClick={() => {
+                      // Trigger logout and close the menu
+                      try { onLogout(); } catch (e) { console.error('Logout handler error', e); }
+                      setShowUserMenu(false);
+                    }}
+                    className="w-full flex items-center space-x-3 px-4 py-2 text-sm text-[var(--danger-color)] hover:bg-red-50 rounded-lg"
+                  >
+                    <div className="icon-log-out mr-2"></div>
+                    <span>Logout</span>
+                  </button>
                     </div>
                   )}
                 </div>

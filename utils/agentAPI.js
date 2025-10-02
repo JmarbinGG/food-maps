@@ -12,11 +12,7 @@ class AgentAPI {
   }
 
   initializeTestData() {
-    // Ensure mock data is available
-    if (!window.mockListings && typeof window.initializeMockData === 'function') {
-      console.log('Initializing mock data from AgentAPI...');
-      window.initializeMockData();
-    }
+    // Prefer real database listings; avoid forcing mock initialization here.
     
     // Add some mock emergency requests
     this.mockRequests = [
@@ -60,59 +56,26 @@ class AgentAPI {
   }
 
   async getNewDonations() {
-    // Ensure mock data is available
-    if (!window.mockListings || window.mockListings.length === 0) {
-      console.log('Initializing mock data for getNewDonations...');
-      if (typeof window.ensureMockDataAvailable === 'function') {
-        window.ensureMockDataAvailable();
-      } else if (typeof window.getMockListings === 'function') {
-        window.mockListings = window.getMockListings();
-      }
-    }
-    
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const listings = window.mockListings || [];
-    console.log(`AgentAPI getNewDonations - Found ${listings.length} total listings for new donations check`);
-    
-    if (listings.length === 0) {
-      console.error('No mock listings available in AgentAPI.getNewDonations');
+    const listings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []));
+
+    if (!Array.isArray(listings) || listings.length === 0) {
       return [];
     }
-    
-    return listings.filter(listing => 
-      new Date(listing.created_at) > oneHourAgo && listing.status === 'available'
-    );
+
+    return listings.filter(listing => {
+      try {
+        return new Date(listing.created_at) > oneHourAgo && (listing.status === 'available' || listing.status === 'AVAILABLE');
+      } catch (e) {
+        return false;
+      }
+    });
   }
 
   async getOpenDonations() {
-    // Always ensure data is available before any operation
-    window.ensureMockDataAvailable();
-    
-    // Get listings with guaranteed fallback
-    let listings = window.mockListings;
-    
-    // Triple-check with direct creation if needed
-    if (!listings || listings.length === 0) {
-      console.warn('AgentAPI: Creating emergency donation data');
-      listings = [
-        {
-          id: 'api_emergency_1', title: 'Emergency Water', category: 'beverages',
-          qty: 50, status: 'available', coords: { lat: 37.7749, lng: -122.4194 },
-          created_at: new Date().toISOString()
-        },
-        {
-          id: 'api_emergency_2', title: 'Emergency Food Kit', category: 'packaged', 
-          qty: 20, status: 'available', coords: { lat: 37.7849, lng: -122.4094 },
-          created_at: new Date().toISOString()
-        }
-      ];
-      window.mockListings = listings;
-    }
-    
-    const openDonations = listings.filter(listing => listing.status === 'available');
-    console.log(`AgentAPI: Found ${openDonations.length} open donations out of ${listings.length} total`);
-    
-    return openDonations;
+    const listings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []));
+    if (!Array.isArray(listings)) return [];
+    return listings.filter(listing => listing && (listing.status === 'available' || listing.status === 'AVAILABLE'));
   }
 
   async getNewRequests() {

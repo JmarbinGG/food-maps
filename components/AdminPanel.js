@@ -25,13 +25,13 @@ function AdminPanel({ onClose }) {
             connected: true
           });
         } else {
-          setDbStats({
-            users: window.mockUsers?.length || 0,
-            listings: window.mockListings?.length || 0,
-            schedules: window.mockSchedules?.length || 0,
-            tasks: window.mockTasks?.length || 0,
-            connected: false
-          });
+          // setDbStats({
+          //   users: window.mockUsers?.length || 0,
+          //   listings: window.databaseService.getListings?.length || 0,
+          //   schedules: window.mockSchedules?.length || 0,
+          //   tasks: window.mockTasks?.length || 0,
+          //   connected: false
+          // });
         }
       } catch (error) {
         console.error('Error loading database stats:', error);

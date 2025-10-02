@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
+import os
+import httpx
 from .models import FoodResource, User, ConsumptionLog
 from .schemas import FoodResourceCreate, FoodResourceResponse, ConsumptionLogCreate, ConsumptionLogResponse
 from .app import get_db, verify_token
@@ -32,11 +34,41 @@ async def create_food_resource(
         coords_lng=resource_data.coords_lng,
         images=str(resource_data.images) if resource_data.images else None
     )
-    
+    # If coords are not provided, attempt server-side geocoding using Mapbox
+    try:
+        if (db_resource.coords_lat is None or db_resource.coords_lng is None) and db_resource.address:
+            MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN")
+            if MAPBOX_TOKEN:
+                # Call Mapbox Geocoding API
+                from urllib.parse import quote as urlquote
+                geocode_url = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json".format(urlquote(db_resource.address))
+                params = {"access_token": MAPBOX_TOKEN, "limit": 1}
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(geocode_url, params=params)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        features = data.get("features") or []
+                        if len(features) > 0:
+                            center = features[0].get("center")
+                            if center and len(center) >= 2:
+                                # Mapbox returns [lng, lat]
+                                db_resource.coords_lng = float(center[0])
+                                db_resource.coords_lat = float(center[1])
+            else:
+                # No MAPBOX token provided; skip geocoding
+                pass
+    except Exception as e:
+        # Don't fail the whole request if geocoding errors; log and continue
+        try:
+            # best-effort print to server logs
+            print(f"Geocoding error for address {db_resource.address}: {e}")
+        except Exception:
+            pass
+
     db.add(db_resource)
     db.commit()
     db.refresh(db_resource)
-    
+
     return db_resource
 
 @router.get("/resources", response_model=List[FoodResourceResponse])

@@ -79,8 +79,9 @@ function FoodSearch({ onClose, onSelectFood, user }) {
   };
 
   const performStandardSearch = async (request) => {
-    const listings = window.getMockListings() || [];
-    let filtered = listings.filter(listing => listing.status === 'available');
+    // Use normalized async fetch to get an array of listings
+    const listings = Array.isArray(await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []))) ? await window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []);
+    let filtered = listings.filter(listing => listing.status === 'AVAILABLE' || listing.status === 'available');
 
     // Apply filters
     if (request.category !== 'all') {

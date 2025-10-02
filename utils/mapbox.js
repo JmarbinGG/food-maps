@@ -54,6 +54,32 @@ window.geocodeAddress = async function(address) {
   }
 };
 
+// Cached geocoding with simple in-memory cache and basic rate-limiting guard
+window._geocodeCache = window._geocodeCache || new Map();
+window._geocodeQueue = window._geocodeQueue || Promise.resolve();
+
+window.geocodeAddressCached = async function(address) {
+  if (!address) return null;
+  const key = address.trim().toLowerCase();
+  if (window._geocodeCache.has(key)) return window._geocodeCache.get(key);
+
+  // Serialize requests to avoid hitting rate limits too quickly
+  window._geocodeQueue = window._geocodeQueue.then(async () => {
+    try {
+      const result = await window.geocodeAddress(address);
+      window._geocodeCache.set(key, result);
+      // Small delay between calls to be polite to the API
+      await new Promise(res => setTimeout(res, 150));
+      return result;
+    } catch (err) {
+      console.error('geocodeAddressCached error:', err);
+      return null;
+    }
+  });
+
+  return window._geocodeQueue;
+};
+
 // Reverse geocoding
 window.reverseGeocode = async function(lng, lat) {
   try {

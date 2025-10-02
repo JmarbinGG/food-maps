@@ -58,19 +58,14 @@ function App() {
   const [selectedStoreId, setSelectedStoreId] = React.useState(null);
   const [filters, setFilters] = React.useState({
     category: 'all',
-    status: 'available',
+    status: 'AVAILABLE',
     distance: 25,
     perishability: 'all'
   });
 
   React.useEffect(() => {
     try {
-      // Set up callback for mock data updates
-      window.onMockDataInitialized = (newListings) => {
-        console.log('Mock data callback triggered with listings:', newListings.length);
-        setListings(newListings);
-        setFilteredListings(newListings);
-      };
+      // No mock callback - prefer real database-backed listings
       
       // Ensure DOM is ready before manipulating elements
       if (document.readyState === 'loading') {
@@ -79,11 +74,26 @@ function App() {
         initializeApp();
       }
       
-      return () => {
-        delete window.onMockDataInitialized;
-      };
+      return () => {};
     } catch (error) {
       console.error('App initialization error:', error);
+    }
+  }, []);
+
+  // Hydrate user from localStorage on mount
+  React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('current_user');
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setUser(parsed);
+        } catch (e) {
+          console.error('Failed to parse stored user', e);
+        }
+      }
+    } catch (e) {
+      console.error('Error hydrating user from localStorage', e);
     }
   }, []);
 
@@ -92,64 +102,44 @@ function App() {
       console.log('Initializing Food Maps app...');
       
       // Always initialize mock data first with error handling
-      let mockData = null;
-      try {
-        if (typeof window.initializeAllMockData === 'function') {
-          mockData = window.initializeAllMockData();
-          console.log('Mock data initialized:', mockData);
-        } else {
-          console.log('Mock data initialization function not found, using fallback');
-          // Ensure mock listings exist
-          if (!window.mockListings || !Array.isArray(window.mockListings)) {
-            window.mockListings = [];
-          }
-        }
-      } catch (mockError) {
-        console.error('Error initializing mock data:', mockError);
-        window.mockListings = [];
-      }
+      // let mockData = null;
+      // try {
+      //   if (typeof window.initializeAllMockData === 'function') {
+      //     mockData = window.initializeAllMockData();
+      //     console.log('Mock data initialized:', mockData);
+      //   } else {
+      //     console.log('Mock data initialization function not found, using fallback');
+      //     // Ensure mock listings exist
+      //     if (!window.databaseService.getListings || !Array.isArray(window.databaseService.getListings)) {
+      //       window.databaseService.getListings = [];
+      //     }
+      //   }
+      // } catch (mockError) {
+      //   console.error('Error initializing mock data:', mockError);
+      //   window.databaseService.getListings = [];
+      // }
       
       // Initialize database service
-      if (window.databaseService) {
-        await window.databaseService.initializeConnection();
-        setDatabaseConnected(window.databaseService.isConnected);
-        
-        if (window.databaseService.isConnected) {
-          // Load data from database
-          try {
-            const listingsResult = await window.databaseService.getListings();
-            if (listingsResult.success && Array.isArray(listingsResult.data)) {
-              const dbListings = listingsResult.data.map(item => ({
-                ...item.objectData,
-                id: item.objectData.id || item.objectId
-              })).filter(listing => listing && listing.id); // Ensure valid listings
-              setListings(dbListings);
-              setFilteredListings(dbListings);
-              console.log(`Loaded ${dbListings.length} listings from database`);
-            } else {
-              throw new Error('Invalid database response');
-            }
-          } catch (dbError) {
-            console.error('Database error:', dbError);
-            // Use initialized mock data as fallback
-            const mockListings = Array.isArray(window.mockListings) ? window.mockListings : (mockData?.listings || []);
-            setListings(mockListings);
-            setFilteredListings(mockListings);
-            console.log(`Database failed, using mock data: ${mockListings.length} listings`);
-          }
-        } else {
-          // Use mock data when database not available
-          const mockListings = Array.isArray(window.mockListings) ? window.mockListings : (mockData?.listings || []);
-          setListings(mockListings);
-          setFilteredListings(mockListings);
-          console.log(`Database not connected, using mock data: ${mockListings.length} listings`);
+      // Initialize database service connection state
+      try {
+        if (window.databaseService && typeof window.databaseService.isConnected !== 'undefined') {
+          setDatabaseConnected(Boolean(window.databaseService.isConnected));
         }
-      } else {
-        // Use mock data as fallback
-        const mockListings = window.mockListings || mockData?.listings || [];
-        setListings(mockListings);
-        setFilteredListings(mockListings);
-        console.log(`No database service, using mock data: ${mockListings.length} listings`);
+      } catch (e) { /* ignore */ }
+
+      // Load data from database (use snapshot fallback)
+      try {
+        const dbListings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []));
+        const normalized = Array.isArray(dbListings) ? dbListings.map(item => ({ ...item, id: item.id || item.objectId || item.id })).filter(l => l && l.id) : [];
+        setListings(normalized);
+        setFilteredListings(normalized);
+        console.log(`Loaded ${normalized.length} listings from database`);
+      } catch (dbError) {
+        console.error('Database error:', dbError);
+        const fallback = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (window.databaseService && Array.isArray(window.databaseService.listings) ? window.databaseService.listings : []));
+        setListings(fallback);
+        setFilteredListings(fallback);
+        console.log(`Database failed, using snapshot fallback: ${fallback.length} listings`);
       }
       
       // Initialize scheduling data
@@ -639,7 +629,12 @@ function App() {
         <Header 
           user={user}
           onAuthClick={() => setShowAuthModal(true)}
-          onLogout={() => setUser(null)}
+          onLogout={() => {
+            // clear persisted auth
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('current_user');
+            setUser(null);
+          }}
           currentView={currentView}
           onViewChange={setCurrentView}
         />

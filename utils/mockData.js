@@ -1,7 +1,23 @@
 // Mock data for development and testing
 
+// If mock mode is disabled, export safe no-op stubs and do not populate large mock arrays.
+if (typeof window.USE_MOCK_API === 'undefined' || window.USE_MOCK_API === false) {
+  window.getMockListings = function() { return []; };
+  window.initializeMockData = function() { return []; };
+  window.ensureMockDataAvailable = function() { /* no-op when mock disabled */ };
+  window.initializeAllMockData = function() { return []; };
+  // Keep compatibility fields but don't overwrite any existing databaseService listings
+  window.mockUsers = window.mockUsers || null;
+  window.mockTransactions = window.mockTransactions || null;
+  window.mockDistributionCenters = window.mockDistributionCenters || null;
+  window.mockDoGoodsStores = window.mockDoGoodsStores || null;
+  window.mockDoGoodsKiosks = window.mockDoGoodsKiosks || null;
+} else {
+
 // Initialize mock data globally on script load
-window.mockListings = null;
+// Keep a listings snapshot on databaseService for compatibility
+window.databaseService = window.databaseService || {};
+window.databaseService.listings = window.databaseService.listings || [];
 window.mockUsers = null;
 window.mockTransactions = null;
 window.mockDistributionCenters = null;
@@ -1032,7 +1048,8 @@ window.getMockDoGoodsKiosks = function() {
 window.initializeMockData = function() {
   console.log('Initializing mock data...');
   try {
-    window.mockListings = window.getMockListings();
+    const mock = window.getMockListings();
+    try { window.databaseService.listings = mock; } catch (e) { /* ignore */ }
     window.mockUsers = window.getMockUsers();
     window.mockTransactions = window.getMockTransactions();
     window.mockDistributionCenters = window.getMockDistributionCenters();
@@ -1040,7 +1057,7 @@ window.initializeMockData = function() {
     window.mockDoGoodsKiosks = window.getMockDoGoodsKiosks();
     
     console.log('Mock data initialized successfully:');
-    console.log('- Listings:', window.mockListings?.length || 0);
+  console.log('- Listings:', (window.databaseService.listings || []).length || 0);
     console.log('- Users:', window.mockUsers?.length || 0);
     console.log('- Distribution Centers:', window.mockDistributionCenters?.length || 0);
     
@@ -1053,23 +1070,28 @@ window.initializeMockData = function() {
 
 // Ensure mock data is always available
 window.ensureMockDataAvailable = function() {
-  if (!window.mockListings || window.mockListings.length === 0) {
+  if (!Array.isArray(window.databaseService.listings) || window.databaseService.listings.length === 0) {
     console.log('Ensuring mock data is available...');
-    
+
     // Force initialization
     if (typeof window.getMockListings === 'function') {
-      window.mockListings = window.getMockListings();
-      console.log(`Direct getMockListings call: ${window.mockListings ? window.mockListings.length : 0} listings`);
+      try { window.databaseService.listings = window.getMockListings(); } catch (e) { /* ignore */ }
+      console.log(`Direct getMockListings call: ${(window.databaseService.listings || []).length} listings`);
     }
-    
+
     // Try full initialization if still empty
-    if ((!window.mockListings || window.mockListings.length === 0) && typeof window.initializeMockData === 'function') {
-      window.initializeMockData();
-      console.log(`After initializeMockData: ${window.mockListings ? window.mockListings.length : 0} listings`);
+    if ((!Array.isArray(window.databaseService.listings) || window.databaseService.listings.length === 0) && typeof window.initializeMockData === 'function') {
+      try { window.initializeMockData(); } catch (e) { /* ignore */ }
+      console.log(`After initializeMockData: ${(window.databaseService.listings || []).length} listings`);
     }
   }
-  
-  return window.mockListings && window.mockListings.length > 0;
+
+  // Trigger callback if available
+  if (typeof window.onMockDataInitialized === 'function') {
+    try { window.onMockDataInitialized(window.databaseService.listings || []); } catch (e) { /* ignore */ }
+  }
+
+  return Array.isArray(window.databaseService.listings) && window.databaseService.listings.length > 0;
 };
 
 // Mock schedules and tasks functions
@@ -1131,10 +1153,10 @@ window.ensureMockDataAvailable = function() {
   
   // Always recreate to guarantee fresh data
   if (typeof window.getMockListings === 'function') {
-    window.mockListings = window.getMockListings();
+    try { window.databaseService.listings = window.getMockListings(); } catch (e) { /* ignore */ }
   } else {
     // Emergency fallback data
-    window.mockListings = [
+    try { window.databaseService.listings = [
       {
         id: '1', donor_id: 'donor1', title: 'Emergency Water Supply',
         description: 'Bottled water for emergency needs', category: 'beverages',
@@ -1151,11 +1173,14 @@ window.ensureMockDataAvailable = function() {
         address: 'Community Garden Center',
         created_at: new Date().toISOString()
       }
-    ];
+  ]; } catch (e) { /* ignore */ }
   }
   
-  console.log(`Mock data ensured: ${window.mockListings?.length || 0} listings available`);
-  return window.mockListings && window.mockListings.length > 0;
+  console.log(`Mock data ensured: ${(window.databaseService.listings || []).length} listings available`);
+  if (typeof window.onMockDataInitialized === 'function') {
+    try { window.onMockDataInitialized(window.databaseService.listings || []); } catch (e) { /* ignore */ }
+  }
+  return Array.isArray(window.databaseService.listings) && window.databaseService.listings.length > 0;
 };
 
 // Initialize all mock data with guaranteed creation
@@ -1171,7 +1196,7 @@ window.initializeAllMockData = function() {
   const schedules = window.getMockSchedules ? window.getMockSchedules() : [];
   const tasks = window.getMockTasks ? window.getMockTasks() : [];
   
-  window.mockListings = listings;
+  try { window.databaseService.listings = listings; } catch (e) { /* ignore */ }
   window.mockUsers = users;
   window.mockTransactions = transactions;
   window.mockDistributionCenters = distributionCenters;
@@ -1401,4 +1426,6 @@ if (typeof window !== 'undefined') {
   window.ensureMockDataAvailable();
   console.log('Mock data auto-initialization complete');
   console.log('Distribution center menu function registered:', typeof window.viewDistributionCenterMenu);
+}
+
 }

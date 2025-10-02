@@ -109,7 +109,7 @@ function LocationListView({ listings = [], onListingClick, userLocation }) {
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
                     <h3 className="font-semibold text-[var(--text-primary)] truncate">
-                      {listing.donor || 'Anonymous Donor'}
+                      {typeof listing.donor === 'string' ? listing.donor : (listing.donor && listing.donor.name) || listing.donor_id || 'Anonymous Donor'}
                     </h3>
                     <p className="text-sm text-[var(--text-secondary)] mb-1">
                       {listing.foodType}

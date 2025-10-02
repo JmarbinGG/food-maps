@@ -502,26 +502,23 @@ class CoverageAgent extends BaseAgent {
     try {
       console.log(`Creating emergency task for request ${request.id}`, request);
       
-      // Always ensure fresh data before processing
-      window.ensureMockDataAvailable();
-      
-      // Double-check data availability with direct access
-      if (!window.mockListings || window.mockListings.length === 0) {
-        console.warn('Mock listings still not available, creating emergency fallback');
-        // Create immediate fallback donations
-        window.mockListings = [
-          {
-            id: 'emergency_1', title: 'Emergency Water Supply', category: 'beverages',
-            qty: 24, status: 'available', coords: { lat: 37.7749, lng: -122.4194 }
-          },
-          {
-            id: 'emergency_2', title: 'Emergency Food Package', category: 'packaged',
-            qty: 10, status: 'available', coords: { lat: 37.7849, lng: -122.4094 }
-          }
-        ];
+      // Ensure fresh data is available from the real database service (snapshot fallback)
+      let listings = [];
+      try {
+        listings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []));
+      } catch (e) {
+        listings = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (window.databaseService && Array.isArray(window.databaseService.listings) ? window.databaseService.listings : []));
       }
-      
-      const availableDonations = window.mockListings.filter(d => d.status === 'available');
+      if (!Array.isArray(listings) || listings.length === 0) {
+        console.warn('No listings available from database or snapshot; using minimal emergency fallback');
+        listings = [
+          { id: 'emergency_1', title: 'Emergency Water Supply', category: 'beverages', qty: 24, status: 'available', coords: { lat: 37.7749, lng: -122.4194 }, created_at: new Date().toISOString() },
+          { id: 'emergency_2', title: 'Emergency Food Package', category: 'packaged', qty: 10, status: 'available', coords: { lat: 37.7849, lng: -122.4094 }, created_at: new Date().toISOString() }
+        ];
+        try { if (window.databaseService) window.databaseService.listings = listings; } catch (e) { /* ignore */ }
+      }
+
+      const availableDonations = listings.filter(d => d.status === 'available' || d.status === 'AVAILABLE');
       console.log(`Found ${availableDonations.length} available donations for emergency task`);
       
       if (availableDonations.length === 0) {

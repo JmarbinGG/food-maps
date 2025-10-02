@@ -13,10 +13,12 @@ from typing import Optional, List
 from dotenv import load_dotenv
 import jwt
 import os
-import hashlib
+from passlib.context import CryptContext
 from .schemas import FoodResourceResponse
-from .models import Base, FoodResource, User
+from .models import Base, FoodResource, User, UserRole
 
+
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -126,8 +128,46 @@ def get_listings(limit: int = 100, db: Session = Depends(get_db)):
         .all()
     )
 
-    # Make sure donor info is loaded for response
+    # Make sure dondor info is loaded for response
     for listing in listings:
         _ = listing.donor  # SQLAlchemy lazy loading
 
     return listings
+
+@app.post("/api/user/create")
+async def create_user(name: str, email: str, password: str, role: UserRole, db: Session = Depends(get_db)):
+    print("login attempt: email:", email, " pw:", password, " len:", len(password.encode('utf-8')), "repr", repr(password))
+    try:    
+        user = User(email = email, name = name, password_hash = password, role=role, created_at = datetime.utcnow())
+        query = db.query(User).filter(User.email == email)
+        existing_user = query.first()
+        print("login attempt: email:", email, " pw:", password, " len:", len(password.encode('utf-8')), "repr", repr(password))
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Email already registered")
+        else:
+            user.password_hash = pwd_context.hash(password)
+        db.add(user)
+        db.commit()
+        db.close()
+        return{"success": True, "message": "written successfully"}
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user/login")
+async def login_user(email: str, password: str, db: Session = Depends(get_db)):
+    try:
+        query = db.query(User).filter(User.email == email)
+        user = query.first()
+        if user and pwd_context.verify(password, user.password_hash):
+            payload = {
+                "sub": str(user.id),
+                "name": user.name,
+                "role": user.role.value,
+                "exp": datetime.utcnow() + timedelta(hours=12)  # Token valid for 12 hours
+            }
+            token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+            return {"success": True, "token": token}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Invalid Email or password")

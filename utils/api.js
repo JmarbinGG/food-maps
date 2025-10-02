@@ -52,25 +52,26 @@ window.userAPI = {
 };
 
 // Listing API calls
+// Listing API (real backend)
 window.listingAPI = {
-  create: (listingData) => apiRequest('/listings', {
+  create: (listingData) => apiRequest('/api/listings', {
     method: 'POST',
     body: JSON.stringify(listingData)
   }),
-  
+
   getAll: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/listings${queryString ? '?' + queryString : ''}`);
+    return apiRequest(`/api/listings${queryString ? '?' + queryString : ''}`);
   },
-  
-  getById: (id) => apiRequest(`/listings/${id}`),
-  
-  update: (id, listingData) => apiRequest(`/listings/${id}`, {
+
+  getById: (id) => apiRequest(`/api/listings/${id}`),
+
+  update: (id, listingData) => apiRequest(`/api/listings/${id}`, {
     method: 'PUT',
     body: JSON.stringify(listingData)
   }),
-  
-  delete: (id) => apiRequest(`/listings/${id}`, { method: 'DELETE' })
+
+  delete: (id) => apiRequest(`/api/listings/${id}`, { method: 'DELETE' })
 };
 
 // Transaction API calls
@@ -169,34 +170,15 @@ window.consumptionAPI = {
   }
 };
 
-// Enhanced listing API with backend integration  
-window.listingAPI = {
-  create: (listingData) => apiRequest('/food/resources', {
-    method: 'POST',
-    body: JSON.stringify(listingData)
-  }),
-  
-  getAll: (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/food/resources${queryString ? '?' + queryString : ''}`);
-  },
-  
-  getById: (id) => apiRequest(`/food/resources/${id}`),
-  
-  update: (id, listingData) => apiRequest(`/food/resources/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(listingData)
-  }),
-  
-  delete: (id) => apiRequest(`/food/resources/${id}`, { method: 'DELETE' })
-};
+// (Legacy /food/resources handlers removed) - use /api/listings instead.
 
 // Mock mode toggle for development
-window.USE_MOCK_API = true;
+// Disable mock API by default so the app uses the real backend
+window.USE_MOCK_API = false;
 
 // Mock API responses for development
 window.mockResponses = {
-  '/listings': () => Promise.resolve({ data: window.getMockListings() }),
+  // listings are served by the real backend /api/listings
   '/me': () => Promise.resolve({ data: { id: '1', name: 'Test User', role: 'recipient' } }),
   '/food/consumption': (options) => {
     if (options?.method === 'GET') {
@@ -206,14 +188,7 @@ window.mockResponses = {
     }
     return Promise.resolve([]);
   },
-  '/food/resources': (options) => {
-    if (options?.method === 'GET') {
-      return Promise.resolve(window.getMockListings());
-    } else if (options?.method === 'POST') {
-      return Promise.resolve({ id: Date.now(), success: true });
-    }
-    return Promise.resolve([]);
-  },
+  // legacy /food/resources mock removed
   '/food/my-resources': () => Promise.resolve([])
 };
 
