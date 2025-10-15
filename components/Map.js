@@ -98,6 +98,35 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         
         // Store interaction state on map instance
         map.current.userHasInteracted = () => userHasInteracted;
+
+        // Define global handlers once for map popups/actions
+        window.claimFromMap = (listingId) => {
+          try { if (map.current && map.current._lastListingPopup) map.current._lastListingPopup.remove(); } catch (e) {}
+          if (window.handleClaimListing) {
+            window.handleClaimListing(listingId);
+          }
+        };
+
+        window.selectFromMap = (listingId) => {
+          try { if (map.current && map.current._lastListingPopup) map.current._lastListingPopup.remove(); } catch (e) {}
+          const idStr = listingId != null ? String(listingId) : null;
+          let listingsArr = [];
+          try { listingsArr = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []); } catch (e) { listingsArr = []; }
+          let selectedListing = null;
+          if (idStr) {
+            selectedListing = listingsArr.find(l => {
+              const lid = l && l.id != null ? String(l.id) : null;
+              const loid = l && l.objectId != null ? String(l.objectId) : null;
+              return (lid && lid === idStr) || (loid && loid === idStr);
+            });
+          }
+          if (!selectedListing) {
+            // Best-effort: nothing else we can do without props
+          }
+          if (selectedListing && window.handleShowDetails) {
+            window.handleShowDetails(selectedListing);
+          }
+        };
         
         // Mobile-specific map adjustments
         if (window.innerWidth <= 768) {
@@ -124,6 +153,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           };
         }
         
+        // Removed Mapbox global clustering; we'll group markers by identical address only
+
         // Trigger resize to ensure proper display
         setTimeout(() => {
           if (map.current) {
@@ -362,24 +393,49 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     if (!listing) return null;
     try {
       if (listing.coords && (listing.coords.lat || listing.coords.lng)) {
-        const lat = parseFloat(listing.coords.lat);
-        const lng = parseFloat(listing.coords.lng);
-        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+        let lat = parseFloat(listing.coords.lat);
+        let lng = parseFloat(listing.coords.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          // Validate ranges - lat should be between -90/90, lng between -180/180
+          const validLat = lat >= -90 && lat <= 90;
+          const validLng = lng >= -180 && lng <= 180;
+          if (!validLat && validLng && lat >= -180 && lat <= 180 && lng >= -90 && lng <= 90) {
+            // swapped values - swap them
+            const tmp = lat; lat = lng; lng = tmp;
+          }
+          if ((lat >= -90 && lat <= 90) && (lng >= -180 && lng <= 180)) {
+            return { lat, lng };
+          }
+        }
       }
 
       if (listing.coordinates && Array.isArray(listing.coordinates) && listing.coordinates.length >= 2) {
-        const lng = parseFloat(listing.coordinates[0]);
-        const lat = parseFloat(listing.coordinates[1]);
-        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+        let lng = parseFloat(listing.coordinates[0]);
+        let lat = parseFloat(listing.coordinates[1]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          // Validate and swap if reversed
+          if (!(lat >= -90 && lat <= 90) && (lng >= -90 && lng <= 90)) {
+            const tmp = lat; lat = lng; lng = tmp;
+          }
+          if ((lat >= -90 && lat <= 90) && (lng >= -180 && lng <= 180)) {
+            return { lat, lng };
+          }
+        }
       }
 
       // Support flat DB columns commonly named coords_lat / coords_lng
       const latKey = listing.coords_lat !== undefined ? 'coords_lat' : (listing.lat !== undefined ? 'lat' : null);
       const lngKey = listing.coords_lng !== undefined ? 'coords_lng' : (listing.lng !== undefined ? 'lng' : null);
       if (latKey && lngKey) {
-        const lat = parseFloat(listing[latKey]);
-        const lng = parseFloat(listing[lngKey]);
-        if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+        let lat = parseFloat(listing[latKey]);
+        let lng = parseFloat(listing[lngKey]);
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          // Swap if reversed
+          if (!(lat >= -90 && lat <= 90) && (lng >= -90 && lng <= 90)) {
+            const tmp = lat; lat = lng; lng = tmp;
+          }
+          if ((lat >= -90 && lat <= 90) && (lng >= -180 && lng <= 180)) return { lat, lng };
+        }
       }
 
       return null;
@@ -510,8 +566,26 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
-  // Get current listings - use synchronous snapshot helper for UI rendering
-  const currentListings = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (safeListings || []));
+    // Get current listings from a single source: prefer window snapshot, fallback to props
+    let sourceListingsRaw = [];
+    try {
+      const snapshot = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []);
+      sourceListingsRaw = (Array.isArray(snapshot) && snapshot.length) ? snapshot : (safeListings || []);
+    } catch (e) {
+      sourceListingsRaw = safeListings || [];
+    }
+
+    // Deduplicate by stable key to avoid duplicate markers
+    const seen = new Set();
+    const currentListings = [];
+    for (const listing of sourceListingsRaw) {
+      const key = (listing && (listing.id || listing.objectId || (listing.title && listing.address && `${listing.title}|${listing.address}`))) || Math.random().toString(36).slice(2);
+      if (!seen.has(key)) {
+        seen.add(key);
+        currentListings.push(listing);
+      }
+    }
+
     console.log('Updating markers with listings:', currentListings.length);
 
     // Schedule geocoding for listings that lack coordinates.
@@ -563,163 +637,91 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       });
     } catch (e) { console.error('Geocode scheduling error:', e); }
 
-    // Add new markers for each listing - with safe coordinate access
-    currentListings
-      .filter(listing => resolveCoords(listing) !== null)
-      .forEach(listing => {
+    // Per-listing emoji markers with slight offset for identical-address items
+    const normalizeAddress = (addr) => (typeof addr === 'string' ? addr.trim().toLowerCase() : null);
+    const groupsByKey = new Map();
+    currentListings.forEach(l => {
+      const c = resolveCoords(l);
+      if (!c) return;
+      const key = normalizeAddress(l.address) || `${c.lat.toFixed(5)},${c.lng.toFixed(5)}`;
+      if (!groupsByKey.has(key)) groupsByKey.set(key, []);
+      groupsByKey.get(key).push(l);
+    });
+
+    // Deterministic offset function for items in same group
+    const toRadians = (deg) => deg * Math.PI / 180;
+    const offsetCoords = (base, index, total) => {
+      if (total <= 1) return base;
+      const radius = 0.00012; // ~10-15m
+      const angle = (2 * Math.PI * index) / total;
+      const latOffset = radius * Math.sin(angle);
+      const lngOffset = radius * Math.cos(angle) / Math.cos(toRadians(base.lat || base[1] || 0));
+      return { lat: base.lat + latOffset, lng: base.lng + lngOffset };
+    };
+
+    for (const [key, arr] of groupsByKey) {
+      // Stable order by id for deterministic offsets
+      const sorted = arr.slice().sort((a, b) => String(a.id).localeCompare(String(b.id)));
+      sorted.forEach((listing, idx) => {
         const coords = resolveCoords(listing);
         if (!coords) return;
-        console.log('Adding marker for listing:', listing.title || listing.id || '(no title)');
-        const markerElement = createMarkerElement(listing);
-
-        const marker = new mapboxgl.Marker(markerElement)
-          .setLngLat([coords.lng, coords.lat])
-          .addTo(map.current);
-
-        // Add click handler to marker
-        markerElement.addEventListener('click', () => {
+        const adjusted = offsetCoords(coords, idx, sorted.length);
+        const el = createMarkerElement(listing);
+        const marker = new mapboxgl.Marker(el).setLngLat([adjusted.lng, adjusted.lat]).addTo(map.current);
+        el.addEventListener('click', () => {
+          // Ensure only the latest popup is visible
+          try { if (map.current && map.current._lastListingPopup) map.current._lastListingPopup.remove(); } catch (e) {}
           const canClaim = user && user.role === 'recipient' && listing.status === 'available';
           const statusBadgeClass = listing.status === 'available' ? 'bg-green-100 text-green-800 border-green-200' :
                                 listing.status === 'claimed' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
                                 'bg-gray-100 text-gray-800 border-gray-200';
-          
-          const formatDateTime = (dateString) => {
-            if (!dateString) return 'Not specified';
-            try {
-              const date = new Date(dateString);
-              return date.toLocaleString('en-US', {
-                weekday: 'short',
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-            } catch (error) {
-              return 'Invalid date';
-            }
-          };
-
           const getPerishabilityInfo = (level) => {
-            switch (level) {
-              case 'high': return { text: 'High - Consume within hours', color: 'text-red-600' };
-              case 'medium': return { text: 'Medium - Consume within days', color: 'text-yellow-600' };
-              case 'low': return { text: 'Low - Shelf stable', color: 'text-green-600' };
-              default: return { text: 'Not specified', color: 'text-gray-600' };
-            }
+            switch (level) { case 'high': return { text: 'High - Consume within hours', color: 'text-red-600' }; case 'medium': return { text: 'Medium - Consume within days', color: 'text-yellow-600' }; case 'low': return { text: 'Low - Shelf stable', color: 'text-green-600' }; default: return { text: 'Not specified', color: 'text-gray-600' }; }
           };
-
           const perishabilityInfo = getPerishabilityInfo(listing.perishability);
           const donorType = getDonorType(listing);
-          
-          const donorTypeLabels = {
-            restaurant: 'Restaurant/Café',
-            store: 'Store/Market',
-            organization: 'Organization',
-            personal: 'Personal Donor'
-          };
-          
-          const donorTypeColors = {
-            restaurant: 'bg-red-100 text-red-800 border-red-200',
-            store: 'bg-blue-100 text-blue-800 border-blue-200',
-            organization: 'bg-purple-100 text-purple-800 border-purple-200',
-            personal: 'bg-green-100 text-green-800 border-green-200'
-          };
-          
+          const donorTypeLabels = { restaurant: 'Restaurant/Café', store: 'Store/Market', organization: 'Organization', personal: 'Personal Donor' };
+          const donorTypeColors = { restaurant: 'bg-red-100 text-red-800 border-red-200', store: 'bg-blue-100 text-blue-800 border-blue-200', organization: 'bg-purple-100 text-purple-800 border-purple-200', personal: 'bg-green-100 text-green-800 border-green-200' };
           const popupHTML = `
-            <div class="p-4 min-w-0 max-w-xs">
-              <!-- Header -->
-              <div class="mb-3">
-                <h3 class="font-bold text-base text-gray-900 mb-1">${listing.title}</h3>
-                <span class="inline-block px-2 py-1 text-xs font-semibold rounded-full ${statusBadgeClass}">
-                  ${listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
-                </span>
-              </div>
-
-              <!-- Basic Info -->
-              <div class="mb-4 space-y-2 text-sm">
-                <div class="flex justify-between">
-                  <span class="text-gray-600">Category:</span>
-                  <span class="font-medium capitalize">${listing.category}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-600">Quantity:</span>
-                  <span class="font-medium">${listing.qty} ${listing.unit}</span>
-                </div>
-                <div class="flex justify-between">
-                  <span class="text-gray-600">Expires:</span>
-                  <span class="font-medium text-xs">${formatDateTime(listing.expiration_date)}</span>
+            <div class="p-5 min-w-0 max-w-sm">
+              <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
+                <div class="flex items-center space-x-2">
+                  <div class="icon-info text-lg text-blue-600"></div>
+                  <h3 class="font-bold text-base text-gray-900">Food Listing Details</h3>
                 </div>
               </div>
-              
-              <!-- Action Buttons -->
-              <div class="space-y-2">
-                <button onclick="window.viewDetailsFromMap('${listing.id}')" 
-                        class="w-full bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center">
-                  <div class="icon-info text-sm mr-2"></div>
-                  View Details
-                </button>
-                <button onclick="window.getDirectionsFromMap('${listing.id}')" 
-                        class="w-full bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors flex items-center justify-center">
-                  <div class="icon-navigation text-sm mr-2"></div>
-                  Get Directions
-                </button>
+              <div class="mb-4">
+                <h4 class="font-bold text-lg text-gray-900 mb-2">${listing.title}</h4>
+                <div class="flex flex-wrap gap-2">
+                  <span class="inline-block px-3 py-1 text-sm font-semibold rounded-full border ${statusBadgeClass}">${listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}</span>
+                  <span class="inline-block px-3 py-1 text-sm font-semibold rounded-full border ${donorTypeColors[donorType]}">${donorTypeLabels[donorType]}</span>
+                </div>
               </div>
-            </div>
-          `;
-
-          // Create popup
-          const popup = new mapboxgl.Popup({ 
-            offset: 25,
-            closeButton: true,
-            closeOnClick: false,
-            className: 'food-listing-popup'
-          })
-            .setLngLat([coords.lng, coords.lat])
+              <div class="mb-4">
+                <h5 class="font-semibold text-gray-900 mb-3">Food Information</h5>
+                <div class="space-y-2 text-sm">
+                  <div class="flex justify-between items-center py-1"><span class="text-gray-600">Category:</span><span class="font-medium text-gray-900 capitalize">${listing.category}</span></div>
+                  <div class="flex justify-between items-center py-1"><span class="text-gray-600">Quantity:</span><span class="font-medium text-gray-900">${listing.qty} ${listing.unit}</span></div>
+                  <div class="flex justify-between items-center py-1"><span class="text-gray-600">Perishability:</span><span class="font-medium ${perishabilityInfo.color}">${perishabilityInfo.text}</span></div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                ${canClaim ? `<button onclick="window.claimFromMap('${listing.id}')" class="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors whitespace-nowrap flex items-center justify-center"><div class="icon-shopping-bag text-sm mr-1"></div>Claim</button>` : ''}
+                <button onclick="window.selectFromMap('${listing.id}')" class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors whitespace-nowrap flex items-center justify-center"><div class="icon-eye text-sm mr-1"></div>Show Details</button>
+              </div>
+            </div>`;
+          try { if (map.current && map.current._lastListingPopup) map.current._lastListingPopup.remove(); } catch (e) {}
+          const popup = new mapboxgl.Popup({ offset: 25, closeButton: true, closeOnClick: false, className: 'food-listing-popup' })
+            .setLngLat([adjusted.lng, adjusted.lat])
             .setHTML(popupHTML)
             .addTo(map.current);
-
-          // Setup global callback functions
-          window.claimFromMap = (listingId) => {
-            popup.remove();
-            if (window.handleClaimListing) {
-              window.handleClaimListing(listingId);
-            }
-          };
-
-          window.selectFromMap = (listingId) => {
-            popup.remove();
-            const selectedListing = currentListings.find(l => l.id === listingId);
-            if (selectedListing && window.handleShowDetails) {
-              window.handleShowDetails(selectedListing);
-            }
-          };
-
-          window.viewDetailsFromMap = (listingId) => {
-            popup.remove();
-            const selectedListing = currentListings.find(l => l.id === listingId);
-            if (selectedListing && window.showDetailedModal) {
-              window.showDetailedModal(selectedListing);
-            }
-          };
-
-          window.getDirectionsFromMap = (listingId) => {
-            popup.remove();
-            const selectedListing = currentListings.find(l => l.id === listingId);
-            if (selectedListing) {
-              const dest = resolveCoords(selectedListing);
-              if (dest && dest.lat && dest.lng) {
-                const url = `https://www.google.com/maps/dir/?api=1&destination=${dest.lat},${dest.lng}&travelmode=driving`;
-                window.open(url, '_blank');
-              }
-            }
-          };
+          map.current._lastListingPopup = popup;
         });
-
         markersRef.current.push(marker);
       });
+    }
 
-    // Add distribution center markers
+    // Keep distribution centers, stores, and kiosks as custom DOM markers
     distributionCenters
       .filter(center => center && center.coords)
       .forEach(center => {
@@ -931,252 +933,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         markersRef.current.push(marker);
       });
 
-    // Add new markers for each listing (fallback/supplemental path)
-    safeListings
-      .filter(listing => resolveCoords(listing) !== null)
-      .forEach(listing => {
-        const coords = resolveCoords(listing);
-        if (!coords) return;
-        const markerElement = createMarkerElement(listing);
-
-        const marker = new mapboxgl.Marker(markerElement)
-          .setLngLat([coords.lng, coords.lat])
-          .addTo(map.current);
-
-        // Add click handler to marker
-        markerElement.addEventListener('click', () => {
-          const canClaim = user && user.role === 'recipient' && listing.status === 'available';
-          const statusBadgeClass = listing.status === 'available' ? 'bg-green-100 text-green-800 border-green-200' :
-                                listing.status === 'claimed' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                                'bg-gray-100 text-gray-800 border-gray-200';
-          
-          const formatDateTime = (dateString) => {
-            if (!dateString) return 'Not specified';
-            try {
-              const date = new Date(dateString);
-              return date.toLocaleString('en-US', {
-                weekday: 'short',
-                year: 'numeric',
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              });
-            } catch (error) {
-              return 'Invalid date';
-            }
-          };
-
-          const getPerishabilityInfo = (level) => {
-            switch (level) {
-              case 'high': return { text: 'High - Consume within hours', color: 'text-red-600' };
-              case 'medium': return { text: 'Medium - Consume within days', color: 'text-yellow-600' };
-              case 'low': return { text: 'Low - Shelf stable', color: 'text-green-600' };
-              default: return { text: 'Not specified', color: 'text-gray-600' };
-            }
-          };
-
-          const perishabilityInfo = getPerishabilityInfo(listing.perishability);
-          const donorType = getDonorType(listing);
-          
-          const donorTypeLabels = {
-            restaurant: 'Restaurant/Café',
-            store: 'Store/Market',
-            organization: 'Organization',
-            personal: 'Personal Donor'
-          };
-          
-          const donorTypeColors = {
-            restaurant: 'bg-red-100 text-red-800 border-red-200',
-            store: 'bg-blue-100 text-blue-800 border-blue-200',
-            organization: 'bg-purple-100 text-purple-800 border-purple-200',
-            personal: 'bg-green-100 text-green-800 border-green-200'
-          };
-          
-          const popupHTML = `
-            <div class="p-5 min-w-0 max-w-sm">
-              <!-- Header -->
-              <div class="flex items-center justify-between mb-4 pb-3 border-b border-gray-200">
-                <div class="flex items-center space-x-2">
-                  <div class="icon-info text-lg text-blue-600"></div>
-                  <h3 class="font-bold text-base text-gray-900">Food Listing Details</h3>
-                </div>
-              </div>
-
-              <!-- Title and Status -->
-              <div class="mb-4">
-                <h4 class="font-bold text-lg text-gray-900 mb-2">${listing.title}</h4>
-                <div class="flex flex-wrap gap-2">
-                  <span class="inline-block px-3 py-1 text-sm font-semibold rounded-full border ${statusBadgeClass}">
-                    ${listing.status.charAt(0).toUpperCase() + listing.status.slice(1)}
-                  </span>
-                  <span class="inline-block px-3 py-1 text-sm font-semibold rounded-full border ${donorTypeColors[donorType]}">
-                    ${donorTypeLabels[donorType]}
-                  </span>
-                </div>
-              </div>
-              
-              <!-- Description -->
-              ${listing.description ? `
-                <div class="mb-4">
-                  <h5 class="font-semibold text-gray-900 mb-2">Description</h5>
-                  <p class="text-sm text-gray-700 leading-relaxed">${listing.description}</p>
-                </div>
-              ` : ''}
-              
-              <!-- Food Information -->
-              <div class="mb-4">
-                <h5 class="font-semibold text-gray-900 mb-3">Food Information</h5>
-                <div class="space-y-2 text-sm">
-                  <div class="flex justify-between items-center py-1">
-                    <span class="text-gray-600">Category:</span>
-                    <span class="font-medium text-gray-900 capitalize">${listing.category}</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1">
-                    <span class="text-gray-600">Quantity:</span>
-                    <span class="font-medium text-gray-900">${listing.qty} ${listing.unit}</span>
-                  </div>
-                  <div class="flex justify-between items-center py-1">
-                    <span class="text-gray-600">Perishability:</span>
-                    <span class="font-medium ${perishabilityInfo.color}">${perishabilityInfo.text}</span>
-                  </div>
-                  ${listing.expiration_date ? `
-                    <div class="flex justify-between items-center py-1">
-                      <span class="text-gray-600">Expires:</span>
-                      <span class="font-medium text-gray-900 text-xs">${formatDateTime(listing.expiration_date)}</span>
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-              
-              <!-- Pickup Information -->
-              <div class="mb-4">
-                <h5 class="font-semibold text-gray-900 mb-3">Pickup Information</h5>
-                <div class="space-y-2 text-sm">
-                  <div>
-                    <span class="text-gray-600 block mb-1">Address:</span>
-                    <span class="font-medium text-gray-900 text-sm leading-tight">${listing.address}</span>
-                  </div>
-                  ${listing.pickup_window_start ? `
-                    <div>
-                      <span class="text-gray-600 block mb-1">Pickup Window:</span>
-                      <div class="text-xs space-y-1">
-                        <div><span class="font-medium text-gray-900">From: ${formatDateTime(listing.pickup_window_start)}</span></div>
-                        ${listing.pickup_window_end ? `<div><span class="font-medium text-gray-900">To: ${formatDateTime(listing.pickup_window_end)}</span></div>` : ''}
-                      </div>
-                    </div>
-                  ` : ''}
-                </div>
-              </div>
-
-              <!-- Donor Information -->
-              ${listing.donor_name ? `
-                <div class="mb-4">
-                  <h5 class="font-semibold text-gray-900 mb-3">Donor Information</h5>
-                  <div class="space-y-2 text-sm">
-                    <div class="flex justify-between items-center py-1">
-                      <span class="text-gray-600">Donor:</span>
-                      <span class="font-medium text-gray-900">${listing.donor_name}</span>
-                    </div>
-                    ${listing.contact_info ? `
-                      <div class="flex justify-between items-center py-1">
-                        <span class="text-gray-600">Contact:</span>
-                        <span class="font-medium text-gray-900">${listing.contact_info}</span>
-                      </div>
-                    ` : ''}
-                  </div>
-                </div>
-              ` : ''}
-
-              <!-- Listing Information -->
-              <div class="mb-4 pb-4 border-b border-gray-200">
-                <h5 class="font-semibold text-gray-900 mb-3">Listing Information</h5>
-                <div class="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span class="text-gray-600 block text-xs">Posted on:</span>
-                    <span class="font-medium text-gray-900 text-xs">${formatDateTime(listing.created_at)}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-600 block text-xs">Listing ID:</span>
-                    <span class="font-medium text-gray-900">${listing.id}</span>
-                  </div>
-                </div>
-              </div>
-              
-              <!-- Action Buttons -->
-              <div class="flex gap-2">
-                ${canClaim ? `
-                  <button onclick="window.claimFromMap('${listing.id}')" 
-                          class="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors whitespace-nowrap flex items-center justify-center">
-                    <div class="icon-shopping-bag text-sm mr-1"></div>
-                    Claim
-                  </button>
-                ` : ''}
-                <button onclick="window.selectFromMap('${listing.id}')" 
-                        class="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors whitespace-nowrap flex items-center justify-center">
-                  <div class="icon-eye text-sm mr-1"></div>
-                  Show Details
-                </button>
-              </div>
-            </div>
-          `;
-
-          // Create popup
-          const popup = new mapboxgl.Popup({ 
-            offset: 25,
-            closeButton: true,
-            closeOnClick: false,
-            className: 'food-listing-popup'
-          })
-            .setLngLat([coords.lng, coords.lat])
-            .setHTML(popupHTML)
-            .addTo(map.current);
-
-          // Setup global callback functions
-          window.claimFromMap = (listingId) => {
-            popup.remove();
-            if (window.handleClaimListing) {
-              window.handleClaimListing(listingId);
-            }
-          };
-
-          window.selectFromMap = (listingId) => {
-            popup.remove();
-            const selectedListing = safeListings.find(l => l.id === listingId);
-            if (selectedListing && window.handleShowDetails) {
-              window.handleShowDetails(selectedListing);
-            }
-          };
-
-          // Store-specific functions
-          window.viewStoreMenu = (storeId) => {
-            if (window.openStoreMenu) {
-              window.openStoreMenu(storeId);
-            }
-          };
-
-          window.getStoreDirections = (storeId) => {
-            const store = doGoodsStores.find(s => s.id === storeId);
-            if (store && store.coords) {
-              const url = `https://www.google.com/maps/dir/?api=1&destination=${store.coords.lat},${store.coords.lng}&travelmode=driving`;
-              window.open(url, '_blank');
-            }
-          };
-
-          // Distribution center functions - use globally registered function
-          // Note: viewDistributionCenterMenu is already registered in mockData.js
-
-          window.getDistributionCenterDirections = (centerId) => {
-            const center = distributionCenters.find(c => c.id === centerId);
-            if (center && center.coords) {
-              const url = `https://www.google.com/maps/dir/?api=1&destination=${center.coords.lat},${center.coords.lng}&travelmode=driving`;
-              window.open(url, '_blank');
-            }
-          };
-        });
-
-        markersRef.current.push(marker);
-      });
+  // Removed duplicate fallback path to prevent inconsistent popups and duplicates
   };
 
   // Fit map to show all listings, distribution centers, stores and kiosks
@@ -1202,12 +959,17 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
     const bounds = new mapboxgl.LngLatBounds();
     let hasValidBounds = false;
-    
+    const extendIfValid = (lat, lng) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) return false;
+      bounds.extend([lng, lat]);
+      return true;
+    };
+
     // Include food listings - priority for positioning
     currentListings.forEach(listing => {
       const coords = resolveCoords(listing);
-      if (coords && coords.lat && coords.lng) {
-        bounds.extend([coords.lng, coords.lat]);
+      if (coords && extendIfValid(coords.lat, coords.lng)) {
         hasValidBounds = true;
       }
     });
@@ -1237,20 +999,49 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     });
 
     if (hasValidBounds) {
-      map.current.fitBounds(bounds, {
-        padding: { top: 50, bottom: 50, left: 50, right: 50 },
-        maxZoom: 16,
-        duration: 1000
-      });
+      try {
+        map.current.fitBounds(bounds, {
+          padding: { top: 50, bottom: 50, left: 50, right: 50 },
+          maxZoom: 16,
+          duration: 1000
+        });
+      } catch (err) {
+        console.error('fitBounds failed, falling back to center', err);
+        // fallback to safe center
+        if (userLocation && userLocation.lat && userLocation.lng) {
+          map.current.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13, duration: 1000 });
+        }
+      }
     } else {
-      // Fallback to Alameda center if no valid bounds
-      map.current.flyTo({
-        center: [-122.2416, 37.7652],
-        zoom: 13,
-        duration: 1000
-      });
+      // Fallback to user location or Alameda center if no valid bounds
+      if (userLocation && userLocation.lat && userLocation.lng) {
+        map.current.flyTo({ center: [userLocation.lng, userLocation.lat], zoom: 13, duration: 1000 });
+      } else {
+        map.current.flyTo({ center: [-122.2416, 37.7652], zoom: 13, duration: 1000 });
+      }
     }
   };
+
+  // Expose a global recenter function so other parts of the app can force a fit
+  React.useEffect(() => {
+    window.recenterMap = () => {
+      try {
+        if (!map.current) return;
+        // Temporarily bypass user interaction flag and fit
+        const originalUserHasInteracted = map.current.userHasInteracted ? map.current.userHasInteracted() : false;
+        // Call fitMapToListings directly
+        fitMapToListings();
+        return true;
+      } catch (err) {
+        console.error('recenterMap failed', err);
+        return false;
+      }
+    };
+
+    return () => {
+      try { delete window.recenterMap; } catch (e) {}
+    };
+  }, [mapLoaded, safeListings, distributionCenters, doGoodsStores, doGoodsKiosks]);
 
   // Update markers when data changes
   React.useEffect(() => {

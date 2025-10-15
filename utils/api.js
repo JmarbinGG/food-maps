@@ -54,24 +54,24 @@ window.userAPI = {
 // Listing API calls
 // Listing API (real backend)
 window.listingAPI = {
-  create: (listingData) => apiRequest('/api/listings', {
+  create: (listingData) => apiRequest('/api/listings/get', {
     method: 'POST',
     body: JSON.stringify(listingData)
   }),
 
   getAll: (params = {}) => {
     const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/api/listings${queryString ? '?' + queryString : ''}`);
+    return apiRequest(`/api/listings/get${queryString ? '?' + queryString : ''}`);
   },
 
-  getById: (id) => apiRequest(`/api/listings/${id}`),
+  getById: (id) => apiRequest(`/api/listings/get/${id}`),
 
-  update: (id, listingData) => apiRequest(`/api/listings/${id}`, {
+  update: (id, listingData) => apiRequest(`/api/listings/get/${id}`, {
     method: 'PUT',
     body: JSON.stringify(listingData)
   }),
 
-  delete: (id) => apiRequest(`/api/listings/${id}`, { method: 'DELETE' })
+  delete: (id) => apiRequest(`/api/listings/get/${id}`, { method: 'DELETE' })
 };
 
 // Transaction API calls

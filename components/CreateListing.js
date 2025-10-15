@@ -34,6 +34,17 @@ function CreateListing({ user, onCancel, onSuccess }) {
     }
   };
 
+  // Helper to format Date -> 'YYYY-MM-DDTHH:mm' in local time for datetime-local inputs
+  const toLocalInput = (date) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    const y = date.getFullYear();
+    const m = pad(date.getMonth() + 1);
+    const d = pad(date.getDate());
+    const hh = pad(date.getHours());
+    const mm = pad(date.getMinutes());
+    return `${y}-${m}-${d}T${hh}:${mm}`;
+  };
+
   const validateForm = () => {
     const newErrors = {};
     
@@ -62,27 +73,47 @@ function CreateListing({ user, onCancel, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validateForm() || !user) return;
-
     setIsSubmitting(true);
-    
+    const urlParams = new URLSearchParams({
+	    donor_id: JSON.parse(localStorage.getItem("current_user"))['id'],
+	    title: formData.title,
+	    desc: formData.description,
+	    category: formData.category,
+	    qty: formData.qty,
+	    unit: formData.unit,
+	    perishability: formData.perishability,
+	    address: formData.address,
+	    pickup_start: formData.pickup_window_start,
+	    pickup_end: formData.pickup_window_end
+    });
+
     try {
-      // In production, this would call the API
-      const newListing = {
-        ...formData,
-        id: Date.now().toString(),
-        donor_id: user.id,
-        status: 'available',
-        coords: { lat: 40.7128, lng: -74.0060 }, // Would geocode address
-        created_at: new Date().toISOString()
+      const payload = {
+        donor_id: JSON.parse(localStorage.getItem('current_user'))['id'],
+        title: formData.title,
+        desc: formData.description,
+        category: formData.category,
+        qty: formData.qty,
+        unit: formData.unit,
+        perishability: formData.perishability,
+        address: formData.address,
+        pickup_start: formData.pickup_window_start,
+        pickup_end: formData.pickup_window_end
       };
-      
-      console.log('Creating listing:', newListing);
-      alert('Listing created successfully!');
-      onSuccess();
-      
+
+      const res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false });
+      if (res && res.success) {
+        console.log('Created listing:', res.data || res);
+        alert('Listing created successfully!');
+        onSuccess();
+      } else {
+        const err = (res && res.error) || 'Failed to create listing';
+        console.error('Create listing failed:', err);
+        alert('Failed to create listing. Please try again. ' + err);
+      }
     } catch (error) {
       console.error('Error creating listing:', error);
-      alert('Failed to create listing. Please try again.');
+      alert('Failed to create listing. Please try again.' + error);
     } finally {
       setIsSubmitting(false);
     }
@@ -224,12 +255,27 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Pickup Window Start *
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.pickup_window_start}
-                    onChange={(e) => handleInputChange('pickup_window_start', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="datetime-local"
+                      value={formData.pickup_window_start}
+                      onChange={(e) => handleInputChange('pickup_window_start', e.target.value)}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary whitespace-nowrap"
+                      onClick={() => {
+                        // Set to now rounded up to the next 5 minutes for nicer times
+                        const now = new Date();
+                        const ms = 1000 * 60 * 5; // 5 minutes
+                        const rounded = new Date(Math.ceil(now.getTime() / ms) * ms);
+                        handleInputChange('pickup_window_start', toLocalInput(rounded));
+                      }}
+                    >
+                      Now
+                    </button>
+                  </div>
                   {errors.pickup_window_start && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_start}</p>}
                 </div>
 
@@ -237,12 +283,26 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Pickup Window End *
                   </label>
-                  <input
-                    type="datetime-local"
-                    value={formData.pickup_window_end}
-                    onChange={(e) => handleInputChange('pickup_window_end', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      type="datetime-local"
+                      value={formData.pickup_window_end}
+                      onChange={(e) => handleInputChange('pickup_window_end', e.target.value)}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      className="btn-secondary whitespace-nowrap"
+                      onClick={() => {
+                        // Convenience: if start set, end = start + 2h; else now + 2h
+                        const base = formData.pickup_window_start ? new Date(formData.pickup_window_start) : new Date();
+                        base.setHours(base.getHours() + 2);
+                        handleInputChange('pickup_window_end', toLocalInput(base));
+                      }}
+                    >
+                      +2h
+                    </button>
+                  </div>
                   {errors.pickup_window_end && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_end}</p>}
                 </div>
               </div>

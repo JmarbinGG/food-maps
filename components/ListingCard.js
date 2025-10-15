@@ -16,7 +16,7 @@ function ListingCard({ listing = {}, onClaim = () => {}, onSelect = () => {}, us
     }
   };
 
-  const canClaim = user && user.role === 'recipient' && listing.status === 'AVAILABLE';
+  const canClaim = user && user.role === 'recipient' && ((listing.status || '').toString().toLowerCase() === 'available');
 
   try {
     return (

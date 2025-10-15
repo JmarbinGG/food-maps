@@ -1,182 +1,257 @@
-// Database integration utilities for Food Maps
-// Consolidated, valid implementation exposing a normalized listings API.
+// Database integration utilities for Food Maps (backend-backed)
+// This module replaces the old "trickle" local DB calls with HTTP calls
+// to the backend using the shared `window.apiRequest` / `window.*API` helpers.
 
 class DatabaseService {
   constructor() {
     this.isConnected = false;
     this.listings = [];
-    // Start connection test but don't block construction
     this.initializeConnection();
   }
 
   async initializeConnection() {
     try {
-      const res = await fetch('/api/dbtest').catch(() => null);
-      const json = res ? await res.json().catch(() => null) : null;
-      if (json && json.success) {
-        this.isConnected = true;
-        console.log('Database service connected successfully');
-      } else {
-        console.warn('Trickle database functions not available, using mock mode');
-        this.isConnected = false;
-      }
-    } catch (error) {
-      console.warn('DB test fetch failed, using mock mode', error);
+      // Try a lightweight listing fetch to confirm backend availability.
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const probe = await fetch('/api/listings/get?limit=1', { headers });
+      if (!probe || !probe.ok) throw new Error('probe failed');
+      this.isConnected = true;
+      console.log('Database service: backend reachable');
+    } catch (err) {
       this.isConnected = false;
+      console.warn('Database service: backend unreachable, operating with local snapshot only', err?.message || err);
     }
   }
 
   // User operations
   async createUser(userData) {
     try {
-      const user = await trickleCreateObject('users', {
-        ...userData,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_active: true
-      });
-      return { success: true, data: user };
+      // Use query-string POST like AuthModal for compatibility with backend handlers
+      const params = new URLSearchParams(userData).toString();
+      const response = await fetch('/api/user/create?' + params, { method: 'POST' });
+      const json = await response.json().catch(() => ({}));
+      return { success: true, data: json };
     } catch (error) {
-      console.error('Error creating user:', error);
+      console.error('Error creating user via backend:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Authentication helpers that mirror the query-string POST style used by AuthModal
+  async authLogin(email, password) {
+    try {
+      const params = new URLSearchParams({ email, password }).toString();
+      const response = await fetch('/api/user/login?' + params, { method: 'POST' });
+      const json = await response.json().catch(() => ({}));
+      return json;
+    } catch (error) {
+      console.error('authLogin error:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  async authRegister(userData) {
+    try {
+      const params = new URLSearchParams(userData).toString();
+      const response = await fetch('/api/user/create?' + params, { method: 'POST' });
+      const json = await response.json().catch(() => ({}));
+      return json;
+    } catch (error) {
+      console.error('authRegister error:', error);
       return { success: false, error: error.message };
     }
   }
 
   async getUser(userId) {
-    if (!this.isConnected) return this.getMockUser(userId);
     try {
-      const user = await trickleGetObject('users', userId);
-      return { success: true, data: user };
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const resp = await fetch(`/api/users/${userId}`, { headers });
+      if (!resp.ok) throw new Error('fetch failed');
+      const json = await resp.json().catch(() => ({}));
+      return { success: true, data: json };
     } catch (error) {
-      console.error('Error getting user:', error);
+      console.warn('getUser failed, falling back to /me when possible', error?.message || error);
+      try {
+        // Try /me endpoint as a fallback
+        const token = localStorage.getItem('auth_token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const meResp = await fetch('/api/me', { headers });
+        if (meResp && meResp.ok) {
+          const meJson = await meResp.json().catch(() => ({}));
+          return { success: true, data: meJson };
+        }
+      } catch (e) {
+        // ignore
+      }
       return { success: false, error: error.message };
     }
   }
 
   async updateUser(userId, updates) {
-    if (!this.isConnected) return this.createMockResponse('user', updates);
     try {
-      const user = await trickleUpdateObject('users', userId, {
-        ...updates,
-        updated_at: new Date().toISOString()
+      const token = localStorage.getItem('auth_token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const resp = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() })
       });
-      return { success: true, data: user };
+      const json = await resp.json().catch(() => ({}));
+      return { success: true, data: json };
     } catch (error) {
-      console.error('Error updating user:', error);
+      console.error('Error updating user via backend:', error);
       return { success: false, error: error.message };
     }
   }
 
-  // Food listing operations
+  // Listing operations
   async createListing(listingData) {
-    if (!this.isConnected) return this.createMockResponse('listing', listingData);
     try {
-      const listing = await trickleCreateObject('food_listings', {
-        ...listingData,
-        status: 'available',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+      // Backend expects query-string POST to /api/listings/create (see backend/app.py)
+      if (!listingData.status) listingData.status = 'available';
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Ensure numeric fields are coerced
+      const paramsObj = Object.assign({}, listingData);
+      if (paramsObj.qty !== undefined && paramsObj.qty !== null) {
+        paramsObj.qty = parseInt(paramsObj.qty, 10) || 0;
+      }
+      if (paramsObj.donor_id !== undefined && paramsObj.donor_id !== null) {
+        paramsObj.donor_id = parseInt(paramsObj.donor_id, 10) || paramsObj.donor_id;
+      }
+
+      const params = new URLSearchParams(paramsObj).toString();
+      const response = await fetch('/api/listings/create?' + params, {
+        method: 'POST',
+        headers
       });
-      return { success: true, data: listing };
+      const resp = await response.json().catch(() => ({}));
+      const created = resp && (resp.listing || resp.data || resp);
+      if (created) {
+        // update local snapshot
+        try { this.listings.unshift(created); } catch (e) {}
+        try { window.databaseService.listings = this.listings; } catch (e) {}
+      }
+      return { success: true, data: created };
     } catch (error) {
-      console.error('Error creating listing:', error);
+      console.error('Error creating listing via backend:', error);
       return { success: false, error: error.message };
     }
   }
 
-  // Raw DB call - returns { success, data }
+  // Raw listing fetch
   async getListings(limit = 100) {
     try {
-      const response = await fetch(`/api/listings?limit=${limit}`).catch(() => null);
-      if (!response) return { success: false, error: 'Fetch failed' };
-      const data = await response.json().catch(() => null);
-      return { success: true, data: data };
+      const token = localStorage.getItem('auth_token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const resp = await fetch(`/api/listings/get?limit=${limit}`, { headers });
+      if (!resp.ok) throw new Error('fetch failed');
+      const json = await resp.json().catch(() => null);
+      return { success: true, data: json };
     } catch (error) {
-      console.error('Error fetching listings:', error);
+      console.error('Error fetching listings from backend:', error);
       return { success: false, error: error.message };
     }
   }
 
-  // Helper that returns an array of listings for callers
+  // Return an array of listings (normalize different response shapes)
   async fetchListingsArray(limit = 100) {
     try {
-      // Always try to fetch from the backend. Even if the initial
-      // connection probe failed, attempt a live fetch here so the
-      // UI can recover when the backend becomes available later.
       const res = await this.getListings(limit);
-      if (res && res.success && Array.isArray(res.data)) {
-        this.listings = res.data;
-        try { window.databaseService.listings = res.data; } catch (e) { /* ignore */ }
-        return res.data;
-      }
-      if (res && res.success && res.data && Array.isArray(res.data.items)) {
-        this.listings = res.data.items;
-        try { window.databaseService.listings = res.data.items; } catch (e) { /* ignore */ }
-        return res.data.items;
-      }
+      if (res && res.success) {
+        const data = res.data;
+        let items = [];
+        if (Array.isArray(data)) items = data;
+        else if (Array.isArray(data.items)) items = data.items;
+        else if (Array.isArray(data.data)) items = data.data;
 
-      // Fallbacks
-      if (typeof window.getListingsArray === 'function') {
-        return window.getListingsArray();
+        this.listings = items;
+        try { window.databaseService.listings = items; } catch (e) {}
+        return items;
       }
-
-      if (Array.isArray(this.listings) && this.listings.length > 0) {
-        return this.listings;
-      }
-
-      // No mock fallback here - prefer snapshot helpers or empty array
+      // fallback to snapshot
+      if (Array.isArray(this.listings) && this.listings.length) return this.listings;
       return [];
-    } catch (err) {
-      console.error('fetchListingsArray error:', err);
+    } catch (error) {
+      console.error('fetchListingsArray error:', error);
       return Array.isArray(this.listings) ? this.listings : [];
     }
   }
 
   async updateListingStatus(listingId, status, recipientId = null) {
-    if (!this.isConnected) return this.createMockResponse('listing', { status });
     try {
-      const updates = {
-        status,
-        updated_at: new Date().toISOString()
-      };
+      const updates = { status, updated_at: new Date().toISOString() };
       if (recipientId) {
         updates.recipient_id = recipientId;
         updates.claimed_at = new Date().toISOString();
       }
       if (status === 'completed') updates.completed_at = new Date().toISOString();
-      const listing = await trickleUpdateObject('food_listings', listingId, updates);
-      return { success: true, data: listing };
+
+      const token = localStorage.getItem('auth_token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const respFetch = await fetch(`/api/listings/get/${listingId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(updates)
+      });
+      const resp = await respFetch.json().catch(() => ({}));
+      const updated = resp && (resp.listing || resp.data || resp);
+      // update local snapshot if present
+      try {
+        const idx = this.listings.findIndex(l => l.id === listingId || l.objectId == listingId);
+        if (idx !== -1) this.listings[idx] = { ...this.listings[idx], ...updated };
+        try { window.databaseService.listings = this.listings; } catch (e) {}
+      } catch (e) { /* ignore */ }
+
+      return { success: true, data: updated };
     } catch (error) {
-      console.error('Error updating listing status:', error);
+      console.error('Error updating listing status via backend:', error);
       return { success: false, error: error.message };
     }
   }
 
-  // Mock helpers
-  createMockResponse(type, data) {
-    return {
-      success: true,
-      data: {
-        objectId: `mock_${type}_${Date.now()}`,
-        objectType: type,
-        objectData: data,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
+  // General listing update (title, desc, qty, unit, address, windows, etc.)
+  async updateListing(listingId, updates) {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const headers = { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+      const respFetch = await fetch(`/api/listings/get/${listingId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ ...updates, updated_at: new Date().toISOString() })
+      });
+      const resp = await respFetch.json().catch(() => ({}));
+      if (respFetch.status === 401 || respFetch.status === 403) {
+        return { success: false, error: resp?.detail || 'Not authorized' };
       }
-    };
+      const updated = resp && (resp.listing || resp.data || resp);
+      // update local snapshot if present
+      try {
+        const idx = this.listings.findIndex(l => l.id === listingId || String(l.id) === String(listingId));
+        if (idx !== -1) this.listings[idx] = { ...this.listings[idx], ...updated };
+        try { window.databaseService.listings = this.listings; } catch (e) {}
+      } catch (e) { /* ignore */ }
+
+      return { success: true, data: updated };
+    } catch (error) {
+      console.error('Error updating listing via backend:', error);
+      return { success: false, error: error.message };
+    }
   }
 
-  getMockUser(userId) {
+  // Utilities
+  createMockResponse(type, data) {
+    // Keep a lightweight mock response function for non-critical dev flows
     return {
       success: true,
       data: {
-        objectId: userId,
-        objectData: {
-          id: userId,
-          email: 'mock@example.com',
-          full_name: 'Mock User',
-          role: 'donor'
-        }
+        id: `mock_${type}_${Date.now()}`,
+        ...data,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }
     };
   }
@@ -186,7 +261,7 @@ class DatabaseService {
 try {
   window.databaseService = window.databaseService || new DatabaseService();
 } catch (e) {
-  // In non-browser test environments, ignore
+  // non-browser environment: ignore
 }
 
 // Synchronous helper: return the latest snapshot (may be empty)
@@ -201,50 +276,62 @@ try {
   }
 } catch (e) { /* ignore */ }
 
-// Export helper for manual use in dev
-try {
-  if (!window.exportToSupabase) {
-    window.exportToSupabase = {
-      async exportAllData() {
-        const exportData = { users: [], food_listings: [], schedules: [], tasks: [], ai_matches: [], agent_logs: [], exported_at: new Date().toISOString() };
-        try {
-          const usersResponse = await trickleListObjects('users', 1000).catch(() => ({ items: [] }));
-          exportData.users = usersResponse.items || [];
-          const listingsResponse = await trickleListObjects('food_listings', 1000).catch(() => ({ items: [] }));
-          exportData.food_listings = listingsResponse.items || [];
-          const schedulesResponse = await trickleListObjects('schedules', 1000).catch(() => ({ items: [] }));
-          exportData.schedules = schedulesResponse.items || [];
-          const tasksResponse = await trickleListObjects('tasks', 1000).catch(() => ({ items: [] }));
-          exportData.tasks = tasksResponse.items || [];
-          const matchesResponse = await trickleListObjects('ai_matches', 1000).catch(() => ({ items: [] }));
-          exportData.ai_matches = matchesResponse.items || [];
-          const logsResponse = await trickleListObjects('agent_logs', 1000).catch(() => ({ items: [] }));
-          exportData.agent_logs = logsResponse.items || [];
-          return exportData;
-        } catch (error) {
-          console.error('Export error:', error);
-          throw error;
-        }
-      },
+// Export helper for manual use in dev: implement via backend where possible
+  try {
+    if (!window.exportToSupabase) {
+      window.exportToSupabase = {
+        async exportAllData() {
+          const exportData = { users: [], food_listings: [], schedules: [], tasks: [], ai_matches: [], agent_logs: [], exported_at: new Date().toISOString() };
+          try {
+            // Users - attempt to fetch via /api/users
+            try {
+              const usersResp = await fetch('/api/users?limit=1000');
+              const usersJson = await usersResp.json().catch(() => ({}));
+              exportData.users = usersJson.items || usersJson.data || usersJson || [];
+            } catch (e) {
+              exportData.users = [];
+            }
 
-      async downloadExport() {
-        try {
-          const data = await this.exportAllData();
-          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `food-maps-export-${new Date().toISOString().split('T')[0]}.json`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-          return { success: true };
-        } catch (error) {
-          console.error('Download error:', error);
-          return { success: false, error: error.message };
+            // Listings
+            try {
+              const listingsResp = await fetch('/api/listings/get?limit=1000');
+              const listingsJson = await listingsResp.json().catch(() => ({}));
+              exportData.food_listings = listingsJson.items || listingsJson.data || listingsJson || [];
+            } catch (e) {
+              exportData.food_listings = [];
+            }
+
+            // Other collections: best-effort or leave empty
+            exportData.schedules = [];
+            exportData.tasks = [];
+            exportData.ai_matches = [];
+            exportData.agent_logs = [];
+
+            return exportData;
+          } catch (error) {
+            console.error('Export error:', error);
+            throw error;
+          }
+        },
+
+        async downloadExport() {
+          try {
+            const data = await this.exportAllData();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `food-maps-export-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            return { success: true };
+          } catch (error) {
+            console.error('Download error:', error);
+            return { success: false, error: error.message };
+          }
         }
-      }
-    };
-  }
-} catch (e) { /* ignore */ }
+      };
+    }
+  } catch (e) { /* ignore */ }

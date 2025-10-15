@@ -90,80 +90,64 @@ function AuthModal({ onClose, onAuth }) {
       isNewUser: !isLogin
     };
     
-    if(isLogin){
-        setAuthError('');
-        const params = new URLSearchParams({
-            email: formData.email,
-            password: formData.password
-        });
-        let url = '/api/user/login?' + params.toString();
-        try{
-            const response = await fetch(url, { method: 'POST' });
-            const json = await response.json().catch(() => ({}));
-            if (json && json.success && json.token) {
-                // persist token and user
-                localStorage.setItem('auth_token', json.token);
-                const payload = parseJwt(json.token);
-                const loggedUser = {
-                  id: payload && payload.sub ? payload.sub : formData.email,
-                  name: payload && payload.name ? payload.name : formData.email,
-                  role: payload && payload.role ? payload.role : formData.role
-                };
-                localStorage.setItem('current_user', JSON.stringify(loggedUser));
-                onAuth(loggedUser);
-                onClose();
-            } else {
-                const err = (json && (json.error || json.message)) || response.statusText || 'Login failed';
-                setAuthError(err);
-            }
-        } catch (error) {
-          console.error('request failed: ', error);
-          setAuthError('Network error');
-          return;
+    if (isLogin) {
+      setAuthError('');
+      try {
+        const json = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
+        if (json && json.success && json.token) {
+          localStorage.setItem('auth_token', json.token);
+          const payload = parseJwt(json.token);
+          const loggedUser = {
+            id: payload && payload.sub ? payload.sub : formData.email,
+            name: payload && payload.name ? payload.name : formData.email,
+            role: payload && payload.role ? payload.role : formData.role
+          };
+          localStorage.setItem('current_user', JSON.stringify(loggedUser));
+          onAuth(loggedUser);
+          onClose();
+        } else {
+          const err = (json && (json.error || json.message)) || 'Login failed';
+          setAuthError(err);
         }
-    }else{
-        setAuthError('');
-        const params = new URLSearchParams({
-            name: formData.name,
-            email: formData.email,
-            password: formData.password,
-            role: formData.role
-        });
-        let url = '/api/user/create?' + params.toString();
-        try{
-            const response = await fetch(url, { method: 'POST' });
-            const json = await response.json().catch(() => ({}));
-            if (json && json.success) {
-                // Auto-login after create
-                const loginParams = new URLSearchParams({ email: formData.email, password: formData.password });
-                const loginResp = await fetch('/api/user/login?' + loginParams.toString(), { method: 'POST' });
-                const loginJson = await loginResp.json().catch(() => ({}));
-                if (loginJson && loginJson.success && loginJson.token) {
-                    localStorage.setItem('auth_token', loginJson.token);
-                    const payload = parseJwt(loginJson.token);
-                    const loggedUser = {
-                      id: payload && payload.sub ? payload.sub : formData.email,
-                      name: payload && payload.name ? payload.name : formData.name,
-                      role: payload && payload.role ? payload.role : formData.role
-                    };
-                    localStorage.setItem('current_user', JSON.stringify(loggedUser));
-                    onAuth(loggedUser);
-                    onClose();
-                } else {
-                    // Fallback: persist local user object (no token)
-                    localStorage.setItem('current_user', JSON.stringify(userData));
-                    onAuth(userData);
-                    onClose();
-                }
-            } else {
-                const err = (json && (json.error || json.message)) || response.statusText || 'Account creation failed';
-                setAuthError(err);
-            }
-        } catch (error) {
-          console.error('request failed: ', error);
-          setAuthError('Network error');
-          return;
+      } catch (error) {
+        console.error('auth request failed:', error);
+        setAuthError('Network error');
+        return;
+      }
+    } else {
+      setAuthError('');
+      try {
+        const registerData = { name: formData.name, email: formData.email, password: formData.password, role: formData.role };
+        const json = await (window.databaseService ? window.databaseService.authRegister(registerData) : {});
+        if (json && json.success) {
+          // Auto-login after create
+          const loginJson = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
+          if (loginJson && loginJson.success && loginJson.token) {
+            localStorage.setItem('auth_token', loginJson.token);
+            const payload = parseJwt(loginJson.token);
+            const loggedUser = {
+              id: payload && payload.sub ? payload.sub : formData.email,
+              name: payload && payload.name ? payload.name : formData.name,
+              role: payload && payload.role ? payload.role : formData.role
+            };
+            localStorage.setItem('current_user', JSON.stringify(loggedUser));
+            onAuth(loggedUser);
+            onClose();
+          } else {
+            // Fallback: persist local user object (no token)
+            localStorage.setItem('current_user', JSON.stringify(userData));
+            onAuth(userData);
+            onClose();
+          }
+        } else {
+          const err = (json && (json.error || json.message)) || 'Account creation failed';
+          setAuthError(err);
         }
+      } catch (error) {
+        console.error('request failed:', error);
+        setAuthError('Network error');
+        return;
+      }
     }
     
   };

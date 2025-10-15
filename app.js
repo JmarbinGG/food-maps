@@ -58,7 +58,7 @@ function App() {
   const [selectedStoreId, setSelectedStoreId] = React.useState(null);
   const [filters, setFilters] = React.useState({
     category: 'all',
-    status: 'AVAILABLE',
+    status: 'available',
     distance: 25,
     perishability: 'all'
   });
@@ -130,7 +130,57 @@ function App() {
       // Load data from database (use snapshot fallback)
       try {
         const dbListings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []));
-        const normalized = Array.isArray(dbListings) ? dbListings.map(item => ({ ...item, id: item.id || item.objectId || item.id })).filter(l => l && l.id) : [];
+        const normalizeListing = (item) => {
+          if (!item) return item;
+          const copy = { ...item };
+          // Normalize status to lowercase
+          copy.status = (copy.status || '').toString().toLowerCase();
+
+          // Normalize coords to copy.coords = { lat, lng }
+          try {
+            if (copy.coords && copy.coords.lat !== undefined && copy.coords.lng !== undefined) {
+              copy.coords = { lat: parseFloat(copy.coords.lat), lng: parseFloat(copy.coords.lng) };
+            } else if (copy.coords_lat !== undefined && copy.coords_lng !== undefined) {
+              copy.coords = { lat: parseFloat(copy.coords_lat), lng: parseFloat(copy.coords_lng) };
+            } else if (Array.isArray(copy.coordinates) && copy.coordinates.length >= 2) {
+              // coordinates stored as [lng, lat]
+              copy.coords = { lat: parseFloat(copy.coordinates[1]), lng: parseFloat(copy.coordinates[0]) };
+            }
+            // Validate and auto-swap if values look reversed
+            if (copy.coords) {
+              const lat = copy.coords.lat;
+              const lng = copy.coords.lng;
+              const validLat = Number.isFinite(lat) && lat >= -90 && lat <= 90;
+              const validLng = Number.isFinite(lng) && lng >= -180 && lng <= 180;
+              if (!validLat && validLng) {
+                // try swapping
+                if (Number.isFinite(lng) && lng >= -90 && lng <= 90 && Number.isFinite(lat) && lat >= -180 && lat <= 180) {
+                  copy.coords = { lat: lng, lng: lat };
+                } else {
+                  // invalid coords - remove
+                  delete copy.coords;
+                }
+              } else if (!validLng && validLat) {
+                if (Number.isFinite(lat) && lat >= -180 && lat <= 180 && Number.isFinite(lng) && lng >= -90 && lng <= 90) {
+                  copy.coords = { lat: lng, lng: lat };
+                } else {
+                  delete copy.coords;
+                }
+              } else if (!validLat || !validLng) {
+                delete copy.coords;
+              }
+            }
+          } catch (e) {
+            // leave as-is if normalization fails
+            console.error('Listing normalization error', e);
+          }
+
+          // Ensure id exists
+          copy.id = copy.id || copy.objectId || copy._id || copy.listing_id;
+          return copy;
+        };
+
+        const normalized = Array.isArray(dbListings) ? dbListings.map(item => normalizeListing(item)).filter(l => l && l.id) : [];
         setListings(normalized);
         setFilteredListings(normalized);
         console.log(`Loaded ${normalized.length} listings from database`);
@@ -235,29 +285,44 @@ function App() {
     }
     
     try {
-      // Update in database if connected
-      if (databaseConnected && window.databaseService) {
-        const result = await window.databaseService.updateListingStatus(
-          listingId, 
-          'claimed', 
-          user.id
-        );
-        
-        if (result.success) {
-          console.log('Listing claimed in database');
-        } else {
-          console.error('Failed to update listing in database:', result.error);
+      // Prefer to update via backend API if available
+      let updatedListing = null;
+      if (window.listingAPI && window.listingAPI.update) {
+        try {
+          const resp = await window.listingAPI.update(listingId, { status: 'claimed', recipient_id: user.id });
+          // resp may include a 'listing' object depending on backend
+          if (resp && resp.listing) {
+            updatedListing = resp.listing;
+          }
+        } catch (apiErr) {
+          console.warn('listingAPI.update failed, falling back to databaseService', apiErr);
         }
       }
-      
-      // Update local state
-      const updatedListings = listings.map(listing => 
-        listing.id === listingId 
-          ? { ...listing, status: 'claimed', recipient_id: user.id }
-          : listing
-      );
-      setListings(updatedListings);
-      setFilteredListings(updatedListings);
+
+      // Fallback to databaseService update if API didn't return updated listing
+      if (!updatedListing && databaseConnected && window.databaseService) {
+        const result = await window.databaseService.updateListingStatus(listingId, 'claimed', user.id);
+        if (result && result.success && result.data) {
+          updatedListing = result.data;
+        }
+      }
+
+      // Update local state based on updatedListing or optimistic update
+      if (updatedListing) {
+        const updatedListings = listings.map(l => l.id === listingId ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'claimed') }) : l);
+        setListings(updatedListings);
+        setFilteredListings(updatedListings);
+      } else {
+        // optimistic fallback
+        const updatedListings = listings.map(listing => 
+          listing.id === listingId 
+            ? { ...listing, status: 'claimed', recipient_id: user.id }
+            : listing
+        );
+        setListings(updatedListings);
+        setFilteredListings(updatedListings);
+      }
+
       alert('Listing claimed successfully!');
       
     } catch (error) {
@@ -414,13 +479,35 @@ function App() {
   const renderView = () => {
     switch (currentView) {
       case 'create':
-        return (
-          <CreateListing
-            user={user}
-            onCancel={() => setCurrentView('map')}
-            onSuccess={() => setCurrentView('map')}
-          />
-        );
+          return (
+            <CreateListing
+              user={user}
+              onCancel={() => setCurrentView('map')}
+              onSuccess={async () => {
+                // Fetch latest listings from backend after creation
+                try {
+                  if (window.listingAPI && window.listingAPI.getAll) {
+                    const latestListings = await window.listingAPI.getAll();
+                    if (Array.isArray(latestListings)) {
+                      setListings(latestListings);
+                      setFilteredListings(latestListings);
+                    }
+                  }
+                } catch (err) {
+                  console.error('Failed to refresh listings after creation', err);
+                }
+                // Ensure we go back to the map view and recenter to new listings
+                setCurrentView('map');
+                try {
+                  if (window.recenterMap) {
+                    window.recenterMap();
+                  }
+                } catch (e) {
+                  console.error('recenterMap call failed', e);
+                }
+              }}
+            />
+          );
       case 'bulk-create':
         return (
           <BulkListing
