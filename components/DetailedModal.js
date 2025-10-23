@@ -67,9 +67,11 @@ function DetailedModal({ listing, onClose, onClaim }) {
         React.createElement('h2', { className: 'font-bold text-xl text-gray-900' }, 'Food Listing Details'),
         React.createElement('button', {
           onClick: onClose,
-          className: 'p-2 hover:bg-gray-100 rounded-full transition-colors'
+          className: 'p-3 hover:bg-gray-100 rounded-full transition-colors',
+          'aria-label': 'Close',
+          title: 'Close'
         },
-          React.createElement('div', { className: 'icon-x text-xl text-gray-500' })
+          React.createElement('div', { className: 'icon-x text-2xl text-gray-500' })
         )
       ),
 

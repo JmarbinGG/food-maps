@@ -2,6 +2,8 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   if (!listing) return null;
 
   const [isEditing, setIsEditing] = React.useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
   const [editData, setEditData] = React.useState({
     title: listing.title || '',
     description: listing.description || '',
@@ -73,6 +75,88 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       console.error('Failed to save listing edits', e);
       alert('Failed to save changes.');
     }
+    window.location.reload();
+  };
+
+  const handleDelete = async () => {
+    try {
+      if (!canEdit) { alert('You are not authorized to delete this listing.'); return; }
+      // Require a real auth token (demo login will not work for protected endpoints)
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        setShowDeleteConfirm(false);
+        alert('Please sign in to delete this listing. Use a donor account that owns the listing.');
+        try { if (window.openAuthModal) window.openAuthModal(); } catch (e) {}
+        return;
+      }
+      setIsDeleting(true);
+      let ok = false;
+      let lastStatus = null;
+      let lastError = null;
+      // Prefer unified API helper if present
+      if (window.listingAPI && typeof window.listingAPI.delete === 'function') {
+        try {
+          await window.listingAPI.delete(listing.id, { timeout: 10000 });
+          ok = true;
+        } catch (err) {
+          console.error('listingAPI.delete failed, falling back:', err);
+          lastError = err;
+          try {
+            // Extract status code if embedded in message
+            const m = (err && err.message) ? err.message.match(/API Error:\s*(\d{3})/) : null;
+            if (m && m[1]) lastStatus = parseInt(m[1], 10);
+          } catch (_) {}
+        }
+      }
+      // Fallback direct fetch to backend route
+      if (!ok) {
+        try {
+          const headers = { Authorization: `Bearer ${token}` };
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 10000);
+          const resp = await fetch(`/api/listings/get/${listing.id}`, { method: 'DELETE', headers, signal: controller.signal });
+          clearTimeout(timer);
+          ok = resp && resp.ok;
+          lastStatus = resp ? resp.status : lastStatus;
+        } catch (err) {
+          console.error('Direct DELETE failed:', err);
+          lastError = err;
+        }
+      }
+      if (!ok) {
+        // Tailored auth/permission messaging
+        if (lastStatus === 401) {
+          setShowDeleteConfirm(false);
+          alert('Your session is missing or expired. Please sign in to continue.');
+          try { if (window.openAuthModal) window.openAuthModal(); } catch (e) {}
+        } else if (lastStatus === 403) {
+          alert('You can only delete listings you own.');
+        } else if (lastError && (lastError.name === 'AbortError' || /timeout/i.test(String(lastError.message)))) {
+          alert('The server didn’t respond. Check your API URL and network, then try again.');
+        } else {
+          alert('Failed to delete listing.');
+        }
+        setIsDeleting(false);
+        return;
+      }
+
+      // Remove from local snapshot to keep UI in sync
+      try {
+        if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+          window.databaseService.listings = window.databaseService.listings.filter(l => String(l.id) !== String(listing.id));
+        }
+      } catch (e) { /* ignore */ }
+
+      try { if (window.recenterMap) window.recenterMap(); } catch(e){}
+      setShowDeleteConfirm(false);
+      setIsDeleting(false);
+      if (typeof onClose === 'function') onClose();
+    } catch (e) {
+      console.error('Delete listing error', e);
+      alert('Failed to delete listing.');
+      setIsDeleting(false);
+    }
+    window.location.reload();
   };
 
   return (
@@ -125,6 +209,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
               <div className="flex gap-2">
                 <button onClick={saveEdits} className="btn-primary">Save</button>
                 <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
+                <button onClick={() => setShowDeleteConfirm(true)} className="btn-danger">Delete Listing</button>
               </div>
             </div>
           ) : (
@@ -148,13 +233,38 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
                 ) : listing.status === 'claimed' ? (
                   <div className="flex-1 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg text-center">Already Claimed</div>
                 ) : (
-                  <div className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg text-center">Not Available</div>
+                  <div className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg text-center">{userRole === 'donor' ? 'Only recipients can claim food' : 'Not Available'}</div>
                 )}
               </div>
             </div>
           )}
         </div>
       </div>
+      {/* Delete confirmation modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60" onClick={() => !isDeleting && setShowDeleteConfirm(false)}></div>
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="h-6 w-6 text-red-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Delete listing?</h3>
+                <p className="mt-1 text-sm text-gray-600">This action cannot be undone. "{listing.title}" will be permanently removed.</p>
+              </div>
+            </div>
+            <div className="mt-6 flex justify-end gap-2">
+              <button disabled={isDeleting} onClick={() => setShowDeleteConfirm(false)} className="btn-secondary">Cancel</button>
+              <button disabled={isDeleting} onClick={handleDelete} className="btn-danger">
+                {isDeleting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

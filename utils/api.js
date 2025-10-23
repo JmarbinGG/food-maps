@@ -1,5 +1,13 @@
 // API utilities for backend communication
-window.API_BASE_URL = 'http://localhost:8000';
+// Default API base URL:
+// - If a global window.API_BASE_URL is already defined, use it
+// - If running on localhost, default to http://localhost:8000
+// - Otherwise, default to '' (same-origin relative requests)
+window.API_BASE_URL = (typeof window.API_BASE_URL !== 'undefined')
+  ? window.API_BASE_URL
+  : ((typeof window.location !== 'undefined' && (/^localhost$|^127\.0\.0\.1$/.test(window.location.hostname)))
+      ? 'http://localhost:8000'
+      : '');
 
 // API request wrapper with error handling
 window.apiRequest = async function(endpoint, options = {}) {
@@ -11,10 +19,31 @@ window.apiRequest = async function(endpoint, options = {}) {
       ...options.headers
     };
 
-    const response = await fetch(`${window.API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers
+    // Build URL: respect absolute URLs, otherwise prepend API_BASE_URL when provided
+    let url = endpoint;
+    const isAbsolute = /^https?:\/\//i.test(endpoint);
+    if (!isAbsolute) {
+      if (window.API_BASE_URL) {
+        const base = window.API_BASE_URL.replace(/\/$/, '');
+        const path = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+        url = `${base}${path}`;
+      } else {
+        url = endpoint; // same-origin relative
+      }
+    }
+
+    // Support timeout via AbortController
+    const { timeout, ...restOptions } = options;
+    const timeoutMs = typeof timeout === 'number' ? timeout : 15000;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    const response = await fetch(url, {
+      ...restOptions,
+      headers,
+      signal: controller.signal
     });
+    clearTimeout(timer);
 
     if (!response.ok) {
       throw new Error(`API Error: ${response.status} ${response.statusText}`);
@@ -71,7 +100,7 @@ window.listingAPI = {
     body: JSON.stringify(listingData)
   }),
 
-  delete: (id) => apiRequest(`/api/listings/get/${id}`, { method: 'DELETE' })
+  delete: (id, options = {}) => apiRequest(`/api/listings/get/${id}`, { method: 'DELETE', ...options })
 };
 
 // Transaction API calls

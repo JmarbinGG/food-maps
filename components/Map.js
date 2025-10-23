@@ -449,6 +449,33 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     const el = document.createElement('div');
     el.className = 'custom-marker';
     
+    // Determine if this listing belongs to the current user (donor)
+    const getCurrentUserId = () => {
+      try {
+        if (user && user.id != null) return String(user.id);
+        const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+        if (cu && (cu.id != null || cu.user_id != null || cu.sub != null)) {
+          return String(cu.id ?? cu.user_id ?? cu.sub);
+        }
+      } catch (_) {}
+      return null;
+    };
+    const getListingDonorId = (l) => {
+      try {
+        const val = (l && (
+          (l.donor_id != null ? l.donor_id : null) ??
+          (l.donorId != null ? l.donorId : null) ??
+          (l.owner_id != null ? l.owner_id : null) ??
+          (l.ownerId != null ? l.ownerId : null) ??
+          (l.donor && l.donor.id != null ? l.donor.id : null)
+        ));
+        return val != null ? String(val) : null;
+      } catch (_) { return null; }
+    };
+    const currentUserId = getCurrentUserId();
+    const listingDonorId = getListingDonorId(listing);
+    const isOwner = currentUserId && listingDonorId && (currentUserId === String(listingDonorId));
+
     const donorType = getDonorType(listing);
     
     // Color scheme based on donor type
@@ -493,6 +520,11 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       beverages: '💧'
     };
     
+    // Owner outline uses subtle blue ring outside the existing border
+    const ownerBoxShadow = isOwner
+      ? '0 0 0 2px rgba(59,130,246,0.9), 0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)'
+      : '0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)';
+
     el.innerHTML = `
       <div style="
         width: 36px;
@@ -501,7 +533,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         border: 3px solid ${borderColor};
         border-radius: 50% 50% 50% 0;
         transform: rotate(-45deg);
-        box-shadow: 0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1);
+        box-shadow: ${ownerBoxShadow};
         cursor: pointer;
         position: relative;
         transition: all 0.3s ease;

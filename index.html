@@ -68,6 +68,23 @@
             min-width: 280px;
         }
 
+        /* Enlarge Mapbox popup close button for better accessibility */
+        .mapboxgl-popup-close-button {
+            font-size: 22px;
+            width: 36px;
+            height: 36px;
+            line-height: 36px;
+            top: 6px;
+            right: 6px;
+            color: #4b5563; /* gray-600 */
+            border-radius: 9999px;
+            background: transparent;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+        .mapboxgl-popup-close-button:hover {
+            background: rgba(0,0,0,0.06);
+        }
+
         .food-listing-popup .mapboxgl-popup-content {
             max-width: min(90vw, 380px);
             width: auto;
@@ -148,10 +165,10 @@
             }
             
             .mapboxgl-popup-close-button {
-                font-size: 18px;
-                width: 30px;
-                height: 30px;
-                line-height: 30px;
+                font-size: 26px;
+                width: 44px;
+                height: 44px;
+                line-height: 44px;
             }
             
             /* Mobile sidebar adjustments */
@@ -280,6 +297,10 @@
         
         .btn-secondary {
             @apply bg-[var(--secondary-color)] text-[var(--primary-color)] px-4 py-2 rounded-lg font-medium hover:bg-green-100 transition-colors border border-[var(--primary-color)];
+        }
+
+        .btn-danger {
+            @apply bg-[var(--danger-color)] text-white px-4 py-2 rounded-lg font-medium hover:bg-red-600 transition-colors;
         }
         
         .card {

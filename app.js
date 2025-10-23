@@ -443,6 +443,8 @@ function App() {
     window.handleShowDetails = handleShowDetails;
     window.showAISearch = () => setShowAISearch(true);
     window.showFoodSearch = () => setShowFoodSearch(true);
+    // Allow nested components to trigger the auth modal
+    window.openAuthModal = () => setShowAuthModal(true);
     
     // Setup global detailed modal callback
     window.showDetailedModal = (listing) => {
@@ -463,6 +465,7 @@ function App() {
       delete window.showFoodSearch;
       delete window.showDetailedModal;
       delete window.openStoreMenu;
+      delete window.openAuthModal;
     };
   }, [handleClaimListing, handleShowDetails]);
 
@@ -636,11 +639,44 @@ function App() {
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                    Available Food ({filteredListings.length})
+                    {user && String(user.role).toLowerCase() === 'donor' ? 'My Listings' : 'All Listings'} ({(() => {
+                      const isDonor = user && String(user.role).toLowerCase() === 'donor';
+                      const getUid = () => {
+                        try {
+                          if (user && user.id != null) return String(user.id);
+                          const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+                          return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+                        } catch (_) { return null; }
+                      };
+                      const uid = getUid();
+                      const ownOnly = isDonor ? (filteredListings || []).filter(l => {
+                        try {
+                          const did = (l && ((l.donor_id ?? l.donorId ?? l.owner_id ?? l.ownerId) ?? (l.donor && l.donor.id)))
+                          return uid && did != null && String(did) === uid;
+                        } catch (_) { return false; }
+                      }) : filteredListings;
+                      return (ownOnly || []).length;
+                    })()})
                   </h2>
                 </div>
                 
-                {filteredListings.map(listing => 
+                {(() => {
+                  const isDonor = user && String(user.role).toLowerCase() === 'donor';
+                  const getUid = () => {
+                    try {
+                      if (user && user.id != null) return String(user.id);
+                      const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+                      return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+                    } catch (_) { return null; }
+                  };
+                  const uid = getUid();
+                  const sidebarListings = isDonor ? (filteredListings || []).filter(l => {
+                    try {
+                      const did = (l && ((l.donor_id ?? l.donorId ?? l.owner_id ?? l.ownerId) ?? (l.donor && l.donor.id)))
+                      return uid && did != null && String(did) === uid;
+                    } catch (_) { return false; }
+                  }) : filteredListings;
+                  return (sidebarListings || []).map(listing => 
                   <ListingCard
                     key={listing.id}
                     listing={listing}
@@ -651,12 +687,30 @@ function App() {
                     }}
                     user={user}
                   />
-                )}
+                  );
+                })()}
                 
-                {filteredListings.length === 0 && (
+                {(() => {
+                  const isDonor = user && String(user.role).toLowerCase() === 'donor';
+                  const getUid = () => {
+                    try {
+                      if (user && user.id != null) return String(user.id);
+                      const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+                      return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+                    } catch (_) { return null; }
+                  };
+                  const uid = getUid();
+                  const sidebarListings = isDonor ? (filteredListings || []).filter(l => {
+                    try {
+                      const did = (l && ((l.donor_id ?? l.donorId ?? l.owner_id ?? l.ownerId) ?? (l.donor && l.donor.id)))
+                      return uid && did != null && String(did) === uid;
+                    } catch (_) { return false; }
+                  }) : filteredListings;
+                  return (sidebarListings || []).length === 0;
+                })() && (
                   <div className="text-center py-8 text-[var(--text-secondary)]">
                     <div className="icon-search text-3xl mb-2"></div>
-                    <p>No listings found</p>
+                    <p>No listings found{user && String(user.role).toLowerCase() === 'donor' ? ' for your account ' : ''}</p>
                   </div>
                 )}
               </div>

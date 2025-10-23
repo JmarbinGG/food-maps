@@ -134,6 +134,34 @@ def get_listings(limit: int = 100, db: Session = Depends(get_db)):
 
     return listings
 
+@app.delete("/api/listings/get/{listing_id}")
+async def delete_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Delete a listing. Only the donor who created the listing can delete it."""
+    try:
+        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+        # Authorization: only the donor who created the listing can delete
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = str(payload.get("sub")) if payload else None
+            if not user_id or str(item.donor_id) != user_id:
+                raise HTTPException(status_code=403, detail="Not authorized to delete this listing")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or missing token")
+
+        db.delete(item)
+        db.commit()
+
+        return {"success": True, "message": "Listing deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.put("/api/listings/get/{listing_id}")
 async def update_listing(listing_id: int, request: Request, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
