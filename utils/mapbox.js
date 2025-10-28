@@ -1,7 +1,7 @@
 // Mapbox utilities and API integration
-// IMPORTANT: Replace this demo token with your own Mapbox access token
-// Get a free token at: https://www.mapbox.com/
-window.MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoic2lnbndpc2UiLCJhIjoiY21jOTZhZDl4MXd4cjJtcHRpZmMybzI2NSJ9.9ipnwxM81T2qguB27nt96Q';
+// IMPORTANT: Mapbox public access token
+// Using token provided by project owner. Replace here if you rotate tokens.
+window.MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoiam1hcmJpbiIsImEiOiJjbWc3aWg0M3AwbXhhMmpxM3NhZWo1Z2x6In0.W8AZQbCZTUfizNliutsyHg';
 
 // Check if Mapbox GL JS is available
 window.MAPBOX_AVAILABLE = typeof mapboxgl !== 'undefined';
@@ -51,6 +51,30 @@ window.geocodeAddress = async function(address) {
   } catch (error) {
     console.error('Geocoding error:', error);
     return null;
+  }
+};
+
+// Address search (autocomplete) - returns a list of candidate features
+window.searchAddress = async function(query, { types = 'address,poi,place', limit = 5 } = {}) {
+  try {
+    const q = String(query || '').trim();
+    if (!q) return [];
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json?access_token=${window.MAPBOX_ACCESS_TOKEN}&types=${encodeURIComponent(types)}&limit=${limit}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const features = Array.isArray(data && data.features) ? data.features : [];
+    // Normalize minimal shape used by UI
+    return features.map(f => ({
+      id: f.id,
+      place_name: f.place_name,
+      center: f.center,
+      context: f.context || [],
+      text: f.text,
+      properties: f.properties || {}
+    }));
+  } catch (err) {
+    console.error('searchAddress error:', err);
+    return [];
   }
 };
 

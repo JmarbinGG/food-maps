@@ -72,7 +72,7 @@ function FoodSearch({ onClose, onSelectFood, user }) {
       setSearchResults(results);
     } catch (error) {
       console.error('Search error:', error);
-      alert('Search failed. Please try again.');
+  if (typeof window.showAlert === 'function') window.showAlert('Search failed. Please try again.', { title: 'Error', variant: 'error' });
     } finally {
       setIsSearching(false);
     }

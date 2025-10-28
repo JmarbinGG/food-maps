@@ -19,8 +19,8 @@ A comprehensive food distribution platform with AI-driven optimization, route pl
 
 ### Backend (API Server)
 1. Install dependencies: `cd backend && pip install -r requirements.txt`
-2. Start database: `docker-compose up postgres`
-3. Run API server: `uvicorn main:app --reload`
+2. (Optional) Start a DB. By default we use a local SQLite file at `project/food_maps.db`. To use Postgres/MySQL, set `DATABASE_URL`.
+3. Run the API server from the `backend` folder: `uvicorn app:app --reload`
 4. API available at `http://localhost:8000`
 
 ### Full Docker Setup
@@ -31,10 +31,30 @@ docker-compose up
 ## Environment Variables
 
 ```env
+# Mapbox (optional, enables server-side geocoding on create/update)
 MAPBOX_ACCESS_TOKEN=your_mapbox_token
-DATABASE_URL=postgresql://user:pass@localhost/food_maps
+
+# Database. Defaults to SQLite at project/food_maps.db if not set.
+DATABASE_URL=sqlite:///../food_maps.db
+
+# JWT secret for auth tokens
 JWT_SECRET=your_secret_key
 ```
+
+## API additions (Claiming, Contacts, Phone)
+
+- Listings
+	- GET `/api/listings/get?include_claimed_for_me=true` — returns available listings; when authenticated, optionally includes claimed listings relevant to the current user (donor or recipient).
+	- PATCH `/api/listings/get/{id}` — claim a listing (requires recipient auth and a saved phone number).
+	- GET `/api/listings/user-details/{id}` — for a claimed listing, returns counterparty name/phone (recipient sees donor; donor sees recipient). Unclaimed or missing users return empty contact.
+
+- User
+	- GET `/api/user/me` — returns the authenticated user profile.
+	- PUT `/api/user/phone` — saves/updates the authenticated user's phone.
+
+Notes
+- Creating or claiming a listing requires the user to have a valid phone number on file.
+- A lightweight startup migration adds `recipient_id` and `claimed_at` columns to `food_resources` when missing (SQLite/Postgres/MySQL best-effort).
 
 ## Tech Stack
 
@@ -50,4 +70,4 @@ JWT_SECRET=your_secret_key
 3. **Volunteers**: Optimized delivery routes
 4. **Everyone**: Track food consumption and waste
 
-Last updated: January 2025
+Last updated: October 2025

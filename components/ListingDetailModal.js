@@ -4,6 +4,9 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   const [isEditing, setIsEditing] = React.useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [isDeleting, setIsDeleting] = React.useState(false);
+  const [contact, setContact] = React.useState(null);
+  const [contactError, setContactError] = React.useState(null);
+  const [contactLoading, setContactLoading] = React.useState(false);
   const [editData, setEditData] = React.useState({
     title: listing.title || '',
     description: listing.description || '',
@@ -35,6 +38,63 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   const userRole = String(user && user.role ? user.role : (JSON.parse(localStorage.getItem('current_user')||'{}').role || '')).toLowerCase();
   const canEdit = userRole === 'donor' && currentUserId && listingDonorId && (currentUserId === listingDonorId);
 
+  // Determine if this listing is claimed by me (recipient) using backend field or local fallback
+  const isClaimedByMe = React.useMemo(() => {
+    if (!currentUserId) return false;
+    const status = String(listing.status || '').toLowerCase();
+    if (status !== 'claimed') return false;
+    const rid = listing.recipient_id ?? listing.recipientId ?? null;
+    if (rid != null && String(rid) === String(currentUserId)) return true;
+    // Fallback to localStorage cache set at claim time
+    try {
+      const key = `my_claimed_ids:${currentUserId}`;
+      const raw = localStorage.getItem(key);
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) && arr.some(id => String(id) === String(listing.id));
+    } catch (_) { return false; }
+  }, [listing, currentUserId]);
+
+  // Fetch counterparty contact if eligible
+  React.useEffect(() => {
+    let cancelled = false;
+    async function fetchContact() {
+      try {
+        setContactError(null);
+        setContact(null);
+        setContactLoading(true);
+        if (!window.listingAPI || typeof window.listingAPI.getCounterparty !== 'function') {
+          throw new Error('Contact API not available');
+        }
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          throw new Error('Not signed in');
+        }
+        const data = await window.listingAPI.getCounterparty(listing.id, { timeout: 10000 });
+        if (!cancelled) setContact(data || null);
+      } catch (e) {
+        if (!cancelled) setContactError(e?.message || 'Failed to fetch contact');
+      } finally {
+        if (!cancelled) setContactLoading(false);
+      }
+    }
+
+    const status = String(listing.status || '').toLowerCase();
+    const shouldFetch = (
+      status === 'claimed' && (
+        (userRole === 'recipient' && isClaimedByMe) ||
+        (userRole === 'donor' && canEdit)
+      )
+    );
+    if (shouldFetch) {
+      fetchContact();
+    } else {
+      setContact(null);
+      setContactError(null);
+      setContactLoading(false);
+    }
+    return () => { cancelled = true; };
+  }, [listing.id, listing.status, userRole, isClaimedByMe, canEdit]);
+
   const getStatusColor = (status) => {
     switch ((status || '').toString().toLowerCase()) {
       case 'available': return 'bg-green-100 text-green-800 border-green-200';
@@ -46,7 +106,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
 
   const saveEdits = async () => {
     try {
-      if (!canEdit) { alert('You are not authorized to edit this listing.'); return; }
+  if (!canEdit) { if (typeof window.showAlert === 'function') window.showAlert('You are not authorized to edit this listing.', { title: 'Not allowed', variant: 'error' }); return; }
       if (window.databaseService && window.databaseService.updateListing) {
         const resp = await window.databaseService.updateListing(listing.id, {
           title: editData.title,
@@ -56,7 +116,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
           address: editData.address
         });
         if (!resp || !resp.success) {
-          alert(resp?.error || 'Failed to save changes.');
+          if (typeof window.showAlert === 'function') window.showAlert(resp?.error || 'Failed to save changes.', { title: 'Error', variant: 'error' });
           return;
         }
         const updated = resp.data;
@@ -73,19 +133,19 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       setIsEditing(false);
     } catch (e) {
       console.error('Failed to save listing edits', e);
-      alert('Failed to save changes.');
+  if (typeof window.showAlert === 'function') window.showAlert('Failed to save changes.', { title: 'Error', variant: 'error' });
     }
     window.location.reload();
   };
 
   const handleDelete = async () => {
     try {
-      if (!canEdit) { alert('You are not authorized to delete this listing.'); return; }
+  if (!canEdit) { if (typeof window.showAlert === 'function') window.showAlert('You are not authorized to delete this listing.', { title: 'Not allowed', variant: 'error' }); return; }
       // Require a real auth token (demo login will not work for protected endpoints)
       const token = localStorage.getItem('auth_token');
       if (!token) {
-        setShowDeleteConfirm(false);
-        alert('Please sign in to delete this listing. Use a donor account that owns the listing.');
+  setShowDeleteConfirm(false);
+  if (typeof window.showAlert === 'function') window.showAlert('Please sign in to delete this listing. Use a donor account that owns the listing.', { title: 'Sign in required', variant: 'error' });
         try { if (window.openAuthModal) window.openAuthModal(); } catch (e) {}
         return;
       }
@@ -127,14 +187,14 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         // Tailored auth/permission messaging
         if (lastStatus === 401) {
           setShowDeleteConfirm(false);
-          alert('Your session is missing or expired. Please sign in to continue.');
+          if (typeof window.showAlert === 'function') window.showAlert('Your session is missing or expired. Please sign in to continue.', { title: 'Session expired', variant: 'error' });
           try { if (window.openAuthModal) window.openAuthModal(); } catch (e) {}
         } else if (lastStatus === 403) {
-          alert('You can only delete listings you own.');
+          if (typeof window.showAlert === 'function') window.showAlert('You can only delete listings you own.', { title: 'Not allowed', variant: 'error' });
         } else if (lastError && (lastError.name === 'AbortError' || /timeout/i.test(String(lastError.message)))) {
-          alert('The server didn’t respond. Check your API URL and network, then try again.');
+          if (typeof window.showAlert === 'function') window.showAlert('The server didn’t respond. Check your API URL and network, then try again.', { title: 'Timeout', variant: 'error' });
         } else {
-          alert('Failed to delete listing.');
+          if (typeof window.showAlert === 'function') window.showAlert('Failed to delete listing.', { title: 'Error', variant: 'error' });
         }
         setIsDeleting(false);
         return;
@@ -153,11 +213,12 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       if (typeof onClose === 'function') onClose();
     } catch (e) {
       console.error('Delete listing error', e);
-      alert('Failed to delete listing.');
+  if (typeof window.showAlert === 'function') window.showAlert('Failed to delete listing.', { title: 'Error', variant: 'error' });
       setIsDeleting(false);
     }
     window.location.reload();
   };
+
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -226,6 +287,29 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
                 <div className="text-sm text-gray-600">Pickup Address</div>
                 <div className="font-medium">{listing.address}</div>
               </div>
+
+              {/* Contact info for counterpart when claimed and authorized */}
+              {String(listing.status || '').toLowerCase() === 'claimed' && (
+                (userRole === 'recipient' && isClaimedByMe) || (userRole === 'donor' && canEdit)
+              ) && (
+                <div className="mt-2 p-3 border border-blue-200 rounded bg-blue-50">
+                  <div className="text-sm font-medium text-blue-900 mb-1">
+                    {userRole === 'recipient' ? 'Donor Contact' : 'Recipient Contact'}
+                  </div>
+                  {contactLoading ? (
+                    <div className="text-sm text-blue-800">Loading contact…</div>
+                  ) : contactError ? (
+                    <div className="text-sm text-red-700">{contactError}</div>
+                  ) : contact ? (
+                    <div className="text-sm text-blue-900">
+                      <div><span className="font-semibold">Name:</span> {contact.name || '—'}</div>
+                      <div><span className="font-semibold">Phone:</span> {contact.phone || '—'}</div>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-blue-800">Contact not available.</div>
+                  )}
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-4">
                 {canClaim ? (

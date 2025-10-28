@@ -68,7 +68,7 @@ class FoodResourceResponse(BaseModel):
     address: str
     coords_lat: Optional[float] = None
     coords_lng: Optional[float] = None
-    urgency_score: int
+    urgency_score: Optional[int] = 0
     created_at: datetime
     donor: UserResponse
 

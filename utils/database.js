@@ -128,8 +128,17 @@ class DatabaseService {
         method: 'POST',
         headers
       });
-      const resp = await response.json().catch(() => ({}));
-      const created = resp && (resp.listing || resp.data || resp);
+      let bodyText = '';
+      try { bodyText = await response.text(); } catch (_) {}
+      let respJson = null;
+      try { respJson = bodyText ? JSON.parse(bodyText) : null; } catch (_) { respJson = null; }
+
+      if (!response.ok) {
+        const msg = (respJson && (respJson.detail || respJson.error)) || `${response.status} ${response.statusText}`;
+        return { success: false, error: msg };
+      }
+
+      const created = respJson && (respJson.listing || respJson.data || respJson);
       if (created) {
         // update local snapshot
         try { this.listings.unshift(created); } catch (e) {}
@@ -147,7 +156,9 @@ class DatabaseService {
     try {
       const token = localStorage.getItem('auth_token');
       const headers = token ? { Authorization: `Bearer ${token}` } : {};
-      const resp = await fetch(`/api/listings/get?limit=${limit}`, { headers });
+      // Ask backend to include my relevant claimed items when authenticated
+      const includeClaimed = token ? '&include_claimed_for_me=true' : '';
+      const resp = await fetch(`/api/listings/get?limit=${limit}${includeClaimed}`, { headers });
       if (!resp.ok) throw new Error('fetch failed');
       const json = await resp.json().catch(() => null);
       return { success: true, data: json };

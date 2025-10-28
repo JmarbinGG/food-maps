@@ -475,6 +475,28 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     const currentUserId = getCurrentUserId();
     const listingDonorId = getListingDonorId(listing);
     const isOwner = currentUserId && listingDonorId && (currentUserId === String(listingDonorId));
+    // Highlight if current recipient claimed this listing
+    const getRecipientIdForListing = (l) => {
+      try {
+        const v = (l?.recipient_id ?? l?.recipientId ?? (l?.recipient && l?.recipient.id));
+        return v != null ? String(v) : null;
+      } catch (_) { return null; }
+    };
+    const isClaimedByMe = (() => {
+      try {
+        const role = String(user?.role || '').toLowerCase();
+        if (role !== 'recipient') return false;
+        const rid = getRecipientIdForListing(listing);
+        const statusIsClaimed = String(listing?.status || '').toLowerCase() === 'claimed';
+        if (currentUserId && rid && currentUserId === rid && statusIsClaimed) return true;
+        // Fallback to local storage mapping if backend doesn't include recipient_id
+        try {
+          const key = `my_claimed_ids:${currentUserId}`;
+          const arr = JSON.parse(localStorage.getItem(key) || '[]');
+          return statusIsClaimed && Array.isArray(arr) && arr.includes(String(listing.id));
+        } catch (_) { return false; }
+      } catch (_) { return false; }
+    })();
 
     const donorType = getDonorType(listing);
     
@@ -520,8 +542,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       beverages: '💧'
     };
     
-    // Owner outline uses subtle blue ring outside the existing border
-    const ownerBoxShadow = isOwner
+    // Owner/claimer outline uses subtle blue ring outside the existing border
+    const ownerBoxShadow = (isOwner || isClaimedByMe)
       ? '0 0 0 2px rgba(59,130,246,0.9), 0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)'
       : '0 4px 16px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)';
 
@@ -607,9 +629,9 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       sourceListingsRaw = safeListings || [];
     }
 
-    // Deduplicate by stable key to avoid duplicate markers
-    const seen = new Set();
-    const currentListings = [];
+  // Deduplicate by stable key to avoid duplicate markers
+  const seen = new Set();
+  let currentListings = [];
     for (const listing of sourceListingsRaw) {
       const key = (listing && (listing.id || listing.objectId || (listing.title && listing.address && `${listing.title}|${listing.address}`))) || Math.random().toString(36).slice(2);
       if (!seen.has(key)) {
@@ -619,6 +641,38 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     }
 
     console.log('Updating markers with listings:', currentListings.length);
+
+    // Filter visibility for claimed listings based on user role/ownership
+    try {
+      const role = String(user?.role || '').toLowerCase();
+      const getUid = () => {
+        try {
+          if (user && user.id != null) return String(user.id);
+          const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+          return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+        } catch (_) { return null; }
+      };
+      const uid = getUid();
+      const getDonorId = (l) => { try { const v = (l?.donor_id ?? l?.donorId ?? l?.owner_id ?? l?.ownerId ?? (l?.donor && l?.donor.id)); return v != null ? String(v) : null; } catch { return null; } };
+      const getRecipientId = (l) => { try { const v = (l?.recipient_id ?? l?.recipientId ?? (l?.recipient && l?.recipient.id)); return v != null ? String(v) : null; } catch { return null; } };
+      const isClaimedByMeFallback = (l) => {
+        try {
+          const key = `my_claimed_ids:${uid}`;
+          const arr = JSON.parse(localStorage.getItem(key) || '[]');
+          return Array.isArray(arr) && arr.includes(String(l.id));
+        } catch (_) { return false; }
+      };
+
+      currentListings = currentListings.filter(l => {
+        const status = String(l?.status || '').toLowerCase();
+        if (status !== 'claimed') return true;
+        const ownedByDonor = uid && getDonorId(l) === uid;
+  const claimedByMe = (uid && getRecipientId(l) === uid) || isClaimedByMeFallback(l);
+        if (role === 'donor') return ownedByDonor;
+        if (role === 'recipient') return claimedByMe;
+        return false;
+      });
+    } catch (e) { console.warn('Marker visibility filter error:', e); }
 
     // Schedule geocoding for listings that lack coordinates.
     // Use a small in-memory in-flight map on the map instance to avoid duplicates.
@@ -1056,13 +1110,38 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
   // Expose a global recenter function so other parts of the app can force a fit
   React.useEffect(() => {
-    window.recenterMap = () => {
+    window.recenterMap = (opts = {}) => {
       try {
-        if (!map.current) return;
-        // Temporarily bypass user interaction flag and fit
-        const originalUserHasInteracted = map.current.userHasInteracted ? map.current.userHasInteracted() : false;
-        // Call fitMapToListings directly
-        fitMapToListings();
+        if (!map.current) return false;
+        const { force = true, target = 'listings' } = opts || {};
+
+        // Temporarily override user interaction guard if forcing
+        const originalUserHasInteractedFn = map.current.userHasInteracted;
+        if (force) {
+          map.current.userHasInteracted = () => false;
+        }
+
+        // Optionally center to user, otherwise fit to listings
+        if (target === 'user' && navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => {
+              try {
+                const center = [pos.coords.longitude, pos.coords.latitude];
+                map.current.flyTo({ center, zoom: 13, duration: 800 });
+              } catch (e) { /* ignore */ }
+            },
+            () => {
+              try { fitMapToListings(); } catch (e) { /* ignore */ }
+            }
+          );
+        } else {
+          fitMapToListings();
+        }
+
+        // Restore original interaction detector
+        if (force && originalUserHasInteractedFn) {
+          map.current.userHasInteracted = originalUserHasInteractedFn;
+        }
         return true;
       } catch (err) {
         console.error('recenterMap failed', err);
@@ -1102,7 +1181,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       }, 100);
     }
 
-  }, [mapLoaded, safeListings, distributionCenters, doGoodsStores, doGoodsKiosks]);
+  }, [mapLoaded, safeListings, distributionCenters, doGoodsStores, doGoodsKiosks, user]);
   
   // Force refresh when window data is available - but only fit once on initial load
   React.useEffect(() => {

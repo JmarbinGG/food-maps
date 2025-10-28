@@ -62,6 +62,57 @@ function App() {
     distance: 25,
     perishability: 'all'
   });
+  // Phone modal state and helper
+  const [phoneModalOpen, setPhoneModalOpen] = React.useState(false);
+  const phoneResolveRef = React.useRef(null);
+  const phoneInitialRef = React.useRef('');
+  // Alert modal state
+  const [alertOpen, setAlertOpen] = React.useState(false);
+  const [alertData, setAlertData] = React.useState({ title: 'Notice', message: '', variant: 'default' });
+  const alertResolveRef = React.useRef(null);
+
+  const requestPhone = React.useCallback(() => {
+    return new Promise((resolve) => {
+      phoneResolveRef.current = resolve;
+      try {
+        const stored = JSON.parse(localStorage.getItem('current_user') || 'null');
+        phoneInitialRef.current = stored && stored.phone ? String(stored.phone) : '';
+      } catch (_) { phoneInitialRef.current = ''; }
+      setPhoneModalOpen(true);
+    });
+  }, []);
+
+  const handlePhoneClose = React.useCallback(() => {
+    setPhoneModalOpen(false);
+    if (phoneResolveRef.current) {
+      try { phoneResolveRef.current(false); } catch (_) {}
+      phoneResolveRef.current = null;
+    }
+  }, []);
+
+  const handlePhoneSubmit = React.useCallback(async (phone) => {
+    try {
+      await window.userAPI.updatePhone(phone);
+      try {
+        const cuRaw = localStorage.getItem('current_user');
+        if (cuRaw) {
+          const cu = JSON.parse(cuRaw);
+          cu.phone = phone;
+          localStorage.setItem('current_user', JSON.stringify(cu));
+        }
+      } catch (_) {}
+      setPhoneModalOpen(false);
+      if (phoneResolveRef.current) {
+        try { phoneResolveRef.current(true); } catch (_) {}
+        phoneResolveRef.current = null;
+      }
+    } catch (e) {
+      if (typeof window.showAlert === 'function') {
+        window.showAlert('Failed to save phone number. Please try again.', { title: 'Error', variant: 'error' });
+      }
+      throw e;
+    }
+  }, []);
 
   React.useEffect(() => {
     try {
@@ -96,6 +147,76 @@ function App() {
       console.error('Error hydrating user from localStorage', e);
     }
   }, []);
+
+  // Refetch listings once user/auth is known to include relevant claimed items
+  React.useEffect(() => {
+    const refreshForUser = async () => {
+      try {
+        const dbListings = await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : []);
+        if (Array.isArray(dbListings)) {
+          // Normalize status to lowercase etc. (reuse normalize from init)
+          const normalizeListing = (item) => {
+            if (!item) return item;
+            const copy = { ...item };
+            copy.status = (copy.status || '').toString().toLowerCase();
+            try {
+              if (copy.coords && copy.coords.lat !== undefined && copy.coords.lng !== undefined) {
+                copy.coords = { lat: parseFloat(copy.coords.lat), lng: parseFloat(copy.coords.lng) };
+              } else if (copy.coords_lat !== undefined && copy.coords_lng !== undefined) {
+                copy.coords = { lat: parseFloat(copy.coords_lat), lng: parseFloat(copy.coords_lng) };
+              }
+            } catch (_) {}
+            copy.id = copy.id || copy.objectId || copy._id || copy.listing_id;
+            return copy;
+          };
+          const normalized = dbListings.map(normalizeListing).filter(l => l && l.id);
+          setListings(normalized);
+          setFilteredListings(normalized);
+        }
+      } catch (e) {
+        console.warn('Refresh listings after user hydration failed', e);
+      }
+    };
+    // Only refetch when we have a user or a token present
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (user || token) {
+        refreshForUser();
+      }
+    } catch (_) {
+      if (user) refreshForUser();
+    }
+  }, [user]);
+
+  // Expose phone request helper globally
+  React.useEffect(() => {
+    window.requestPhone = requestPhone;
+    return () => { delete window.requestPhone; };
+  }, [requestPhone]);
+
+  // Alert helper
+  const showAlert = React.useCallback((message, opts = {}) => {
+    return new Promise((resolve) => {
+      const { title = 'Notice', variant = 'default' } = opts || {};
+      setAlertData({ title, message: String(message || ''), variant });
+      alertResolveRef.current = resolve;
+      setAlertOpen(true);
+    });
+  }, []);
+
+  const handleAlertClose = React.useCallback(() => {
+    setAlertOpen(false);
+    if (alertResolveRef.current) {
+      try { alertResolveRef.current(true); } catch (_) {}
+      alertResolveRef.current = null;
+    }
+  }, []);
+
+  // Expose globally
+  React.useEffect(() => {
+    window.showAlert = showAlert;
+    return () => { delete window.showAlert; };
+  }, [showAlert]);
 
   const initializeApp = async () => {
     try {
@@ -255,79 +376,211 @@ function App() {
         setFilteredListings([]);
         return;
       }
-      
-      const filtered = listings.filter(listing => {
+
+      const role = String(user?.role || '').toLowerCase();
+      const getUid = () => {
         try {
-          if (!listing) return false;
-          if (filters.status !== 'all' && listing.status !== filters.status) return false;
-          if (filters.category !== 'all' && listing.category !== filters.category) return false;
-          if (filters.perishability !== 'all' && listing.perishability !== filters.perishability) return false;
-          return true;
-        } catch (error) {
-          console.error('Error filtering listing:', listing, error);
-          return false;
-        }
+          if (user && user.id != null) return String(user.id);
+          const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+          return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+        } catch (_) { return null; }
+      };
+      const uid = getUid();
+      const getDonorId = (l) => {
+        try { const v = (l?.donor_id ?? l?.donorId ?? l?.owner_id ?? l?.ownerId ?? (l?.donor && l?.donor.id)); return v != null ? String(v) : null; } catch { return null; }
+      };
+      const getRecipientId = (l) => {
+        try { const v = (l?.recipient_id ?? l?.recipientId ?? (l?.recipient && l?.recipient.id)); return v != null ? String(v) : null; } catch { return null; }
+      };
+
+      const statusFilter = String(filters.status || 'available').toLowerCase();
+
+      // Start with category/perishability filters only
+      let base = listings.filter(l => {
+        if (!l) return false;
+        if (filters.category !== 'all' && l.category !== filters.category) return false;
+        if (filters.perishability !== 'all' && l.perishability !== filters.perishability) return false;
+        return true;
       });
-      
-      console.log(`Filtering listings: ${listings.length} total -> ${filtered.length} filtered`);
-      console.log('Active filters:', filters);
-      setFilteredListings(filtered);
+
+      const isOwnedByDonor = (l) => uid && getDonorId(l) === uid;
+      const isClaimedByMe = (l) => {
+        const ridMatches = uid && getRecipientId(l) === uid;
+        if (ridMatches) return true;
+        try {
+          const key = `my_claimed_ids:${uid}`;
+          const arr = JSON.parse(localStorage.getItem(key) || '[]');
+          return Array.isArray(arr) && arr.includes(String(l.id));
+        } catch (_) { return false; }
+      };
+      const statusOf = (l) => String(l?.status || '').toLowerCase();
+
+      if (statusFilter === 'available') {
+        const availableOnly = base.filter(l => statusOf(l) === 'available');
+        // Union in relevant claimed items based on role
+        let extras = [];
+        if (role === 'donor') {
+          extras = base.filter(l => statusOf(l) === 'claimed' && isOwnedByDonor(l));
+        } else if (role === 'recipient') {
+          extras = base.filter(l => statusOf(l) === 'claimed' && isClaimedByMe(l));
+        }
+        // Merge without duplicates by id
+        const byId = new Map();
+        for (const l of availableOnly) byId.set(String(l.id), l);
+        for (const l of extras) byId.set(String(l.id), l);
+        base = Array.from(byId.values());
+      } else {
+        // statusFilter === 'all' — hide irrelevant claimed based on role
+        base = base.filter(l => {
+          const s = statusOf(l);
+          if (s !== 'claimed') return true;
+          if (role === 'donor') return isOwnedByDonor(l);
+          if (role === 'recipient') return isClaimedByMe(l);
+          // unauth/other roles: hide claimed
+          return false;
+        });
+      }
+
+      console.log(`Filtering listings: ${listings.length} total -> ${base.length} filtered (status=${statusFilter}, role=${role}, uid=${uid})`);
+      setFilteredListings(base);
     } catch (error) {
       console.error('Error in filtering effect:', error);
       setFilteredListings([]);
     }
-  }, [listings, filters]);
+  }, [listings, filters, user]);
 
   const handleClaimListing = async (listingId) => {
+    // Require auth
     if (!user) {
       setShowAuthModal(true);
       return;
     }
-    
+
+    const role = String(user.role || '').toLowerCase();
+    if (role !== 'recipient') {
+  if (typeof window.showAlert === 'function') window.showAlert('Only recipients can claim food.', { title: 'Not allowed', variant: 'error' });
+      return;
+    }
+
+    // Ensure listing is available
+    const listing = (listings || []).find(l => String(l.id) === String(listingId));
+    const status = String(listing?.status || '').toLowerCase();
+    if (status && status !== 'available') {
+  if (typeof window.showAlert === 'function') window.showAlert(status === 'claimed' ? 'This listing has already been claimed.' : 'This listing is not available to claim.', { title: 'Unavailable', variant: 'error' });
+      return;
+    }
+
+    // Ensure token exists
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setShowAuthModal(true);
+      return;
+    }
+
     try {
-      // Prefer to update via backend API if available
+      // Ensure user has a phone number before claiming
+      try {
+        if (window.userAPI && typeof window.userAPI.getMeV2 === 'function') {
+          const me = await window.userAPI.getMeV2();
+          const phone = (me && me.phone) ? String(me.phone).trim() : '';
+          if (!phone || phone.length < 7) {
+            const ok = await requestPhone();
+            if (!ok) {
+              if (typeof window.showAlert === 'function') window.showAlert('A phone number is required to claim food.', { title: 'Phone required', variant: 'error' });
+              return;
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Phone precheck failed or unavailable; proceeding to server enforcement');
+      }
+
       let updatedListing = null;
-      if (window.listingAPI && window.listingAPI.update) {
+
+      // Use dedicated claim endpoint
+      if (window.listingAPI && typeof window.listingAPI.claim === 'function') {
         try {
-          const resp = await window.listingAPI.update(listingId, { status: 'claimed', recipient_id: user.id });
-          // resp may include a 'listing' object depending on backend
+          const resp = await window.listingAPI.claim(listingId, user.id, { timeout: 10000 });
+          // Backend returns { success, message } or possibly an updated listing
           if (resp && resp.listing) {
             updatedListing = resp.listing;
           }
-        } catch (apiErr) {
-          console.warn('listingAPI.update failed, falling back to databaseService', apiErr);
+        } catch (err) {
+          // Surface helpful messages on auth/permission/network
+          const msg = String(err?.message || '');
+          if (/401/.test(msg)) {
+            if (typeof window.showAlert === 'function') window.showAlert('Your session has expired. Please sign in again.', { title: 'Session expired', variant: 'error' });
+            setShowAuthModal(true);
+            return;
+          }
+          if (/403/.test(msg)) {
+            if (typeof window.showAlert === 'function') window.showAlert('You are not allowed to claim this listing.', { title: 'Not allowed', variant: 'error' });
+            return;
+          }
+          if (/timeout|abort/i.test(msg)) {
+            if (typeof window.showAlert === 'function') window.showAlert('The server did not respond in time. Please try again.', { title: 'Timeout', variant: 'error' });
+            return;
+          }
+          console.warn('listingAPI.claim failed:', err);
         }
       }
 
-      // Fallback to databaseService update if API didn't return updated listing
-      if (!updatedListing && databaseConnected && window.databaseService) {
-        const result = await window.databaseService.updateListingStatus(listingId, 'claimed', user.id);
-        if (result && result.success && result.data) {
-          updatedListing = result.data;
+      // Fallback: try updating locally if API did not return listing
+      if (!updatedListing && databaseConnected && window.databaseService && typeof window.databaseService.updateListingStatus === 'function') {
+        try {
+          const result = await window.databaseService.updateListingStatus(listingId, 'claimed', user.id);
+          if (result && result.success && result.data) {
+            updatedListing = result.data;
+          }
+        } catch (e) {
+          console.warn('databaseService.updateListingStatus failed:', e);
         }
       }
 
-      // Update local state based on updatedListing or optimistic update
+      // Update client state
       if (updatedListing) {
-        const updatedListings = listings.map(l => l.id === listingId ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'claimed') }) : l);
+        const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'claimed'), recipient_id: (updatedListing.recipient_id ?? user.id) }) : l);
         setListings(updatedListings);
         setFilteredListings(updatedListings);
+        // Sync snapshot so map and other globals see latest state
+        try {
+          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+            const idx = window.databaseService.listings.findIndex(li => String(li.id) === String(listingId));
+            if (idx !== -1) {
+              window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: (updatedListing.status || 'claimed'), recipient_id: (updatedListing.recipient_id ?? user.id) };
+            }
+          }
+        } catch (_) {}
       } else {
-        // optimistic fallback
-        const updatedListings = listings.map(listing => 
-          listing.id === listingId 
-            ? { ...listing, status: 'claimed', recipient_id: user.id }
-            : listing
-        );
+        // optimistic update
+        const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, status: 'claimed', recipient_id: user.id }) : l);
         setListings(updatedListings);
         setFilteredListings(updatedListings);
+        // Sync snapshot
+        try {
+          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+            const idx = window.databaseService.listings.findIndex(li => String(li.id) === String(listingId));
+            if (idx !== -1) {
+              window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: 'claimed', recipient_id: user.id };
+            }
+          }
+        } catch (_) {}
       }
 
-      alert('Listing claimed successfully!');
-      
+  if (typeof window.showAlert === 'function') window.showAlert('Listing claimed successfully!', { title: 'Success', variant: 'success' });
+      // Persist a local record that this user claimed this listing (fallback if backend lacks recipient_id)
+      try {
+        const uid = String(user.id);
+        const key = `my_claimed_ids:${uid}`;
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        if (!arr.includes(String(listingId))) {
+          arr.push(String(listingId));
+          localStorage.setItem(key, JSON.stringify(arr));
+        }
+      } catch (_) {}
     } catch (error) {
       console.error('Error claiming listing:', error);
-      alert('Failed to claim listing. Please try again.');
+      if (typeof window.showAlert === 'function') window.showAlert('Failed to claim listing. Please try again.', { title: 'Error', variant: 'error' });
     }
   };
 
@@ -866,6 +1119,27 @@ function App() {
             onClose={() => setShowStorePortal(false)}
           />
         )}
+
+        {/* Phone Modal */}
+        {typeof PhoneModal !== 'undefined' && (
+          <PhoneModal
+            isOpen={phoneModalOpen}
+            onClose={handlePhoneClose}
+            onSubmit={handlePhoneSubmit}
+            initialPhone={phoneInitialRef.current}
+          />
+        )}
+
+        {/* Alert Modal */}
+        {typeof AlertModal !== 'undefined' && (
+          <AlertModal
+            isOpen={alertOpen}
+            title={alertData.title}
+            message={alertData.message}
+            variant={alertData.variant}
+            onClose={handleAlertClose}
+          />
+        )}
       </div>
     );
   } catch (error) {
@@ -880,3 +1154,6 @@ root.render(
     <App />
   </ErrorBoundary>
 );
+
+// Render PhoneModal portal at body end via React 18 root if needed from global
+// Integrate into App by appending JSX for PhoneModal

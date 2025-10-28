@@ -73,11 +73,15 @@ window.authAPI = {
 
 // User API calls
 window.userAPI = {
-  getMe: () => apiRequest('/me'),
-  updateMe: (userData) => apiRequest('/me', {
+  // New backend endpoints
+  getMeV2: () => apiRequest('/api/user/me'),
+  updatePhone: (phone) => apiRequest('/api/user/phone', {
     method: 'PUT',
-    body: JSON.stringify(userData)
-  })
+    body: JSON.stringify({ phone })
+  }),
+  // Legacy placeholders (unused in this app)
+  getMe: () => apiRequest('/me'),
+  updateMe: (userData) => apiRequest('/me', { method: 'PUT', body: JSON.stringify(userData) })
 };
 
 // Listing API calls
@@ -100,7 +104,28 @@ window.listingAPI = {
     body: JSON.stringify(listingData)
   }),
 
-  delete: (id, options = {}) => apiRequest(`/api/listings/get/${id}`, { method: 'DELETE', ...options })
+  delete: (id, options = {}) => apiRequest(`/api/listings/get/${id}`, { method: 'DELETE', ...options }),
+
+  // Claim a listing as a recipient. Backend expects PATCH with recipient_id.
+  // Primary route: /api/listings/get/{id}?recipient_id=...
+  // Fallback route (to tolerate backend typo): /api/listings/get{id}?recipient_id=...
+  claim: async (id, recipientId, options = {}) => {
+    const qs = new URLSearchParams({ recipient_id: String(recipientId) }).toString();
+    try {
+      return await apiRequest(`/api/listings/get/${id}?${qs}`, { method: 'PATCH', ...options });
+    } catch (err) {
+      // Try fallback path if the first one 404s due to missing slash in server route
+      if (String(err?.message || '').includes('404')) {
+        return await apiRequest(`/api/listings/get${id}?${qs}`, { method: 'PATCH', ...options });
+      }
+      throw err;
+    }
+  },
+
+  // Get counterparty contact details for a claimed listing.
+  // - If current user is the recipient who claimed the listing: returns donor contact.
+  // - If current user is the donor owner of the listing and it's claimed: returns recipient contact.
+  getCounterparty: (id, options = {}) => apiRequest(`/api/listings/user-details/${id}`, { method: 'GET', ...options })
 };
 
 // Transaction API calls

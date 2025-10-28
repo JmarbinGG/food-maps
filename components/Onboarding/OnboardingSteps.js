@@ -67,7 +67,7 @@ function OnboardingStep({ step, stepIndex, user, data, onDataUpdate, onNext, onP
                   lat: position.coords.latitude,
                   lng: position.coords.longitude
                 });
-                alert('Location detected successfully!');
+                if (typeof window.showAlert === 'function') window.showAlert('Location detected successfully!', { title: 'Success', variant: 'success' });
               });
             }
           }}

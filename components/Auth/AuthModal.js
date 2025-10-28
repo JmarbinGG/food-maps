@@ -89,7 +89,10 @@ function AuthModal({ onClose, onAuth }) {
       role: formData.role,
       isNewUser: !isLogin
     };
-    
+    if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) === false) {
+      setAuthError('Please enter a valid email address');
+      return;
+    }
     if (isLogin) {
       setAuthError('');
       try {

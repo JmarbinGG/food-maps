@@ -18,10 +18,27 @@ function ListingCard({ listing = {}, onClaim = () => {}, onSelect = () => {}, us
 
   const canClaim = user && user.role === 'recipient' && ((listing.status || '').toString().toLowerCase() === 'available');
 
+  // Determine highlight rules for claimed items (blue fill)
+  const role = String(user?.role || '').toLowerCase();
+  const getUid = () => {
+    try {
+      if (user && user.id != null) return String(user.id);
+      const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+      return cu && (cu.id != null || cu.user_id != null || cu.sub != null) ? String(cu.id ?? cu.user_id ?? cu.sub) : null;
+    } catch (_) { return null; }
+  };
+  const uid = getUid();
+  const getDonorId = (l) => { try { const v = (l?.donor_id ?? l?.donorId ?? l?.owner_id ?? l?.ownerId ?? (l?.donor && l?.donor.id)); return v != null ? String(v) : null; } catch { return null; } };
+  const getRecipientId = (l) => { try { const v = (l?.recipient_id ?? l?.recipientId ?? (l?.recipient && l?.recipient.id)); return v != null ? String(v) : null; } catch { return null; } };
+  const status = String(listing?.status || '').toLowerCase();
+  const isOwnedByDonor = uid && getDonorId(listing) === uid;
+  const isClaimedByMe = uid && getRecipientId(listing) === uid;
+  const shouldBlueFill = status === 'claimed' && ((role === 'donor' && isOwnedByDonor) || (role === 'recipient' && isClaimedByMe));
+
   try {
     return (
       <div 
-        className="bg-white rounded-xl shadow-sm border border-[var(--border-color)] hover:shadow-lg transition-all duration-200 group"
+        className={`bg-white rounded-xl shadow-sm border hover:shadow-lg transition-all duration-200 group ${shouldBlueFill ? 'border-blue-300 bg-blue-50' : 'border-[var(--border-color)]'}`}
         data-name="listing-card" 
         data-file="components/ListingCard.js"
       >

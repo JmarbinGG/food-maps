@@ -53,6 +53,8 @@ class FoodResource(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     donor_id = Column(Integer, ForeignKey("users.id"))
+    # Who claimed the listing (nullable for available/unclaimed)
+    recipient_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     title = Column(String(255))
     description = Column(Text, nullable=True)
     category = Column(SQLEnum(FoodCategory))
@@ -67,6 +69,7 @@ class FoodResource(Base):
     coords_lat = Column(Float, nullable=True)
     coords_lng = Column(Float, nullable=True)
     status = Column(String(255), default="available")
+    claimed_at = Column(DateTime, nullable=True)
     images = Column(Text, nullable=True)  # JSON array of image URLs
     urgency_score = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)

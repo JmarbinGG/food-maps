@@ -354,7 +354,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             onSelectFood={(food) => {
               console.log('Selected food:', food);
               // You can add additional logic here for handling selected food
-              alert(`Selected: ${food.title} - ${food.qty} ${food.unit}`);
+              if (typeof window.showAlert === 'function') window.showAlert(`Selected: ${food.title} - ${food.qty} ${food.unit}`, { title: 'Selected', variant: 'default' });
             }}
           />
         )}

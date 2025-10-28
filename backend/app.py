@@ -4,7 +4,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session, relationship
 from sqlalchemy import text
 from pydantic import BaseModel
@@ -27,6 +26,8 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 #app.mount("/", StaticFiles(directory=PROJECT_ROOT), name="root")
 security = HTTPBearer()
+# Optional bearer for endpoints where auth is not required but can tailor results
+optional_security = HTTPBearer(auto_error=False)
 
 # CORS middleware
 app.add_middleware(
@@ -41,7 +42,7 @@ app.add_middleware(
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./food_maps.db")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
+# NOTE: Use Base imported from models; do not re-declare another Base here
 # JWT settings
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = "HS256"
@@ -52,6 +53,65 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# -----------------------------
+# Serialization helpers
+# -----------------------------
+
+def serialize_user(user: Optional[User]) -> Optional[dict]:
+    """Return a safe, minimal representation of a User for client responses."""
+    if not user:
+        return None
+    try:
+        return {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role.value if getattr(user, "role", None) else None,
+            "phone": getattr(user, "phone", None),
+            "address": getattr(user, "address", None),
+            "coords_lat": getattr(user, "coords_lat", None),
+            "coords_lng": getattr(user, "coords_lng", None),
+            "created_at": user.created_at.isoformat() if getattr(user, "created_at", None) else None,
+        }
+    except Exception:
+        # Best-effort fallback to avoid breaking responses
+        return {"id": getattr(user, "id", None), "name": getattr(user, "name", None)}
+
+
+def serialize_listing(item: FoodResource, include_donor: bool = True) -> dict:
+    """Return a safe, client-friendly listing dict. Converts enums/datetimes and includes donor if available."""
+    donor_payload = serialize_user(item.donor) if (include_donor and getattr(item, "donor", None)) else None
+    # Enum helpers
+    def ev(v):
+        try:
+            return v.value if v is not None else None
+        except Exception:
+            # Already a string or unexpected type
+            return v
+
+    return {
+        "id": item.id,
+        "donor_id": getattr(item, "donor_id", None),
+        "recipient_id": getattr(item, "recipient_id", None),
+        "title": getattr(item, "title", None),
+        "description": getattr(item, "description", None),
+        "category": ev(getattr(item, "category", None)),
+        "qty": getattr(item, "qty", None),
+        "unit": getattr(item, "unit", None),
+        "perishability": ev(getattr(item, "perishability", None)),
+        "address": getattr(item, "address", None),
+        "coords_lat": getattr(item, "coords_lat", None),
+        "coords_lng": getattr(item, "coords_lng", None),
+        "pickup_window_start": item.pickup_window_start.isoformat() if getattr(item, "pickup_window_start", None) else None,
+        "pickup_window_end": item.pickup_window_end.isoformat() if getattr(item, "pickup_window_end", None) else None,
+        "status": getattr(item, "status", None),
+        "claimed_at": item.claimed_at.isoformat() if getattr(item, "claimed_at", None) else None,
+        "urgency_score": getattr(item, "urgency_score", 0) or 0,
+        "created_at": item.created_at.isoformat() if getattr(item, "created_at", None) else None,
+        "updated_at": item.updated_at.isoformat() if getattr(item, "updated_at", None) else None,
+        "donor": donor_payload,
+    }
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
@@ -97,10 +157,111 @@ async def serve_terms():
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
 
+# -----------------------------
+# User profile helper endpoints
+# -----------------------------
+
+@app.get("/api/user/me")
+async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        return {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role.value if user.role else None,
+            "phone": user.phone,
+            "address": user.address,
+            "coords_lat": user.coords_lat,
+            "coords_lng": user.coords_lng,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/user/phone")
+async def update_phone(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        body = await request.json()
+        phone = (body or {}).get("phone") if isinstance(body, dict) else None
+        if not phone or not isinstance(phone, str) or len(phone.strip()) < 7:
+            raise HTTPException(status_code=422, detail="Please provide a valid phone number")
+        phone = phone.strip()
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        user.phone = phone
+        db.add(user)
+        db.commit()
+        return {"success": True, "phone": phone}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Create tables
 @app.on_event("startup")
 async def startup_event():
-     Base.metadata.create_all(bind=engine)
+    # Ensure tables exist
+    Base.metadata.create_all(bind=engine)
+    # Lightweight, best-effort migration: add missing columns used by new features
+    # This primarily targets SQLite; no-op on other engines if the statements fail
+    try:
+        with engine.connect() as conn:
+            dialect_name = conn.engine.dialect.name
+            if dialect_name == "sqlite":
+                # Inspect existing columns
+                res = conn.execute(text("PRAGMA table_info(food_resources)"))
+                cols = {row[1] for row in res.fetchall()}
+                if "recipient_id" not in cols:
+                    conn.execute(text("ALTER TABLE food_resources ADD COLUMN recipient_id INTEGER"))
+                if "claimed_at" not in cols:
+                    conn.execute(text("ALTER TABLE food_resources ADD COLUMN claimed_at DATETIME"))
+            elif dialect_name in ("mysql", "mariadb"):
+                # MySQL/MariaDB conditional adds
+                conn.execute(text(
+                    """
+                    ALTER TABLE food_resources
+                    ADD COLUMN IF NOT EXISTS recipient_id INT NULL,
+                    ADD COLUMN IF NOT EXISTS claimed_at DATETIME NULL
+                    """
+                ))
+            elif dialect_name == "postgresql":
+                conn.execute(text(
+                    """
+                    DO $$ BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='food_resources' AND column_name='recipient_id'
+                    ) THEN
+                        ALTER TABLE food_resources ADD COLUMN recipient_id INTEGER NULL;
+                    END IF;
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='food_resources' AND column_name='claimed_at'
+                    ) THEN
+                        ALTER TABLE food_resources ADD COLUMN claimed_at TIMESTAMP NULL;
+                    END IF;
+                    END $$;
+                    """
+                ))
+    except Exception as e:
+        try:
+            print(f"Startup migration warning: {e}")
+        except Exception:
+            pass
 
 @app.get("/api/dbtest")
 async def db_test():
@@ -115,24 +276,91 @@ async def db_test():
 
 
 @app.get("/api/listings/get", response_model=List[FoodResourceResponse])
-def get_listings(limit: int = 100, db: Session = Depends(get_db)):
+def get_listings(
+    limit: int = 100,
+    include_claimed_for_me: bool = False,
+    db: Session = Depends(get_db),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)
+):
     """
-    Returns up to `limit` food resources from the database,
-    including donor information.
+    Returns up to `limit` food resources.
+    By default returns only available listings.
+    When `include_claimed_for_me=true` and a valid JWT is provided:
+      - If user is a donor: also include listings with status=='claimed' owned by this donor
+      - If user is a recipient: also include listings with status=='claimed' claimed by this recipient
     """
-    listings = (
-        db.query(FoodResource)
-        .filter(FoodResource.status == "available")
-        .order_by(FoodResource.created_at.desc())
-        .limit(limit)
-        .all()
-    )
+    try:
+        # Base: available items
+        # Base: only available items for general audience
+        available_q = (
+            db.query(FoodResource)
+            .filter(FoodResource.status == "available")
+            .order_by(FoodResource.created_at.desc())
+            .limit(limit)
+        )
+        available_list = available_q.all()
 
-    # Make sure dondor info is loaded for response
-    for listing in listings:
-        _ = listing.donor  # SQLAlchemy lazy loading
+        # Optionally include claimed-for-me items
+        claimed_list = []
+        user_id = None
+        user_role = None
+        if include_claimed_for_me and credentials is not None:
+            try:
+                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+                user_id = str(payload.get("sub")) if payload else None
+                user_role = str(payload.get("role") or "").lower() if payload else None
+                print("Decoded JWT payload:", payload)
+            except Exception as e:
+                print(f"JWT decode error: {e}")
+                # Invalid token - ignore claimed inclusion
+                user_id = None
+                user_role = None
 
-    return listings
+        print("user_id:", user_id, " user_role:", user_role)
+        if include_claimed_for_me and user_id:
+            if user_role == "donor":
+                claimed_q = (
+                    db.query(FoodResource)
+                    .filter(FoodResource.status == "claimed", FoodResource.donor_id == int(user_id))
+                    .order_by(FoodResource.status, FoodResource.created_at.desc())
+                    .limit(limit)
+                )
+                claimed_list = claimed_q.all()
+            elif user_role == "recipient":
+                # If recipient_id column exists, include claimed-by-me items
+                # Guard against older databases without the column
+                try:
+                    claimed_q = (
+                        db.query(FoodResource)
+                        .filter(FoodResource.status == "claimed", FoodResource.recipient_id == int(user_id))
+                        .order_by(FoodResource.created_at.desc())
+                        .limit(limit)
+                    )
+                    claimed_list = claimed_q.all()
+                except Exception:
+                    claimed_list = []
+
+        # Merge (avoid duplicates by id)
+        by_id = {}
+        for item in available_list:
+            by_id[item.id] = item
+        for item in claimed_list:
+            by_id[item.id] = item
+
+        listings = list(by_id.values())
+
+        # Ensure donor relationship is loaded to satisfy response_model
+        for listing in listings:
+            _ = listing.donor
+
+        return listings
+    except Exception as e:
+        # Inline logging for easier diagnostics in environments without log collection
+        try:
+            print(f"/api/listings/get error: {e}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="Failed to fetch listings")
 
 @app.delete("/api/listings/get/{listing_id}")
 async def delete_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
@@ -243,7 +471,7 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
                     from urllib.parse import quote as urlquote
                     import httpx
                     geocode_url = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json".format(urlquote(item.address))
-                    params = {"access_token": MAPBOX_TOKEN, "limit": 1}
+                    params = {"access_token": MAPBOX_TOKEN, "limit": 1, "type": "address"}
                     with httpx.Client(timeout=10.0) as client:
                         resp = client.get(geocode_url, params=params)
                         if resp.status_code == 200:
@@ -265,24 +493,7 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         db.commit()
         db.refresh(item)
 
-        return {"success": True, "listing": {
-            "id": item.id,
-            "donor_id": item.donor_id,
-            "title": item.title,
-            "description": item.description,
-            "category": item.category.name if item.category else None,
-            "qty": item.qty,
-            "unit": item.unit,
-            "perishability": item.perishability.name if item.perishability else None,
-            "address": item.address,
-            "coords_lat": item.coords_lat,
-            "coords_lng": item.coords_lng,
-            "pickup_window_start": item.pickup_window_start.isoformat() if item.pickup_window_start else None,
-            "pickup_window_end": item.pickup_window_end.isoformat() if item.pickup_window_end else None,
-            "status": item.status,
-            "created_at": item.created_at.isoformat() if item.created_at else None,
-            "updated_at": item.updated_at.isoformat() if item.updated_at else None
-        }}
+        return {"success": True, "listing": serialize_listing(item)}
     except HTTPException:
         raise
     except Exception as e:
@@ -327,6 +538,44 @@ async def login_user(email: str, password: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Invalid Email or password")
 
 
+@app.patch("/api/listings/get/{listing_id}")
+async def claim_listing(listing_id: int, recipient_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Claim a listing by setting its recipient_id and updating status to 'claimed'."""
+    try:
+        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not item:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+        # Authorization: any authenticated user can claim
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = str(payload.get("sub")) if payload else None
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid or missing token")
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or missing token")
+
+        # Enforce phone presence for claimant
+        claimant = db.query(User).filter(User.id == int(user_id)).first()
+        if not claimant or not claimant.phone or len(str(claimant.phone).strip()) < 7:
+            raise HTTPException(status_code=400, detail="A valid phone number is required to claim food")
+
+        # Use token subject as recipient to prevent spoofing
+        item.recipient_id = int(user_id)
+        item.status = "claimed"
+        item.claimed_at = datetime.utcnow()
+        db.add(item)
+        db.commit()
+        db.refresh(item)
+
+        return {"success": True, "message": "Listing claimed successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/listings/create")
 async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: int, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: int = 0, db: Session = Depends(get_db)):
@@ -335,6 +584,13 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
     and coords are not supplied. Returns the created listing as JSON.
     """
     try:
+        # Enforce that donor has a phone number on file
+        donor = db.query(User).filter(User.id == int(donor_id)).first()
+        if not donor:
+            raise HTTPException(status_code=404, detail="Donor not found")
+        if not donor.phone or len(str(donor.phone).strip()) < 7:
+            raise HTTPException(status_code=400, detail="A valid phone number is required to create a listing")
+
         item = FoodResource(
             donor_id=donor_id,
             title=title,
@@ -382,27 +638,63 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
         db.add(item)
         db.commit()
         db.refresh(item)
-        # Return the created item as a simple dict
-        return {
-            "success": True,
-            "listing": {
-                "id": item.id,
-                "donor_id": item.donor_id,
-                "title": item.title,
-                "description": item.description,
-                "category": item.category.name if item.category else None,
-                "qty": item.qty,
-                "unit": item.unit,
-                "perishability": item.perishability.name if item.perishability else None,
-                "address": item.address,
-                "coords_lat": item.coords_lat,
-                "coords_lng": item.coords_lng,
-                "pickup_window_start": item.pickup_window_start.isoformat() if item.pickup_window_start else None,
-                "pickup_window_end": item.pickup_window_end.isoformat() if item.pickup_window_end else None,
-                "status": item.status,
-                "created_at": item.created_at.isoformat() if item.created_at else None
-            }
-        }
+        # Return the created item
+        return {"success": True, "listing": serialize_listing(item)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/listings/user-details/{listing_id}")
+async def get_user_details(
+    listing_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Return the counterparty contact info for a claimed listing:
+    - If requester is the recipient who claimed the listing, return the donor's name/phone.
+    - If requester is the donor who created the listing, return the recipient's name/phone.
+    """
+    try:
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_role = str(payload.get("role") or "").lower() if payload else None
+            user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except Exception:
+            raise HTTPException(status_code=401, detail="Invalid or missing token")
+
+        if user_role not in ("donor", "recipient"):
+            raise HTTPException(status_code=403, detail="Not authorized")
+
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+
+        # Recipient can only see donor for listings they claimed
+        if user_role == "recipient":
+            if listing.recipient_id is None or listing.recipient_id != user_id:
+                raise HTTPException(status_code=403, detail="Not authorized for this listing")
+            donor = db.query(User).filter(User.id == listing.donor_id).first()
+            if not donor:
+                # Return empty contact gracefully if donor record is missing
+                return {"name": "", "phone": ""}
+            return {"name": donor.name or "", "phone": donor.phone or ""}
+
+        # Donor can only see recipient for their own listing
+        if listing.donor_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized for this listing")
+        # If not yet claimed or recipient missing, return empty contact gracefully
+        if listing.recipient_id is None:
+            return {"name": "", "phone": ""}
+        recipient = db.query(User).filter(User.id == listing.recipient_id).first()
+        if not recipient:
+            return {"name": "", "phone": ""}
+        return {"name": recipient.name or "", "phone": recipient.phone or ""}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            print(f"/api/listings/user-details error: {e}")
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="Failed to fetch user details")
