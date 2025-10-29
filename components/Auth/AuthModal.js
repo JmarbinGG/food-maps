@@ -223,9 +223,7 @@ function AuthModal({ onClose, onAuth }) {
                 >
                   <option value="recipient">Recipient</option>
                   <option value="donor">Donor</option>
-                  <option value="volunteer">Volunteer</option>
                   <option value="store_owner">Store Owner</option>
-                  <option value="admin">Administrator</option>
                 </select>
               </div>
             )}

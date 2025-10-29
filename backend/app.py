@@ -503,6 +503,9 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
 async def create_user(name: str, email: str, password: str, role: UserRole, db: Session = Depends(get_db)):
     print("login attempt: email:", email, " pw:", password, " len:", len(password.encode('utf-8')), "repr", repr(password))
     try:    
+        if role == "volunteer" or role == "admin":
+            raise HTTPException(status_code=400, detail="Invalid role")
+        
         user = User(email = email, name = name, password_hash = password, role=role, created_at = datetime.utcnow())
         query = db.query(User).filter(User.email == email)
         existing_user = query.first()
