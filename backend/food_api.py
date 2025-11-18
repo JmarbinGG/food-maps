@@ -1,12 +1,42 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 import httpx
-from .models import FoodResource, User, ConsumptionLog
-from .schemas import FoodResourceCreate, FoodResourceResponse, ConsumptionLogCreate, ConsumptionLogResponse
-from .app import get_db, verify_token
+from backend.models import FoodResource, User, ConsumptionLog, Base
+from backend.schemas import FoodResourceCreate, FoodResourceResponse, ConsumptionLogCreate, ConsumptionLogResponse
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from dotenv import load_dotenv
+import jwt
+
+load_dotenv()
+
+# Database setup
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./food_maps.db")
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# JWT settings
+JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_ALGORITHM = "HS256"
+security = HTTPBearer()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return payload
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 router = APIRouter(prefix="/food", tags=["food-management"])
 

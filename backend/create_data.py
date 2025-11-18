@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models import Base, User, FoodResource, UserRole, FoodCategory, PerishabilityLevel
+from backend.models import Base, User, FoodResource, UserRole, FoodCategory, PerishabilityLevel
 from sqlalchemy import create_engine
 import os
 from datetime import datetime, timedelta

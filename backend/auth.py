@@ -4,9 +4,25 @@ from datetime import datetime, timedelta
 import jwt
 import hashlib
 import os
-from .models import User
-from .schemas import UserCreate, UserResponse
-from .app import get_db
+from backend.models import User, Base
+from backend.schemas import UserCreate, UserResponse
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker, Session
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Database setup
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./food_maps.db")
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 

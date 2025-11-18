@@ -1,23 +1,13 @@
-function AlertModal({ isOpen, title = 'Notice', message = '', variant = 'default', onClose }) {
+function AlertModal({ isOpen, title, message, variant, onClose }) {
   if (!isOpen) return null;
-  const color = variant === 'error' ? 'text-red-700 bg-red-50 border-red-200'
-               : variant === 'success' ? 'text-green-700 bg-green-50 border-green-200'
-               : 'text-blue-700 bg-blue-50 border-blue-200';
-
+  
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose}></div>
-      <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md mx-4 p-6">
-        <div className={`mb-3 p-3 rounded border ${color}`}>
-          <h3 className="text-lg font-semibold mb-1">{title}</h3>
-          <div className="text-sm leading-relaxed">{message}</div>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <button className="btn-primary" onClick={onClose}>OK</button>
-        </div>
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 className="text-lg font-semibold mb-2">{title}</h3>
+        <p className="text-gray-600 mb-4">{message}</p>
+        <button onClick={onClose} className="btn-primary w-full">OK</button>
       </div>
     </div>
   );
 }
-
-try { window.AlertModal = AlertModal; } catch (e) {}

@@ -99,3 +99,77 @@ class ConsumptionLogResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class PerishabilityLevel(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+class DistributionCenterCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    address: str
+    coords_lat: float
+    coords_lng: float
+    phone: Optional[str] = None
+    hours: Optional[str] = None
+
+class DistributionCenterResponse(BaseModel):
+    id: int
+    owner_id: int
+    name: str
+    description: Optional[str] = None
+    address: str
+    coords_lat: float
+    coords_lng: float
+    phone: Optional[str] = None
+    hours: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class CenterInventoryCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    category: FoodCategory
+    quantity: float
+    unit: str
+    perishability: Optional[PerishabilityLevel] = None
+    expiration_date: Optional[datetime] = None
+    images: Optional[List[str]] = None
+
+class CenterInventoryUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Optional[float] = None
+    unit: Optional[str] = None
+    perishability: Optional[PerishabilityLevel] = None
+    expiration_date: Optional[datetime] = None
+    is_available: Optional[bool] = None
+    images: Optional[List[str]] = None
+
+class CenterInventoryResponse(BaseModel):
+    id: int
+    center_id: int
+    name: str
+    description: Optional[str] = None
+    category: FoodCategory
+    quantity: float
+    unit: str
+    perishability: Optional[PerishabilityLevel] = None
+    expiration_date: Optional[datetime] = None
+    images: Optional[List[str]] = None
+    is_available: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DistributionCenterWithInventory(DistributionCenterResponse):
+    inventory: List[CenterInventoryResponse] = []
+
+    class Config:
+        from_attributes = True

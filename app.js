@@ -39,6 +39,7 @@ function App() {
   const [listings, setListings] = React.useState([]);
   const [filteredListings, setFilteredListings] = React.useState([]);
   const [showAuthModal, setShowAuthModal] = React.useState(false);
+  const [showForgotPasswordModal, setShowForgotPasswordModal] = React.useState(false);
   const [selectedListing, setSelectedListing] = React.useState(null);
   const [showDetailModal, setShowDetailModal] = React.useState(false);
   const [showAISearch, setShowAISearch] = React.useState(false);
@@ -56,6 +57,11 @@ function App() {
   const [showStoreMenu, setShowStoreMenu] = React.useState(false);
   const [showStorePortal, setShowStorePortal] = React.useState(false);
   const [selectedStoreId, setSelectedStoreId] = React.useState(null);
+  const [showConfirmationModal, setShowConfirmationModal] = React.useState(false);
+  const [pendingClaimId, setPendingClaimId] = React.useState(null);
+  const [showUserProfile, setShowUserProfile] = React.useState(false);
+  const [showDistributionMap, setShowDistributionMap] = React.useState(false);
+  const [showStoreOwnerDashboard, setShowStoreOwnerDashboard] = React.useState(false);
   const [filters, setFilters] = React.useState({
     category: 'all',
     status: 'available',
@@ -85,7 +91,7 @@ function App() {
   const handlePhoneClose = React.useCallback(() => {
     setPhoneModalOpen(false);
     if (phoneResolveRef.current) {
-      try { phoneResolveRef.current(false); } catch (_) {}
+      try { phoneResolveRef.current(false); } catch (_) { }
       phoneResolveRef.current = null;
     }
   }, []);
@@ -100,10 +106,10 @@ function App() {
           cu.phone = phone;
           localStorage.setItem('current_user', JSON.stringify(cu));
         }
-      } catch (_) {}
+      } catch (_) { }
       setPhoneModalOpen(false);
       if (phoneResolveRef.current) {
-        try { phoneResolveRef.current(true); } catch (_) {}
+        try { phoneResolveRef.current(true); } catch (_) { }
         phoneResolveRef.current = null;
       }
     } catch (e) {
@@ -117,15 +123,15 @@ function App() {
   React.useEffect(() => {
     try {
       // No mock callback - prefer real database-backed listings
-      
+
       // Ensure DOM is ready before manipulating elements
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initializeApp);
       } else {
         initializeApp();
       }
-      
-      return () => {};
+
+      return () => { };
     } catch (error) {
       console.error('App initialization error:', error);
     }
@@ -165,7 +171,7 @@ function App() {
               } else if (copy.coords_lat !== undefined && copy.coords_lng !== undefined) {
                 copy.coords = { lat: parseFloat(copy.coords_lat), lng: parseFloat(copy.coords_lng) };
               }
-            } catch (_) {}
+            } catch (_) { }
             copy.id = copy.id || copy.objectId || copy._id || copy.listing_id;
             return copy;
           };
@@ -193,9 +199,14 @@ function App() {
     window.requestPhone = requestPhone;
     return () => { delete window.requestPhone; };
   }, [requestPhone]);
-
+  var logout = false;
   // Alert helper
-  const showAlert = React.useCallback((message, opts = {}) => {
+  const showAlert = React.useCallback((message, opts = {}, logout) => {
+    logout = logout;
+    if (logout) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('current_user');
+    }
     return new Promise((resolve) => {
       const { title = 'Notice', variant = 'default' } = opts || {};
       setAlertData({ title, message: String(message || ''), variant });
@@ -206,8 +217,13 @@ function App() {
 
   const handleAlertClose = React.useCallback(() => {
     setAlertOpen(false);
+    if (logout) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('current_user');
+      window.location.reload();
+    }
     if (alertResolveRef.current) {
-      try { alertResolveRef.current(true); } catch (_) {}
+      try { alertResolveRef.current(true); } catch (_) { }
       alertResolveRef.current = null;
     }
   }, []);
@@ -221,7 +237,7 @@ function App() {
   const initializeApp = async () => {
     try {
       console.log('Initializing Food Maps app...');
-      
+
       // Always initialize mock data first with error handling
       // let mockData = null;
       // try {
@@ -239,7 +255,7 @@ function App() {
       //   console.error('Error initializing mock data:', mockError);
       //   window.databaseService.getListings = [];
       // }
-      
+
       // Initialize database service
       // Initialize database service connection state
       try {
@@ -312,18 +328,18 @@ function App() {
         setFilteredListings(fallback);
         console.log(`Database failed, using snapshot fallback: ${fallback.length} listings`);
       }
-      
+
       // Initialize scheduling data
       if (typeof window.getMockSchedules === 'function') {
         const mockSchedules = window.getMockSchedules();
         setSchedules(mockSchedules);
       }
-      
+
       if (typeof window.getMockTasks === 'function') {
         const mockTasks = window.getMockTasks();
         setActiveTasks(mockTasks);
       }
-      
+
       // Check for selected food from landing page
       const selectedFood = localStorage.getItem('selectedFood');
       if (selectedFood) {
@@ -336,7 +352,7 @@ function App() {
           console.error('Error parsing selected food:', error);
         }
       }
-      
+
       // Get user location for distance calculations
       if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
@@ -355,7 +371,7 @@ function App() {
       } else {
         setUserLocation({ lat: 37.7749, lng: -122.4194 });
       }
-      
+
       // Start agent orchestrator with guaranteed data
       setTimeout(() => {
         if (window.agentOrchestrator && !window.agentOrchestrator.isRunning) {
@@ -363,7 +379,7 @@ function App() {
           window.agentOrchestrator.start();
         }
       }, 1000);
-      
+
     } catch (error) {
       console.error('Error in app initialization:', error);
     }
@@ -458,7 +474,7 @@ function App() {
 
     const role = String(user.role || '').toLowerCase();
     if (role !== 'recipient') {
-  if (typeof window.showAlert === 'function') window.showAlert('Only recipients can claim food.', { title: 'Not allowed', variant: 'error' });
+      if (typeof window.showAlert === 'function') window.showAlert('Only recipients can claim food.', { title: 'Not allowed', variant: 'error' });
       return;
     }
 
@@ -466,7 +482,7 @@ function App() {
     const listing = (listings || []).find(l => String(l.id) === String(listingId));
     const status = String(listing?.status || '').toLowerCase();
     if (status && status !== 'available') {
-  if (typeof window.showAlert === 'function') window.showAlert(status === 'claimed' ? 'This listing has already been claimed.' : 'This listing is not available to claim.', { title: 'Unavailable', variant: 'error' });
+      if (typeof window.showAlert === 'function') window.showAlert(status === 'claimed' ? 'This listing has already been claimed.' : 'This listing is not available to claim.', { title: 'Unavailable', variant: 'error' });
       return;
     }
 
@@ -550,7 +566,7 @@ function App() {
               window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: (updatedListing.status || 'claimed'), recipient_id: (updatedListing.recipient_id ?? user.id) };
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       } else {
         // optimistic update
         const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, status: 'claimed', recipient_id: user.id }) : l);
@@ -564,10 +580,17 @@ function App() {
               window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: 'claimed', recipient_id: user.id };
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       }
 
-  if (typeof window.showAlert === 'function') window.showAlert('Listing claimed successfully!', { title: 'Success', variant: 'success' });
+      // Check if confirmation is needed
+      if (updatedListing && updatedListing.needs_confirmation) {
+        setPendingClaimId(listingId);
+        setShowConfirmationModal(true);
+        if (typeof window.showAlert === 'function') window.showAlert('Check your phone for confirmation code.', { title: 'Confirmation Required', variant: 'info' });
+      } else {
+        if (typeof window.showAlert === 'function') window.showAlert('Listing claimed successfully!', { title: 'Success', variant: 'success' });
+      }
       // Persist a local record that this user claimed this listing (fallback if backend lacks recipient_id)
       try {
         const uid = String(user.id);
@@ -577,7 +600,7 @@ function App() {
           arr.push(String(listingId));
           localStorage.setItem(key, JSON.stringify(arr));
         }
-      } catch (_) {}
+      } catch (_) { }
     } catch (error) {
       console.error('Error claiming listing:', error);
       if (typeof window.showAlert === 'function') window.showAlert('Failed to claim listing. Please try again.', { title: 'Error', variant: 'error' });
@@ -596,7 +619,7 @@ function App() {
       estimatedDuration: pickupData.estimatedDuration || 30,
       createdAt: new Date().toISOString()
     };
-    
+
     setSchedules(prev => [...prev, newSchedule]);
     console.log('Pickup scheduled:', newSchedule);
   };
@@ -615,7 +638,7 @@ function App() {
       deliveryAddress: deliveryData.address,
       createdAt: new Date().toISOString()
     };
-    
+
     setSchedules(prev => [...prev, newSchedule]);
     console.log('Delivery scheduled:', newSchedule);
   };
@@ -633,7 +656,7 @@ function App() {
       priority: taskData.priority,
       createdAt: new Date().toISOString()
     };
-    
+
     setActiveTasks(prev => [...prev, newTask]);
     console.log('Task created:', newTask);
   };
@@ -654,19 +677,19 @@ function App() {
     const R = 6371; // Earth's radius in km
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLng/2) * Math.sin(dLng/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLng / 2) * Math.sin(dLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c; // Distance in km
   };
 
   const getLocationsWithDistance = () => {
     if (!userLocation) return filteredListings;
-    
+
     return filteredListings.map(listing => {
       let lat, lng;
-      
+
       // Handle both coordinate formats safely
       if (listing.coords) {
         lat = listing.coords.lat;
@@ -675,14 +698,14 @@ function App() {
         lng = listing.coordinates[0];
         lat = listing.coordinates[1];
       }
-      
+
       const distance = (lat && lng) ? calculateDistance(
         userLocation.lat,
         userLocation.lng,
         lat,
         lng
       ) : 0;
-      
+
       return {
         ...listing,
         distance
@@ -698,7 +721,13 @@ function App() {
     window.showFoodSearch = () => setShowFoodSearch(true);
     // Allow nested components to trigger the auth modal
     window.openAuthModal = () => setShowAuthModal(true);
-    
+
+    //Allw nested components to trigger the auth modal
+    window.showForgotPasswordModal = () => {
+      setShowAuthModal(false);
+      setShowForgotPasswordModal(true);
+    };
+
     // Setup global detailed modal callback
     window.showDetailedModal = (listing) => {
       setDetailedListing(listing);
@@ -710,7 +739,22 @@ function App() {
       setSelectedStoreId(storeId);
       setShowStoreMenu(true);
     };
-    
+
+    // Setup global user profile callback
+    window.openUserProfile = () => {
+      setShowUserProfile(true);
+    };
+
+    // Setup distribution map callback
+    window.openDistributionMap = () => {
+      setShowDistributionMap(true);
+    };
+
+    // Setup store owner dashboard callback
+    window.openStoreOwnerDashboard = () => {
+      setShowStoreOwnerDashboard(true);
+    };
+
     return () => {
       delete window.handleClaimListing;
       delete window.handleShowDetails;
@@ -719,6 +763,9 @@ function App() {
       delete window.showDetailedModal;
       delete window.openStoreMenu;
       delete window.openAuthModal;
+      delete window.openUserProfile;
+      delete window.openDistributionMap;
+      delete window.openStoreOwnerDashboard;
     };
   }, [handleClaimListing, handleShowDetails]);
 
@@ -735,35 +782,35 @@ function App() {
   const renderView = () => {
     switch (currentView) {
       case 'create':
-          return (
-            <CreateListing
-              user={user}
-              onCancel={() => setCurrentView('map')}
-              onSuccess={async () => {
-                // Fetch latest listings from backend after creation
-                try {
-                  if (window.listingAPI && window.listingAPI.getAll) {
-                    const latestListings = await window.listingAPI.getAll();
-                    if (Array.isArray(latestListings)) {
-                      setListings(latestListings);
-                      setFilteredListings(latestListings);
-                    }
+        return (
+          <CreateListing
+            user={user}
+            onCancel={() => setCurrentView('map')}
+            onSuccess={async () => {
+              // Fetch latest listings from backend after creation
+              try {
+                if (window.listingAPI && window.listingAPI.getAll) {
+                  const latestListings = await window.listingAPI.getAll();
+                  if (Array.isArray(latestListings)) {
+                    setListings(latestListings);
+                    setFilteredListings(latestListings);
                   }
-                } catch (err) {
-                  console.error('Failed to refresh listings after creation', err);
                 }
-                // Ensure we go back to the map view and recenter to new listings
-                setCurrentView('map');
-                try {
-                  if (window.recenterMap) {
-                    window.recenterMap();
-                  }
-                } catch (e) {
-                  console.error('recenterMap call failed', e);
+              } catch (err) {
+                console.error('Failed to refresh listings after creation', err);
+              }
+              // Ensure we go back to the map view and recenter to new listings
+              setCurrentView('map');
+              try {
+                if (window.recenterMap) {
+                  window.recenterMap();
                 }
-              }}
-            />
-          );
+              } catch (e) {
+                console.error('recenterMap call failed', e);
+              }
+            }}
+          />
+        );
       case 'bulk-create':
         return (
           <BulkListing
@@ -866,8 +913,8 @@ function App() {
             tasks={activeTasks}
             schedules={schedules}
             onTaskUpdate={(taskId, status) => {
-              setActiveTasks(prev => prev.map(task => 
-                task.id === taskId ? {...task, status} : task
+              setActiveTasks(prev => prev.map(task =>
+                task.id === taskId ? { ...task, status } : task
               ));
             }}
             onViewChange={setCurrentView}
@@ -884,11 +931,11 @@ function App() {
           <div className="flex h-[calc(100vh-64px)] min-h-[500px]">
             {/* Desktop Sidebar */}
             <div className="sidebar w-96 bg-white border-r border-[var(--border-color)] flex flex-col hidden lg:flex">
-              <FilterPanel 
+              <FilterPanel
                 filters={filters}
                 onFiltersChange={setFilters}
               />
-              
+
               <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 <div className="flex justify-between items-center">
                   <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -912,7 +959,7 @@ function App() {
                     })()})
                   </h2>
                 </div>
-                
+
                 {(() => {
                   const isDonor = user && String(user.role).toLowerCase() === 'donor';
                   const getUid = () => {
@@ -929,20 +976,20 @@ function App() {
                       return uid && did != null && String(did) === uid;
                     } catch (_) { return false; }
                   }) : filteredListings;
-                  return (sidebarListings || []).map(listing => 
-                  <ListingCard
-                    key={listing.id}
-                    listing={listing}
-                    onClaim={handleClaimListing}
-                    onSelect={(listing) => {
-                      setSelectedListing(listing);
-                      setShowDetailModal(true);
-                    }}
-                    user={user}
-                  />
+                  return (sidebarListings || []).map(listing =>
+                    <ListingCard
+                      key={listing.id}
+                      listing={listing}
+                      onClaim={handleClaimListing}
+                      onSelect={(listing) => {
+                        setSelectedListing(listing);
+                        setShowDetailModal(true);
+                      }}
+                      user={user}
+                    />
                   );
                 })()}
-                
+
                 {(() => {
                   const isDonor = user && String(user.role).toLowerCase() === 'donor';
                   const getUid = () => {
@@ -961,11 +1008,11 @@ function App() {
                   }) : filteredListings;
                   return (sidebarListings || []).length === 0;
                 })() && (
-                  <div className="text-center py-8 text-[var(--text-secondary)]">
-                    <div className="icon-search text-3xl mb-2"></div>
-                    <p>No listings found{user && String(user.role).toLowerCase() === 'donor' ? ' for your account ' : ''}</p>
-                  </div>
-                )}
+                    <div className="text-center py-8 text-[var(--text-secondary)]">
+                      <div className="icon-search text-3xl mb-2"></div>
+                      <p>No listings found{user && String(user.role).toLowerCase() === 'donor' ? ' for your account ' : ''}</p>
+                    </div>
+                  )}
               </div>
             </div>
 
@@ -975,27 +1022,27 @@ function App() {
               <div className="absolute top-4 right-4 z-10 bg-white rounded-lg shadow-md border border-gray-200 p-1 flex">
                 <button
                   onClick={() => setViewMode('map')}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${
-                    viewMode === 'map' 
-                      ? 'bg-[var(--primary-color)] text-white' 
+                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${viewMode === 'map'
+                      ? 'bg-[var(--primary-color)] text-white'
                       : 'text-gray-600 hover:text-[var(--primary-color)]'
-                  }`}
+                    }`}
                 >
                   <div className="icon-map text-lg mr-1"></div>
                   Map
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${
-                    viewMode === 'list' 
-                      ? 'bg-[var(--primary-color)] text-white' 
+                  className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${viewMode === 'list'
+                      ? 'bg-[var(--primary-color)] text-white'
                       : 'text-gray-600 hover:text-[var(--primary-color)]'
-                  }`}
+                    }`}
                 >
                   <div className="icon-list text-lg mr-1"></div>
                   List
                 </button>
               </div>
+
+
 
               {viewMode === 'map' ? (
                 <MapComponent
@@ -1020,7 +1067,7 @@ function App() {
   try {
     return (
       <div className="min-h-screen bg-[var(--background)]" data-name="app" data-file="app.js">
-        <Header 
+        <Header
           user={user}
           onAuthClick={() => setShowAuthModal(true)}
           onLogout={() => {
@@ -1032,7 +1079,7 @@ function App() {
           currentView={currentView}
           onViewChange={setCurrentView}
         />
-        
+
         {renderView()}
 
         {showAuthModal && (
@@ -1041,6 +1088,17 @@ function App() {
             onAuth={setUser}
           />
         )}
+
+        {showForgotPasswordModal && (
+          <ForgotPasswordModal
+            onClose={() => setShowForgotPasswordModal(false)}
+            onBackToLogin={() => {
+              setShowForgotPasswordModal(false);
+              setShowAuthModal(true);
+            }}
+          />
+        )}
+
 
         {showDetailModal && selectedListing && (
           <ListingDetailModal
@@ -1138,6 +1196,59 @@ function App() {
             message={alertData.message}
             variant={alertData.variant}
             onClose={handleAlertClose}
+          />
+        )}
+
+        {/* Confirmation Modal */}
+        {typeof ConfirmationModal !== 'undefined' && (
+          <ConfirmationModal
+            isOpen={showConfirmationModal}
+            listingId={pendingClaimId}
+            onClose={() => {
+              setShowConfirmationModal(false);
+              setPendingClaimId(null);
+            }}
+            onConfirmed={() => {
+              // Refresh listings after confirmation
+              window.location.reload();
+            }}
+          />
+        )}
+
+        {/* User Profile Modal */}
+        {showUserProfile && (
+          <UserProfile
+            user={user}
+            onClose={() => setShowUserProfile(false)}
+            onUserUpdate={setUser}
+          />
+        )}
+
+        {/* Distribution Center Map */}
+        {showDistributionMap && (
+          <div className="fixed inset-0 z-50 bg-white">
+            <div className="h-full flex flex-col">
+              <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
+                <h1 className="text-xl font-bold text-gray-900">🏪 Distribution Centers</h1>
+                <button
+                  onClick={() => setShowDistributionMap(false)}
+                  className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+              <div className="flex-1">
+                <DistributionCenterMap user={user} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Store Owner Dashboard */}
+        {showStoreOwnerDashboard && (
+          <StoreOwnerDashboard
+            user={user}
+            onClose={() => setShowStoreOwnerDashboard(false)}
           />
         )}
       </div>

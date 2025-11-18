@@ -42,6 +42,8 @@ class User(Base):
     vehicle_capacity_kg = Column(Float, nullable=True)
     has_refrigeration = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # reset_token = Column(String(10), nullable=True)  # Commented out - not in MySQL DB
+    # reset_token_expiry = Column(DateTime, nullable=True)  # Commented out - not in MySQL DB
     
     # Relationships
     donations = relationship("FoodResource", foreign_keys="FoodResource.donor_id", back_populates="donor")
@@ -118,3 +120,42 @@ class ConsumptionLog(Base):
     # Relationships
     user = relationship("User", back_populates="consumption_logs")
     food_resource = relationship("FoodResource", back_populates="consumption_logs")
+
+class DistributionCenter(Base):
+    __tablename__ = "distribution_centers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    name = Column(String(255))
+    description = Column(Text, nullable=True)
+    address = Column(String(255))
+    coords_lat = Column(Float)
+    coords_lng = Column(Float)
+    phone = Column(String(255), nullable=True)
+    hours = Column(Text, nullable=True)  # JSON object with operating hours
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    owner = relationship("User", foreign_keys=[owner_id])
+    inventory = relationship("CenterInventory", back_populates="center")
+
+class CenterInventory(Base):
+    __tablename__ = "center_inventory"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    center_id = Column(Integer, ForeignKey("distribution_centers.id"))
+    name = Column(String(255))
+    description = Column(Text, nullable=True)
+    category = Column(SQLEnum(FoodCategory))
+    quantity = Column(Float)
+    unit = Column(String(255))
+    perishability = Column(SQLEnum(PerishabilityLevel), nullable=True)
+    expiration_date = Column(DateTime, nullable=True)
+    images = Column(Text, nullable=True)  # JSON array
+    is_available = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    center = relationship("DistributionCenter", back_populates="inventory")

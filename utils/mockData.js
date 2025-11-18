@@ -9,9 +9,101 @@ if (typeof window.USE_MOCK_API === 'undefined' || window.USE_MOCK_API === false)
   // Keep compatibility fields but don't overwrite any existing databaseService listings
   window.mockUsers = window.mockUsers || null;
   window.mockTransactions = window.mockTransactions || null;
+  /*
   window.mockDistributionCenters = window.mockDistributionCenters || null;
   window.mockDoGoodsStores = window.mockDoGoodsStores || null;
   window.mockDoGoodsKiosks = window.mockDoGoodsKiosks || null;
+  */
+  window.mockDistributionCenters = [
+    {
+      id: 'dc1',
+      name: 'Alameda Food Bank',
+      description: 'Main distribution center of Alameda',
+      address: '650 W Ranger Ave, Alameda , CA 94501',
+      latitude: 37.7793,
+      longitude: -122.2852,
+      capacity: 5000,
+      type: 'food_bank'
+    },
+    {
+      id: 'dc2',
+      name: 'Oakland community Center',
+      description: 'Oakland Communityfood distribution hub',
+      address: '1234 Internation Blvd, Oakland, CA 94601',
+      latitude: 37.7831,
+      longitude: -122.2395,
+      capacity: 3000,
+      type: 'community_center'
+      
+    },
+
+   {
+    id: 'dc3',
+      name: 'San leandro Distribution Hub',
+      description: 'Regionsl food distribution center',
+      address: '1919 Davis st, san leandro, 94577',
+      latitude: 37.7249,
+      longitude: -122.1828,
+      capacity: 4000,
+      type: 'distribution_hub'
+   }
+
+  ];
+
+  window.mockDoGoodsStores = [
+    {
+      id: 'store1',
+      name: 'Dogoods Alameda',
+      description: 'Alameda location for food Distribution',
+      address: '2001 Broadway, Alameda, CA 94501',
+      latitude: 37.7627,
+      longitude: -122.2352,
+      type: 'store'
+    },
+    {
+      id: 'store2',
+      name: 'Dogoods Oakland',
+      description: 'Oakland location for food Distribution',
+      address: '2001 Broadway, Oakland, CA 94607',
+      latitude: 37.8002,
+      longitude: -122.2744,
+      type: 'store'
+    }
+
+  ];
+  window.mockDogoodsKiosks = [
+    {
+      id: 'Kiosk1',
+      name: 'Alameda Point Kiosk',
+      description: '950 W Mall Square, Alameda, CA 94501',
+      latitude: 37.7741,
+      longitude: -122.2984,
+      type:'kiosk'
+    },
+    {
+      id:'Kioks2',
+      name: 'Jack London Square Kiosk',
+      description: '24/7 food access point',
+      address: '472 water Street, Oakland, CA 94607',
+      latitude: 37.7947,
+      longitude: -122.2778,
+      type:'Kiosk'
+    }
+  ];
+
+  window.getMockDistributionCenters = function () {
+    return window.mockDistributionCenters;
+  };
+  window.getMockDoGoodsStores = function() {
+    return window.mockDoGoodsStores;
+  };
+
+  window.getMockDoGoodsKiosks = function() {
+    return window.mockDoGoodsKiosks;
+  };
+  
+
+
 } else {
 
 // Initialize mock data globally on script load

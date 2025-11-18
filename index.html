@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -8,28 +9,37 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Food Maps - Agentic Dispatch System</title>
-    <meta name="description" content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
+    <meta name="description"
+        content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
     <meta name="keywords" content="food distribution, AI routing, automated dispatch, food rescue, smart logistics">
     <meta property="og:title" content="Food Maps - Agentic Dispatch System">
-    <meta property="og:description" content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
+    <meta property="og:description"
+        content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
     <meta name="twitter:title" content="Food Maps - Agentic Dispatch System">
-    <meta name="twitter:description" content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
+    <meta name="twitter:description"
+        content="AI-powered food distribution system with automatic routing, coverage guarantees, and 60-second donation flow">
 
-    <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
     <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
-    <script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.js'></script>
-    <link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.css' type='text/css' />
+    <script
+        src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.js'></script>
+    <link rel='stylesheet'
+        href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.0/mapbox-gl-directions.css'
+        type='text/css' />
     <!-- Mapbox Search JS (Autofill Web Component) -->
     <script src="https://api.mapbox.com/search-js/v1.0.0/web.js"></script>
     <link href="https://api.mapbox.com/search-js/v1.0.0/web.css" rel="stylesheet" />
 
     <style type="text/tailwindcss">
-    @layer theme {
+        @layer theme {
         :root {
             --primary-color: #10b981;
             --secondary-color: #f0fdf4;
@@ -317,6 +327,10 @@
         .status-claimed {
             @apply bg-[var(--warning-color)] text-white px-2 py-1 rounded-full text-xs font-medium;
         }
+
+        .status-expired {
+             @apply bg-[var(--danger-color)] text-white px-2 py-1 rounded-full text-xs font-medium;
+        }
         
         .status-completed {
             @apply bg-gray-500 text-white px-2 py-1 rounded-full text-xs font-medium;
@@ -337,9 +351,10 @@
     }
     </style>
 </head>
+
 <body>
     <div id="root"></div>
-    
+
     <script type="text/babel" src="utils/mockData.js"></script>
     <script type="text/babel" src="utils/database.js"></script>
     <script type="text/babel" src="utils/supabaseExport.js"></script>
@@ -354,7 +369,9 @@
     <script type="text/babel" src="components/Map.js"></script>
     <script type="text/babel" src="components/LocationListView.js"></script>
     <script type="text/babel" src="components/MapListView.js"></script>
+    <script type="text/babel" src="components/Auth/SimpleCaptcha.js"></script>
     <script type="text/babel" src="components/Auth/AuthModal.js"></script>
+    <script type="text/babel" src="components/Auth/ForgotPasswordModal.js"></script>
     <script type="text/babel" src="components/QuickDonate.js"></script>
     <script type="text/babel" src="components/RequestHelp.js"></script>
     <script type="text/babel" src="components/VolunteerRoutes.js"></script>
@@ -373,6 +390,9 @@
     <script type="text/babel" src="components/CreateListing.js"></script>
     <script type="text/babel" src="components/BulkListing.js"></script>
     <script type="text/babel" src="components/UserPortal.js"></script>
+    <script type="text/babel" src="components/UserProfile.js"></script>
+    <script type="text/babel" src="components/DistributionCenterMap.js"></script>
+    <script type="text/babel" src="components/StoreOwnerDashboard.js"></script>
     <script type="text/babel" src="components/Dashboard.js"></script>
     <script type="text/babel" src="components/ListingDetailModal.js"></script>
     <script type="text/babel" src="components/DetailedModal.js"></script>
@@ -386,6 +406,8 @@
     <script type="text/babel" src="components/StorePortal.js"></script>
     <script type="text/babel" src="components/Auth/AlertModal.js"></script>
     <script type="text/babel" src="components/Auth/PhoneModal.js"></script>
+    <script type="text/babel" src="components/ConfirmationModal.js"></script>
     <script type="text/babel" src="app.js"></script>
 </body>
+
 </html>

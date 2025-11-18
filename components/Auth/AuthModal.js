@@ -69,12 +69,22 @@ function AuthModal({ onClose, onAuth }) {
   ];
 
   const [authError, setAuthError] = React.useState('');
+  const [captchaVerified, setCaptchaVerified] = React.useState(false);
 
   const parseJwt = (token) => {
     try {
-      const payload = token.split('.')[1];
-      const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
-      return JSON.parse(decodeURIComponent(escape(json)));
+      const parts = String(token || '').split('.');
+      if (parts.length < 2) return null;
+      let payload = parts[1];
+      payload = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const pad = payload.length % 4;
+      if (pad > 0) payload += '='.repeat(4 - pad);
+      const json = atob(payload);
+      try {
+        return JSON.parse(json);
+      } catch (e) {
+        return JSON.parse(decodeURIComponent(escape(json)));
+      }
     } catch (e) {
       return null;
     }
@@ -82,6 +92,12 @@ function AuthModal({ onClose, onAuth }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check captcha verification
+    if (!captchaVerified) {
+      setAuthError('Please complete the captcha verification');
+      return;
+    }
     
     const userData = {
       name: formData.name,
@@ -203,7 +219,24 @@ function AuthModal({ onClose, onAuth }) {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">Password</label>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-[var(--text-secondary)]">Password</label>
+                {isLogin && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      // Trigger forgot password modal
+                      if (window.showForgotPasswordModal) {
+                        window.showForgotPasswordModal();
+                      }
+                    }}
+                    className="text-xs text-[var(--primary-color)] hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                )}
+              </div>
               <input
                 type="password"
                 required
@@ -228,7 +261,15 @@ function AuthModal({ onClose, onAuth }) {
               </div>
             )}
 
-            <button type="submit" className="btn-primary w-full">
+            <SimpleCaptcha onVerify={setCaptchaVerified} />
+
+            <button 
+              type="submit" 
+              className={`btn-primary w-full ${
+                !captchaVerified ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              disabled={!captchaVerified}
+            >
               {isLogin ? 'Sign In' : 'Create Account'}
             </button>
             {authError && (
