@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Panel - Distribution Centers</title>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
+  <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
+  <style>
+    .map-container {
+      height: 400px;
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    // Mapbox token
+    window.MAPBOX_ACCESS_TOKEN = 'pk.eyJ1Ijoiam1hcmJpbiIsImEiOiJjbWc3aWg0M3AwbXhhMmpxM3NhZWo1Z2x6In0.W8AZQbCZTUfizNliutsyHg';
+
+    function AdminPanel() {
+      const [centers, setCenters] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [showAddForm, setShowAddForm] = useState(false);
+      const [formData, setFormData] = useState({
+        name: '',
+        description: '',
+        address: '',
+        coords_lat: '',
+        coords_lng: '',
+        phone: '',
+        hours: ''
+      });
+      const [markerPosition, setMarkerPosition] = useState(null);
+      const mapContainer = useRef(null);
+      const map = useRef(null);
+      const marker = useRef(null);
+
+      useEffect(() => {
+        loadCenters();
+      }, []);
+
+      // Initialize map when form is shown
+      useEffect(() => {
+        if (showAddForm && !map.current && mapContainer.current) {
+          mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
+
+          map.current = new mapboxgl.Map({
+            container: mapContainer.current,
+            style: 'mapbox://styles/mapbox/streets-v12',
+            center: [-122.2594, 37.7653], // Alameda center
+            zoom: 12
+          });
+
+          map.current.on('click', (e) => {
+            const { lng, lat } = e.lngLat;
+            setMarkerPosition({ lng, lat });
+            setFormData(prev => ({
+              ...prev,
+              coords_lat: lat.toFixed(6),
+              coords_lng: lng.toFixed(6)
+            }));
+
+            // Update marker
+            if (marker.current) {
+              marker.current.remove();
+            }
+            marker.current = new mapboxgl.Marker({ color: '#10b981' })
+              .setLngLat([lng, lat])
+              .addTo(map.current);
+          });
+        }
+      }, [showAddForm]);
+
+      const loadCenters = async () => {
+        try {
+          const response = await fetch('/api/centers');
+          const data = await response.json();
+          setCenters(data);
+        } catch (error) {
+          console.error('Error loading centers:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData(prev => ({ ...prev, [name]: value }));
+      };
+
+      const handleSubmit = async (e) => {
+        e.preventDefault();
+
+        if (!formData.coords_lat || !formData.coords_lng) {
+          alert('Please click on the map to select a location');
+          return;
+        }
+
+        try {
+          const response = await fetch('/api/centers', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              ...formData,
+              coords_lat: parseFloat(formData.coords_lat),
+              coords_lng: parseFloat(formData.coords_lng)
+            })
+          });
+
+          if (response.ok) {
+            alert('Distribution center added successfully!');
+            setShowAddForm(false);
+            setFormData({
+              name: '',
+              description: '',
+              address: '',
+              coords_lat: '',
+              coords_lng: '',
+              phone: '',
+              hours: ''
+            });
+            setMarkerPosition(null);
+            if (marker.current) {
+              marker.current.remove();
+              marker.current = null;
+            }
+            loadCenters();
+          } else {
+            const error = await response.json();
+            alert(`Error: ${error.detail || 'Failed to add center'}`);
+          }
+        } catch (error) {
+          console.error('Error adding center:', error);
+          alert('Failed to add distribution center');
+        }
+      };
+
+      const handleDelete = async (id, name) => {
+        if (!confirm(`Are you sure you want to delete "${name}"?`)) {
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/centers/${id}`, {
+            method: 'DELETE'
+          });
+
+          if (response.ok) {
+            alert('Distribution center deleted successfully!');
+            loadCenters();
+          } else {
+            const error = await response.json();
+            alert(`Error: ${error.detail || 'Failed to delete center'}`);
+          }
+        } catch (error) {
+          console.error('Error deleting center:', error);
+          alert('Failed to delete distribution center');
+        }
+      };
+
+      return (
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            {/* Header */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-3xl font-bold text-gray-900">Distribution Centers Admin</h1>
+                  <p className="text-gray-600 mt-1">Manage food distribution centers and their locations</p>
+                </div>
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                >
+                  {showAddForm ? '✕ Cancel' : '+ Add New Center'}
+                </button>
+              </div>
+            </div>
+
+            {/* Add Form */}
+            {showAddForm && (
+              <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Add New Distribution Center</h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Center Name *
+                      </label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        required
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="e.g., Downtown Food Hub"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Phone
+                      </label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                        placeholder="(555) 123-4567"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description
+                    </label>
+                    <textarea
+                      name="description"
+                      value={formData.description}
+                      onChange={handleInputChange}
+                      rows="2"
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Brief description of the center..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address *
+                    </label>
+                    <input
+                      type="text"
+                      name="address"
+                      value={formData.address}
+                      onChange={handleInputChange}
+                      required
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="123 Main St, City, State ZIP"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Hours
+                    </label>
+                    <input
+                      type="text"
+                      name="hours"
+                      value={formData.hours}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                      placeholder="Mon-Fri: 9AM-5PM"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Location * (Click on map to select)
+                    </label>
+                    <div ref={mapContainer} className="map-container border-2 border-gray-300 rounded-lg"></div>
+                    {markerPosition && (
+                      <p className="text-sm text-green-600 mt-2">
+                        ✓ Location selected: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end space-x-4 pt-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddForm(false)}
+                      className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
+                    >
+                      Add Center
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Centers List */}
+            <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900">
+                  Existing Centers ({centers.length})
+                </h2>
+              </div>
+
+              {loading ? (
+                <div className="p-8 text-center text-gray-500">Loading...</div>
+              ) : centers.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No distribution centers yet</div>
+              ) : (
+                <div className="divide-y divide-gray-200">
+                  {centers.map(center => (
+                    <div key={center.id} className="p-6 hover:bg-gray-50 transition-colors">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                            {center.name}
+                          </h3>
+                          {center.description && (
+                            <p className="text-sm text-gray-600 mb-2">{center.description}</p>
+                          )}
+                          <div className="space-y-1 text-sm text-gray-500">
+                            <p>📍 {center.address}</p>
+                            {center.phone && <p>📞 {center.phone}</p>}
+                            {center.hours && <p>🕐 {center.hours}</p>}
+                            <p className="text-xs text-gray-400">
+                              Coordinates: {center.coords_lat}, {center.coords_lng}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleDelete(center.id, center.name)}
+                          className="ml-4 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors text-sm font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.render(<AdminPanel />, document.getElementById('root'));
+  </script>
+</body>
+
+</html>

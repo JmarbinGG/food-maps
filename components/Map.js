@@ -75,6 +75,28 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     // Add food listing markers (red/orange)
     safeListings.forEach(listing => {
       if (listing.coords_lat && listing.coords_lng) {
+        // Check if this listing is claimed by the current user
+        const isClaimedByMe = (() => {
+          if (!user) return false;
+          const userId = String(user.id);
+          
+          // Check recipient_id
+          const recipientId = listing.recipient_id ?? listing.recipientId ?? listing.recipient?.id;
+          if (recipientId && String(recipientId) === userId) return true;
+          
+          // Check localStorage fallback
+          try {
+            const key = `my_claimed_ids:${userId}`;
+            const arr = JSON.parse(localStorage.getItem(key) || '[]');
+            return Array.isArray(arr) && arr.includes(String(listing.id));
+          } catch (_) {
+            return false;
+          }
+        })();
+
+        const borderColor = isClaimedByMe && user?.role === 'recipient' ? '#3b82f6' : 'white';
+        const borderWidth = isClaimedByMe && user?.role === 'recipient' ? '4px' : '3px';
+
         const el = document.createElement('div');
         el.className = 'food-listing-marker';
         el.innerHTML = `
@@ -84,7 +106,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             height: 35px;
             border-radius: 50% 50% 50% 0;
             transform: rotate(-45deg);
-            border: 3px solid white;
+            border: ${borderWidth} solid ${borderColor};
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             cursor: pointer;
             display: flex;
@@ -110,6 +132,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                   <p style="font-size: 12px; margin-top: 4px;">
                     <strong>${listing.qty} ${listing.unit}</strong>
                   </p>
+                  ${isClaimedByMe && user?.role === 'recipient' ? '<p style="font-size: 11px; color: #3b82f6; margin-top: 4px; font-weight: 600;">✓ Claimed by you</p>' : ''}
                 </div>
               `)
           )

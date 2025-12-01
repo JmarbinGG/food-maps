@@ -116,16 +116,18 @@ function AuthModal({ onClose, onAuth }) {
         if (json && json.success && json.token) {
           localStorage.setItem('auth_token', json.token);
           const payload = parseJwt(json.token);
+          console.log('Login - JWT payload:', payload);
           const loggedUser = {
             id: payload && payload.sub ? payload.sub : formData.email,
             name: payload && payload.name ? payload.name : formData.email,
-            role: payload && payload.role ? payload.role : formData.role
+            role: payload && payload.role ? payload.role : 'recipient'
           };
+          console.log('Login - Setting current_user:', loggedUser);
           localStorage.setItem('current_user', JSON.stringify(loggedUser));
           onAuth(loggedUser);
           onClose();
         } else {
-          const err = (json && (json.error || json.message)) || 'Login failed';
+          const err = (json && (json.error || json.message)) || 'Invalid email or password ';
           setAuthError(err);
         }
       } catch (error) {
@@ -147,7 +149,7 @@ function AuthModal({ onClose, onAuth }) {
             const loggedUser = {
               id: payload && payload.sub ? payload.sub : formData.email,
               name: payload && payload.name ? payload.name : formData.name,
-              role: payload && payload.role ? payload.role : formData.role
+              role: payload && payload.role ? payload.role : registerData.role
             };
             localStorage.setItem('current_user', JSON.stringify(loggedUser));
             onAuth(loggedUser);

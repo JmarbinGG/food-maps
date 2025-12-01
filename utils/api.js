@@ -14,13 +14,12 @@ window.listingAPI = {
   claim: async function(listingId, userId) {
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(`/api/listings/get/${listingId}`, {
+      const response = await fetch(`/api/listings/get/${listingId}?recipient_id=${userId}`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ recipient_id: userId })
+        }
       });
       if (!response.ok) throw new Error('Failed to claim');
       return await response.json();

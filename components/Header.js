@@ -91,6 +91,15 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🏪 Distribution Centers
                   </button>
+                  <button
+                    onClick={() => {
+                      window.open('/admin.html', '_blank');
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    ⚙️ Admin Panel
+                  </button>
                   {user.role === 'donor' && (
                     <button
                       onClick={() => {

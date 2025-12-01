@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,20 +15,17 @@ import os
 import random
 import string
 from passlib.context import CryptContext
-from backend.schemas import (
-    FoodResourceResponse, 
+from .schemas import (
+    FoodResourceResponse,
     DistributionCenterCreate,
     DistributionCenterResponse,
     DistributionCenterWithInventory,
-    CenterInventoryCreate,
-    CenterInventoryUpdate,
     CenterInventoryResponse
 )
-from backend.models import (
-    Base, FoodResource, User, UserRole, FoodCategory, 
-    PerishabilityLevel, DistributionCenter, CenterInventory
+from .models import (
+    Base, FoodResource, User, UserRole, FoodCategory, PerishabilityLevel,
+    DistributionCenter, CenterInventory
 )
-import asyncio
 from threading import Timer
 
 
@@ -39,9 +36,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Serve static files at root paths for legacy HTML compatibility
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-app.mount("/components", StaticFiles(directory=os.path.join(PROJECT_ROOT, "components")), name="components")
-app.mount("/utils", StaticFiles(directory=os.path.join(PROJECT_ROOT, "utils")), name="utils")
-app.mount("/static", StaticFiles(directory=PROJECT_ROOT), name="static")
+#app.mount("/", StaticFiles(directory=PROJECT_ROOT), name="root")
 security = HTTPBearer()
 # Optional bearer for endpoints where auth is not required but can tailor results
 optional_security = HTTPBearer(auto_error=False)
@@ -126,7 +121,7 @@ def serialize_listing(item: FoodResource, include_donor: bool = True) -> dict:
         "claimed_at": item.claimed_at.isoformat() if getattr(item, "claimed_at", None) else None,
         "urgency_score": getattr(item, "urgency_score", 0) or 0,
         "created_at": item.created_at.isoformat() if getattr(item, "created_at", None) else None,
-        "needs_confirmation": getattr(item, "status", None) == "pending_confirmation",
+        "updated_at": item.updated_at.isoformat() if getattr(item, "updated_at", None) else None,
         "donor": donor_payload,
     }
 
@@ -170,24 +165,6 @@ async def serve_cookies():
 async def serve_terms():
     return get_html_content("terms.html")
 
-@app.get("/forgot-password-test.html", response_class=HTMLResponse)
-async def serve_forgot_password():
-    return get_html_content("forgot-password-test")
-
-@app.get("/app.js")
-async def serve_app_js():
-    filepath = os.path.join(HTML_DIR, "app.js")
-    with open(filepath, 'r') as f:
-        content = f.read()
-    return Response(content, media_type="application/javascript")
-
-@app.get("/style.css")
-async def serve_style_css():
-    filepath = os.path.join(HTML_DIR, "style.css")
-    with open(filepath, 'r') as f:
-        content = f.read()
-    return Response(content, media_type="text/css")
-
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
@@ -222,74 +199,6 @@ async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.put("/api/user/profile")
-async def update_profile(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        body = await request.json()
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Update fields if provided
-        if 'name' in body and body['name']:
-            user.name = body['name'].strip()
-        if 'email' in body and body['email']:
-            user.email = body['email'].strip()
-        if 'phone' in body:
-            user.phone = body['phone'].strip() if body['phone'] else None
-        if 'address' in body:
-            user.address = body['address'].strip() if body['address'] else None
-        
-        db.add(user)
-        db.commit()
-        return {"success": True, "message": "Profile updated successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/user/change-password")
-async def change_password(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        body = await request.json()
-        current_password = body.get('current_password')
-        new_password = body.get('new_password')
-        
-        if not current_password or not new_password:
-            raise HTTPException(status_code=422, detail="Current and new passwords are required")
-        
-        if len(new_password) < 8:
-            raise HTTPException(status_code=422, detail="New password must be at least 8 characters long")
-        
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-        
-        # Verify current password
-        if not pwd_context.verify(current_password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Current password is incorrect")
-        
-        # Update password
-        user.password_hash = pwd_context.hash(new_password)
-        db.add(user)
-        db.commit()
-        
-        return {"success": True, "message": "Password changed successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.put("/api/user/phone")
 async def update_phone(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     try:
@@ -314,9 +223,6 @@ async def update_phone(request: Request, credentials: HTTPAuthorizationCredentia
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Store for pending confirmations
-pending_confirmations = {}
-
 # Create tables
 @app.on_event("startup")
 async def startup_event():
@@ -335,23 +241,6 @@ async def startup_event():
                     conn.execute(text("ALTER TABLE food_resources ADD COLUMN recipient_id INTEGER"))
                 if "claimed_at" not in cols:
                     conn.execute(text("ALTER TABLE food_resources ADD COLUMN claimed_at DATETIME"))
-
-                #added missing columns to user table
-                res = conn.execute(text("PRAGMA table_info(users)"))
-                user_cols = {row[1] for row in res.fetchall()}
-                if "reset_token" not in user_cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN reset_token VARCHAR(10)"))
-                if "reset_token_expiry" not in user_cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN reset_token_expiry DATETIME"))
-                if "vehicle_capacity_kg" not in user_cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN vehicle_capacity_kg FLOAT"))
-                if "has_refrigeration" not in user_cols:
-                    conn.execute(text("ALTER TABLE users ADD COLUMN has_refrigeration BOOLEAN DEFAULT 0"))                        
-
-
-
-
-
             elif dialect_name in ("mysql", "mariadb"):
                 # MySQL/MariaDB conditional adds
                 conn.execute(text(
@@ -360,16 +249,6 @@ async def startup_event():
                     ADD COLUMN IF NOT EXISTS recipient_id INT NULL,
                     ADD COLUMN IF NOT EXISTS claimed_at DATETIME NULL
                     """
-                ))
-
-                conn.execute(text(
-
-                """
-                ALTER TABLE users
-                ADD COLUMN IF NOT EXISTS reset_token VARCHAR(10) NULL,
-                ADD COLUMN IF NOT EXISTS reset_token_expiry DATETIME NULL
-                """
-                     
                 ))
             elif dialect_name == "postgresql":
                 conn.execute(text(
@@ -386,18 +265,6 @@ async def startup_event():
                         WHERE table_name='food_resources' AND column_name='claimed_at'
                     ) THEN
                         ALTER TABLE food_resources ADD COLUMN claimed_at TIMESTAMP NULL;
-                    END IF;
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name='users' AND column_name='reset_token'
-                    ) THEN
-                        ALTER TABLE users ADD COLUMN reset_token VARCHAR(10) NULL;
-                    END IF;
-                    IF NOT EXISTS (
-                        SELECT 1 FROM information_schema.columns
-                        WHERE table_name='users' AND column_name='reset_token_expiry'
-                    ) THEN
-                        ALTER TABLE users ADD COLUMN reset_token_expiry TIMESTAMP NULL;
                     END IF;
                     END $$;
                     """
@@ -434,6 +301,18 @@ def get_listings(
       - If user is a donor: also include listings with status=='claimed' owned by this donor
       - If user is a recipient: also include listings with status=='claimed' claimed by this recipient
     """
+    if credentials is not None:
+            try:
+                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            except jwt.ExpiredSignatureError:
+                print("JWT token expired")
+                raise HTTPException(status_code=401, detail="Invalid token")
+            except jwt.InvalidTokenError as e:
+                print(f"JWT token invalid: {e}")
+                raise HTTPException(status_code=401, detail="Invalid token")
+            except Exception as e:
+                print(f"JWT decode error: {e}")
+                raise HTTPException(status_code=401, detail="Invalid token")
     try:
         # Base: available items
         # Base: only available items for general audience
@@ -449,6 +328,7 @@ def get_listings(
         claimed_list = []
         user_id = None
         user_role = None
+        
         if include_claimed_for_me and credentials is not None:
             try:
                 payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -466,7 +346,10 @@ def get_listings(
             if user_role == "donor":
                 claimed_q = (
                     db.query(FoodResource)
-                    .filter(FoodResource.status == "claimed", FoodResource.donor_id == int(user_id))
+                    .filter(
+                        FoodResource.status.in_(["claimed", "pending_confirmation"]),
+                        FoodResource.donor_id == int(user_id)
+                    )
                     .order_by(FoodResource.status, FoodResource.created_at.desc())
                     .limit(limit)
                 )
@@ -477,7 +360,10 @@ def get_listings(
                 try:
                     claimed_q = (
                         db.query(FoodResource)
-                        .filter(FoodResource.status == "claimed", FoodResource.recipient_id == int(user_id))
+                        .filter(
+                            FoodResource.status.in_(["claimed", "pending_confirmation"]),
+                            FoodResource.recipient_id == int(user_id)
+                        )
                         .order_by(FoodResource.created_at.desc())
                         .limit(limit)
                     )
@@ -524,7 +410,7 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
         except HTTPException:
             raise
         except Exception:
-            raise HTTPException(status_code=401, detail="Invalid or missing token")
+            raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
         db.delete(item)
         db.commit()
@@ -553,7 +439,7 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         except HTTPException:
             raise
         except Exception:
-            raise HTTPException(status_code=401, detail="Invalid or missing token")
+            raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
         body = {}
         try:
@@ -633,7 +519,7 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
             except Exception:
                 pass
 
-        # item.updated_at = datetime.utcnow()  # Column doesn't exist
+        item.updated_at = datetime.utcnow()
         db.add(item)
         db.commit()
         db.refresh(item)
@@ -648,6 +534,9 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
 async def create_user(name: str, email: str, password: str, role: UserRole, db: Session = Depends(get_db)):
     print("login attempt: email:", email, " pw:", password, " len:", len(password.encode('utf-8')), "repr", repr(password))
     try:    
+        if role == "volunteer" or role == "admin":
+            raise HTTPException(status_code=400, detail="Invalid role")
+         
         user = User(email = email, name = name, password_hash = password, role=role, created_at = datetime.utcnow())
         query = db.query(User).filter(User.email == email)
         existing_user = query.first()
@@ -669,225 +558,110 @@ async def login_user(email: str, password: str, db: Session = Depends(get_db)):
         query = db.query(User).filter(User.email == email)
         user = query.first()
         if user and pwd_context.verify(password, user.password_hash):
+            # Create token with 24 hour expiration
+            now = datetime.utcnow()
             payload = {
                 "sub": str(user.id),
                 "name": user.name,
                 "role": user.role.value,
-                "exp": datetime.utcnow() + timedelta(hours=12)  # Token valid for 12 hours
+                "iat": now,  # Issued at time
+                "exp": now + timedelta(hours=24)  # Token valid for 24 hours
             }
             token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+            print(f"Generated token for user {user.id}, expires in 24 hours")
             return {"success": True, "token": token}
         else:
             raise HTTPException(status_code=401, detail="Invalid email or password")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Invalid Email or password")
+
+# Store for pending confirmations
+pending_confirmations = {}
 
 def generate_reset_code(length: int = 6) -> str:
-    """Generate a random numeric verification code"""
+    """Generate a random numeric code for SMS confirmation"""
     return ''.join(random.choices(string.digits, k=length))
 
 def send_sms(phone: str, message: str) -> bool:
-    """Send SMS using Twilio with console fallback"""
-    try:
-        # Try real SMS service first
-        from sms_service import send_sms_real
-        success = send_sms_real(phone, message)
-        
-        if success:
-            return True
-        else:
-            # Fallback to console logging
-            print(f"\n📱 SMS FALLBACK to {phone}:")
-            print(f"Message: {message}")
-            print("=" * 50)
-            return True
-            
-    except ImportError:
-        # Fallback if SMS service not available
-        print(f"\n📱 SMS (Console) to {phone}:")
-        print(f"Message: {message}")
-        print("=" * 50)
-        return True
-    except Exception as e:
-        print(f"SMS error: {e}")
-        return False
+    """Send SMS - stub for now, logs to console"""
+    print(f"📱 SMS to {phone}: {message}")
+    return True
 
 def auto_release_claim(listing_id: int):
-    """Auto-release claim after 5 minutes if not confirmed"""
+    """Auto-release a claim if not confirmed within time limit"""
     try:
         db = SessionLocal()
-        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
-        if listing and listing.status == 'pending_confirmation':
-            listing.status = 'available'
-            listing.recipient_id = None
-            listing.claimed_at = None
-            db.commit()
-            print(f"Auto-released listing {listing_id} due to no confirmation")
+        if listing_id in pending_confirmations:
+            item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+            if item and item.status == "pending_confirmation":
+                item.status = "available"
+                item.recipient_id = None
+                item.claimed_at = None
+                db.commit()
+                print(f"⏰ Auto-released listing {listing_id} due to timeout")
+            del pending_confirmations[listing_id]
         db.close()
     except Exception as e:
-        print(f"Auto-release error: {e}")
+        print(f"Error in auto_release_claim: {e}")
 
+# ============================================
+# DISTRIBUTION CENTER ENDPOINTS
+# ============================================
 
-def send_verification_email(email: str, code: str, name: str) -> bool:
-    """
-    Send verification code via email using real SMTP service.
-    """
+@app.get("/api/centers", response_model=List[DistributionCenterResponse])
+async def get_distribution_centers(db: Session = Depends(get_db)):
+    """Get all distribution centers"""
     try:
-        # Try real email service first
-        from email_service import send_reset_email
-        success = send_reset_email(email, code, name)
-        
-        if success:
-            return True
-        else:
-            # Fallback to console logging if email fails
-            print("\n" + "="*60)
-            print(f"📧 EMAIL FALLBACK - PASSWORD RESET")
-            print("="*60)
-            print(f"To: {email}")
-            print(f"Code: {code}")
-            print("Email service failed, code printed above")
-            print("="*60 + "\n")
-            return True
-            
-    except ImportError:
-        # Fallback if email service not available
-        print("\n" + "="*60)
-        print(f"📧 PASSWORD RESET EMAIL (Console)")
-        print("="*60)
-        print(f"To: {email}")
-        print(f"Code: {code}")
-        print("="*60 + "\n")
-        return True
+        centers = db.query(DistributionCenter).all()
+        return centers
     except Exception as e:
-        print(f"Error sending email: {e}")
-        return False
+        raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/api/user/forgot-password")
-async def forgot_password(request: Request, db: Session = Depends(get_db)):
-    """
-    Request a password reset. Generates a verification code and sends it to the user's email.
-    The code expires in 15 minutes.
-    """
+@app.get("/api/centers/{center_id}", response_model=DistributionCenterWithInventory)
+async def get_distribution_center(center_id: int, db: Session = Depends(get_db)):
+    """Get a specific distribution center with inventory"""
     try:
-        # Get email from form data
-        form = await request.form()
-        email = form.get('email')
+        center = db.query(DistributionCenter).filter(
+            DistributionCenter.id == center_id
+        ).first()
         
-        if not email:
-            raise HTTPException(status_code=422, detail="Email is required")
-            
-        user = db.query(User).filter(User.email == email).first()
+        if not center:
+            raise HTTPException(status_code=404, detail="Distribution center not found")
         
-        if not user:
-            # For security, return success even if user doesn't exist
-            # This prevents email enumeration attacks
-            return {
-                "success": True, 
-                "message": "If an account exists with this email, a verification code has been sent."
-            }
-        
-        # Generate 6-digit verification code
-        reset_code = generate_reset_code(6)
-        
-        # Store code in memory (temporary solution)
-        # TODO: Add reset_token columns to MySQL database
-        if not hasattr(forgot_password, 'reset_codes'):
-            forgot_password.reset_codes = {}
-        
-        forgot_password.reset_codes[email] = {
-            'code': reset_code,
-            'expires': datetime.utcnow() + timedelta(minutes=15)
-        }
-        
-        # Send email with verification code
-        email_sent = send_verification_email(user.email, reset_code, user.name)
-        
-        if not email_sent:
-            # Log error but don't expose to client
-            print(f"Failed to send email to {email}")
-        
-        return {
-            "success": True,
-            "message": "If an account exists with this email, a verification code has been sent.",
-            "debug_code": reset_code if os.getenv("DEBUG_MODE") == "true" else None  # Only in debug mode
-        }
-        
-    except Exception as e:
-        print(f"Forgot password error: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred processing your request")
-
-
-@app.post("/api/user/reset-password")
-async def reset_password(request: Request, db: Session = Depends(get_db)):
-    """
-    Reset password using the verification code sent to email.
-    """
-    try:
-        # Get data from form
-        form = await request.form()
-        email = form.get('email')
-        code = form.get('code')
-        new_password = form.get('new_password')
-        
-        # Validate input
-        if not email or not code or not new_password:
-            raise HTTPException(status_code=422, detail="Email, code, and new password are required")
-        
-        if len(new_password) < 8:
-            raise HTTPException(status_code=422, detail="Password must be at least 8 characters long")
-        
-        # Find user
-        user = db.query(User).filter(User.email == email).first()
-        
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid verification code or email")
-        
-        # Check memory storage for reset code
-        if not hasattr(forgot_password, 'reset_codes') or email not in forgot_password.reset_codes:
-            raise HTTPException(status_code=401, detail="No password reset request found. Please request a new code.")
-        
-        reset_data = forgot_password.reset_codes[email]
-        
-        # Check if token is expired
-        if datetime.utcnow() > reset_data['expires']:
-            del forgot_password.reset_codes[email]
-            raise HTTPException(status_code=401, detail="Verification code has expired. Please request a new one.")
-        
-        # Verify code
-        if reset_data['code'] != code:
-            raise HTTPException(status_code=401, detail="Invalid verification code")
-        
-        # Update password
-        user.password_hash = pwd_context.hash(new_password)
-        
-        # Clear reset code from memory
-        del forgot_password.reset_codes[email]
-        
-        db.add(user)
-        db.commit()
-        
-        return {
-            "success": True,
-            "message": "Password has been reset successfully. You can now login with your new password."
-        }
-        
+        return center
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Reset password error: {e}")
-        raise HTTPException(status_code=500, detail="An error occurred resetting your password")
+        raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/centers/{center_id}/inventory", response_model=List[CenterInventoryResponse])
+async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
+    """Get inventory for a specific distribution center"""
+    try:
+        center = db.query(DistributionCenter).filter(
+            DistributionCenter.id == center_id
+        ).first()
+        
+        if not center:
+            raise HTTPException(status_code=404, detail="Distribution center not found")
+        
+        inventory = db.query(CenterInventory).filter(
+            CenterInventory.center_id == center_id
+        ).all()
+        
+        return inventory
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.patch("/api/listings/get/{listing_id}")
-async def claim_listing(listing_id: int, recipient_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def claim_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Claim a listing with SMS confirmation requirement."""
     try:
         item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
         if not item:
             raise HTTPException(status_code=404, detail="Listing not found")
-
         if item.status != 'available':
             raise HTTPException(status_code=400, detail="Listing is not available")
 
@@ -1031,7 +805,7 @@ async def get_user_details(
             user_role = str(payload.get("role") or "").lower() if payload else None
             user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
         except Exception:
-            raise HTTPException(status_code=401, detail="Invalid or missing token")
+            raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
         if user_role not in ("donor", "recipient"):
             raise HTTPException(status_code=403, detail="Not authorized")
@@ -1068,289 +842,4 @@ async def get_user_details(
             print(f"/api/listings/user-details error: {e}")
         except Exception:
             pass
-        raise HTTPException(status_code=500, detail="Failed to fetch user details")
-
-@app.post("/api/listings/confirm/{listing_id}")
-async def confirm_claim(listing_id: int, request: Request, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """Confirm a claim with SMS code."""
-    try:
-        body = await request.json()
-        code = body.get('code')
-        
-        if not code:
-            raise HTTPException(status_code=400, detail="Confirmation code required")
-        
-        # Check if confirmation exists
-        if listing_id not in pending_confirmations:
-            raise HTTPException(status_code=404, detail="No pending confirmation found")
-        
-        confirmation = pending_confirmations[listing_id]
-        
-        # Check if expired
-        if datetime.utcnow() > confirmation['expires_at']:
-            del pending_confirmations[listing_id]
-            raise HTTPException(status_code=400, detail="Confirmation code expired")
-        
-        # Verify code
-        if code != confirmation['code']:
-            raise HTTPException(status_code=400, detail="Invalid confirmation code")
-        
-        # Get listing and confirm
-        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        
-        item.status = "claimed"
-        db.commit()
-        
-        # Clean up
-        del pending_confirmations[listing_id]
-        
-        # Get users for final SMS
-        claimant = db.query(User).filter(User.id == confirmation['recipient_id']).first()
-        donor = db.query(User).filter(User.id == item.donor_id).first()
-        
-        # Send confirmation SMS
-        if claimant and claimant.phone:
-            send_sms(claimant.phone, f"Confirmed! You can pick up '{item.title}' at {item.address}")
-        
-        if donor and donor.phone:
-            send_sms(donor.phone, f"Claim confirmed for '{item.title}'. Recipient: {claimant.name if claimant else 'Unknown'} - {claimant.phone if claimant else ''}")
-        
-        return {"success": True, "message": "Claim confirmed successfully!"}
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================
-# DISTRIBUTION CENTER ENDPOINTS
-# ============================================
-
-@app.post("/api/centers", response_model=DistributionCenterResponse)
-async def create_distribution_center(
-    center_data: DistributionCenterCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Create a new distribution center"""
-    try:
-        user = verify_token(credentials.credentials, db)
-        
-        new_center = DistributionCenter(
-            owner_id=user.id,
-            name=center_data.name,
-            description=center_data.description,
-            address=center_data.address,
-            coords_lat=center_data.coords_lat,
-            coords_lng=center_data.coords_lng,
-            phone=center_data.phone,
-            hours=center_data.hours,
-            is_active=True
-        )
-        
-        db.add(new_center)
-        db.commit()
-        db.refresh(new_center)
-        
-        return new_center
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/centers", response_model=List[DistributionCenterResponse])
-async def get_distribution_centers(
-    is_active: Optional[bool] = True,
-    db: Session = Depends(get_db)
-):
-    """Get all distribution centers"""
-    try:
-        query = db.query(DistributionCenter)
-        if is_active is not None:
-            query = query.filter(DistributionCenter.is_active == is_active)
-        centers = query.all()
-        return centers
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/centers/{center_id}", response_model=DistributionCenterWithInventory)
-async def get_distribution_center(
-    center_id: int,
-    db: Session = Depends(get_db)
-):
-    """Get a specific distribution center with its inventory"""
-    try:
-        center = db.query(DistributionCenter).filter(
-            DistributionCenter.id == center_id
-        ).first()
-        
-        if not center:
-            raise HTTPException(status_code=404, detail="Distribution center not found")
-        
-        return center
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/centers/{center_id}/inventory", response_model=CenterInventoryResponse)
-async def add_inventory_item(
-    center_id: int,
-    item_data: CenterInventoryCreate,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Add an item to a distribution center's inventory"""
-    try:
-        user = verify_token(credentials.credentials, db)
-        
-        # Verify center exists and user owns it
-        center = db.query(DistributionCenter).filter(
-            DistributionCenter.id == center_id
-        ).first()
-        
-        if not center:
-            raise HTTPException(status_code=404, detail="Distribution center not found")
-        
-        if center.owner_id != user.id and user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=403, detail="Not authorized to add inventory to this center")
-        
-        # Create inventory item
-        new_item = CenterInventory(
-            center_id=center_id,
-            name=item_data.name,
-            description=item_data.description,
-            category=item_data.category,
-            quantity=item_data.quantity,
-            unit=item_data.unit,
-            perishability=item_data.perishability,
-            expiration_date=item_data.expiration_date,
-            images=','.join(item_data.images) if item_data.images else None,
-            is_available=True
-        )
-        
-        db.add(new_item)
-        db.commit()
-        db.refresh(new_item)
-        
-        return new_item
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/centers/{center_id}/inventory", response_model=List[CenterInventoryResponse])
-async def get_center_inventory(
-    center_id: int,
-    is_available: Optional[bool] = None,
-    db: Session = Depends(get_db)
-):
-    """Get all inventory items for a distribution center"""
-    try:
-        query = db.query(CenterInventory).filter(
-            CenterInventory.center_id == center_id
-        )
-        
-        if is_available is not None:
-            query = query.filter(CenterInventory.is_available == is_available)
-        
-        items = query.order_by(CenterInventory.created_at.desc()).all()
-        return items
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.put("/api/centers/{center_id}/inventory/{item_id}", response_model=CenterInventoryResponse)
-async def update_inventory_item(
-    center_id: int,
-    item_id: int,
-    item_data: CenterInventoryUpdate,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Update an inventory item"""
-    try:
-        user = verify_token(credentials.credentials, db)
-        
-        # Verify center and authorization
-        center = db.query(DistributionCenter).filter(
-            DistributionCenter.id == center_id
-        ).first()
-        
-        if not center:
-            raise HTTPException(status_code=404, detail="Distribution center not found")
-        
-        if center.owner_id != user.id and user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        # Get and update item
-        item = db.query(CenterInventory).filter(
-            CenterInventory.id == item_id,
-            CenterInventory.center_id == center_id
-        ).first()
-        
-        if not item:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        # Update fields
-        update_data = item_data.dict(exclude_unset=True)
-        if 'images' in update_data and update_data['images']:
-            update_data['images'] = ','.join(update_data['images'])
-        
-        for key, value in update_data.items():
-            setattr(item, key, value)
-        
-        item.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(item)
-        
-        return item
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.delete("/api/centers/{center_id}/inventory/{item_id}")
-async def delete_inventory_item(
-    center_id: int,
-    item_id: int,
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
-):
-    """Delete an inventory item"""
-    try:
-        user = verify_token(credentials.credentials, db)
-        
-        # Verify authorization
-        center = db.query(DistributionCenter).filter(
-            DistributionCenter.id == center_id
-        ).first()
-        
-        if not center:
-            raise HTTPException(status_code=404, detail="Distribution center not found")
-        
-        if center.owner_id != user.id and user.role != UserRole.ADMIN:
-            raise HTTPException(status_code=403, detail="Not authorized")
-        
-        # Delete item
-        item = db.query(CenterInventory).filter(
-            CenterInventory.id == item_id,
-            CenterInventory.center_id == center_id
-        ).first()
-        
-        if not item:
-            raise HTTPException(status_code=404, detail="Inventory item not found")
-        
-        db.delete(item)
-        db.commit()
-        
-        return {"success": True, "message": "Item deleted successfully"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to fetch user details")   

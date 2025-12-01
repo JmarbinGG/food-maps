@@ -81,18 +81,93 @@ def seed_distribution_centers():
                 ]
             },
             {
-                "name": "Dogood's Grocery & Market",
-                "description": "Local grocery store and community market serving fresh food to the neighborhood",
-                "address": "550 Irving St, San Francisco, CA 94122",
-                "coords_lat": 37.7634,
-                "coords_lng": -122.4642,
-                "phone": "(415) 555-0104",
-                "hours": "Mon-Sun: 7AM-10PM",
+                "name": "Do Good Warehouse",
+                "description": "Main warehouse and distribution hub for community food programs",
+                "address": "1900 Thau Way, Alameda, CA 94501",
+                "coords_lat": 37.7652,
+                "coords_lng": -122.2416,
+                "phone": "510-522-6288",
+                "hours": "Mon-Fri: 8AM-5PM",
                 "inventory": [
-                    {"name": "Fresh Chicken", "category": FoodCategory.PREPARED, "quantity": 30, "unit": "lbs", "perishability": PerishabilityLevel.HIGH},
-                    {"name": "Milk & Dairy", "category": FoodCategory.PACKAGED, "quantity": 50, "unit": "items", "perishability": PerishabilityLevel.HIGH},
-                    {"name": "Fresh Vegetables", "category": FoodCategory.PRODUCE, "quantity": 60, "unit": "lbs", "perishability": PerishabilityLevel.MEDIUM},
-                    {"name": "Fresh Eggs", "category": FoodCategory.PACKAGED, "quantity": 100, "unit": "dozen", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Canned Goods", "category": FoodCategory.PACKAGED, "quantity": 200, "unit": "cans", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Dry Pasta", "category": FoodCategory.PACKAGED, "quantity": 150, "unit": "boxes", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Rice", "category": FoodCategory.PACKAGED, "quantity": 100, "unit": "bags", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Fresh Produce", "category": FoodCategory.PRODUCE, "quantity": 80, "unit": "lbs", "perishability": PerishabilityLevel.HIGH},
+                ]
+            },
+            {
+                "name": "Ruby Bridges Elementary CC",
+                "description": "Community center at Ruby Bridges Elementary School providing food assistance",
+                "address": "351 Jack London Ave, Alameda, CA 94501",
+                "coords_lat": 37.7714,
+                "coords_lng": -122.2628,
+                "phone": "510-748-4006",
+                "hours": "Mon-Fri: 3PM-6PM, Sat: 10AM-2PM",
+                "inventory": [
+                    {"name": "Fresh Fruit", "category": FoodCategory.FRUIT, "quantity": 50, "unit": "lbs", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Snack Packs", "category": FoodCategory.PACKAGED, "quantity": 120, "unit": "packs", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Juice Boxes", "category": FoodCategory.WATER, "quantity": 100, "unit": "boxes", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Breakfast Items", "category": FoodCategory.PACKAGED, "quantity": 80, "unit": "items", "perishability": PerishabilityLevel.LOW},
+                ]
+            },
+            {
+                "name": "NEA/ACLC CC",
+                "description": "Nea Community Learning Center providing food distribution services",
+                "address": "1900 3rd St, Alameda, CA 94501",
+                "coords_lat": 37.7653,
+                "coords_lng": -122.2594,
+                "phone": "510-748-4008",
+                "hours": "Tue-Sat: 9AM-5PM",
+                "inventory": [
+                    {"name": "Fresh Vegetables", "category": FoodCategory.PRODUCE, "quantity": 70, "unit": "lbs", "perishability": PerishabilityLevel.HIGH},
+                    {"name": "Bread Loaves", "category": FoodCategory.BAKERY, "quantity": 40, "unit": "loaves", "perishability": PerishabilityLevel.HIGH},
+                    {"name": "Canned Soup", "category": FoodCategory.PACKAGED, "quantity": 90, "unit": "cans", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Bottled Water", "category": FoodCategory.WATER, "quantity": 150, "unit": "bottles", "perishability": PerishabilityLevel.LOW},
+                ]
+            },
+            {
+                "name": "Academy of Alameda CC",
+                "description": "Academy of Alameda community center offering food assistance programs",
+                "address": "401 Pacific Ave, Alameda, CA 94501",
+                "coords_lat": 37.7707,
+                "coords_lng": -122.2636,
+                "phone": "510-748-4017",
+                "hours": "Mon-Fri: 8AM-4PM",
+                "inventory": [
+                    {"name": "Fresh Bananas", "category": FoodCategory.FRUIT, "quantity": 45, "unit": "lbs", "perishability": PerishabilityLevel.HIGH},
+                    {"name": "Cereal Boxes", "category": FoodCategory.PACKAGED, "quantity": 70, "unit": "boxes", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Peanut Butter", "category": FoodCategory.PACKAGED, "quantity": 50, "unit": "jars", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Fresh Lettuce", "category": FoodCategory.PRODUCE, "quantity": 30, "unit": "heads", "perishability": PerishabilityLevel.HIGH},
+                ]
+            },
+            {
+                "name": "Island HS CC",
+                "description": "Island High School community center providing food distribution to students and families",
+                "address": "2323 Pacific Ave, Alameda, CA 94501",
+                "coords_lat": 37.7721,
+                "coords_lng": -122.2651,
+                "phone": "510-748-4024",
+                "hours": "Mon-Fri: 3PM-6PM",
+                "inventory": [
+                    {"name": "Granola Bars", "category": FoodCategory.PACKAGED, "quantity": 150, "unit": "bars", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Apple Juice", "category": FoodCategory.WATER, "quantity": 80, "unit": "bottles", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Fresh Carrots", "category": FoodCategory.PRODUCE, "quantity": 40, "unit": "lbs", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Sandwich Bread", "category": FoodCategory.BAKERY, "quantity": 50, "unit": "loaves", "perishability": PerishabilityLevel.HIGH},
+                ]
+            },
+            {
+                "name": "Encinal Jr Sr High School CC",
+                "description": "Encinal Junior Senior High School community center serving students and local families",
+                "address": "210 Central Ave, Alameda, CA 94501",
+                "coords_lat": 37.7664,
+                "coords_lng": -122.2554,
+                "phone": "510-748-4023",
+                "hours": "Mon-Fri: 2:30PM-5:30PM, Sat: 10AM-2PM",
+                "inventory": [
+                    {"name": "Fresh Apples", "category": FoodCategory.FRUIT, "quantity": 60, "unit": "lbs", "perishability": PerishabilityLevel.MEDIUM},
+                    {"name": "Mac & Cheese", "category": FoodCategory.PACKAGED, "quantity": 85, "unit": "boxes", "perishability": PerishabilityLevel.LOW},
+                    {"name": "Fresh Tomatoes", "category": FoodCategory.PRODUCE, "quantity": 35, "unit": "lbs", "perishability": PerishabilityLevel.HIGH},
+                    {"name": "Fruit Cups", "category": FoodCategory.PACKAGED, "quantity": 100, "unit": "cups", "perishability": PerishabilityLevel.LOW},
                 ]
             }
         ]

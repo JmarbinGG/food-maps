@@ -234,6 +234,38 @@ function App() {
     return () => { delete window.showAlert; };
   }, [showAlert]);
 
+  // Handle expired/invalid token
+  const handleTokenExpired = React.useCallback(() => {
+    console.log('Token expired or invalid - clearing authentication');
+    // Clear all auth-related localStorage
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('current_user');
+    // Clear any claimed listings cache
+    const keys = Object.keys(localStorage);
+    keys.forEach(key => {
+      if (key.startsWith('my_claimed_ids:')) {
+        localStorage.removeItem(key);
+      }
+    });
+    // Clear user state
+    setUser(null);
+    // Show auth modal
+    setShowAuthModal(true);
+    // Show alert
+    if (typeof window.showAlert === 'function') {
+      window.showAlert('Your session has expired. Please sign in again.', { 
+        title: 'Session Expired', 
+        variant: 'error' 
+      });
+    }
+  }, [showAlert]);
+
+  // Expose globally for API error handling
+  React.useEffect(() => {
+    window.handleTokenExpired = handleTokenExpired;
+    return () => { delete window.handleTokenExpired; };
+  }, [handleTokenExpired]);
+
   const initializeApp = async () => {
     try {
       console.log('Initializing Food Maps app...');
@@ -323,6 +355,13 @@ function App() {
         console.log(`Loaded ${normalized.length} listings from database`);
       } catch (dbError) {
         console.error('Database error:', dbError);
+        // Check if it's a token expiration error
+        if (dbError && (dbError.message?.includes('401') || dbError.message?.includes('expired') || dbError.message?.includes('Invalid token'))) {
+          if (typeof window.handleTokenExpired === 'function') {
+            window.handleTokenExpired();
+          }
+          return;
+        }
         const fallback = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (window.databaseService && Array.isArray(window.databaseService.listings) ? window.databaseService.listings : []));
         setListings(fallback);
         setFilteredListings(fallback);
@@ -430,15 +469,16 @@ function App() {
         } catch (_) { return false; }
       };
       const statusOf = (l) => String(l?.status || '').toLowerCase();
+      const isClaimedStatus = (s) => s === 'claimed' || s === 'pending_confirmation';
 
       if (statusFilter === 'available') {
         const availableOnly = base.filter(l => statusOf(l) === 'available');
         // Union in relevant claimed items based on role
         let extras = [];
         if (role === 'donor') {
-          extras = base.filter(l => statusOf(l) === 'claimed' && isOwnedByDonor(l));
+          extras = base.filter(l => isClaimedStatus(statusOf(l)) && isOwnedByDonor(l));
         } else if (role === 'recipient') {
-          extras = base.filter(l => statusOf(l) === 'claimed' && isClaimedByMe(l));
+          extras = base.filter(l => isClaimedStatus(statusOf(l)) && isClaimedByMe(l));
         }
         // Merge without duplicates by id
         const byId = new Map();
@@ -449,7 +489,7 @@ function App() {
         // statusFilter === 'all' — hide irrelevant claimed based on role
         base = base.filter(l => {
           const s = statusOf(l);
-          if (s !== 'claimed') return true;
+          if (!isClaimedStatus(s)) return true;
           if (role === 'donor') return isOwnedByDonor(l);
           if (role === 'recipient') return isClaimedByMe(l);
           // unauth/other roles: hide claimed
@@ -601,6 +641,13 @@ function App() {
           localStorage.setItem(key, JSON.stringify(arr));
         }
       } catch (_) { }
+      
+      // Refresh listings from server to get updated status
+      try {
+        await initializeApp();
+      } catch (e) {
+        console.warn('Failed to refresh listings after claim:', e);
+      }
     } catch (error) {
       console.error('Error claiming listing:', error);
       if (typeof window.showAlert === 'function') window.showAlert('Failed to claim listing. Please try again.', { title: 'Error', variant: 'error' });
