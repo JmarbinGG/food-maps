@@ -99,7 +99,7 @@ function AIMatching({ onClose }) {
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {matches.length > 0 ? (matches.reduce((sum, m) => sum + m.distance_km, 0) / matches.length).toFixed(1) : 0} km
+                  {matches.length > 0 ? (matches.reduce((sum, m) => sum + (m.distance_km * 0.621371), 0) / matches.length).toFixed(1) : 0} mi
                 </div>
                 <div className="text-sm text-gray-500">Avg Distance</div>
               </div>
@@ -126,7 +126,7 @@ function AIMatching({ onClose }) {
                         {assignment.match_score}% Match
                       </div>
                       <span className="text-sm text-gray-500">
-                        {assignment.distance_km.toFixed(1)} km away
+                        {(assignment.distance_km * 0.621371).toFixed(1)} mi away
                       </span>
                       <span className="text-sm text-gray-500">
                         ETA: {new Date(assignment.estimated_delivery).toLocaleString()}

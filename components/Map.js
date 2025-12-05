@@ -12,7 +12,26 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   // Load distribution centers
   React.useEffect(() => {
     loadDistributionCenters();
-  }, []);
+
+    // Set up global function for popup buttons to trigger the detail modal
+    window.handleListingDetailsClick = (listingId) => {
+      const listing = safeListings.find(l => l.id === listingId);
+      if (listing) {
+        // First update the selected listing
+        if (onListingSelect) {
+          onListingSelect(listing);
+        }
+        // Then trigger the modal via global function (set in app.js)
+        if (window.triggerListingDetailModal) {
+          window.triggerListingDetailModal(listing);
+        }
+      }
+    };
+
+    return () => {
+      delete window.handleListingDetailsClick;
+    };
+  }, [safeListings, onListingSelect]);
 
   const loadDistributionCenters = async () => {
     try {
@@ -79,11 +98,11 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         const isClaimedByMe = (() => {
           if (!user) return false;
           const userId = String(user.id);
-          
+
           // Check recipient_id
           const recipientId = listing.recipient_id ?? listing.recipientId ?? listing.recipient?.id;
           if (recipientId && String(recipientId) === userId) return true;
-          
+
           // Check localStorage fallback
           try {
             const key = `my_claimed_ids:${userId}`;
@@ -121,18 +140,103 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           if (onListingSelect) onListingSelect(listing);
         });
 
+        const expirationDate = listing.pickup_window_end || listing.expiration_date;
+        const formattedExpiration = expirationDate ? new Date(expirationDate).toLocaleDateString('en-US', {
+          weekday: 'short',
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit'
+        }) : 'N/A';
+
+        const statusBgColor = listing.status === 'available' ? '#d1fae5' :
+          listing.status === 'reserved' ? '#fef3c7' :
+            listing.status === 'picked_up' ? '#e5e7eb' : '#fee2e2';
+        const statusTextColor = listing.status === 'available' ? '#065f46' :
+          listing.status === 'reserved' ? '#92400e' :
+            listing.status === 'picked_up' ? '#374151' : '#991b1b';
+        const statusText = (listing.status || 'available').charAt(0).toUpperCase() + (listing.status || 'available').slice(1);
+
         const marker = new mapboxgl.Marker(el)
           .setLngLat([listing.coords_lng, listing.coords_lat])
           .setPopup(
-            new mapboxgl.Popup({ offset: 25 })
+            new mapboxgl.Popup({ offset: 25, maxWidth: '320px' })
               .setHTML(`
-                <div style="padding: 8px;">
-                  <h3 style="font-weight: bold; margin-bottom: 4px;">${listing.title}</h3>
-                  <p style="font-size: 12px; color: #666;">${listing.address}</p>
-                  <p style="font-size: 12px; margin-top: 4px;">
-                    <strong>${listing.qty} ${listing.unit}</strong>
-                  </p>
-                  ${isClaimedByMe && user?.role === 'recipient' ? '<p style="font-size: 11px; color: #3b82f6; margin-top: 4px; font-weight: 600;">✓ Claimed by you</p>' : ''}
+                <div style="padding: 0; min-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                  <div style="padding: 16px 20px;">
+                    <h3 style="font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 12px 0; line-height: 1.3;">
+                      ${listing.title}
+                    </h3>
+                    <div style="display: inline-block; background-color: ${statusBgColor}; color: ${statusTextColor}; padding: 4px 12px; border-radius: 12px; font-size: 13px; font-weight: 600; margin-bottom: 16px;">
+                      ${statusText}
+                    </div>
+                    
+                    <div style="margin-top: 12px;">
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 14px; color: #6b7280; font-weight: 500;">Category:</span>
+                        <span style="font-size: 14px; color: #111827; font-weight: 600; text-transform: capitalize;">${listing.category || 'N/A'}</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span style="font-size: 14px; color: #6b7280; font-weight: 500;">Quantity:</span>
+                        <span style="font-size: 14px; color: #111827; font-weight: 600;">${listing.qty || 0} ${listing.unit || 'items'}</span>
+                      </div>
+                      <div style="display: flex; justify-content: space-between;">
+                        <span style="font-size: 14px; color: #6b7280; font-weight: 500;">Expires:</span>
+                        <span style="font-size: 14px; color: #111827; font-weight: 600;">${formattedExpiration}</span>
+                      </div>
+                    </div>
+
+                    <div style="margin-top: 16px; display: flex; flex-direction: column; gap: 8px;">
+                      <button 
+                        onclick="window.handleListingDetailsClick(${listing.id})"
+                        style="
+                          background-color: #2563eb;
+                          color: white;
+                          padding: 12px 16px;
+                          border-radius: 8px;
+                          border: none;
+                          font-size: 15px;
+                          font-weight: 600;
+                          cursor: pointer;
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          gap: 8px;
+                          transition: background-color 0.2s;
+                        "
+                        onmouseover="this.style.backgroundColor='#1d4ed8'"
+                        onmouseout="this.style.backgroundColor='#2563eb'"
+                      >
+                        <span style="font-size: 18px;">ℹ️</span> View Details
+                      </button>
+                      <button 
+                        onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${listing.coords_lat},${listing.coords_lng}', '_blank')"
+                        style="
+                          background-color: #16a34a;
+                          color: white;
+                          padding: 12px 16px;
+                          border-radius: 8px;
+                          border: none;
+                          font-size: 15px;
+                          font-weight: 600;
+                          cursor: pointer;
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          gap: 8px;
+                          transition: background-color 0.2s;
+                        "
+                        onmouseover="this.style.backgroundColor='#15803d'"
+                        onmouseout="this.style.backgroundColor='#16a34a'"
+                      >
+                        <span style="font-size: 18px;">🧭</span> Get Directions
+                      </button>
+                    </div>
+                    ${isClaimedByMe && user?.role === 'recipient' ? '<div style="margin-top: 12px; padding: 8px 12px; background-color: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 13px; font-weight: 600; text-align: center;">✓ Claimed by you</div>' : ''}
+                  </div>
                 </div>
               `)
           )

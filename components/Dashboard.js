@@ -41,7 +41,7 @@ function Dashboard({ user, onViewChange }) {
           id: 'task1',
           from: '123 Main St',
           to: '456 Oak Ave',
-          distance: '2.5 km',
+          distance: '1.6 mi',
           status: 'available'
         }
       ]);

@@ -1,3 +1,6 @@
+// AuthModal component - handles user authentication
+// Note: React is available globally from CDN, no import needed
+
 function AuthModal({ onClose, onAuth }) {
   const [isLogin, setIsLogin] = React.useState(true);
   const [showDemoOptions, setShowDemoOptions] = React.useState(false);
@@ -5,8 +8,11 @@ function AuthModal({ onClose, onAuth }) {
     name: '',
     email: '',
     password: '',
-    role: 'recipient'
+    role: 'recipient',
+    referralCode: ''
   });
+  const [referralValid, setReferralValid] = React.useState(null);
+  const [referrerName, setReferrerName] = React.useState('');
 
   const demoUsers = [
     {
@@ -19,7 +25,7 @@ function AuthModal({ onClose, onAuth }) {
       coords: { lat: 40.7128, lng: -74.0060 }
     },
     {
-      id: 'demo_recipient_1', 
+      id: 'demo_recipient_1',
       name: 'Maria Rodriguez',
       email: 'maria@family.demo',
       role: 'recipient',
@@ -31,7 +37,7 @@ function AuthModal({ onClose, onAuth }) {
     {
       id: 'demo_volunteer_1',
       name: 'Alex Kim',
-      email: 'alex@volunteer.demo', 
+      email: 'alex@volunteer.demo',
       role: 'volunteer',
       onboardingCompleted: true,
       address: '789 Helper Ave, NYC',
@@ -42,7 +48,7 @@ function AuthModal({ onClose, onAuth }) {
       id: 'demo_dispatcher_1',
       name: 'Jordan Taylor',
       email: 'jordan@dispatch.demo',
-      role: 'dispatcher', 
+      role: 'dispatcher',
       onboardingCompleted: true,
       address: 'NYC Food Distribution Center',
       coords: { lat: 40.7280, lng: -73.9950 }
@@ -92,53 +98,70 @@ function AuthModal({ onClose, onAuth }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+    console.log('🔐 Login form submitted');
+    console.log('Captcha verified:', captchaVerified);
+    console.log('Form data:', { email: formData.email, hasPassword: !!formData.password });
+
     // Check captcha verification
     if (!captchaVerified) {
+      console.log('❌ Captcha not verified');
       setAuthError('Please complete the captcha verification');
       return;
     }
-    
+
     const userData = {
       name: formData.name,
       email: formData.email,
       role: formData.role,
       isNewUser: !isLogin
     };
-    if(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) === false) {
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) === false) {
+      console.log('❌ Invalid email format');
       setAuthError('Please enter a valid email address');
       return;
     }
     if (isLogin) {
+      console.log('📧 Attempting login for:', formData.email);
       setAuthError('');
       try {
         const json = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
+        console.log('Login response:', json);
         if (json && json.success && json.token) {
           localStorage.setItem('auth_token', json.token);
           const payload = parseJwt(json.token);
+          if (!payload) {
+            setAuthError('Invalid token received');
+            return;
+          }
           console.log('Login - JWT payload:', payload);
           const loggedUser = {
-            id: payload && payload.sub ? payload.sub : formData.email,
-            name: payload && payload.name ? payload.name : formData.email,
-            role: payload && payload.role ? payload.role : 'recipient'
+            id: payload.sub || formData.email,
+            name: payload.name || formData.email,
+            role: payload.role || 'recipient'
           };
           console.log('Login - Setting current_user:', loggedUser);
           localStorage.setItem('current_user', JSON.stringify(loggedUser));
           onAuth(loggedUser);
           onClose();
         } else {
-          const err = (json && (json.error || json.message)) || 'Invalid email or password ';
+          const err = (json && (json.error || json.message || json.detail)) || 'Invalid email or password';
           setAuthError(err);
         }
       } catch (error) {
         console.error('auth request failed:', error);
-        setAuthError('Network error');
+        setAuthError(error.message || 'Network error');
         return;
       }
     } else {
       setAuthError('');
       try {
-        const registerData = { name: formData.name, email: formData.email, password: formData.password, role: formData.role };
+        const registerData = {
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          role: formData.role,
+          referral_code: formData.referralCode || undefined
+        };
         const json = await (window.databaseService ? window.databaseService.authRegister(registerData) : {});
         if (json && json.success) {
           // Auto-login after create
@@ -170,7 +193,7 @@ function AuthModal({ onClose, onAuth }) {
         return;
       }
     }
-    
+
   };
 
   const handleDemoLogin = (demoUser) => {
@@ -180,6 +203,30 @@ function AuthModal({ onClose, onAuth }) {
 
   const handleInputChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
+
+    // Validate referral code when it changes
+    if (field === 'referralCode' && value.length >= 6) {
+      validateReferralCode(value);
+    } else if (field === 'referralCode' && value.length < 6) {
+      setReferralValid(null);
+      setReferrerName('');
+    }
+  };
+
+  const validateReferralCode = async (code) => {
+    try {
+      const response = await fetch('/api/referral/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code })
+      });
+      const result = await response.json();
+      setReferralValid(result.valid);
+      setReferrerName(result.referrer_name || '');
+    } catch (error) {
+      setReferralValid(false);
+      setReferrerName('');
+    }
   };
 
   try {
@@ -263,13 +310,46 @@ function AuthModal({ onClose, onAuth }) {
               </div>
             )}
 
-            <SimpleCaptcha onVerify={setCaptchaVerified} />
+            {!isLogin && (
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  Referral Code (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={formData.referralCode}
+                  onChange={(e) => handleInputChange('referralCode', e.target.value.toUpperCase())}
+                  placeholder="Enter referral code"
+                  className={`w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] ${referralValid === true ? 'border-green-500' :
+                      referralValid === false ? 'border-red-500' :
+                        'border-[var(--border-color)]'
+                    }`}
+                />
+                {referralValid === true && referrerName && (
+                  <p className="text-sm text-green-600 mt-1">
+                    ✓ Referred by {referrerName}
+                  </p>
+                )}
+                {referralValid === false && formData.referralCode && (
+                  <p className="text-sm text-red-600 mt-1">
+                    Invalid referral code
+                  </p>
+                )}
+              </div>
+            )}
 
-            <button 
-              type="submit" 
-              className={`btn-primary w-full ${
-                !captchaVerified ? 'opacity-50 cursor-not-allowed' : ''
-              }`}
+            {typeof SimpleCaptcha !== 'undefined' ? (
+              <SimpleCaptcha onVerify={setCaptchaVerified} />
+            ) : (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                Captcha loading...
+              </div>
+            )}
+
+            <button
+              type="submit"
+              className={`btn-primary w-full ${!captchaVerified ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
               disabled={!captchaVerified}
             >
               {isLogin ? 'Sign In' : 'Create Account'}
@@ -278,8 +358,8 @@ function AuthModal({ onClose, onAuth }) {
               <div className="text-sm text-red-600 mt-2" role="alert">{authError}</div>
             )}
           </form>
-          
-          
+
+
 
           <div className="mt-4 text-center">
             <button

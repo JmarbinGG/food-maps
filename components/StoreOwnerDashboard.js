@@ -4,6 +4,14 @@ function StoreOwnerDashboard({ user, onClose }) {
   const [inventory, setInventory] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [showAddForm, setShowAddForm] = React.useState(false);
+  const [isEditingCenter, setIsEditingCenter] = React.useState(false);
+  const [centerFormData, setCenterFormData] = React.useState({
+    name: '',
+    description: '',
+    address: '',
+    phone: '',
+    hours: ''
+  });
   const [formData, setFormData] = React.useState({
     name: '',
     description: '',
@@ -30,6 +38,13 @@ function StoreOwnerDashboard({ user, onClose }) {
 
       if (userCenter) {
         setMyCenter(userCenter);
+        setCenterFormData({
+          name: userCenter.name || '',
+          description: userCenter.description || '',
+          address: userCenter.address || '',
+          phone: userCenter.phone || '',
+          hours: userCenter.hours || ''
+        });
         await loadInventory(userCenter.id);
       }
     } catch (error) {
@@ -316,7 +331,7 @@ function StoreOwnerDashboard({ user, onClose }) {
                       required
                     >
                       <option value="lbs">lbs</option>
-                      <option value="kg">kg</option>
+                      <option value="lbs">lbs</option>
                       <option value="items">items</option>
                       <option value="boxes">boxes</option>
                       <option value="bags">bags</option>
@@ -433,44 +448,155 @@ function StoreOwnerDashboard({ user, onClose }) {
 
         {activeTab === 'info' && (
           <div className="bg-white rounded-lg shadow-sm p-6">
-            <h2 className="text-xl font-bold mb-4">Distribution Center Information</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                <p className="text-gray-900">{myCenter.name}</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
-                <p className="text-gray-900">{myCenter.address}</p>
-              </div>
-              {myCenter.description && (
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">Distribution Center Information</h2>
+              <button
+                onClick={() => setIsEditingCenter(!isEditingCenter)}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+              >
+                {isEditingCenter ? 'Cancel' : 'Edit Info'}
+              </button>
+            </div>
+            
+            {isEditingCenter ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                try {
+                  const token = localStorage.getItem('auth_token');
+                  const response = await fetch(`/api/centers/${myCenter.id}`, {
+                    method: 'PUT',
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(centerFormData)
+                  });
+                  
+                  if (response.ok) {
+                    const result = await response.json();
+                    setMyCenter(result.center);
+                    setIsEditingCenter(false);
+                    alert('Center information updated successfully!');
+                  } else {
+                    alert('Failed to update center information');
+                  }
+                } catch (error) {
+                  console.error('Error updating center:', error);
+                  alert('Network error. Please try again.');
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
+                  <input
+                    type="text"
+                    value={centerFormData.name}
+                    onChange={(e) => setCenterFormData({ ...centerFormData, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
+                  <input
+                    type="text"
+                    value={centerFormData.address}
+                    onChange={(e) => setCenterFormData({ ...centerFormData, address: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <p className="text-gray-900">{myCenter.description}</p>
+                  <textarea
+                    value={centerFormData.description}
+                    onChange={(e) => setCenterFormData({ ...centerFormData, description: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="3"
+                  />
                 </div>
-              )}
-              {myCenter.phone && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
-                  <p className="text-gray-900">{myCenter.phone}</p>
+                  <input
+                    type="tel"
+                    value={centerFormData.phone}
+                    onChange={(e) => setCenterFormData({ ...centerFormData, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              )}
-              {myCenter.hours && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Hours</label>
-                  <p className="text-gray-900">{myCenter.hours}</p>
+                  <input
+                    type="text"
+                    value={centerFormData.hours}
+                    onChange={(e) => setCenterFormData({ ...centerFormData, hours: e.target.value })}
+                    placeholder="e.g., Mon-Fri 9AM-5PM"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              )}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <span className={`px-3 py-1 rounded ${myCenter.is_active
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800'
-                  }`}>
-                  {myCenter.is_active ? 'Active' : 'Inactive'}
-                </span>
+                <div className="flex gap-2 justify-end pt-4">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingCenter(false);
+                      setCenterFormData({
+                        name: myCenter.name || '',
+                        description: myCenter.description || '',
+                        address: myCenter.address || '',
+                        phone: myCenter.phone || '',
+                        hours: myCenter.hours || ''
+                      });
+                    }}
+                    className="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                  <p className="text-gray-900">{myCenter.name}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
+                  <p className="text-gray-900">{myCenter.address}</p>
+                </div>
+                {myCenter.description && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <p className="text-gray-900">{myCenter.description}</p>
+                  </div>
+                )}
+                {myCenter.phone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <p className="text-gray-900">{myCenter.phone}</p>
+                  </div>
+                )}
+                {myCenter.hours && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Hours</label>
+                    <p className="text-gray-900">{myCenter.hours}</p>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                  <span className={`px-3 py-1 rounded ${myCenter.is_active
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                    }`}>
+                    {myCenter.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

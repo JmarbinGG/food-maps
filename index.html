@@ -38,6 +38,10 @@
     <script src="https://api.mapbox.com/search-js/v1.0.0/web.js"></script>
     <link href="https://api.mapbox.com/search-js/v1.0.0/web.css" rel="stylesheet" />
 
+    <!-- Translation System -->
+    <script src="utils/translations.js"></script>
+    <script src="utils/useTranslation.js"></script>
+
     <style type="text/tailwindcss">
         @layer theme {
         :root {
@@ -328,6 +332,10 @@
             @apply bg-[var(--warning-color)] text-white px-2 py-1 rounded-full text-xs font-medium;
         }
 
+        .status-pending_confirmation {
+            @apply bg-gray-400 text-white px-2 py-1 rounded-full text-xs font-medium;
+        }
+
         .status-expired {
              @apply bg-[var(--danger-color)] text-white px-2 py-1 rounded-full text-xs font-medium;
         }
@@ -407,7 +415,23 @@
     <script type="text/babel" src="components/Auth/AlertModal.js"></script>
     <script type="text/babel" src="components/Auth/PhoneModal.js"></script>
     <script type="text/babel" src="components/ConfirmationModal.js"></script>
+    <script type="text/babel" src="components/ClaimConfirmationModal.js"></script>
+    <script type="text/babel" src="components/LanguageSwitcher.js"></script>
     <script type="text/babel" src="app.js"></script>
+
+    <script>
+        // Initialize language system
+        document.addEventListener('DOMContentLoaded', () => {
+            window.i18n.initLanguageSystem();
+
+            // Listen for language changes to update all components
+            window.addEventListener('languageChanged', () => {
+                window.i18n.translatePage();
+                // Force React components to re-render
+                window.location.reload();
+            });
+        });
+    </script>
 </body>
 
 </html>

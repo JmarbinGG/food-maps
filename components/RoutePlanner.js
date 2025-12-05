@@ -157,14 +157,14 @@ function RoutePlanner({ vehicles = [], deliveries = [], onRouteUpdate }) {
                     </span>
                   </div>
                   <div className="text-sm text-gray-500">
-                    {formatDuration(route.duration)} • {(route.distance / 1000).toFixed(1)}km
+                    {formatDuration(route.duration)} • {(route.distance / 1609.34).toFixed(1)} mi
                   </div>
                 </div>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
                   <div>
                     <span className="text-gray-500">Distance:</span>
-                    <span className="ml-1 font-medium">{(route.distance / 1000).toFixed(1)} km</span>
+                    <span className="ml-1 font-medium">{(route.distance / 1609.34).toFixed(1)} mi</span>
                   </div>
                   <div>
                     <span className="text-gray-500">Duration:</span>

@@ -59,6 +59,8 @@ function App() {
   const [selectedStoreId, setSelectedStoreId] = React.useState(null);
   const [showConfirmationModal, setShowConfirmationModal] = React.useState(false);
   const [pendingClaimId, setPendingClaimId] = React.useState(null);
+  const [showClaimConfirmationModal, setShowClaimConfirmationModal] = React.useState(false);
+  const [pendingClaimListing, setPendingClaimListing] = React.useState(null);
   const [showUserProfile, setShowUserProfile] = React.useState(false);
   const [showDistributionMap, setShowDistributionMap] = React.useState(false);
   const [showStoreOwnerDashboard, setShowStoreOwnerDashboard] = React.useState(false);
@@ -124,6 +126,13 @@ function App() {
     try {
       // No mock callback - prefer real database-backed listings
 
+      // Check for hash parameter to set initial view
+      if (window.location.hash === '#create') {
+        setCurrentView('create');
+        // Clear the hash to avoid confusion
+        window.history.replaceState(null, null, window.location.pathname);
+      }
+
       // Ensure DOM is ready before manipulating elements
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initializeApp);
@@ -153,6 +162,37 @@ function App() {
       console.error('Error hydrating user from localStorage', e);
     }
   }, []);
+
+  // Validate JWT token on mount - must run after showAuthModal state is ready
+  React.useEffect(() => {
+    // Add a small delay to ensure React state is fully initialized
+    const timeoutId = setTimeout(() => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        console.log('Validating token on mount:', token ? `Token found (length: ${token.length})` : 'No token');
+
+        if (!token || token.trim() === '') {
+          console.log('No token to validate - user not logged in');
+          return;
+        }
+
+        const validation = validateToken(token);
+        console.log('Token validation result:', validation);
+
+        if (!validation.valid && !validation.isEmpty) {
+          // Token exists but is invalid or expired
+          console.warn(`Token validation failed: ${validation.reason} - clearing auth and showing modal`);
+          handleTokenExpired();
+        } else if (validation.valid && !validation.isEmpty) {
+          console.log('Token is valid');
+        }
+      } catch (e) {
+        console.error('Error validating token on mount', e);
+      }
+    }, 100);
+
+    return () => clearTimeout(timeoutId);
+  }, [validateToken, handleTokenExpired]);
 
   // Refetch listings once user/auth is known to include relevant claimed items
   React.useEffect(() => {
@@ -234,10 +274,52 @@ function App() {
     return () => { delete window.showAlert; };
   }, [showAlert]);
 
+  // Parse JWT token
+  const parseJwt = React.useCallback((token) => {
+    try {
+      const parts = String(token || '').split('.');
+      if (parts.length < 2) return null;
+      let payload = parts[1];
+      payload = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const pad = payload.length % 4;
+      if (pad > 0) payload += '='.repeat(4 - pad);
+      const json = atob(payload);
+      try {
+        return JSON.parse(json);
+      } catch (e) {
+        return JSON.parse(decodeURIComponent(escape(json)));
+      }
+    } catch (e) {
+      return null;
+    }
+  }, []);
+
+  // Validate JWT token
+  const validateToken = React.useCallback((token) => {
+    if (!token || typeof token !== 'string' || token.trim() === '') {
+      return { valid: true, isEmpty: true }; // Empty is valid state (not logged in)
+    }
+
+    const payload = parseJwt(token);
+    if (!payload) {
+      return { valid: false, isEmpty: false, reason: 'malformed' }; // Malformed token
+    }
+
+    // Check expiration
+    if (payload.exp) {
+      const now = Math.floor(Date.now() / 1000);
+      if (payload.exp < now) {
+        return { valid: false, isEmpty: false, reason: 'expired' }; // Expired token
+      }
+    }
+
+    return { valid: true, isEmpty: false }; // Valid token
+  }, [parseJwt]);
+
   // Handle expired/invalid token
   const handleTokenExpired = React.useCallback(() => {
     console.log('Token expired or invalid - clearing authentication');
-    // Clear all auth-related localStorage
+    // Clear all auth-related localStorage immediately
     localStorage.removeItem('auth_token');
     localStorage.removeItem('current_user');
     // Clear any claimed listings cache
@@ -251,14 +333,16 @@ function App() {
     setUser(null);
     // Show auth modal
     setShowAuthModal(true);
-    // Show alert
-    if (typeof window.showAlert === 'function') {
-      window.showAlert('Your session has expired. Please sign in again.', { 
-        title: 'Session Expired', 
-        variant: 'error' 
-      });
-    }
-  }, [showAlert]);
+    // Show alert (use setTimeout to ensure it runs after state updates)
+    setTimeout(() => {
+      if (typeof window.showAlert === 'function') {
+        window.showAlert('Your session has expired. Please sign in again.', {
+          title: 'Session Expired',
+          variant: 'error'
+        });
+      }
+    }, 100);
+  }, []);
 
   // Expose globally for API error handling
   React.useEffect(() => {
@@ -623,11 +707,14 @@ function App() {
         } catch (_) { }
       }
 
-      // Check if confirmation is needed
-      if (updatedListing && updatedListing.needs_confirmation) {
+      // Always show confirmation modal for pending_confirmation status
+      const needsConfirmation = updatedListing && (updatedListing.status === 'pending_confirmation' || updatedListing.needs_confirmation);
+      
+      if (needsConfirmation) {
         setPendingClaimId(listingId);
-        setShowConfirmationModal(true);
-        if (typeof window.showAlert === 'function') window.showAlert('Check your phone for confirmation code.', { title: 'Confirmation Required', variant: 'info' });
+        setPendingClaimListing(listing);
+        setShowClaimConfirmationModal(true);
+        if (typeof window.showAlert === 'function') window.showAlert('Check your phone for confirmation code.', { title: 'Code Sent', variant: 'info' });
       } else {
         if (typeof window.showAlert === 'function') window.showAlert('Listing claimed successfully!', { title: 'Success', variant: 'success' });
       }
@@ -641,7 +728,7 @@ function App() {
           localStorage.setItem(key, JSON.stringify(arr));
         }
       } catch (_) { }
-      
+
       // Refresh listings from server to get updated status
       try {
         await initializeApp();
@@ -716,19 +803,41 @@ function App() {
   }, [user]);
 
   const handleShowDetails = (listing) => {
+    // If listing is pending confirmation and user is the claimant, show confirmation modal
+    const listingStatus = String(listing.status || '').toLowerCase();
+    
+    // Check localStorage for claimed listings
+    const isClaimedByMe = (() => {
+      if (!user) return false;
+      const userId = String(user.id);
+      try {
+        const key = `my_claimed_ids:${userId}`;
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(arr) && arr.includes(String(listing.id));
+      } catch (_) {
+        return false;
+      }
+    })();
+    
+    if (listingStatus === 'pending_confirmation' && user && isClaimedByMe) {
+      setPendingClaimId(listing.id);
+      setPendingClaimListing(listing);
+      setShowClaimConfirmationModal(true);
+      return;
+    }
     setSelectedListing(listing);
     setShowDetailModal(true);
   };
 
   const calculateDistance = (lat1, lng1, lat2, lng2) => {
-    const R = 6371; // Earth's radius in km
+    const R = 3959; // Earth's radius in miles
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLng = (lng2 - lng1) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
       Math.sin(dLng / 2) * Math.sin(dLng / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c; // Distance in km
+    return R * c; // Distance in miles
   };
 
   const getLocationsWithDistance = () => {
@@ -802,6 +911,17 @@ function App() {
       setShowStoreOwnerDashboard(true);
     };
 
+    // Setup admin panel callback
+    window.openAdminPanel = () => {
+      setCurrentView('admin');
+    };
+
+    // Setup listing detail modal trigger
+    window.triggerListingDetailModal = (listing) => {
+      setSelectedListing(listing);
+      setShowDetailModal(true);
+    };
+
     return () => {
       delete window.handleClaimListing;
       delete window.handleShowDetails;
@@ -813,6 +933,7 @@ function App() {
       delete window.openUserProfile;
       delete window.openDistributionMap;
       delete window.openStoreOwnerDashboard;
+      delete window.triggerListingDetailModal;
     };
   }, [handleClaimListing, handleShowDetails]);
 
@@ -1028,10 +1149,7 @@ function App() {
                       key={listing.id}
                       listing={listing}
                       onClaim={handleClaimListing}
-                      onSelect={(listing) => {
-                        setSelectedListing(listing);
-                        setShowDetailModal(true);
-                      }}
+                      onSelect={handleShowDetails}
                       user={user}
                     />
                   );
@@ -1070,8 +1188,8 @@ function App() {
                 <button
                   onClick={() => setViewMode('map')}
                   className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${viewMode === 'map'
-                      ? 'bg-[var(--primary-color)] text-white'
-                      : 'text-gray-600 hover:text-[var(--primary-color)]'
+                    ? 'bg-[var(--primary-color)] text-white'
+                    : 'text-gray-600 hover:text-[var(--primary-color)]'
                     }`}
                 >
                   <div className="icon-map text-lg mr-1"></div>
@@ -1080,8 +1198,8 @@ function App() {
                 <button
                   onClick={() => setViewMode('list')}
                   className={`px-3 py-2 rounded text-sm font-medium transition-colors flex items-center ${viewMode === 'list'
-                      ? 'bg-[var(--primary-color)] text-white'
-                      : 'text-gray-600 hover:text-[var(--primary-color)]'
+                    ? 'bg-[var(--primary-color)] text-white'
+                    : 'text-gray-600 hover:text-[var(--primary-color)]'
                     }`}
                 >
                   <div className="icon-list text-lg mr-1"></div>
@@ -1257,6 +1375,24 @@ function App() {
             }}
             onConfirmed={() => {
               // Refresh listings after confirmation
+              window.location.reload();
+            }}
+          />
+        )}
+
+        {/* Claim Confirmation Modal */}
+        {typeof ClaimConfirmationModal !== 'undefined' && (
+          <ClaimConfirmationModal
+            isOpen={showClaimConfirmationModal}
+            listing={pendingClaimListing}
+            onClose={() => {
+              setShowClaimConfirmationModal(false);
+              setPendingClaimListing(null);
+            }}
+            onConfirm={() => {
+              setShowClaimConfirmationModal(false);
+              setPendingClaimListing(null);
+              // Refresh listings
               window.location.reload();
             }}
           />

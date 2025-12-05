@@ -34,6 +34,7 @@
       const [centers, setCenters] = useState([]);
       const [loading, setLoading] = useState(true);
       const [showAddForm, setShowAddForm] = useState(false);
+      const [editingCenter, setEditingCenter] = useState(null);
       const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -101,6 +102,24 @@
         setFormData(prev => ({ ...prev, [name]: value }));
       };
 
+      const handleEdit = (center) => {
+        setEditingCenter(center);
+        setFormData({
+          name: center.name || '',
+          description: center.description || '',
+          address: center.address || '',
+          coords_lat: center.coords_lat || '',
+          coords_lng: center.coords_lng || '',
+          phone: center.phone || '',
+          hours: center.hours || ''
+        });
+        setMarkerPosition({
+          lat: center.coords_lat,
+          lng: center.coords_lng
+        });
+        setShowAddForm(true);
+      };
+
       const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -110,8 +129,11 @@
         }
 
         try {
-          const response = await fetch('/api/centers', {
-            method: 'POST',
+          const url = editingCenter ? `/api/centers/${editingCenter.id}` : '/api/centers';
+          const method = editingCenter ? 'PUT' : 'POST';
+
+          const response = await fetch(url, {
+            method: method,
             headers: {
               'Content-Type': 'application/json',
             },
@@ -123,8 +145,9 @@
           });
 
           if (response.ok) {
-            alert('Distribution center added successfully!');
+            alert(editingCenter ? 'Distribution center updated successfully!' : 'Distribution center added successfully!');
             setShowAddForm(false);
+            setEditingCenter(null);
             setFormData({
               name: '',
               description: '',
@@ -142,11 +165,11 @@
             loadCenters();
           } else {
             const error = await response.json();
-            alert(`Error: ${error.detail || 'Failed to add center'}`);
+            alert(`Error: ${error.detail || 'Failed to save center'}`);
           }
         } catch (error) {
-          console.error('Error adding center:', error);
-          alert('Failed to add distribution center');
+          console.error('Error saving center:', error);
+          alert('Failed to save distribution center');
         }
       };
 

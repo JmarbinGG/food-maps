@@ -14,25 +14,23 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
   return (
     <header className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-2">
+        <a href="/" className="flex items-center gap-2 cursor-pointer">
           <img
             src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
             alt="Food Maps"
             className="w-10 h-10 rounded-lg"
           />
-        </div>
+        </a>
         <div className="flex items-center gap-2">
+          {/* Language Switcher */}
+          <LanguageSwitcherCompact />
+
           <button
             onClick={() => user ? window.showFoodSearch?.() : onAuthClick()}
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
+            data-i18n="nav.findFood"
           >
             🔍 Find Food
-          </button>
-          <button
-            onClick={() => user ? window.showAISearch?.() : onAuthClick()}
-            className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium text-sm transition-colors"
-          >
-            🤖 AI Agent
           </button>
           {user ? (
             <div className="relative dropdown-container">
@@ -55,33 +53,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     Profile Settings
                   </button>
-                  <button
-                    onClick={() => {
-                      onViewChange?.('create');
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    Share Food
-                  </button>
-                  <button
-                    onClick={() => {
-                      onViewChange?.('map');
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    Find Food
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.showAISearch?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    AI Food Search
-                  </button>
+                  {user.role === 'donor' && (
+                    <button
+                      onClick={() => {
+                        onViewChange?.('create');
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                    >
+                      Share Food
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       window.openDistributionMap?.();
@@ -90,15 +72,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     🏪 Distribution Centers
-                  </button>
-                  <button
-                    onClick={() => {
-                      window.open('/admin.html', '_blank');
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                    ⚙️ Admin Panel
                   </button>
                   {user.role === 'donor' && (
                     <button
@@ -109,6 +82,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
                     >
                       📦 Manage My Store
+                    </button>
+                  )}
+                  {user.role === 'admin' && (
+                    <button
+                      onClick={() => {
+                        window.openAdminPanel?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
+                    >
+                      ⚙️ Admin Panel
                     </button>
                   )}
                   <button

@@ -16,7 +16,7 @@ function VolunteerRoutes({ user, onClose }) {
           id: 'route1',
           date: '2025-01-09',
           status: 'assigned',
-          total_distance: '12.5 km',
+          total_distance: '7.8 mi',
           estimated_time: '2h 15m',
           stops: [
             {

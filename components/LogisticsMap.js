@@ -363,7 +363,7 @@ function LogisticsMapComponent({ currentView, routes = [], drivers = [], stores 
               <span className="text-gray-600">Last Update: <span className="font-medium">{new Date().toLocaleTimeString()}</span></span>
             </div>
             <div className="flex space-x-4">
-              <span className="text-gray-600">Total Distance Today: <span className="font-medium text-blue-600">1,247 km</span></span>
+              <span className="text-gray-600">Total Distance Today: <span className="font-medium text-blue-600">775 mi</span></span>
               <span className="text-gray-600">Fuel Saved: <span className="font-medium text-green-600">18.3L</span></span>
             </div>
           </div>

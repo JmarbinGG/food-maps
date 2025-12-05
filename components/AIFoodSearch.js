@@ -113,9 +113,9 @@ function AIFoodSearch({ onClose, onSelectFood }) {
                   onChange={(e) => setSearchFilters(prev => ({...prev, radius: parseInt(e.target.value)}))}
                   className="p-2 border border-gray-300 rounded"
                 >
-                  <option value={5}>Within 5km</option>
-                  <option value={10}>Within 10km</option>
-                  <option value={25}>Within 25km</option>
+                  <option value={3}>Within 3 miles</option>
+                  <option value={6}>Within 6 miles</option>
+                  <option value={15}>Within 15 miles</option>
                 </select>
                 
                 <select
@@ -165,7 +165,7 @@ function AIFoodSearch({ onClose, onSelectFood }) {
                           {match.score}% match
                         </span>
                         <span className="text-sm text-gray-500">
-                          {match.distance.toFixed(1)}km away
+                          {match.distance.toFixed(1)} mi away
                         </span>
                       </div>
                     </div>

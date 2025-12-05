@@ -65,7 +65,7 @@ function RouteOptimizerComponent({ routes = [], stores = [] }) {
         );
         
         if (optimized) {
-          alert(`Route optimized! New duration: ${Math.round(optimized.totalDuration / 60)} minutes, Distance: ${(optimized.totalDistance / 1000).toFixed(1)} km`);
+          alert(`Route optimized! New duration: ${Math.round(optimized.totalDuration / 60)} minutes, Distance: ${(optimized.totalDistance / 1609.34).toFixed(1)} mi`);
         }
       } catch (error) {
         console.error('Single route optimization failed:', error);

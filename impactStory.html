@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Impact Story - Food Maps</title>
+  <meta name="description"
+    content="See how Food Maps is making a real difference in communities through AI-powered food distribution">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+
+  <!-- Translation System -->
+  <script src="utils/translations.js"></script>
+  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+  <script crossorigin
+    src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #059669 100%);
+    }
+
+    .hero-pattern {
+      background-image:
+        radial-gradient(circle at 25% 25%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
+        radial-gradient(circle at 75% 75%, rgba(5, 150, 105, 0.1) 0%, transparent 50%);
+    }
+
+    .stat-card {
+      transition: transform 0.3s ease;
+    }
+
+    .stat-card:hover {
+      transform: translateY(-5px);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .fade-in {
+      animation: fadeIn 0.8s ease-out forwards;
+    }
+
+    .timeline-item {
+      opacity: 0;
+      animation: fadeIn 0.8s ease-out forwards;
+    }
+
+    .timeline-item:nth-child(1) {
+      animation-delay: 0.1s;
+    }
+
+    .timeline-item:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .timeline-item:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    .timeline-item:nth-child(4) {
+      animation-delay: 0.4s;
+    }
+
+    .timeline-item:nth-child(5) {
+      animation-delay: 0.5s;
+    }
+
+    .timeline-item:nth-child(6) {
+      animation-delay: 0.6s;
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50">
+  <!-- Navigation -->
+  <nav class="bg-white shadow-lg sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-20">
+        <div class="flex items-center">
+          <img
+            src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
+            alt="Food Maps" class="w-16 h-16 rounded-2xl shadow-lg">
+          <span class="ml-3 text-2xl font-bold text-gray-900">Food Maps</span>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="landing.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Home</a>
+          <a href="index.html"
+            class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+            Get Started
+          </a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hero Section -->
+  <section class="gradient-bg hero-pattern py-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h1 class="text-5xl md:text-6xl font-bold text-white mb-6 fade-in">
+        Our Impact Story
+      </h1>
+      <p class="text-xl text-white/90 max-w-3xl mx-auto fade-in">
+        Transforming food waste into community nourishment through AI-powered logistics and compassionate connections
+      </p>
+    </div>
+  </section>
+
+  <!-- Content Section -->
+  <section class="py-16 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+        <div>
+          <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=2070&auto=format&fit=crop"
+            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto">
+        </div>
+        <div>
+          <h1 class="text-4xl font-bold text-gray-900 mb-6">
+            Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore
+            magna aliqua
+          </h1>
+          <p class="text-lg text-gray-600 leading-relaxed mb-6">
+            Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
+            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
+            Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est
+            laborum.
+          </p>
+          <button
+            class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors inline-flex items-center gap-2">
+            Read More →
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Story Section -->
+  <section class="py-20 bg-gray-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <!-- First Image Column -->
+        <div>
+          <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=2070&auto=format&fit=crop"
+            alt="Community Impact" class="rounded-2xl shadow-2xl w-full h-auto mb-6">
+          <h1 class="text-3xl font-bold text-gray-900 mb-4">
+            Lorem ipsum dolor sit amet consectetur adipiscing elit
+          </h1>
+          <p class="text-gray-600 leading-relaxed">
+            Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud
+            exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor.
+          </p>
+        </div>
+
+        <!-- Second Image Column -->
+        <div>
+          <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=2070&auto=format&fit=crop"
+            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto mb-6">
+          <h1 class="text-3xl font-bold text-gray-900 mb-4">
+            In reprehenderit in voluptate velit esse cillum dolore
+          </h1>
+          <p class="text-gray-600 leading-relaxed">
+            Eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt
+            mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error sit.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Video Section -->
+  <section class="py-20 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="relative flex items-center">
+        <!-- Background Image -->
+        <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=2070&auto=format&fit=crop"
+          alt="Impact Story" class="w-full h-[400px] object-cover rounded-2xl">
+
+        <!-- Card overlaying from middle -->
+        <div
+          class="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2 bg-white bg-opacity-90 p-8 rounded-2xl shadow-2xl">
+          <blockquote class="text-xl font-bold text-gray-900 mb-6 italic">
+            "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt"
+          </blockquote>
+          <p class="text-gray-600 mb-6">
+            Ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi.
+          </p>
+          <button
+            class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+            Watch Now
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Gallery Section -->
+  <section class="py-20 bg-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Image 1 -->
+        <div>
+          <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop"
+            alt="Community" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
+          <p class="text-gray-600">
+            Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut.
+          </p>
+        </div>
+
+        <!-- Image 2 -->
+        <div>
+          <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=800&auto=format&fit=crop"
+            alt="Food Distribution" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
+          <p class="text-gray-600">
+            Labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco.
+          </p>
+        </div>
+
+        <!-- Image 3 -->
+        <div>
+          <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=800&auto=format&fit=crop"
+            alt="Impact" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
+          <p class="text-gray-600">
+            Laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor in reprehenderit.
+          </p>
+        </div>
+      </div>
+
+      <div class="text-center mt-12">
+        <button class="bg-green-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+          View All
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Parallax Form Section -->
+  <section class="relative h-[600px] overflow-hidden">
+    <!-- Parallax Background Image -->
+    <div class="absolute inset-0 bg-fixed bg-center bg-cover"
+      style="background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=2074&auto=format&fit=crop'); transform: translateY(0); will-change: transform;">
+    </div>
+
+    <!-- Overlay -->
+    <div class="absolute inset-0 bg-black bg-opacity-40"></div>
+
+    <!-- Form Card -->
+    <div class="relative h-full flex items-center justify-end pr-12">
+      <div class="bg-white rounded-2xl shadow-2xl p-8 w-96 max-w-md">
+        <h2 class="text-2xl font-bold text-gray-900 mb-4">
+          Lorem ipsum dolor sit amet
+        </h2>
+        <p class="text-gray-600 mb-6">
+          Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna.
+        </p>
+
+        <form class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.firstName">First
+                Name</label>
+              <input type="text"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                data-i18n-placeholder="impact.firstName">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.lastName">Last Name</label>
+              <input type="text"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                data-i18n-placeholder="impact.lastName">
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.email">Email</label>
+              <input type="email"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="your@email.com">
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.mobilePhone">Mobile
+                Phone</label>
+              <input type="tel"
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="+1 (555) 000-0000">
+            </div>
+          </div>
+
+          <div class="text-right">
+            <button type="button" id="nextBtn"
+              class="bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
+              data-i18n="common.next">
+              NEXT
+            </button>
+          </div>
+
+          <div id="interestSection" class="hidden">
+            <label class="block text-sm font-medium text-gray-900 mb-3" data-i18n="impact.interestedIn">I'm interested
+              in:</label>
+            <div class="space-y-2">
+              <label class="flex items-center">
+                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                <span class="ml-2 text-gray-700" data-i18n="impact.volunteering">Volunteering</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                <span class="ml-2 text-gray-700" data-i18n="impact.donatingFood">Donating Food</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                <span class="ml-2 text-gray-700" data-i18n="impact.partnership">Partnership Opportunities</span>
+              </label>
+              <label class="flex items-center">
+                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
+                <span class="ml-2 text-gray-700" data-i18n="impact.updates">Monthly Updates</span>
+              </label>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-6">
+              <button type="button" id="backBtn"
+                class="bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
+                data-i18n="common.back">
+                Back
+              </button>
+              <button type="submit"
+                class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors"
+                data-i18n="impact.letsGo">
+                Let's Go!
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    // Form step navigation
+    document.getElementById('nextBtn').addEventListener('click', function () {
+      document.getElementById('interestSection').classList.remove('hidden');
+      this.parentElement.classList.add('hidden');
+    });
+
+    document.getElementById('backBtn').addEventListener('click', function () {
+      document.getElementById('interestSection').classList.add('hidden');
+      document.getElementById('nextBtn').parentElement.classList.remove('hidden');
+    });
+
+    // Parallax scroll effect
+    window.addEventListener('scroll', function () {
+      const parallax = document.querySelector('.bg-fixed');
+      if (parallax) {
+        const scrolled = window.pageYOffset;
+        const parallaxSection = parallax.closest('section');
+        if (parallaxSection) {
+          const sectionTop = parallaxSection.offsetTop;
+          const sectionHeight = parallaxSection.offsetHeight;
+          const scrollPosition = scrolled - sectionTop;
+
+          if (scrollPosition > -sectionHeight && scrollPosition < window.innerHeight + sectionHeight) {
+            const translateY = scrollPosition * 0.5;
+            parallax.style.transform = `translateY(${translateY}px)`;
+          }
+        }
+      }
+    });
+  </script>
+
+  <!-- CTA Section -->
+  <section class="gradient-bg hero-pattern py-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">Be Part of Our Story</h2>
+      <p class="text-xl text-white/90 mb-8">
+        Every meal shared, every pound of food saved, every life touched—it all starts with you.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-4 justify-center">
+        <a href="index.html"
+          class="bg-white text-green-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-lg">
+          Join the Platform
+        </a>
+        <a href="https://allgoodlivingfoundation.org/donate"
+          class="bg-orange-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-orange-700 transition-colors shadow-lg">
+          Support Our Mission
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-900 text-white py-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div>
+          <h3 class="text-xl font-bold mb-4">Food Maps</h3>
+          <p class="text-gray-400">
+            AI-powered food distribution network connecting donors with recipients.
+          </p>
+        </div>
+        <div>
+          <h3 class="text-xl font-bold mb-4">Quick Links</h3>
+          <ul class="space-y-2">
+            <li><a href="landing.html" class="text-gray-400 hover:text-white transition-colors">Home</a></li>
+            <li><a href="index.html" class="text-gray-400 hover:text-white transition-colors">Platform</a></li>
+            <li><a href="privacy.html" class="text-gray-400 hover:text-white transition-colors">Privacy</a></li>
+            <li><a href="terms.html" class="text-gray-400 hover:text-white transition-colors">Terms</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3 class="text-xl font-bold mb-4">Contact</h3>
+          <p class="text-gray-400">
+            Questions? Reach out to us<br>
+            support@foodmaps.org
+          </p>
+        </div>
+      </div>
+      <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
+        <p>&copy; 2025 Food Maps. All rights reserved.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Language Switcher Component -->
+  <script type="text/babel" src="components/LanguageSwitcher.js"></script>
+  <script type="text/babel">
+    // Initialize language system
+    document.addEventListener('DOMContentLoaded', () => {
+      window.i18n.initLanguageSystem();
+
+      // Add language switcher to top right corner
+      const nav = document.createElement('div');
+      nav.className = 'fixed top-4 right-4 z-50';
+      nav.id = 'language-switcher-impact';
+      document.body.appendChild(nav);
+
+      const root = ReactDOM.createRoot(nav);
+      root.render(<LanguageSwitcherCompact />);
+
+      // Listen for language changes
+      window.addEventListener('languageChanged', () => {
+        window.i18n.translatePage();
+      });
+    });
+  </script>
+
+</body>
+
+</html>

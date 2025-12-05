@@ -160,7 +160,7 @@ function PerformanceMetrics({ vehicles = [], routes = [], deliveries = [] }) {
             </div>
             <div className="flex justify-between text-sm">
               <span>Total Distance</span>
-              <span className="font-medium">{(metrics.totalDistance / 1000).toFixed(1)} km</span>
+              <span className="font-medium">{(metrics.totalDistance / 1609.34).toFixed(1)} mi</span>
             </div>
             <div className="flex justify-between text-sm">
               <span>Efficiency Score</span>

@@ -1,6 +1,98 @@
 // Detailed Modal Component for Food Listings
 function DetailedModal({ listing, onClose, onClaim }) {
+  const [contactInfo, setContactInfo] = React.useState(null);
+  const [loadingContact, setLoadingContact] = React.useState(false);
+  
   if (!listing) return null;
+  
+  const listingStatus = String(listing.status || '').toLowerCase();
+  const isClaimed = listingStatus === 'claimed' || listingStatus === 'pending_confirmation';
+  
+  // Get current user from localStorage
+  const getCurrentUser = () => {
+    try {
+      const stored = localStorage.getItem('current_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  };
+  
+  const user = getCurrentUser();
+  
+  // Check if user should see contact info
+  const shouldShowContact = React.useMemo(() => {
+    console.log('DetailedModal shouldShowContact check:', {
+      listingId: listing.id,
+      user: user,
+      listingStatus: listingStatus,
+      status: listing.status
+    });
+    
+    if (!user || listingStatus !== 'claimed') {
+      console.log('DetailedModal: returning false - no user or not claimed');
+      return false;
+    }
+    const userId = String(user.id);
+    const donorId = String(listing.donor_id || listing.donorId || (listing.donor && listing.donor.id) || '');
+    
+    // Check if this user claimed the listing (via localStorage)
+    const isClaimedByMe = (() => {
+      try {
+        const key = `my_claimed_ids:${userId}`;
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        return Array.isArray(arr) && arr.includes(String(listing.id));
+      } catch (_) {
+        return false;
+      }
+    })();
+    
+    const result = (user.role === 'donor' && donorId === userId) || 
+                   (user.role === 'recipient' && isClaimedByMe);
+    console.log('DetailedModal shouldShowContact result:', result, {
+      isDonor: user.role === 'donor' && donorId === userId,
+      isRecipient: user.role === 'recipient' && isClaimedByMe
+    });
+    
+    // Donor can see recipient contact, recipient can see donor contact
+    return result;
+  }, [user, listing, listingStatus]);
+
+  // Fetch contact info when modal opens and contact should be shown
+  React.useEffect(() => {
+    if (shouldShowContact && !contactInfo && !loadingContact) {
+      setLoadingContact(true);
+      fetch(`/api/listings/user-details/${listing.id}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      .then(async res => {
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          throw new Error(errorData.detail || `API error: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Contact API response data:', data);
+        // Check if data has actual values (not just empty strings)
+        const hasName = data.name && data.name.trim() !== '';
+        const hasPhone = data.phone && data.phone.trim() !== '';
+        
+        if (hasName || hasPhone) {
+          setContactInfo(data);
+        } else {
+          setContactInfo({ error: 'Contact information not available' });
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch contact info:', err);
+        setContactInfo({ error: err.message || 'Failed to load contact' });
+      })
+      .finally(() => setLoadingContact(false));
+    }
+  }, [shouldShowContact, listing.id, contactInfo, loadingContact]);
 
   const formatDateTime = (dateString) => {
     if (!dateString) return 'Not specified';
@@ -135,6 +227,29 @@ function DetailedModal({ listing, onClose, onClaim }) {
               )
             )
           )
+        ),
+
+        // Contact Information for claimed listings
+        shouldShowContact && React.createElement('div', { className: 'mb-4 p-4 bg-green-50 border border-green-200 rounded-lg' },
+          React.createElement('h4', { className: 'font-semibold mb-2 text-green-800' }, 
+            user.role === 'donor' ? 'Recipient Contact Information:' : 'Donor Contact Information:'
+          ),
+          loadingContact ? 
+            React.createElement('div', { className: 'text-sm text-gray-500' }, 'Loading contact info...') :
+            contactInfo ? 
+              contactInfo.error ? 
+                React.createElement('div', { className: 'text-sm text-red-600' }, contactInfo.error) :
+                React.createElement('div', { className: 'space-y-2' },
+                  contactInfo.name && React.createElement('div', { className: 'text-sm text-green-700' },
+                    React.createElement('span', { className: 'font-medium' }, 'Name: '),
+                    contactInfo.name
+                  ),
+                  contactInfo.phone && React.createElement('div', { className: 'text-sm text-green-700' },
+                    React.createElement('span', { className: 'font-medium' }, 'Phone: '),
+                    contactInfo.phone
+                  )
+                ) :
+              React.createElement('div', { className: 'text-sm text-gray-500' }, 'Contact information not available')
         ),
 
         // Listing Information

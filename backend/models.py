@@ -41,6 +41,8 @@ class User(Base):
     coords_lng = Column(Float, nullable=True)
     vehicle_capacity_kg = Column(Float, nullable=True)
     has_refrigeration = Column(Boolean, default=False)
+    referral_code = Column(String(20), unique=True, nullable=True, index=True)
+    referred_by_code = Column(String(20), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     # reset_token = Column(String(10), nullable=True)  # Commented out - not in MySQL DB
     # reset_token_expiry = Column(DateTime, nullable=True)  # Commented out - not in MySQL DB

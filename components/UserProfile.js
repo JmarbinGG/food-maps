@@ -16,6 +16,91 @@ function UserProfile({ user, onClose, onUserUpdate }) {
     confirmPassword: ''
   });
 
+  const [referralData, setReferralData] = React.useState({
+    referral_code: '',
+    referral_count: 0
+  });
+  const [copied, setCopied] = React.useState(false);
+
+  React.useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        
+        const response = await fetch('/api/user/me', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setAccountData({
+            name: userData.name || '',
+            email: userData.email || '',
+            phone: userData.phone || '',
+            address: userData.address || ''
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        // Fallback to prop data
+        if (user) {
+          setAccountData({
+            name: user.name || '',
+            email: user.email || '',
+            phone: user.phone || '',
+            address: user.address || ''
+          });
+        }
+      }
+    };
+    
+    fetchUserData();
+    
+    if (activeTab === 'referral') {
+      loadReferralData();
+    }
+  }, [user, activeTab]);
+
+  const loadReferralData = async () => {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const response = await fetch('/api/user/referrals', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setReferralData(data);
+      }
+    } catch (error) {
+      console.error('Error loading referral data:', error);
+    }
+  };
+
+  const copyReferralCode = async () => {
+    try {
+      await navigator.clipboard.writeText(referralData.referral_code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      const textArea = document.createElement('textarea');
+      textArea.value = referralData.referral_code;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
   const handleAccountSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -115,6 +200,15 @@ function UserProfile({ user, onClose, onUserUpdate }) {
               }`}
           >
             Password
+          </button>
+          <button
+            onClick={() => setActiveTab('referral')}
+            className={`flex-1 py-3 px-4 text-sm font-medium ${activeTab === 'referral'
+                ? 'border-b-2 border-green-500 text-green-600'
+                : 'text-gray-500 hover:text-gray-700'
+              }`}
+          >
+            Referrals
           </button>
         </div>
 
@@ -227,6 +321,44 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 {loading ? 'Changing...' : 'Change Password'}
               </button>
             </form>
+          )}
+
+          {activeTab === 'referral' && (
+            <div className="space-y-4">
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="font-semibold text-green-800 mb-2">Your Referral Code</h3>
+                <div className="flex items-center space-x-2">
+                  <code className="bg-white px-3 py-2 rounded border text-lg font-mono flex-1">
+                    {referralData.referral_code}
+                  </code>
+                  <button
+                    onClick={copyReferralCode}
+                    className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    title="Copy to clipboard"
+                  >
+                    {copied ? '✓' : 'Copy'}
+                  </button>
+                </div>
+                {copied && (
+                  <p className="text-sm text-green-600 mt-2">Copied to clipboard!</p>
+                )}
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-blue-600">{referralData.referral_count}</div>
+                <div className="text-sm text-blue-800">People Referred</div>
+              </div>
+
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-semibold text-gray-800 mb-2">How it works:</h4>
+                <ul className="text-sm text-gray-600 space-y-1">
+                  <li>• Share your referral code with friends</li>
+                  <li>• They enter it when signing up</li>
+                  <li>• Help grow the Food Maps community</li>
+                  <li>• Reduce food waste together!</li>
+                </ul>
+              </div>
+            </div>
           )}
         </div>
       </div>

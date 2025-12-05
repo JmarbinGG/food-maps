@@ -390,9 +390,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                   >
                     <option value="lbs">Pounds</option>
-                    <option value="kg">Kilograms</option>
                     <option value="items">Items</option>
                     <option value="servings">Servings</option>
+                    <option value="oz">Ounces</option>
                   </select>
                 </div>
               </div>

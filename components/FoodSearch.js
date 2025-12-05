@@ -191,14 +191,6 @@ function FoodSearch({ onClose, onSelectFood, user }) {
               >
                 Advanced
               </button>
-              <button
-                onClick={() => setSearchMode('ai')}
-                className={`flex-1 py-2 px-4 rounded text-sm font-medium transition ${
-                  searchMode === 'ai' ? 'bg-white text-green-600 shadow' : 'text-gray-600'
-                }`}
-              >
-                AI Agent
-              </button>
             </div>
 
             {/* Search Input */}
@@ -207,10 +199,7 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={searchMode === 'ai' ? 
-                  "Tell me what you need... 'fresh vegetables for family of 4'" :
-                  "Search for food items..."
-                }
+                placeholder="Search for food items..."
                 className="flex-1 p-3 border border-gray-300 rounded-lg"
                 onKeyPress={(e) => e.key === 'Enter' && handleSearch()}
               />
@@ -279,10 +268,10 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                     onChange={(e) => setSearchFilters(prev => ({...prev, radius: parseInt(e.target.value)}))}
                     className="p-2 border border-gray-300 rounded"
                   >
-                    <option value={5}>Within 5km</option>
-                    <option value={10}>Within 10km</option>
-                    <option value={25}>Within 25km</option>
-                    <option value={50}>Within 50km</option>
+                    <option value={3}>Within 3 miles</option>
+                    <option value={6}>Within 6 miles</option>
+                    <option value={15}>Within 15 miles</option>
+                    <option value={30}>Within 30 miles</option>
                   </select>
                 </div>
 
@@ -341,7 +330,7 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                           </span>
                         )}
                         <span className="text-sm text-gray-500">
-                          {result.distance.toFixed(1)}km away
+                          {result.distance.toFixed(1)} mi away
                         </span>
                       </div>
                     </div>
@@ -384,7 +373,6 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                 <div className="text-sm text-gray-500 space-y-1">
                   <p>🔍 Use quick search for common items</p>
                   <p>⚙️ Try advanced filters for specific needs</p>
-                  <p>🤖 Use AI agent for natural language search</p>
                 </div>
               </div>
             ) : null}
