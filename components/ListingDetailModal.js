@@ -62,9 +62,9 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         setContactError(null);
         setContact(null);
         setContactLoading(true);
-        // if (!window.listingAPI || typeof window.listingAPI.getCounterparty !== 'function') {
-        //   throw new Error('Contact API not available');
-        // }
+        if (!window.listingAPI || typeof window.listingAPI.getCounterparty !== 'function') {
+          throw new Error('Contact API not available');
+        }
         const token = localStorage.getItem('auth_token');
         if (!token) {
           throw new Error('Not signed in');

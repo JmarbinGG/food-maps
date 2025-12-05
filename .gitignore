@@ -1,4 +1,4 @@
 .env
 backend/.env.example
-chat.json
 backend/scripts/batch_geocode.py
+dont-publish
