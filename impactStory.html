@@ -10,13 +10,6 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
 
-  <!-- Translation System -->
-  <script src="utils/translations.js"></script>
-  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
-  <script crossorigin
-    src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
-
   <style>
     .gradient-bg {
       background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #059669 100%);
@@ -80,65 +73,250 @@
     .timeline-item:nth-child(6) {
       animation-delay: 0.6s;
     }
+
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 100;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto;
+      background-color: rgba(0, 0, 0, 0.7);
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .modal.show {
+      display: block;
+    }
+
+    .modal-content {
+      background-color: #fefefe;
+      margin: 5% auto;
+      padding: 0;
+      border-radius: 1rem;
+      width: 90%;
+      max-width: 1200px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+
+    .close-modal {
+      color: #aaa;
+      float: right;
+      font-size: 28px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .close-modal:hover,
+    .close-modal:focus {
+      color: #000;
+    }
+
+    .admin-edit-btn {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      z-index: 1000;
+      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 60px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.5);
+      transition: all 0.3s ease;
+    }
+
+    .admin-edit-btn:hover {
+      transform: scale(1.1) rotate(90deg);
+      box-shadow: 0 15px 35px rgba(59, 130, 246, 0.7);
+    }
+
+    .edit-mode .editable {
+      outline: 2px dashed #3b82f6;
+      outline-offset: 4px;
+      cursor: text;
+      position: relative;
+    }
+
+    .edit-mode .editable:hover {
+      outline-color: #1d4ed8;
+      background: rgba(59, 130, 246, 0.05);
+    }
+
+    .edit-mode .editable-img {
+      cursor: pointer;
+      border: 3px dashed #3b82f6;
+      transition: all 0.3s;
+    }
+
+    .edit-mode .editable-img:hover {
+      border-color: #1d4ed8;
+      opacity: 0.8;
+    }
+
+    .edit-mode .editable-bg {
+      cursor: pointer;
+      outline: 3px dashed #3b82f6;
+      outline-offset: -3px;
+    }
+
+    .edit-mode .editable-bg:hover {
+      outline-color: #1d4ed8;
+      opacity: 0.9;
+    }
+
+    .edit-toolbar {
+      position: fixed;
+      top: 100px;
+      right: 2rem;
+      z-index: 1000;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+      padding: 1rem;
+      display: none;
+    }
+
+    .edit-mode .edit-toolbar {
+      display: block;
+    }
   </style>
 </head>
 
 <body class="bg-gray-50">
+  <!-- AI Search Modal Container -->
+  <div id="ai-search-modal"></div>
   <!-- Navigation -->
-  <nav class="bg-white shadow-lg sticky top-0 z-50">
+  <nav class="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-200 sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex justify-between items-center h-20">
         <div class="flex items-center">
-          <img
-            src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
-            alt="Food Maps" class="w-16 h-16 rounded-2xl shadow-lg">
-          <span class="ml-3 text-2xl font-bold text-gray-900">Food Maps</span>
-        </div>
-        <div class="flex items-center space-x-4">
-          <a href="landing.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Home</a>
-          <a href="index.html"
-            class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
-            Get Started
+          <a href="landing.html" class="cursor-pointer">
+            <img
+              src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
+              alt="Food Maps" class="w-16 h-16 rounded-2xl shadow-lg hover:scale-105 transition-transform pulse-glow">
           </a>
+        </div>
+
+        <!-- Desktop Menu -->
+        <div class="hidden md:flex items-center space-x-8">
+          <a href="landing.html#features"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Features</a>
+          <a href="landing.html#how-it-works"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">How It Works</a>
+          <a href="landing.html#impact"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact</a>
+          <a href="impactStory.html"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact Story</a>
+
+          <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
+            class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg">
+            Donate
+          </button>
+          <button onclick="window.location.href='index.html'"
+            class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg">
+            Get Started
+          </button>
+        </div>
+
+        <!-- Mobile Menu Button -->
+        <div class="md:hidden">
+          <button id="mobile-menu-btn"
+            class="text-gray-600 hover:text-green-600 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <div class="icon-menu text-2xl"></div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile Menu -->
+      <div id="mobile-menu" class="md:hidden hidden bg-white/95 backdrop-blur-lg border-t border-gray-200 pb-4">
+        <div class="flex flex-col space-y-4 pt-4">
+          <a href="landing.html#features"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Features</a>
+          <a href="landing.html#how-it-works"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">How
+            It Works</a>
+          <a href="landing.html#impact"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact</a>
+          <a href="impactStory.html"
+            class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact
+            Story</a>
+
+          <!-- Language Switcher for Mobile -->
+
+          <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
+            class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
+            Donate
+          </button>
+          <button onclick="window.location.href='index.html'"
+            class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
+            Get Started
+          </button>
         </div>
       </div>
     </div>
   </nav>
 
   <!-- Hero Section -->
-  <section class="gradient-bg hero-pattern py-20">
+  <section class="bg-green-600 py-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h1 class="text-5xl md:text-6xl font-bold text-white mb-6 fade-in">
+      <h1 class="text-5xl md:text-6xl font-bold text-white mb-6 fade-in editable" data-editable="hero-title"
+        contenteditable="false">
         Our Impact Story
       </h1>
-      <p class="text-xl text-white/90 max-w-3xl mx-auto fade-in">
+      <p class="text-xl text-white max-w-3xl mx-auto fade-in mb-8 editable" data-editable="hero-subtitle"
+        contenteditable="false">
         Transforming food waste into community nourishment through AI-powered logistics and compassionate connections
       </p>
+      <div class="flex justify-center gap-8 mt-8">
+        <a href="#featured"
+          class="bg-white text-green-600 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all">Featured</a>
+        <a href="#news"
+          class="bg-white text-green-600 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all">News</a>
+        <a href="#stories"
+          class="bg-white text-green-600 px-6 py-3 rounded-xl font-semibold hover:bg-gray-100 transition-all">Stories</a>
+      </div>
     </div>
   </section>
 
   <!-- Content Section -->
-  <section class="py-16 bg-white">
+  <section id="featured" class="py-16 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
         <div>
           <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=2070&auto=format&fit=crop"
-            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto">
+            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto editable-img"
+            data-editable-img="featured-img">
         </div>
         <div>
-          <h1 class="text-4xl font-bold text-gray-900 mb-6">
-            Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore
-            magna aliqua
+          <h1 class="text-4xl font-bold text-gray-900 mb-6 editable" data-editable="featured-title"
+            contenteditable="false">
+            Bridging the Gap Between Surplus and Need
           </h1>
-          <p class="text-lg text-gray-600 leading-relaxed mb-6">
-            Ut enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.
-            Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur.
-            Excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt mollit anim id est
-            laborum.
+          <p class="text-lg text-gray-600 leading-relaxed mb-6 editable" data-editable="featured-p1"
+            contenteditable="false">
+            Every day, restaurants, grocery stores, and food producers have perfectly good food that goes to waste,
+            while families in our communities struggle with food insecurity. Food Maps uses AI-powered logistics to
+            bridge this gap in real-time.
           </p>
-          <button
+          <p class="text-lg text-gray-600 leading-relaxed mb-6 editable" data-editable="featured-p2"
+            contenteditable="false">
+            Our platform connects donors with recipients within minutes, ensuring fresh food reaches those who need it
+            most. Through intelligent routing and automated coordination, we've created a seamless network that turns
+            potential waste into community nourishment.
+          </p>
+          <button onclick="window.location.href='index.html'"
             class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors inline-flex items-center gap-2">
-            Read More →
+            Join Our Network →
           </button>
         </div>
       </div>
@@ -146,32 +324,48 @@
   </section>
 
   <!-- Story Section -->
-  <section class="py-20 bg-gray-50">
+  <section id="stories" class="py-20 bg-gray-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
         <!-- First Image Column -->
         <div>
           <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=2070&auto=format&fit=crop"
-            alt="Community Impact" class="rounded-2xl shadow-2xl w-full h-auto mb-6">
-          <h1 class="text-3xl font-bold text-gray-900 mb-4">
-            Lorem ipsum dolor sit amet consectetur adipiscing elit
+            alt="Community Impact" class="rounded-2xl shadow-2xl w-full h-auto mb-6 editable-img"
+            data-editable-img="sarah-img">
+          <h1 class="text-3xl font-bold text-gray-900 mb-4 editable" data-editable="sarah-title"
+            contenteditable="false">
+            Sarah's Story: From Volunteer to Champion
           </h1>
-          <p class="text-gray-600 leading-relaxed">
-            Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam quis nostrud
-            exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor.
+          <p class="text-gray-600 leading-relaxed editable" data-editable="sarah-quote" contenteditable="false">
+            "I started as a volunteer driver, picking up surplus food from local restaurants. Now I coordinate our
+            entire network in the Bay Area. Seeing families receive fresh, nutritious meals—food that would have been
+            wasted—gives me purpose every single day. We're not just feeding people; we're building a community that
+            cares."
+          </p>
+          <p class="text-gray-600 leading-relaxed mt-4 editable" data-editable="sarah-attribution"
+            contenteditable="false">
+            <strong>— Sarah Martinez, Community Coordinator, Alameda</strong>
           </p>
         </div>
 
         <!-- Second Image Column -->
         <div>
           <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=2070&auto=format&fit=crop"
-            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto mb-6">
-          <h1 class="text-3xl font-bold text-gray-900 mb-4">
-            In reprehenderit in voluptate velit esse cillum dolore
+            alt="Food Distribution" class="rounded-2xl shadow-2xl w-full h-auto mb-6 editable-img"
+            data-editable-img="michael-img">
+          <h1 class="text-3xl font-bold text-gray-900 mb-4 editable" data-editable="michael-title"
+            contenteditable="false">
+            Restaurant Partnership: A Win-Win Solution
           </h1>
-          <p class="text-gray-600 leading-relaxed">
-            Eu fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt in culpa qui officia deserunt
-            mollit anim id est laborum sed ut perspiciatis unde omnis iste natus error sit.
+          <p class="text-gray-600 leading-relaxed editable" data-editable="michael-quote" contenteditable="false">
+            "As a restaurant owner, I used to feel terrible about food waste at the end of each day. Food Maps
+            transformed that guilt into impact. Now, instead of throwing away perfectly good food, I know it's helping
+            families in our neighborhood. The platform makes it effortless—I post what I have, and within an hour, it's
+            picked up and distributed."
+          </p>
+          <p class="text-gray-600 leading-relaxed mt-4 editable" data-editable="michael-attribution"
+            contenteditable="false">
+            <strong>— Michael Chen, Owner, Golden Wok Restaurant</strong>
           </p>
         </div>
       </div>
@@ -179,25 +373,33 @@
   </section>
 
   <!-- Video Section -->
-  <section class="py-20 bg-white">
+  <section id="news" class="py-20 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="relative flex items-center">
         <!-- Background Image -->
         <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=2070&auto=format&fit=crop"
-          alt="Impact Story" class="w-full h-[400px] object-cover rounded-2xl">
+          alt="Impact Story" class="w-full h-[400px] object-cover rounded-2xl editable-img"
+          data-editable-img="news-bg-img">
 
         <!-- Card overlaying from middle -->
         <div
-          class="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2 bg-white bg-opacity-90 p-8 rounded-2xl shadow-2xl">
-          <blockquote class="text-xl font-bold text-gray-900 mb-6 italic">
-            "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt"
+          class="absolute right-0 top-1/2 transform -translate-y-1/2 w-1/2 bg-white bg-opacity-95 p-8 rounded-2xl shadow-2xl">
+          <blockquote class="text-xl font-bold text-gray-900 mb-6 italic editable" data-editable="news-quote"
+            contenteditable="false">
+            "Food Maps helped us feed over 500 families during the holidays. The AI routing meant we could distribute
+            fresh food within 2 hours of donation—something that was impossible before."
           </blockquote>
-          <p class="text-gray-600 mb-6">
-            Ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi.
+          <p class="text-gray-600 mb-4 editable" data-editable="news-attribution" contenteditable="false">
+            <strong>Director of Community Services</strong><br>
+            Alameda County Food Bank
           </p>
-          <button
+          <p class="text-sm text-gray-500 mb-6 editable" data-editable="news-description" contenteditable="false">
+            Thanks to our network of 150+ partners, we've prevented over 2 million pounds of food waste while providing
+            nutritious meals to families who need them most.
+          </p>
+          <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
             class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
-            Watch Now
+            Support Our Mission
           </button>
         </div>
       </div>
@@ -211,34 +413,47 @@
         <!-- Image 1 -->
         <div>
           <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop"
-            alt="Community" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
-          <p class="text-gray-600">
-            Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut.
+            alt="Community" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4 editable-img"
+            data-editable-img="gallery-img-1">
+          <h3 class="text-xl font-bold text-gray-900 mb-2 editable" data-editable="gallery-community-title"
+            contenteditable="false">Community Centers</h3>
+          <p class="text-gray-600 editable" data-editable="gallery-community-desc" contenteditable="false">
+            Partnering with 45+ community centers across the Bay Area to provide fresh meals and groceries to families
+            in need, serving over 10,000 people monthly.
           </p>
         </div>
 
         <!-- Image 2 -->
         <div>
           <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=800&auto=format&fit=crop"
-            alt="Food Distribution" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
-          <p class="text-gray-600">
-            Labore et dolore magna aliqua ut enim ad minim veniam quis nostrud exercitation ullamco.
+            alt="Food Distribution" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4 editable-img"
+            data-editable-img="gallery-img-2">
+          <h3 class="text-xl font-bold text-gray-900 mb-2 editable" data-editable="gallery-restaurant-title"
+            contenteditable="false">Restaurant Partners</h3>
+          <p class="text-gray-600 editable" data-editable="gallery-restaurant-desc" contenteditable="false">
+            Working with 200+ restaurants and grocers to rescue surplus food daily. Our AI routing ensures food reaches
+            recipients within 60 minutes of donation.
           </p>
         </div>
 
         <!-- Image 3 -->
         <div>
           <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=800&auto=format&fit=crop"
-            alt="Impact" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4">
-          <p class="text-gray-600">
-            Laboris nisi ut aliquip ex ea commodo consequat duis aute irure dolor in reprehenderit.
+            alt="Impact" class="rounded-2xl shadow-lg w-full h-64 object-cover mb-4 editable-img"
+            data-editable-img="gallery-img-3">
+          <h3 class="text-xl font-bold text-gray-900 mb-2 editable" data-editable="gallery-environment-title"
+            contenteditable="false">Environmental Impact</h3>
+          <p class="text-gray-600 editable" data-editable="gallery-environment-desc" contenteditable="false">
+            By preventing food waste, we've reduced over 1,200 tons of CO2 emissions and conserved resources equivalent
+            to 30 million gallons of water.
           </p>
         </div>
       </div>
 
       <div class="text-center mt-12">
-        <button class="bg-green-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
-          View All
+        <button onclick="openStoriesModal()"
+          class="bg-green-600 text-white px-8 py-3 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+          View All Stories
         </button>
       </div>
     </div>
@@ -247,7 +462,7 @@
   <!-- Parallax Form Section -->
   <section class="relative h-[600px] overflow-hidden">
     <!-- Parallax Background Image -->
-    <div class="absolute inset-0 bg-fixed bg-center bg-cover"
+    <div class="absolute inset-0 bg-fixed bg-center bg-cover editable-bg" data-editable-bg="parallax-bg-img"
       style="background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=2074&auto=format&fit=crop'); transform: translateY(0); will-change: transform;">
     </div>
 
@@ -257,41 +472,44 @@
     <!-- Form Card -->
     <div class="relative h-full flex items-center justify-end pr-12">
       <div class="bg-white rounded-2xl shadow-2xl p-8 w-96 max-w-md">
-        <h2 class="text-2xl font-bold text-gray-900 mb-4">
-          Lorem ipsum dolor sit amet
+        <h2 class="text-2xl font-bold text-gray-900 mb-4 editable" data-editable="form-title" contenteditable="false">
+          Join Our Impact Network
         </h2>
-        <p class="text-gray-600 mb-6">
-          Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna.
+        <p class="text-gray-600 mb-6 editable" data-editable="form-description" contenteditable="false">
+          Be part of the solution. Share your story, volunteer, or stay updated on our mission to end food waste and
+          hunger.
         </p>
+        <div id="formSuccess"
+          class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
+          ✓ Thank you! We'll be in touch soon.
+        </div>
 
         <form class="space-y-4">
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.firstName">First
+              <label class="block text-sm font-medium text-gray-700 mb-1">First
                 Name</label>
               <input type="text"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                data-i18n-placeholder="impact.firstName">
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.lastName">Last Name</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
               <input type="text"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                data-i18n-placeholder="impact.lastName">
+                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
             </div>
           </div>
 
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.email">Email</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input type="email"
                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                 placeholder="your@email.com">
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1" data-i18n="impact.mobilePhone">Mobile
+              <label class="block text-sm font-medium text-gray-700 mb-1">Mobile
                 Phone</label>
               <input type="tel"
                 class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
@@ -301,43 +519,40 @@
 
           <div class="text-right">
             <button type="button" id="nextBtn"
-              class="bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors"
-              data-i18n="common.next">
+              class="bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors">
               NEXT
             </button>
           </div>
 
           <div id="interestSection" class="hidden">
-            <label class="block text-sm font-medium text-gray-900 mb-3" data-i18n="impact.interestedIn">I'm interested
+            <label class="block text-sm font-medium text-gray-900 mb-3">I'm interested
               in:</label>
             <div class="space-y-2">
               <label class="flex items-center">
                 <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700" data-i18n="impact.volunteering">Volunteering</span>
+                <span class="ml-2 text-gray-700">Volunteering</span>
               </label>
               <label class="flex items-center">
                 <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700" data-i18n="impact.donatingFood">Donating Food</span>
+                <span class="ml-2 text-gray-700">Donating Food</span>
               </label>
               <label class="flex items-center">
                 <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700" data-i18n="impact.partnership">Partnership Opportunities</span>
+                <span class="ml-2 text-gray-700">Partnership Opportunities</span>
               </label>
               <label class="flex items-center">
                 <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700" data-i18n="impact.updates">Monthly Updates</span>
+                <span class="ml-2 text-gray-700">Monthly Updates</span>
               </label>
             </div>
 
             <div class="grid grid-cols-2 gap-4 mt-6">
               <button type="button" id="backBtn"
-                class="bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors"
-                data-i18n="common.back">
+                class="bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
                 Back
               </button>
               <button type="submit"
-                class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors"
-                data-i18n="impact.letsGo">
+                class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors">
                 Let's Go!
               </button>
             </div>
@@ -348,6 +563,32 @@
   </section>
 
   <script>
+    // Animated counter for statistics
+    function animateCounter(id, target, suffix = '') {
+      const element = document.getElementById(id);
+      if (!element) return;
+      let current = 0;
+      const increment = target / 100;
+      const timer = setInterval(() => {
+        current += increment;
+        if (current >= target) {
+          element.textContent = target.toLocaleString() + suffix;
+          clearInterval(timer);
+        } else {
+          element.textContent = Math.floor(current).toLocaleString() + suffix;
+        }
+      }, 20);
+    }
+
+    // Initialize counters when page loads
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        animateCounter('mealsServed', 250000, '+');
+        animateCounter('poundsRescued', 2000000, '+');
+        animateCounter('partnersHelped', 150, '+');
+      }, 500);
+    });
+
     // Form step navigation
     document.getElementById('nextBtn').addEventListener('click', function () {
       document.getElementById('interestSection').classList.remove('hidden');
@@ -357,6 +598,52 @@
     document.getElementById('backBtn').addEventListener('click', function () {
       document.getElementById('interestSection').classList.add('hidden');
       document.getElementById('nextBtn').parentElement.classList.remove('hidden');
+    });
+
+    // Form submission handler
+    document.addEventListener('DOMContentLoaded', () => {
+      const impactForm = document.querySelector('form');
+      if (impactForm) {
+        impactForm.addEventListener('submit', async function (e) {
+          e.preventDefault();
+
+          const formData = {
+            firstName: this.querySelector('input[type="text"]').value,
+            lastName: this.querySelectorAll('input[type="text"]')[1].value,
+            email: this.querySelector('input[type="email"]').value,
+            phone: this.querySelector('input[type="tel"]').value,
+            interests: Array.from(this.querySelectorAll('input[type="checkbox"]:checked'))
+              .map(cb => cb.nextElementSibling.textContent.trim())
+          };
+
+          try {
+            // Store in localStorage
+            const submissions = JSON.parse(localStorage.getItem('impactFormSubmissions') || '[]');
+            submissions.push({
+              ...formData,
+              timestamp: new Date().toISOString()
+            });
+            localStorage.setItem('impactFormSubmissions', JSON.stringify(submissions));
+
+            // Show success message
+            const successMsg = document.getElementById('formSuccess');
+            if (successMsg) {
+              successMsg.classList.remove('hidden');
+              setTimeout(() => successMsg.classList.add('hidden'), 5000);
+            }
+
+            // Reset form
+            this.reset();
+            document.getElementById('interestSection').classList.add('hidden');
+            document.getElementById('nextBtn').parentElement.classList.remove('hidden');
+
+            console.log('Form submitted successfully:', formData);
+          } catch (error) {
+            console.error('Error submitting form:', error);
+            alert('Thank you for your interest! We will be in touch soon.');
+          }
+        });
+      }
     });
 
     // Parallax scroll effect
@@ -382,8 +669,9 @@
   <!-- CTA Section -->
   <section class="gradient-bg hero-pattern py-20">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl md:text-5xl font-bold text-white mb-6">Be Part of Our Story</h2>
-      <p class="text-xl text-white/90 mb-8">
+      <h2 class="text-4xl md:text-5xl font-bold text-white mb-6 editable" data-editable="cta-title"
+        contenteditable="false">Be Part of Our Story</h2>
+      <p class="text-xl text-white/90 mb-8 editable" data-editable="cta-description" contenteditable="false">
         Every meal shared, every pound of food saved, every life touched—it all starts with you.
       </p>
       <div class="flex flex-col sm:flex-row gap-4 justify-center">
@@ -399,62 +687,690 @@
     </div>
   </section>
 
-  <!-- Footer -->
-  <footer class="bg-gray-900 text-white py-12">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div>
-          <h3 class="text-xl font-bold mb-4">Food Maps</h3>
-          <p class="text-gray-400">
-            AI-powered food distribution network connecting donors with recipients.
+  <!-- Newsletter Section -->
+  <section class="bg-white py-20">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div
+        class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 md:p-12 shadow-xl border border-green-100">
+        <div class="text-center mb-8">
+          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 editable" data-editable="newsletter-title"
+            contenteditable="false">
+            Stay Updated on Our Impact
+          </h2>
+          <p class="text-lg text-gray-600 editable" data-editable="newsletter-description" contenteditable="false">
+            Subscribe to our newsletter for inspiring stories, impact updates, and ways to get involved in fighting food
+            waste.
           </p>
         </div>
+
+        <form id="newsletterForm" class="max-w-2xl mx-auto">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
+              <input type="text" name="firstName" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="John">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
+              <input type="text" name="lastName" required
+                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                placeholder="Doe">
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
+            <input type="email" name="email" required
+              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+              placeholder="john@example.com">
+          </div>
+
+          <div class="mb-6">
+            <label class="flex items-start">
+              <input type="checkbox" name="consent" required
+                class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mt-1">
+              <span class="ml-2 text-sm text-gray-600">
+                I agree to receive updates and newsletters from Food Maps. You can unsubscribe at any time.
+              </span>
+            </label>
+          </div>
+
+          <div id="newsletterSuccess"
+            class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4 text-center">
+            <svg class="inline-block w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd"
+                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                clip-rule="evenodd" />
+            </svg>
+            <strong>Success!</strong> You've been subscribed to our newsletter.
+          </div>
+
+          <div id="newsletterError"
+            class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">
+            <strong>Error!</strong> Something went wrong. Please try again.
+          </div>
+
+          <button type="submit"
+            class="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all shadow-lg transform hover:scale-105">
+            Subscribe to Newsletter
+          </button>
+
+          <p class="text-xs text-gray-500 text-center mt-4">
+            We respect your privacy. Read our <a href="privacy.html"
+              class="text-green-600 hover:text-green-700 underline">Privacy Policy</a>.
+          </p>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer
+    class="bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 text-gray-300 py-16 relative overflow-hidden">
+    <!-- Background Pattern -->
+    <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 60" height="60" viewBox="0 0 60 60"
+      xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
+      fill-opacity="0.02" %3E%3Ccircle cx="30" cy="30" r="15" /%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-30"></div>
+
+    <div class="max-w-7xl mx-auto px-4 relative z-10">
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+        <div class="md:col-span-2">
+          <div class="flex flex-col items-start text-left mb-6">
+            <a href="https://allgoodlivingfoundation.org/" target="_blank" rel="noopener noreferrer"
+              class="transition-transform hover:scale-105">
+              <img src="/logos/AGLfoundationLOGO.png"
+                onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%228%22 fill=%22url(%23g)%22/%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%2310b981%22/%3E%3Cstop offset=%221%22 stop-color=%22%23059669%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Ctext x=%2232%22 y=%2244%22 font-size=%2232%22 text-anchor=%22middle%22%3E🍎%3C/text%3E%3C/svg%3E';"
+                alt="All Good Living Foundation" class="w-16 h-16 rounded-xl shadow-lg cursor-pointer">
+            </a>
+          </div>
+          <p class="text-gray-400 leading-relaxed max-w-md mb-6">
+            All Good Living Foundation is the community's safety net and spirit lifter, rolling up its
+            sleeves to support students and families who are facing the most challenging moments of their
+            lives. From school-based Community Closets to food access programs and youth-centered
+            initiatives, the foundation brings practical help, dignity, and genuine connection to Alameda,
+            Oakland, and other surrounding areas. It's simple: when our neighbors struggle, AGLF shows up —
+            and keeps showing up — to make sure no one is left behind.
+          </p>
+          <div class="flex space-x-4">
+            <a href="https://www.instagram.com/aglfoundation/" target="_blank"
+              class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors">
+              <div class="icon-instagram text-emerald-400 hover:text-white"></div>
+            </a>
+            <a href="https://www.facebook.com/aglfoundation" target="_blank"
+              class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors">
+              <div class="icon-facebook text-emerald-400 hover:text-white"></div>
+            </a>
+          </div>
+        </div>
+
         <div>
-          <h3 class="text-xl font-bold mb-4">Quick Links</h3>
-          <ul class="space-y-2">
-            <li><a href="landing.html" class="text-gray-400 hover:text-white transition-colors">Home</a></li>
-            <li><a href="index.html" class="text-gray-400 hover:text-white transition-colors">Platform</a></li>
-            <li><a href="privacy.html" class="text-gray-400 hover:text-white transition-colors">Privacy</a></li>
-            <li><a href="terms.html" class="text-gray-400 hover:text-white transition-colors">Terms</a></li>
+          <h4 class="text-white font-bold mb-6 text-lg">Get Involved</h4>
+          <ul class="space-y-3">
+            <li><a href="https://allgoodlivingfoundation.org/donate"
+                class="hover:text-emerald-400 transition-colors flex items-center group">
+                <div class="icon-gift mr-2 group-hover:scale-110 transition-transform"></div>
+                Donate
+              </a></li>
+            <li><a href="index.html" class="hover:text-emerald-400 transition-colors flex items-center group">
+                <div class="icon-heart mr-2 group-hover:scale-110 transition-transform"></div>
+                Share Food
+              </a></li>
+            <li><a href="https://allgoodlivingfoundation.org/volunteer-form"
+                class="hover:text-emerald-400 transition-colors flex items-center group">
+                <div class="icon-users mr-2 group-hover:scale-110 transition-transform"></div>
+                Volunteer
+              </a></li>
+            <li><a href="#faqs" class="hover:text-emerald-400 transition-colors flex items-center group">
+                <div class="icon-help-circle mr-2 group-hover:scale-110 transition-transform"></div>
+                FAQs
+              </a></li>
           </ul>
         </div>
+
         <div>
-          <h3 class="text-xl font-bold mb-4">Contact</h3>
-          <p class="text-gray-400">
-            Questions? Reach out to us<br>
-            support@foodmaps.org
-          </p>
+          <h4 class="text-white font-bold mb-6 text-lg">Contact</h4>
+          <ul class="space-y-3">
+            <li class="flex items-center group">
+              <div class="icon-mail mr-3 text-emerald-400 group-hover:scale-110 transition-transform"></div>
+              <a href="mailto:info@allgoodlivingfoundation.org"
+                class="hover:text-emerald-400 transition-colors">info@allgoodlivingfoundation.org</a>
+            </li>
+            <li class="flex items-center group">
+              <div class="icon-phone mr-3 text-emerald-400 group-hover:scale-110 transition-transform"></div>
+              <a href="tel:5105226288" class="hover:text-emerald-400 transition-colors">510-522-6288</a>
+            </li>
+            <li class="flex items-center group">
+              <div class="icon-map-pin mr-3 text-emerald-400 group-hover:scale-110 transition-transform"></div>
+              <a href="https://maps.google.com/?q=1900+Thau+Way,+Alameda,+CA+94501" target="_blank"
+                class="hover:text-emerald-400 transition-colors">1900 Thau Way, Alameda, CA 94501</a>
+            </li>
+          </ul>
         </div>
       </div>
-      <div class="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-        <p>&copy; 2025 Food Maps. All rights reserved.</p>
+
+      <div class="border-t border-gray-800 pt-8">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+          <p class="text-gray-400 mb-4 md:mb-0">
+            &copy; 2025 Food Maps. All rights reserved. Powered by AI for good.
+          </p>
+          <div class="flex space-x-6 text-sm">
+            <a href="https://dogoods.store/" target="_blank" rel="noopener noreferrer"
+              class="text-gray-400 hover:text-emerald-400 transition-colors">DoGoods Store</a>
+            <a href="privacy.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Privacy Policy</a>
+            <a href="terms.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Terms of Service</a>
+            <a href="cookies.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Cookie Policy</a>
+          </div>
+        </div>
       </div>
     </div>
   </footer>
 
-  <!-- Language Switcher Component -->
-  <script type="text/babel" src="components/LanguageSwitcher.js"></script>
-  <script type="text/babel">
-    // Initialize language system
-    document.addEventListener('DOMContentLoaded', () => {
-      window.i18n.initLanguageSystem();
+  <!-- Admin Edit Button -->
+  <button class="admin-edit-btn" id="adminEditBtn" onclick="toggleEditMode()" title="Admin Edit Mode">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+    </svg>
+  </button>
 
-      // Add language switcher to top right corner
-      const nav = document.createElement('div');
-      nav.className = 'fixed top-4 right-4 z-50';
-      nav.id = 'language-switcher-impact';
-      document.body.appendChild(nav);
+  <!-- Edit Toolbar -->
+  <div class="edit-toolbar" id="editToolbar">
+    <h3 class="font-bold text-gray-900 mb-3">Edit Mode Active</h3>
+    <p class="text-sm text-gray-600 mb-4">Click on any highlighted section to edit</p>
+    <button onclick="saveChanges()"
+      class="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors mb-2">
+      Save Changes
+    </button>
+    <button onclick="cancelEdit()"
+      class="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
+      Cancel
+    </button>
+  </div>
 
-      const root = ReactDOM.createRoot(nav);
-      root.render(<LanguageSwitcherCompact />);
+  <script>
+    let isEditMode = false;
+    let originalContent = {};
+    let originalImages = {};
+    let originalBackgrounds = {};
 
-      // Listen for language changes
-      window.addEventListener('languageChanged', () => {
-        window.i18n.translatePage();
+    function toggleEditMode() {
+      isEditMode = !isEditMode;
+      const body = document.body;
+      const btn = document.getElementById('adminEditBtn');
+
+      if (isEditMode) {
+        // Enter edit mode
+        body.classList.add('edit-mode');
+        btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
+
+        // Store original content
+        document.querySelectorAll('[data-editable]').forEach(el => {
+          const key = el.getAttribute('data-editable');
+          originalContent[key] = el.innerHTML;
+          el.setAttribute('contenteditable', 'true');
+        });
+
+        // Store original images
+        document.querySelectorAll('[data-editable-img]').forEach(el => {
+          const key = el.getAttribute('data-editable-img');
+          originalImages[key] = el.src;
+          // Add click handler for image editing
+          el.style.cursor = 'pointer';
+          el.style.border = '3px dashed #3b82f6';
+          el.onclick = () => editImage(key, el);
+        });
+
+        // Store original background images
+        document.querySelectorAll('[data-editable-bg]').forEach(el => {
+          const key = el.getAttribute('data-editable-bg');
+          const bgImage = el.style.backgroundImage;
+          originalBackgrounds[key] = bgImage;
+          // Add click handler for background editing
+          el.style.cursor = 'pointer';
+          el.style.outline = '3px dashed #3b82f6';
+          el.onclick = () => editBackgroundImage(key, el);
+        });
+      } else {
+        // Exit edit mode
+        body.classList.remove('edit-mode');
+        btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
+
+        document.querySelectorAll('[data-editable]').forEach(el => {
+          el.setAttribute('contenteditable', 'false');
+        });
+
+        document.querySelectorAll('[data-editable-img]').forEach(el => {
+          el.style.cursor = '';
+          el.style.border = '';
+          el.onclick = null;
+        });
+
+        document.querySelectorAll('[data-editable-bg]').forEach(el => {
+          el.style.cursor = '';
+          el.style.outline = '';
+          el.onclick = null;
+        });
+      }
+    }
+
+    function editImage(key, imgElement) {
+      const newUrl = prompt('Enter new image URL:', imgElement.src);
+      if (newUrl && newUrl.trim()) {
+        imgElement.src = newUrl.trim();
+      }
+    }
+
+    function editBackgroundImage(key, element) {
+      const currentBg = element.style.backgroundImage;
+      const currentUrl = currentBg.match(/url\(['"]?(.*?)['"]?\)/)?.[1] || '';
+      const newUrl = prompt('Enter new background image URL:', currentUrl);
+      if (newUrl && newUrl.trim()) {
+        element.style.backgroundImage = `url('${newUrl.trim()}')`;
+      }
+    }
+
+    function saveChanges() {
+      const changes = {};
+      let hasChanges = false;
+
+      // Save text content changes
+      document.querySelectorAll('[data-editable]').forEach(el => {
+        const key = el.getAttribute('data-editable');
+        const newContent = el.innerHTML;
+
+        if (originalContent[key] !== newContent) {
+          changes[key] = newContent;
+          hasChanges = true;
+        }
       });
+
+      // Save image changes
+      document.querySelectorAll('[data-editable-img]').forEach(el => {
+        const key = el.getAttribute('data-editable-img');
+        const newSrc = el.src;
+
+        if (originalImages[key] !== newSrc) {
+          changes[`img_${key}`] = newSrc;
+          hasChanges = true;
+        }
+      });
+
+      // Save background image changes
+      document.querySelectorAll('[data-editable-bg]').forEach(el => {
+        const key = el.getAttribute('data-editable-bg');
+        const newBg = el.style.backgroundImage;
+
+        if (originalBackgrounds[key] !== newBg) {
+          changes[`bg_${key}`] = newBg;
+          hasChanges = true;
+        }
+      });
+
+      if (hasChanges) {
+        // Save to localStorage
+        const savedContent = JSON.parse(localStorage.getItem('impactStoryContent') || '{}');
+        Object.assign(savedContent, changes);
+        localStorage.setItem('impactStoryContent', JSON.stringify(savedContent));
+
+        alert('Changes saved successfully!');
+        console.log('Saved changes:', changes);
+      } else {
+        alert('No changes to save.');
+      }
+
+      toggleEditMode();
+    }
+
+    function cancelEdit() {
+      // Restore original content
+      document.querySelectorAll('[data-editable]').forEach(el => {
+        const key = el.getAttribute('data-editable');
+        if (originalContent[key]) {
+          el.innerHTML = originalContent[key];
+        }
+      });
+
+      // Restore original images
+      document.querySelectorAll('[data-editable-img]').forEach(el => {
+        const key = el.getAttribute('data-editable-img');
+        if (originalImages[key]) {
+          el.src = originalImages[key];
+        }
+      });
+
+      // Restore original background images
+      document.querySelectorAll('[data-editable-bg]').forEach(el => {
+        const key = el.getAttribute('data-editable-bg');
+        if (originalBackgrounds[key]) {
+          el.style.backgroundImage = originalBackgrounds[key];
+        }
+      });
+
+      toggleEditMode();
+    }
+
+    // Load saved content on page load
+    document.addEventListener('DOMContentLoaded', function () {
+      const savedContent = JSON.parse(localStorage.getItem('impactStoryContent') || '{}');
+
+      Object.keys(savedContent).forEach(key => {
+        // Handle text content
+        if (!key.startsWith('img_') && !key.startsWith('bg_')) {
+          const el = document.querySelector(`[data-editable="${key}"]`);
+          if (el) {
+            el.innerHTML = savedContent[key];
+          }
+        }
+        // Handle images
+        else if (key.startsWith('img_')) {
+          const actualKey = key.substring(4); // Remove 'img_' prefix
+          const el = document.querySelector(`[data-editable-img="${actualKey}"]`);
+          if (el) {
+            el.src = savedContent[key];
+          }
+        }
+        // Handle background images
+        else if (key.startsWith('bg_')) {
+          const actualKey = key.substring(3); // Remove 'bg_' prefix
+          const el = document.querySelector(`[data-editable-bg="${actualKey}"]`);
+          if (el) {
+            el.style.backgroundImage = savedContent[key];
+          }
+        }
+      });
+    });
+
+    // Check for admin access from current_user
+    function checkAdminAccess() {
+      try {
+        const currentUser = JSON.parse(localStorage.getItem('current_user') || 'null');
+        const isAdmin = currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin';
+        const adminBtn = document.getElementById('adminEditBtn');
+
+        if (!isAdmin) {
+          adminBtn.style.display = 'none';
+        } else {
+          console.log('Admin access granted for user:', currentUser.email || currentUser.username);
+        }
+      } catch (error) {
+        console.error('Error checking admin access:', error);
+        const adminBtn = document.getElementById('adminEditBtn');
+        adminBtn.style.display = 'none';
+      }
+    }
+
+    // Run admin check
+    checkAdminAccess();
+
+    // Re-check admin access when user logs in/out
+    window.addEventListener('storage', function (e) {
+      if (e.key === 'current_user') {
+        checkAdminAccess();
+      }
+    });
+
+    // Newsletter form submission
+    document.addEventListener('DOMContentLoaded', function () {
+      const newsletterForm = document.getElementById('newsletterForm');
+
+      if (newsletterForm) {
+        newsletterForm.addEventListener('submit', async function (e) {
+          e.preventDefault();
+
+          const formData = {
+            firstName: this.querySelector('[name="firstName"]').value.trim(),
+            lastName: this.querySelector('[name="lastName"]').value.trim(),
+            email: this.querySelector('[name="email"]').value.trim(),
+            consent: this.querySelector('[name="consent"]').checked,
+            timestamp: new Date().toISOString(),
+            source: 'impact-story-page'
+          };
+
+          // Validate email
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(formData.email)) {
+            showNewsletterError('Please enter a valid email address.');
+            return;
+          }
+
+          try {
+            // Store in localStorage
+            const subscriptions = JSON.parse(localStorage.getItem('newsletterSubscriptions') || '[]');
+
+            // Check if already subscribed
+            const alreadySubscribed = subscriptions.some(sub => sub.email === formData.email);
+            if (alreadySubscribed) {
+              showNewsletterError('This email is already subscribed!');
+              return;
+            }
+
+            subscriptions.push(formData);
+            localStorage.setItem('newsletterSubscriptions', JSON.stringify(subscriptions));
+
+            // Show success message
+            showNewsletterSuccess();
+
+            // Reset form
+            this.reset();
+
+            console.log('Newsletter subscription:', formData);
+          } catch (error) {
+            console.error('Error submitting newsletter:', error);
+            showNewsletterError('Something went wrong. Please try again.');
+          }
+        });
+      }
+    });
+
+    function showNewsletterSuccess() {
+      const successMsg = document.getElementById('newsletterSuccess');
+      const errorMsg = document.getElementById('newsletterError');
+
+      errorMsg.classList.add('hidden');
+      successMsg.classList.remove('hidden');
+
+      setTimeout(() => {
+        successMsg.classList.add('hidden');
+      }, 5000);
+    }
+
+    function showNewsletterError(message) {
+      const successMsg = document.getElementById('newsletterSuccess');
+      const errorMsg = document.getElementById('newsletterError');
+
+      successMsg.classList.add('hidden');
+      errorMsg.classList.remove('hidden');
+
+      if (message) {
+        errorMsg.innerHTML = `<strong>Error!</strong> ${message}`;
+      }
+
+      setTimeout(() => {
+        errorMsg.classList.add('hidden');
+      }, 5000);
+    }
+  </script>
+
+  <!-- Stories Modal -->
+  <div id="storiesModal" class="modal">
+    <div class="modal-content">
+      <div class="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
+        <span class="close-modal" onclick="closeStoriesModal()">&times;</span>
+        <h2 class="text-3xl font-bold text-gray-900 editable" data-editable="modal-title" contenteditable="false">All
+          Impact Stories</h2>
+      </div>
+      <div class="p-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Story 1: Sarah -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop"
+              alt="Community Impact" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-sarah-title"
+              contenteditable="false">Sarah's Story: From Volunteer to Champion</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-sarah-content" contenteditable="false">
+              "I started as a volunteer driver, picking up surplus food from local restaurants. Now I coordinate our
+              entire network in the Bay Area. Seeing families receive fresh, nutritious meals—food that would have been
+              wasted—gives me purpose every single day. We're not just feeding people; we're building a community that
+              cares."
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-sarah-attribution" contenteditable="false">
+              <strong>— Sarah Martinez, Community Coordinator, Alameda</strong>
+            </p>
+          </div>
+
+          <!-- Story 2: Michael -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=800&auto=format&fit=crop"
+              alt="Food Distribution" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-michael-title"
+              contenteditable="false">Restaurant Partnership: A Win-Win Solution</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-michael-content" contenteditable="false">
+              "As a restaurant owner, I used to feel terrible about food waste at the end of each day. Food Maps
+              transformed that guilt into impact. Now, instead of throwing away perfectly good food, I know it's helping
+              families in our neighborhood. The platform makes it effortless—I post what I have, and within an hour,
+              it's
+              picked up and distributed."
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-michael-attribution" contenteditable="false">
+              <strong>— Michael Chen, Owner, Golden Wok Restaurant</strong>
+            </p>
+          </div>
+
+          <!-- Story 3: Food Bank Director -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=800&auto=format&fit=crop"
+              alt="Food Bank" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-foodbank-title"
+              contenteditable="false">Feeding 500 Families During the Holidays</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-foodbank-content" contenteditable="false">
+              "Food Maps helped us feed over 500 families during the holidays. The AI routing meant we could distribute
+              fresh food within 2 hours of donation—something that was impossible before. Thanks to our network of 150+
+              partners, we've prevented over 2 million pounds of food waste while providing
+              nutritious meals to families who need them most."
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-foodbank-attribution"
+              contenteditable="false"><strong>— Director of Community Services, Alameda County Food Bank</strong>
+            </p>
+          </div>
+
+          <!-- Story 4: Community Centers -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=800&auto=format&fit=crop"
+              alt="Community" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-community-title"
+              contenteditable="false">Serving 10,000 People Monthly</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-community-content" contenteditable="false">
+              Partnering with 45+ community centers across the Bay Area to provide fresh meals and groceries to families
+              in need. Our network ensures that nutritious food reaches those who need it most, creating lasting impact
+              in every neighborhood we serve.
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-community-attribution"
+              contenteditable="false"><strong>— Community Centers Impact Report</strong></p>
+          </div>
+
+          <!-- Story 5: Restaurant Network -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=800&auto=format&fit=crop"
+              alt="Food Distribution" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-restaurant-title"
+              contenteditable="false">200+ Restaurant Partners</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-restaurant-content" contenteditable="false">
+              Working with restaurants and grocers across the region to rescue surplus food daily. Our AI routing
+              ensures food reaches
+              recipients within 60 minutes of donation, maintaining freshness and quality while reducing waste.
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-restaurant-attribution"
+              contenteditable="false"><strong>— Restaurant Partnership Program</strong></p>
+          </div>
+
+          <!-- Story 6: Environmental Impact -->
+          <div class="bg-gray-50 rounded-xl p-6">
+            <img src="https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=800&auto=format&fit=crop"
+              alt="Impact" class="rounded-xl w-full h-48 object-cover mb-4">
+            <h3 class="text-2xl font-bold text-gray-900 mb-3 editable" data-editable="modal-environment-title"
+              contenteditable="false">Saving the Planet, One Meal at a Time</h3>
+            <p class="text-gray-600 mb-4 editable" data-editable="modal-environment-content" contenteditable="false">
+              By preventing food waste, we've reduced over 1,200 tons of CO2 emissions and conserved resources
+              equivalent
+              to 30 million gallons of water. Every meal saved is a step toward a more sustainable future for our
+              communities.
+            </p>
+            <p class="text-sm text-gray-500 editable" data-editable="modal-environment-attribution"
+              contenteditable="false"><strong>— Environmental Impact Assessment</strong></p>
+          </div>
+        </div>
+
+        <div class="text-center mt-8">
+          <button onclick="window.location.href='index.html'"
+            class="bg-green-600 text-white px-8 py-4 rounded-xl font-semibold hover:bg-green-700 transition-colors">
+            Join Our Network
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function openStoriesModal() {
+      document.getElementById('storiesModal').classList.add('show');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeStoriesModal() {
+      document.getElementById('storiesModal').classList.remove('show');
+      document.body.style.overflow = 'auto';
+    }
+
+    // Close modal when clicking outside
+    window.onclick = function (event) {
+      const modal = document.getElementById('storiesModal');
+      if (event.target === modal) {
+        closeStoriesModal();
+      }
+    }
+
+    // Close modal with Escape key
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        closeStoriesModal();
+      }
     });
   </script>
 
+  <!-- Mobile menu toggle functionality -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+      const mobileMenu = document.getElementById('mobile-menu');
+
+      if (mobileMenuBtn && mobileMenu) {
+        mobileMenuBtn.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+
+          const isHidden = mobileMenu.classList.contains('hidden');
+
+          if (isHidden) {
+            mobileMenu.classList.remove('hidden');
+            mobileMenuBtn.innerHTML = '<div class=\"icon-x text-2xl\"></div>';
+          } else {
+            mobileMenu.classList.add('hidden');
+            mobileMenuBtn.innerHTML = '<div class=\"icon-menu text-2xl\"></div>';
+          }
+        });
+
+        // Close menu when clicking outside
+        document.addEventListener('click', function (e) {
+          if (!mobileMenu.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+            mobileMenu.classList.add('hidden');
+            mobileMenuBtn.innerHTML = '<div class=\"icon-menu text-2xl\"></div>';
+          }
+        });
+      }
+    });
+  </script>
 </body>
 
 </html>

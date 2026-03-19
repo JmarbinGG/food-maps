@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Meal Suggestions Test - Food Maps</title>
+  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+  <script crossorigin
+    src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+  <div class="min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg p-8 mb-8 shadow-lg">
+        <h1 class="text-4xl font-bold mb-2">👨‍🍳 Smart Meal Suggestions Test</h1>
+        <p class="text-lg opacity-90">Prevent waste with AI-powered meal ideas using expiring items</p>
+      </div>
+
+      <!-- Feature Description -->
+      <div class="bg-white rounded-lg p-6 mb-8 shadow">
+        <h2 class="text-2xl font-bold mb-4">What This Does:</h2>
+        <div class="space-y-3 text-gray-700">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">🎯</span>
+            <div>
+              <strong>Not "fancy recipes"</strong> - Practical meals: "You've got chicken + greens expiring soon, here's
+              a 15-minute meal."
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">🛡️</span>
+            <div>
+              <strong>Safety first</strong> - Only suggests food that's still safe to eat, with clear timing warnings
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">✨</span>
+            <div>
+              <strong>Dignity</strong> - Real meals that feel normal and satisfying, not "survival food"
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">🥗</span>
+            <div>
+              <strong>Nutrition</strong> - Balanced combinations: protein + vegetables, grains + greens
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">⏱️</span>
+            <div>
+              <strong>Quick & simple</strong> - 5-20 minute meals, easy steps, no special equipment
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Button -->
+      <div id="root"></div>
+    </div>
+  </div>
+
+  <script type="text/babel" src="components/SmartMealSuggestions.js"></script>
+
+  <script type="text/babel">
+    const TestApp = () => {
+      const [showModal, setShowModal] = React.useState(false);
+
+      // Mock user
+      const mockUser = {
+        id: 1,
+        name: "Test User",
+        role: "recipient"
+      };
+
+      // Mock claimed listings with various expiration dates
+      const now = new Date();
+      const mockListings = [
+        {
+          id: 1,
+          title: "Grilled Chicken Breast",
+          description: "Fresh grilled chicken, ready to eat",
+          category: "prepared",
+          qty: "2",
+          unit: "pieces",
+          perishability: "high",
+          expiration_date: new Date(now.getTime() + 18 * 60 * 60 * 1000).toISOString(), // 18 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 2,
+          title: "Mixed Greens Salad",
+          description: "Fresh lettuce and spinach mix",
+          category: "produce",
+          qty: "1",
+          unit: "bag",
+          perishability: "high",
+          expiration_date: new Date(now.getTime() + 36 * 60 * 60 * 1000).toISOString(), // 36 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 3,
+          title: "Cherry Tomatoes",
+          description: "Fresh cherry tomatoes",
+          category: "produce",
+          qty: "1",
+          unit: "pint",
+          perishability: "medium",
+          expiration_date: new Date(now.getTime() + 48 * 60 * 60 * 1000).toISOString(), // 48 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 4,
+          title: "Whole Wheat Bread",
+          description: "Freshly baked whole wheat bread",
+          category: "bakery",
+          qty: "1",
+          unit: "loaf",
+          perishability: "medium",
+          expiration_date: new Date(now.getTime() + 60 * 60 * 60 * 1000).toISOString(), // 60 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 5,
+          title: "Fresh Carrots",
+          description: "Organic carrots",
+          category: "produce",
+          qty: "1",
+          unit: "lb",
+          perishability: "low",
+          expiration_date: new Date(now.getTime() + 72 * 60 * 60 * 1000).toISOString(), // 72 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 6,
+          title: "Brown Rice (Cooked)",
+          description: "Pre-cooked brown rice, ready to reheat",
+          category: "prepared",
+          qty: "2",
+          unit: "cups",
+          perishability: "high",
+          expiration_date: new Date(now.getTime() + 30 * 60 * 60 * 1000).toISOString(), // 30 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 7,
+          title: "Fresh Strawberries",
+          description: "Sweet strawberries",
+          category: "fruit",
+          qty: "1",
+          unit: "pint",
+          perishability: "high",
+          expiration_date: new Date(now.getTime() + 40 * 60 * 60 * 1000).toISOString(), // 40 hours
+          status: "claimed",
+          claimed_by: 1
+        },
+        {
+          id: 8,
+          title: "Plain Yogurt",
+          description: "Greek yogurt",
+          category: "dairy",
+          qty: "1",
+          unit: "container",
+          perishability: "medium",
+          expiration_date: new Date(now.getTime() + 96 * 60 * 60 * 1000).toISOString(), // 96 hours
+          status: "claimed",
+          claimed_by: 1
+        }
+      ];
+
+      return (
+        <div>
+          {/* Info Card */}
+          <div class="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-6 mb-6">
+            <h3 class="text-xl font-bold text-blue-900 mb-3">Test Scenario:</h3>
+            <p class="text-blue-800 mb-4">
+              You have 8 claimed items expiring within the next 3 days:
+            </p>
+            <div class="grid grid-cols-2 gap-3 text-sm">
+              <div class="bg-white p-3 rounded">
+                <strong>Critical (18h):</strong> Grilled Chicken
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>High (30h):</strong> Cooked Rice
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>High (36h):</strong> Mixed Greens
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>High (40h):</strong> Strawberries
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>Medium (48h):</strong> Tomatoes
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>Medium (60h):</strong> Bread
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>Low (72h):</strong> Carrots
+              </div>
+              <div class="bg-white p-3 rounded">
+                <strong>Medium (96h):</strong> Yogurt
+              </div>
+            </div>
+          </div>
+
+          {/* Test Button */}
+          <button
+            onClick={() => setShowModal(true)}
+            className="w-full bg-gradient-to-r from-green-600 to-blue-600 text-white px-8 py-4 rounded-lg font-bold text-lg hover:shadow-lg transition-all"
+          >
+            🎯 Show Smart Meal Suggestions
+          </button>
+
+          {/* Expected Suggestions */}
+          <div class="mt-6 bg-white rounded-lg p-6 shadow">
+            <h3 class="text-lg font-bold mb-3">What AI Should Suggest:</h3>
+            <div class="space-y-2 text-sm text-gray-700">
+              <div class="flex items-start gap-2">
+                <span class="text-green-600 font-bold">1.</span>
+                <span><strong>Quick Protein Salad</strong> - Chicken + greens + tomatoes (15-min, no cooking)</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-green-600 font-bold">2.</span>
+                <span><strong>Protein & Veggie Stir-Fry</strong> - Chicken + carrots + tomatoes over rice (15-min)</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-green-600 font-bold">3.</span>
+                <span><strong>Veggie & Grain Bowl</strong> - Carrots + tomatoes + rice (20-min)</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-green-600 font-bold">4.</span>
+                <span><strong>Big Fresh Salad</strong> - Greens + carrots + tomatoes (10-min, no cooking)</span>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="text-green-600 font-bold">5.</span>
+                <span><strong>Loaded Sandwich</strong> - Bread + chicken + greens + tomatoes (5-min)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal */}
+          {showModal && (
+            <SmartMealSuggestions
+              user={mockUser}
+              claimedListings={mockListings}
+              onClose={() => setShowModal(false)}
+            />
+          )}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TestApp />);
+  </script>
+</body>
+
+</html>

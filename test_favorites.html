@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Favorites Feature</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body>
+    <div id="root"></div>
+    <script src="/components/FavoritesPanel.js"></script>
+    <script type="text/babel">
+        function TestApp() {
+            const [showFavorites, setShowFavorites] = React.useState(false);
+            const [token, setToken] = React.useState(localStorage.getItem('token') || '');
+
+            React.useEffect(() => {
+                if (token) {
+                    localStorage.setItem('token', token);
+                }
+            }, [token]);
+
+            return (
+                <div className="p-8">
+                    <h1 className="text-3xl font-bold mb-4">Favorites Feature Test</h1>
+                    
+                    {!token ? (
+                        <div className="mb-4">
+                            <p className="mb-2">Enter your auth token:</p>
+                            <input 
+                                type="text" 
+                                className="border p-2 w-full mb-2"
+                                placeholder="Paste your JWT token here"
+                                value={token}
+                                onChange={(e) => setToken(e.target.value)}
+                            />
+                            <p className="text-sm text-gray-600">
+                                Get your token by logging in at <a href="/" className="text-blue-600">the main app</a> 
+                                and checking localStorage.token in browser console
+                            </p>
+                        </div>
+                    ) : (
+                        <div>
+                            <button 
+                                onClick={() => setShowFavorites(true)}
+                                className="bg-yellow-500 text-white px-6 py-3 rounded-lg hover:bg-yellow-600"
+                            >
+                                ⭐ Open Favorites Panel
+                            </button>
+                            <button 
+                                onClick={() => {
+                                    localStorage.removeItem('token');
+                                    setToken('');
+                                }}
+                                className="ml-4 bg-gray-500 text-white px-6 py-3 rounded-lg hover:bg-gray-600"
+                            >
+                                Clear Token
+                            </button>
+                        </div>
+                    )}
+
+                    {showFavorites && token && (
+                        <window.FavoritesPanel onClose={() => setShowFavorites(false)} />
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<TestApp />, document.getElementById('root'));
+    </script>
+</body>
+</html>

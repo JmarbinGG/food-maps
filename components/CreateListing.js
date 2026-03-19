@@ -1,4 +1,5 @@
 function CreateListing({ user, onCancel, onSuccess }) {
+  const [step, setStep] = React.useState(1); // 1 = basic info, 2 = safety checklist
   const [formData, setFormData] = React.useState({
     title: '',
     description: '',
@@ -11,6 +12,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
     pickup_window_start: '',
     pickup_window_end: ''
   });
+  const [safetyData, setSafetyData] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [errors, setErrors] = React.useState({});
   // Address (Mapbox Autofill element)
@@ -72,7 +74,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
   React.useEffect(() => {
     setAddressQuery(formData.address || '');
     setAddressSelected(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Listen to Mapbox Autofill "retrieve" event to capture the selected result
@@ -114,11 +116,11 @@ function CreateListing({ user, onCancel, onSuccess }) {
           }, 0);
           if (errors.address) setErrors({ ...errors, address: null });
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     el.addEventListener('retrieve', handleRetrieve);
     return () => {
-      try { el.removeEventListener('retrieve', handleRetrieve); } catch (_) {}
+      try { el.removeEventListener('retrieve', handleRetrieve); } catch (_) { }
     };
   }, [errors.address, formatFullAddressFromFeature]);
 
@@ -135,21 +137,21 @@ function CreateListing({ user, onCancel, onSuccess }) {
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.title.trim()) newErrors.title = 'Title is required';
     if (!formData.qty || formData.qty <= 0) newErrors.qty = 'Valid quantity is required';
-  if (!String(formData.address || '').trim()) newErrors.address = 'Pickup address is required';
+    if (!String(formData.address || '').trim()) newErrors.address = 'Pickup address is required';
     if (!formData.pickup_window_start) newErrors.pickup_window_start = 'Start time is required';
     if (!formData.pickup_window_end) newErrors.pickup_window_end = 'End time is required';
-    
+
     const now = new Date();
     const startTime = new Date(formData.pickup_window_start);
     const endTime = new Date(formData.pickup_window_end);
-    
+
     if (startTime <= now) {
       newErrors.pickup_window_start = 'Pickup must be in the future';
     }
-    
+
     if (endTime <= startTime) {
       newErrors.pickup_window_end = 'End time must be after start time';
     }
@@ -160,18 +162,27 @@ function CreateListing({ user, onCancel, onSuccess }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Step 1: Validate basic form and move to safety checklist
+    if (step === 1) {
+      if (!validateForm() || !user) return;
+      setStep(2); // Move to safety checklist
+      return;
+    }
+
+    // Step 2: Submit with safety data
     if (!validateForm() || !user) return;
     setIsSubmitting(true);
     // Require auth token (server needs to tie phone to an authenticated donor)
     try {
       const token = localStorage.getItem('auth_token');
       if (!token) {
-  if (typeof window.showAlert === 'function') window.showAlert('Please sign in as a donor to create a listing.', { title: 'Sign in required', variant: 'error' });
-        try { if (typeof window.openAuthModal === 'function') window.openAuthModal(); } catch (_) {}
+        if (typeof window.showAlert === 'function') window.showAlert('Please sign in as a donor to create a listing.', { title: 'Sign in required', variant: 'error' });
+        try { if (typeof window.openAuthModal === 'function') window.openAuthModal(); } catch (_) { }
         setIsSubmitting(false);
         return;
       }
-    } catch (_) {}
+    } catch (_) { }
     // Ensure donor has a phone number before allowing listing creation
     try {
       if (window.userAPI && typeof window.userAPI.getMeV2 === 'function') {
@@ -204,7 +215,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
         const recomposed = fromFeatPreferred || formatFullAddressFromFeature(addressSelected.feature) || addressSelected.place_name || '';
         if (recomposed) finalAddress = recomposed;
       }
-    } catch (_) {}
+    } catch (_) { }
 
     const urlParams = new URLSearchParams({
       donor_id: JSON.parse(localStorage.getItem("current_user"))['id'],
@@ -230,7 +241,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
             return;
           }
         }
-      } catch (_) {}
+      } catch (_) { }
 
       const payload = {
         donor_id: JSON.parse(localStorage.getItem('current_user'))['id'],
@@ -247,8 +258,42 @@ function CreateListing({ user, onCancel, onSuccess }) {
 
       let res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
       if (res && res.success) {
-  console.log('Created listing:', res.data || res);
-  if (typeof window.showAlert === 'function') window.showAlert('Listing created successfully!', { title: 'Success', variant: 'success' });
+        console.log('Created listing:', res.data || res);
+
+        // Submit safety checklist if provided
+        if (safetyData && res.listing && res.listing.id) {
+          try {
+            const safetyPayload = {
+              listing_id: res.listing.id,
+              storage_temperature: safetyData.storageTemperature || null,
+              is_refrigerated: safetyData.isRefrigerated || false,
+              is_frozen: safetyData.isFrozen || false,
+              packaging_condition: safetyData.packagingCondition || 'good',
+              safety_score: safetyData.safetyScore || 0,
+              safety_notes: safetyData.safetyNotes || null
+            };
+
+            const token = localStorage.getItem('auth_token');
+            const safetyRes = await fetch('/api/food/safety-check', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Authorization': `Bearer ${token}`
+              },
+              body: new URLSearchParams(safetyPayload).toString()
+            });
+
+            if (!safetyRes.ok) {
+              console.warn('Safety check submission failed:', await safetyRes.text());
+            } else {
+              console.log('Safety check submitted successfully');
+            }
+          } catch (safetyError) {
+            console.warn('Failed to submit safety checklist:', safetyError);
+          }
+        }
+
+        if (typeof window.showAlert === 'function') window.showAlert('Listing created successfully!', { title: 'Success', variant: 'success' });
         onSuccess();
       } else {
         let err = (res && res.error) || 'Failed to create listing';
@@ -270,11 +315,11 @@ function CreateListing({ user, onCancel, onSuccess }) {
             }
           }
         }
-  if (typeof window.showAlert === 'function') window.showAlert('Failed to create listing. ' + err, { title: 'Error', variant: 'error' });
+        if (typeof window.showAlert === 'function') window.showAlert('Failed to create listing. ' + err, { title: 'Error', variant: 'error' });
       }
     } catch (error) {
       console.error('Error creating listing:', error);
-  if (typeof window.showAlert === 'function') window.showAlert('Failed to create listing. ' + (error?.message || 'Please try again.'), { title: 'Error', variant: 'error' });
+      if (typeof window.showAlert === 'function') window.showAlert('Failed to create listing. ' + (error?.message || 'Please try again.'), { title: 'Error', variant: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -297,206 +342,283 @@ function CreateListing({ user, onCancel, onSuccess }) {
         <div className="max-w-2xl mx-auto">
           <div className="bg-white rounded-lg shadow-sm border border-[var(--border-color)] p-6">
             <div className="flex items-center justify-between mb-6">
-              <h1 className="text-2xl font-bold text-[var(--text-primary)]">Share Food</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-[var(--text-primary)]">Share Food</h1>
+                <div className="flex items-center mt-2 space-x-4">
+                  <div className={`flex items-center space-x-2 ${step >= 1 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>1</div>
+                    <span className="text-sm font-medium">Basic Info</span>
+                  </div>
+                  <div className="flex-1 h-0.5 bg-gray-200" />
+                  <div className={`flex items-center space-x-2 ${step >= 2 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-gray-200'}`}>2</div>
+                    <span className="text-sm font-medium">Safety Check</span>
+                  </div>
+                </div>
+              </div>
               <button onClick={onCancel} className="btn-secondary">
                 <div className="icon-x text-lg mr-2"></div>
                 Cancel
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Title *
-                </label>
-                <input
-                  type="text"
-                  value={formData.title}
-                  onChange={(e) => handleInputChange('title', e.target.value)}
-                  className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  placeholder="e.g., Fresh vegetables from community garden"
-                />
-                {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => handleInputChange('description', e.target.value)}
-                  rows={3}
-                  className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  placeholder="Describe the food items..."
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {step === 1 && (
+              <form onSubmit={handleSubmit} className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Category *
+                    Title *
                   </label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => handleInputChange('category', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  >
-                    {categories.map(cat => (
-                      <option key={cat.value} value={cat.value}>{cat.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Perishability
-                  </label>
-                  <select
-                    value={formData.perishability}
-                    onChange={(e) => handleInputChange('perishability', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  >
-                    {perishabilityLevels.map(level => (
-                      <option key={level.value} value={level.value}>{level.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Quantity *
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={formData.qty}
-                    onChange={(e) => handleInputChange('qty', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  />
-                  {errors.qty && <p className="text-red-500 text-sm mt-1">{errors.qty}</p>}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Unit
-                  </label>
-                  <select
-                    value={formData.unit}
-                    onChange={(e) => handleInputChange('unit', e.target.value)}
-                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                  >
-                    <option value="lbs">Pounds</option>
-                    <option value="items">Items</option>
-                    <option value="servings">Servings</option>
-                    <option value="oz">Ounces</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="relative">
-                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                  Pickup Address *
-                </label>
-                <mapbox-address-autofill
-                  ref={autofillRef}
-                  access-token={window.MAPBOX_ACCESS_TOKEN || ''}
-                  options='{"language":"en"}'
-                >
                   <input
                     type="text"
-                    autoComplete="street-address"
-                    value={addressQuery}
-                    onChange={(e) => {
-                      if (suppressNextChange.current) return;
-                      setAddressQuery(e.target.value);
-                      setAddressSelected(null);
-                      setFormData(prev => ({ ...prev, address: e.target.value }));
-                    }}
+                    value={formData.title}
+                    onChange={(e) => handleInputChange('title', e.target.value)}
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                    placeholder="Search address with Mapbox"
+                    placeholder="e.g., Fresh vegetables from community garden"
                   />
-                </mapbox-address-autofill>
-                {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Pickup Window Start *
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="datetime-local"
-                      value={formData.pickup_window_start}
-                      onChange={(e) => handleInputChange('pickup_window_start', e.target.value)}
-                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
-                    />
-                    <button
-                      type="button"
-                      className="btn-secondary whitespace-nowrap"
-                      onClick={() => {
-                        // Set to now rounded up to the next 5 minutes for nicer times
-                        const now = new Date();
-                        const ms = 1000 * 60 * 5; // 5 minutes
-                        const rounded = new Date(Math.ceil(now.getTime() / ms) * ms);
-                        handleInputChange('pickup_window_start', toLocalInput(rounded));
-                      }}
-                    >
-                      Now
-                    </button>
-                  </div>
-                  {errors.pickup_window_start && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_start}</p>}
+                  {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
-                    Pickup Window End *
+                    Description
                   </label>
-                  <div className="flex gap-2">
+                  <textarea
+                    value={formData.description}
+                    onChange={(e) => handleInputChange('description', e.target.value)}
+                    rows={3}
+                    className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    placeholder="Describe the food items..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Category *
+                    </label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => handleInputChange('category', e.target.value)}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    >
+                      {categories.map(cat => (
+                        <option key={cat.value} value={cat.value}>{cat.label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Perishability
+                    </label>
+                    <select
+                      value={formData.perishability}
+                      onChange={(e) => handleInputChange('perishability', e.target.value)}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    >
+                      {perishabilityLevels.map(level => (
+                        <option key={level.value} value={level.value}>{level.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Quantity *
+                    </label>
                     <input
-                      type="datetime-local"
-                      value={formData.pickup_window_end}
-                      onChange={(e) => handleInputChange('pickup_window_end', e.target.value)}
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={formData.qty}
+                      onChange={(e) => handleInputChange('qty', e.target.value)}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     />
-                    <button
-                      type="button"
-                      className="btn-secondary whitespace-nowrap"
-                      onClick={() => {
-                        // Convenience: if start set, end = start + 2h; else now + 2h
-                        const base = formData.pickup_window_start ? new Date(formData.pickup_window_start) : new Date();
-                        base.setHours(base.getHours() + 2);
-                        handleInputChange('pickup_window_end', toLocalInput(base));
-                      }}
-                    >
-                      +2h
-                    </button>
+                    {errors.qty && <p className="text-red-500 text-sm mt-1">{errors.qty}</p>}
                   </div>
-                  {errors.pickup_window_end && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_end}</p>}
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Unit
+                    </label>
+                    <select
+                      value={formData.unit}
+                      onChange={(e) => handleInputChange('unit', e.target.value)}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                    >
+                      <option value="lbs">Pounds</option>
+                      <option value="items">Items</option>
+                      <option value="servings">Servings</option>
+                      <option value="oz">Ounces</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    Pickup Address *
+                  </label>
+                  <mapbox-address-autofill
+                    ref={autofillRef}
+                    access-token={window.MAPBOX_ACCESS_TOKEN || ''}
+                    options='{"language":"en"}'
+                  >
+                    <input
+                      type="text"
+                      autoComplete="street-address"
+                      value={addressQuery}
+                      onChange={(e) => {
+                        if (suppressNextChange.current) return;
+                        setAddressQuery(e.target.value);
+                        setAddressSelected(null);
+                        setFormData(prev => ({ ...prev, address: e.target.value }));
+                      }}
+                      className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      placeholder="Search address with Mapbox"
+                    />
+                  </mapbox-address-autofill>
+                  {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
+
+                  {/* Display full selected address */}
+                  {addressSelected && formData.address && (
+                    <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-start gap-2">
+                        <span className="text-green-600 text-lg">📍</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-green-900">Selected Address:</p>
+                          <p className="text-sm text-green-700 mt-1">{formData.address}</p>
+                          {addressSelected.center && addressSelected.center.length === 2 && (
+                            <p className="text-xs text-green-600 mt-1">
+                              Coordinates: {addressSelected.center[1].toFixed(6)}, {addressSelected.center[0].toFixed(6)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Pickup Window Start *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="datetime-local"
+                        value={formData.pickup_window_start}
+                        onChange={(e) => handleInputChange('pickup_window_start', e.target.value)}
+                        className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary whitespace-nowrap"
+                        onClick={() => {
+                          // Set to now rounded up to the next 5 minutes for nicer times
+                          const now = new Date();
+                          const ms = 1000 * 60 * 5; // 5 minutes
+                          const rounded = new Date(Math.ceil(now.getTime() / ms) * ms);
+                          handleInputChange('pickup_window_start', toLocalInput(rounded));
+                        }}
+                      >
+                        Now
+                      </button>
+                    </div>
+                    {errors.pickup_window_start && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_start}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                      Pickup Window End *
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="datetime-local"
+                        value={formData.pickup_window_end}
+                        onChange={(e) => handleInputChange('pickup_window_end', e.target.value)}
+                        className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      />
+                      <button
+                        type="button"
+                        className="btn-secondary whitespace-nowrap"
+                        onClick={() => {
+                          // Convenience: if start set, end = start + 2h; else now + 2h
+                          const base = formData.pickup_window_start ? new Date(formData.pickup_window_start) : new Date();
+                          base.setHours(base.getHours() + 2);
+                          handleInputChange('pickup_window_end', toLocalInput(base));
+                        }}
+                      >
+                        +2h
+                      </button>
+                    </div>
+                    {errors.pickup_window_end && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_end}</p>}
+                  </div>
+                </div>
+
+                <div className="flex space-x-4 pt-4">
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="btn-secondary"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-primary flex-1"
+                  >
+                    Continue to Safety Check →
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {step === 2 && (
+              <div>
+                {window.FoodSafetyChecklist && React.createElement(window.FoodSafetyChecklist, {
+                  foodItem: {
+                    ...formData,
+                    category: formData.category.charAt(0).toUpperCase() + formData.category.slice(1),
+                    expiration_date: formData.expiration_date
+                  },
+                  onSafetyUpdate: (data) => {
+                    setSafetyData(data);
+                    // Auto-submit the form after safety check is complete
+                    setTimeout(() => {
+                      const fakeEvent = { preventDefault: () => { } };
+                      handleSubmit(fakeEvent);
+                    }, 100);
+                  },
+                  mode: 'create'
+                })}
+
+                <div className="flex space-x-4 pt-4 mt-6">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="btn-secondary"
+                    disabled={isSubmitting}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      // Skip safety check
+                      setSafetyData(null);
+                      const fakeEvent = { preventDefault: () => { } };
+                      handleSubmit(fakeEvent);
+                    }}
+                    className="btn-secondary"
+                    disabled={isSubmitting}
+                  >
+                    Skip Safety Check
+                  </button>
                 </div>
               </div>
-
-              <div className="flex space-x-4 pt-4">
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="btn-primary flex-1 disabled:opacity-50"
-                >
-                  {isSubmitting ? 'Creating...' : 'Create Listing'}
-                </button>
-                <button
-                  type="button"
-                  onClick={onCancel}
-                  className="btn-secondary"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
+            )}
           </div>
         </div>
       </div>

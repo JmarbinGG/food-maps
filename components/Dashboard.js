@@ -3,6 +3,43 @@ function Dashboard({ user, onViewChange }) {
   const [userListings, setUserListings] = React.useState([]);
   const [userTransactions, setUserTransactions] = React.useState([]);
   const [volunteerTasks, setVolunteerTasks] = React.useState([]);
+  const [recommendedListings, setRecommendedListings] = React.useState([]);
+  const [loadingRecommended, setLoadingRecommended] = React.useState(false);
+
+  // API base URL
+  const API_BASE_URL = window.location.hostname === 'localhost'
+    ? 'http://localhost:8000'
+    : 'https://api.foodmaps.com';
+
+  // Load recommended listings for recipients
+  React.useEffect(() => {
+    if (user?.role === 'recipient') {
+      loadRecommendedListings();
+    }
+  }, [user]);
+
+  const loadRecommendedListings = async () => {
+    setLoadingRecommended(true);
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/api/listings/recommended`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecommendedListings(data.slice(0, 5)); // Show top 5
+      }
+    } catch (error) {
+      console.error('Failed to load recommended listings:', error);
+    } finally {
+      setLoadingRecommended(false);
+    }
+  };
 
   React.useEffect(() => {
     if (user) {
@@ -23,7 +60,7 @@ function Dashboard({ user, onViewChange }) {
         }
       ]);
     }
-    
+
     if (user.role === 'recipient') {
       setUserTransactions([
         {
@@ -34,7 +71,7 @@ function Dashboard({ user, onViewChange }) {
         }
       ]);
     }
-    
+
     if (user.role === 'volunteer') {
       setVolunteerTasks([
         {
@@ -62,7 +99,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -74,7 +111,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -96,7 +133,7 @@ function Dashboard({ user, onViewChange }) {
             Add Listing
           </button>
         </div>
-        
+
         <div className="space-y-3">
           {userListings.map(listing => (
             <div key={listing.id} className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
@@ -112,7 +149,7 @@ function Dashboard({ user, onViewChange }) {
               </div>
             </div>
           ))}
-          
+
           {userListings.length === 0 && (
             <div className="text-center py-8 text-[var(--text-secondary)]">
               <div className="icon-package text-3xl mb-2"></div>
@@ -129,6 +166,29 @@ function Dashboard({ user, onViewChange }) {
 
   const renderRecipientDashboard = () => (
     <div className="space-y-6">
+      {/* Meal Builder Button */}
+      <div className="card p-0 overflow-hidden">
+        {window.MealBuilderButton ?
+          React.createElement(window.MealBuilderButton, {
+            onClick: () => window.location.href = '/meal-builder.html'
+          }) :
+          <button
+            onClick={() => window.location.href = '/meal-builder.html'}
+            className="w-full p-4 bg-gradient-to-r from-green-500 to-blue-500 text-white hover:shadow-lg transition-all flex items-center justify-between"
+            type="button"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-3xl">🍳</span>
+              <div className="text-left">
+                <div className="font-bold text-lg">AI Meal Builder</div>
+                <div className="text-sm opacity-90">Turn your food into meals</div>
+              </div>
+            </div>
+            <span className="text-2xl">→</span>
+          </button>
+        }
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card">
           <div className="flex items-center space-x-3">
@@ -141,7 +201,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -153,7 +213,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -167,9 +227,75 @@ function Dashboard({ user, onViewChange }) {
         </div>
       </div>
 
+      {/* Recommended Listings */}
+      <div className="card">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]">🥗 Recommended for You</h3>
+          <button
+            onClick={() => window.openDietaryPreferences?.()}
+            className="text-sm text-[var(--primary-color)] hover:underline"
+          >
+            Update Preferences
+          </button>
+        </div>
+
+        {loadingRecommended ? (
+          <div className="text-center py-8 text-[var(--text-secondary)]">
+            <div className="animate-spin h-8 w-8 border-4 border-[var(--primary-color)] border-t-transparent rounded-full mx-auto mb-2"></div>
+            <p>Loading recommendations...</p>
+          </div>
+        ) : recommendedListings.length > 0 ? (
+          <div className="space-y-3">
+            {recommendedListings.map(listing => (
+              <div
+                key={listing.id}
+                className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg hover:border-[var(--primary-color)] transition-colors cursor-pointer"
+                onClick={() => onViewChange?.('map')}
+              >
+                <div className="flex-1">
+                  <h4 className="font-medium text-[var(--text-primary)]">{listing.title}</h4>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    {listing.qty} {listing.unit} • {listing.category}
+                  </p>
+                  {listing.match_score && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <div className="h-2 w-24 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-green-500 to-green-600"
+                          style={{ width: `${listing.match_score}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-[var(--text-secondary)]">{listing.match_score}% match</span>
+                    </div>
+                  )}
+                </div>
+                <span className="status-available ml-3">available</span>
+              </div>
+            ))}
+            <button
+              onClick={() => onViewChange?.('map')}
+              className="w-full mt-2 px-4 py-2 text-[var(--primary-color)] border border-[var(--primary-color)] rounded-lg font-medium hover:bg-[var(--secondary-color)] transition-colors"
+            >
+              View All Recommendations
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-[var(--text-secondary)]">
+            <div className="icon-utensils text-3xl mb-2"></div>
+            <p className="mb-2">No recommendations yet</p>
+            <button
+              onClick={() => window.openDietaryPreferences?.()}
+              className="btn-primary"
+            >
+              Set Dietary Preferences
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="card">
         <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">My Claims</h3>
-        
+
         <div className="space-y-3">
           {userTransactions.map(transaction => (
             <div key={transaction.id} className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
@@ -182,7 +308,7 @@ function Dashboard({ user, onViewChange }) {
               <span className="status-claimed">{transaction.status}</span>
             </div>
           ))}
-          
+
           {userTransactions.length === 0 && (
             <div className="text-center py-8 text-[var(--text-secondary)]">
               <div className="icon-shopping-bag text-3xl mb-2"></div>
@@ -216,7 +342,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -228,7 +354,7 @@ function Dashboard({ user, onViewChange }) {
             </div>
           </div>
         </div>
-        
+
         <div className="card">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -244,7 +370,7 @@ function Dashboard({ user, onViewChange }) {
 
       <div className="card">
         <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4">Available Tasks</h3>
-        
+
         <div className="space-y-3">
           {volunteerTasks.map(task => (
             <div key={task.id} className="flex items-center justify-between p-3 border border-[var(--border-color)] rounded-lg">
@@ -257,7 +383,7 @@ function Dashboard({ user, onViewChange }) {
               <button className="btn-primary text-sm">Accept Task</button>
             </div>
           ))}
-          
+
           {volunteerTasks.length === 0 && (
             <div className="text-center py-8 text-[var(--text-secondary)]">
               <div className="icon-truck text-3xl mb-2"></div>

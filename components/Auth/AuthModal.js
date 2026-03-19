@@ -204,26 +204,50 @@ function AuthModal({ onClose, onAuth }) {
   const handleInputChange = (field, value) => {
     setFormData({ ...formData, [field]: value });
 
-    // Validate referral code when it changes
-    if (field === 'referralCode' && value.length >= 6) {
-      validateReferralCode(value);
-    } else if (field === 'referralCode' && value.length < 6) {
-      setReferralValid(null);
-      setReferrerName('');
+    // Validate referral code in real-time when it changes
+    if (field === 'referralCode') {
+      const trimmedValue = value.trim().toUpperCase();
+      if (trimmedValue.length >= 6) {
+        // Debounce validation to avoid too many API calls
+        if (window.referralValidationTimeout) {
+          clearTimeout(window.referralValidationTimeout);
+        }
+        window.referralValidationTimeout = setTimeout(() => {
+          validateReferralCode(trimmedValue);
+        }, 500); // Wait 500ms after user stops typing
+      } else {
+        setReferralValid(null);
+        setReferrerName('');
+      }
     }
   };
 
   const validateReferralCode = async (code) => {
+    if (!code || code.length < 6) {
+      setReferralValid(null);
+      setReferrerName('');
+      return;
+    }
+
     try {
       const response = await fetch('/api/referral/validate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code })
+        body: JSON.stringify({ code: code.trim().toUpperCase() })
       });
+
+      if (!response.ok) {
+        console.error('Referral validation failed:', response.status);
+        setReferralValid(false);
+        setReferrerName('');
+        return;
+      }
+
       const result = await response.json();
-      setReferralValid(result.valid);
-      setReferrerName(result.referrer_name || '');
+      setReferralValid(result.valid === true);
+      setReferrerName(result.valid === true ? (result.referrer_name || '') : '');
     } catch (error) {
+      console.error('Error validating referral code:', error);
       setReferralValid(false);
       setReferrerName('');
     }
@@ -305,6 +329,7 @@ function AuthModal({ onClose, onAuth }) {
                 >
                   <option value="recipient">Recipient</option>
                   <option value="donor">Donor</option>
+                  <option value="driver">Driver</option>
                   <option value="store_owner">Store Owner</option>
                 </select>
               </div>
@@ -321,8 +346,8 @@ function AuthModal({ onClose, onAuth }) {
                   onChange={(e) => handleInputChange('referralCode', e.target.value.toUpperCase())}
                   placeholder="Enter referral code"
                   className={`w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] ${referralValid === true ? 'border-green-500' :
-                      referralValid === false ? 'border-red-500' :
-                        'border-[var(--border-color)]'
+                    referralValid === false ? 'border-red-500' :
+                      'border-[var(--border-color)]'
                     }`}
                 />
                 {referralValid === true && referrerName && (

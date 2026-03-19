@@ -64,6 +64,22 @@ function App() {
   const [showUserProfile, setShowUserProfile] = React.useState(false);
   const [showDistributionMap, setShowDistributionMap] = React.useState(false);
   const [showStoreOwnerDashboard, setShowStoreOwnerDashboard] = React.useState(false);
+  const [showMessageSupport, setShowMessageSupport] = React.useState(false);
+  const [showDonationScheduler, setShowDonationScheduler] = React.useState(false);
+  const [showFeedbackModal, setShowFeedbackModal] = React.useState(false);
+  const [showDonorImpact, setShowDonorImpact] = React.useState(false);
+  const [showDietaryPreferences, setShowDietaryPreferences] = React.useState(false);
+  const [showFavoritesPanel, setShowFavoritesPanel] = React.useState(false);
+  const [verificationModal, setVerificationModal] = React.useState({ show: false, listing: null, type: null });
+  const [showTutorial, setShowTutorial] = React.useState(false);
+  const [showSafetyCenter, setShowSafetyCenter] = React.useState(false);
+  const [showPickupReminders, setShowPickupReminders] = React.useState(false);
+  const [showSmartNotifications, setShowSmartNotifications] = React.useState(false);
+  const [showStorageCoach, setShowStorageCoach] = React.useState(false);
+  const [storageCoachListing, setStorageCoachListing] = React.useState(null);
+  const [showSpoilageAlerts, setShowSpoilageAlerts] = React.useState(false);
+  const [showMealSuggestions, setShowMealSuggestions] = React.useState(false);
+  const [showSMSConsent, setShowSMSConsent] = React.useState(false);
   const [filters, setFilters] = React.useState({
     category: 'all',
     status: 'available',
@@ -163,6 +179,29 @@ function App() {
     }
   }, []);
 
+  // Auto-show tutorial for new users on login/signup
+  React.useEffect(() => {
+    if (user) {
+      try {
+        const tutorialCompleted = localStorage.getItem('tutorial_completed');
+        const tutorialShown = sessionStorage.getItem('tutorial_shown_this_session');
+
+        // Show tutorial if:
+        // 1. User has never completed it AND
+        // 2. Haven't shown it in this session (to avoid showing twice on page refresh)
+        if (!tutorialCompleted && !tutorialShown && typeof TutorialMode !== 'undefined') {
+          // Small delay to ensure components are loaded
+          setTimeout(() => {
+            setShowTutorial(true);
+            sessionStorage.setItem('tutorial_shown_this_session', 'true');
+          }, 1500); // 1.5 second delay for smoother UX
+        }
+      } catch (e) {
+        console.error('Error checking tutorial status', e);
+      }
+    }
+  }, [user]);
+
   // Validate JWT token on mount - must run after showAuthModal state is ready
   React.useEffect(() => {
     // Add a small delay to ensure React state is fully initialized
@@ -193,6 +232,36 @@ function App() {
 
     return () => clearTimeout(timeoutId);
   }, [validateToken, handleTokenExpired]);
+
+  // Track user activity - update last_active timestamp periodically
+  React.useEffect(() => {
+    if (!user || !user.id) return;
+
+    const updateActivity = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+
+        await fetch(`/api/users/${user.id}/activity`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      } catch (err) {
+        // Silent fail - this is not critical
+        console.debug('Activity update failed:', err);
+      }
+    };
+
+    // Update immediately
+    updateActivity();
+
+    // Then update every 5 minutes while user is active
+    const interval = setInterval(updateActivity, 5 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [user]);
 
   // Refetch listings once user/auth is known to include relevant claimed items
   React.useEffect(() => {
@@ -582,6 +651,47 @@ function App() {
       }
 
       console.log(`Filtering listings: ${listings.length} total -> ${base.length} filtered (status=${statusFilter}, role=${role}, uid=${uid})`);
+
+      // Sort by urgency - critical items first
+      base.sort((a, b) => {
+        const getUrgencyScore = (listing) => {
+          const expirationDate = listing.expiration_date || listing.pickup_window_end;
+          if (!expirationDate) return 999; // No expiration = lowest priority for sorting
+
+          const now = new Date();
+          const expiry = new Date(expirationDate);
+          const diffHours = (expiry - now) / (1000 * 60 * 60);
+
+          if (diffHours <= 0) return 1000; // Expired = lowest priority
+
+          const perishability = listing.perishability || 'medium';
+          let urgency = 0;
+
+          // Calculate urgency score (lower is more urgent)
+          if (perishability === 'high') {
+            if (diffHours < 2) urgency = 1;        // Critical
+            else if (diffHours < 6) urgency = 2;   // High
+            else if (diffHours < 24) urgency = 3;  // Medium
+            else urgency = 4;                       // Low
+          } else if (perishability === 'medium') {
+            if (diffHours < 6) urgency = 2;
+            else if (diffHours < 24) urgency = 3;
+            else urgency = 4;
+          } else { // low perishability
+            if (diffHours < 24) urgency = 3;
+            else urgency = 4;
+          }
+
+          return urgency;
+        };
+
+        const scoreA = getUrgencyScore(a);
+        const scoreB = getUrgencyScore(b);
+
+        // Sort by urgency score (lower score = more urgent = appears first)
+        return scoreA - scoreB;
+      });
+
       setFilteredListings(base);
     } catch (error) {
       console.error('Error in filtering effect:', error);
@@ -709,7 +819,7 @@ function App() {
 
       // Always show confirmation modal for pending_confirmation status
       const needsConfirmation = updatedListing && (updatedListing.status === 'pending_confirmation' || updatedListing.needs_confirmation);
-      
+
       if (needsConfirmation) {
         setPendingClaimId(listingId);
         setPendingClaimListing(listing);
@@ -805,7 +915,7 @@ function App() {
   const handleShowDetails = (listing) => {
     // If listing is pending confirmation and user is the claimant, show confirmation modal
     const listingStatus = String(listing.status || '').toLowerCase();
-    
+
     // Check localStorage for claimed listings
     const isClaimedByMe = (() => {
       if (!user) return false;
@@ -818,7 +928,7 @@ function App() {
         return false;
       }
     })();
-    
+
     if (listingStatus === 'pending_confirmation' && user && isClaimedByMe) {
       setPendingClaimId(listing.id);
       setPendingClaimListing(listing);
@@ -916,6 +1026,94 @@ function App() {
       setCurrentView('admin');
     };
 
+    // Setup message support callback
+    window.openMessageSupport = () => {
+      setShowMessageSupport(true);
+    };
+
+    // Setup donation scheduler callback
+    window.openDonationScheduler = () => {
+      setShowDonationScheduler(true);
+    };
+
+    // Setup feedback modal callback
+    window.openFeedbackModal = () => {
+      setShowFeedbackModal(true);
+    };
+
+    // Setup donor impact dashboard callback
+    window.openDonorImpact = () => {
+      setShowDonorImpact(true);
+    };
+
+    // Setup dietary preferences modal callback
+    window.openDietaryPreferences = () => {
+      setShowDietaryPreferences(true);
+    };
+
+    // Setup favorites panel callback
+    window.openFavoritesPanel = () => {
+      setShowFavoritesPanel(true);
+    };
+
+    // Setup verification photo callbacks
+    window.openBeforePhotoVerification = (listing) => {
+      setVerificationModal({ show: true, listing, type: 'before' });
+    };
+
+    window.openAfterPhotoVerification = (listing) => {
+      setVerificationModal({ show: true, listing, type: 'after' });
+    };
+
+    // Setup tutorial mode callback
+    window.openTutorial = () => {
+      if (typeof TutorialMode !== 'undefined') {
+        setShowTutorial(true);
+      } else {
+        console.error('TutorialMode component not loaded');
+        window.showAlert?.('Tutorial is not available at the moment. Please refresh the page.', {
+          title: 'Error',
+          variant: 'destructive'
+        });
+      }
+    };
+
+    // Setup safety center callback
+    window.openSafetyCenter = () => {
+      setShowSafetyCenter(true);
+    };
+
+    // Setup pickup reminders callback
+    window.openPickupReminders = () => {
+      setShowPickupReminders(true);
+    };
+
+    // Setup smart notifications callback
+    window.openSmartNotifications = () => {
+      setShowSmartNotifications(true);
+    };
+
+    // Setup storage coach callback
+    window.openStorageCoach = (listing = null) => {
+      setStorageCoachListing(listing);
+      setShowStorageCoach(true);
+    };
+
+    // Setup spoilage alerts callback
+    window.openSpoilageAlerts = () => {
+      setShowSpoilageAlerts(true);
+    };
+
+    // Setup meal suggestions callback
+    window.openMealSuggestions = () => {
+      setShowMealSuggestions(true);
+    };
+
+    // Setup SMS consent callback
+    window.openSMSConsent = () => {
+      setShowSMSConsent(true);
+    };
+
     // Setup listing detail modal trigger
     window.triggerListingDetailModal = (listing) => {
       setSelectedListing(listing);
@@ -933,6 +1131,24 @@ function App() {
       delete window.openUserProfile;
       delete window.openDistributionMap;
       delete window.openStoreOwnerDashboard;
+      delete window.openMessageSupport;
+      delete window.openDonationScheduler;
+      delete window.openFeedbackModal;
+      delete window.openDonorImpact;
+      delete window.openDietaryPreferences;
+      delete window.openFavoritesPanel;
+      delete window.openBeforePhotoVerification;
+      delete window.openAfterPhotoVerification;
+      delete window.openTutorial;
+      delete window.openSafetyCenter;
+      delete window.openPickupReminders;
+      delete window.openSmartNotifications;
+      delete window.openStorageCoach;
+      delete window.openSpoilageAlerts;
+      delete window.openMealSuggestions;
+      delete window.openSMSConsent;
+      delete window.triggerListingDetailModal;
+      delete window.openDietaryPreferences;
       delete window.triggerListingDetailModal;
     };
   }, [handleClaimListing, handleShowDetails]);
@@ -945,6 +1161,11 @@ function App() {
   const handleClaimFromModal = (listingId) => {
     handleCloseDetailedModal();
     handleClaimListing(listingId);
+  };
+
+  const handleUserUpdate = (updatedUser) => {
+    setUser(updatedUser);
+    localStorage.setItem('current_user', JSON.stringify(updatedUser));
   };
 
   const renderView = () => {
@@ -1098,7 +1319,7 @@ function App() {
         return (
           <div className="flex h-[calc(100vh-64px)] min-h-[500px]">
             {/* Desktop Sidebar */}
-            <div className="sidebar w-96 bg-white border-r border-[var(--border-color)] flex flex-col hidden lg:flex">
+            <div className="sidebar w-96 bg-white border-r border-[var(--border-color)] flex flex-col hidden lg:flex overflow-hidden">
               <FilterPanel
                 filters={filters}
                 onFiltersChange={setFilters}
@@ -1244,6 +1465,18 @@ function App() {
           currentView={currentView}
           onViewChange={setCurrentView}
         />
+
+        {/* Floating Chat Button - Always visible when logged in */}
+        {user && (
+          <button
+            onClick={() => setShowMessageSupport(true)}
+            className="fixed bottom-6 right-6 z-50 bg-green-600 hover:bg-green-700 text-white rounded-full p-4 shadow-2xl transition-all hover:scale-110 flex items-center gap-2"
+            title="Message Support"
+          >
+            <div className="icon-message-circle text-2xl"></div>
+            <span className="hidden sm:inline font-medium">Support</span>
+          </button>
+        )}
 
         {renderView()}
 
@@ -1432,6 +1665,140 @@ function App() {
           <StoreOwnerDashboard
             user={user}
             onClose={() => setShowStoreOwnerDashboard(false)}
+          />
+        )}
+
+        {/* Message Support */}
+        {showMessageSupport && (
+          <MessageSupport
+            user={user}
+            onClose={() => setShowMessageSupport(false)}
+          />
+        )}
+
+        {/* Donation Scheduler */}
+        {showDonationScheduler && (
+          <DonationScheduler
+            user={user}
+            onClose={() => setShowDonationScheduler(false)}
+          />
+        )}
+
+        {/* Feedback Modal */}
+        {showFeedbackModal && (
+          <FeedbackModal
+            onClose={() => setShowFeedbackModal(false)}
+          />
+        )}
+
+        {/* Donor Impact Dashboard */}
+        {showDonorImpact && user && user.role === 'donor' && (
+          <DonorImpactDashboard
+            user={user}
+            onClose={() => setShowDonorImpact(false)}
+          />
+        )}
+
+        {/* Dietary Preferences Modal */}
+        {showDietaryPreferences && user && user.role === 'recipient' && (
+          <DietaryPreferences
+            user={user}
+            onClose={() => setShowDietaryPreferences(false)}
+            onUpdate={handleUserUpdate}
+          />
+        )}
+
+        {/* Favorites Panel */}
+        {showFavoritesPanel && user && (
+          <FavoritesPanel onClose={() => setShowFavoritesPanel(false)} />
+        )}
+
+        {/* Pickup Verification Modal */}
+        {verificationModal.show && verificationModal.listing && (
+          <PickupVerification
+            listing={verificationModal.listing}
+            verificationType={verificationModal.type}
+            onClose={() => setVerificationModal({ show: false, listing: null, type: null })}
+            onSuccess={() => {
+              // Refresh listings to show updated verification status
+              setTimeout(() => {
+                window.location.reload();
+              }, 1000);
+            }}
+          />
+        )}
+
+        {/* Tutorial Mode */}
+        {showTutorial && typeof TutorialMode !== 'undefined' && (
+          <TutorialMode
+            user={user}
+            onClose={() => setShowTutorial(false)}
+            onComplete={() => setShowTutorial(false)}
+          />
+        )}
+
+        {/* Tutorial Launcher for new users */}
+        {user && !showTutorial && typeof TutorialLauncher !== 'undefined' && (
+          <TutorialLauncher
+            user={user}
+            onLaunch={() => setShowTutorial(true)}
+          />
+        )}
+
+        {/* Safety and Trust Center */}
+        {showSafetyCenter && user && (
+          <SafetyCenter
+            user={user}
+            onClose={() => setShowSafetyCenter(false)}
+          />
+        )}
+
+        {/* Pickup Reminders */}
+        {showPickupReminders && user && window.PickupReminders && (
+          <window.PickupReminders
+            user={user}
+            listings={listings}
+            onClose={() => setShowPickupReminders(false)}
+          />
+        )}
+
+        {/* Smart Notifications */}
+        {showSmartNotifications && user && window.SmartNotifications && (
+          <window.SmartNotifications
+            user={user}
+            onClose={() => setShowSmartNotifications(false)}
+          />
+        )}
+
+        {/* Smart Storage Coach */}
+        {showStorageCoach && window.SmartStorageCoach && (
+          <window.SmartStorageCoach
+            listing={storageCoachListing}
+            onClose={() => {
+              setShowStorageCoach(false);
+              setStorageCoachListing(null);
+            }}
+          />
+        )}
+
+        {/* Smart Meal Suggestions */}
+        {showMealSuggestions && user && window.SmartMealSuggestions && (
+          <window.SmartMealSuggestions
+            user={user}
+            claimedListings={listings.filter(l =>
+              l.status === 'claimed' &&
+              l.claimed_by === user.id
+            )}
+            onClose={() => setShowMealSuggestions(false)}
+          />
+        )}
+
+        {/* SMS Consent Manager */}
+        {showSMSConsent && user && window.SMSConsentManager && (
+          <window.SMSConsentManager
+            user={user}
+            onClose={() => setShowSMSConsent(false)}
+            onUpdate={handleUserUpdate}
           />
         )}
       </div>

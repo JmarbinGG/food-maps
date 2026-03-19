@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Storage Coach Test - Food Maps</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel" src="components/SmartStorageCoach.js"></script>
+
+  <script type="text/babel">
+    const TestApp = () => {
+      const [selectedFood, setSelectedFood] = React.useState(null);
+
+      const testFoods = [
+        {
+          id: 1,
+          title: 'Fresh Lettuce',
+          description: 'Organic romaine lettuce',
+          category: 'produce',
+          perishability: 'high',
+          qty: 2,
+          unit: 'heads',
+          expiration_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 2,
+          title: 'Homemade Lasagna',
+          description: 'Family-size lasagna, fully cooked',
+          category: 'prepared',
+          perishability: 'high',
+          qty: 1,
+          unit: 'tray',
+          expiration_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 3,
+          title: 'Sourdough Bread',
+          description: 'Fresh baked sourdough loaf',
+          category: 'bakery',
+          perishability: 'medium',
+          qty: 1,
+          unit: 'loaf',
+          expiration_date: new Date(Date.now() + 4 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 4,
+          title: 'Fresh Strawberries',
+          description: 'Organic strawberries from local farm',
+          category: 'fruit',
+          perishability: 'high',
+          qty: 2,
+          unit: 'lbs',
+          expiration_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 5,
+          title: 'Cooked Rice',
+          description: 'White rice, cooked yesterday',
+          category: 'leftovers',
+          perishability: 'high',
+          qty: 4,
+          unit: 'cups',
+          expiration_date: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 6,
+          title: 'Fresh Carrots',
+          description: 'Bunch of organic carrots',
+          category: 'produce',
+          perishability: 'medium',
+          qty: 1,
+          unit: 'bunch',
+          expiration_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 7,
+          title: 'Tomatoes',
+          description: 'Vine-ripened tomatoes',
+          category: 'fruit',
+          perishability: 'medium',
+          qty: 6,
+          unit: 'count',
+          expiration_date: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString()
+        },
+        {
+          id: 8,
+          title: 'Bottled Water',
+          description: 'Spring water bottles',
+          category: 'water',
+          perishability: 'low',
+          qty: 12,
+          unit: 'bottles'
+        }
+      ];
+
+      return (
+        <div className="min-h-screen p-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h1 className="text-3xl font-bold mb-2">🤖 Smart Storage Coach Test</h1>
+              <p className="text-gray-600 mb-4">
+                Get AI-powered storage guidance for different types of food
+              </p>
+            </div>
+
+            <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-xl font-bold mb-4">How It Works</h2>
+              <div className="grid md:grid-cols-2 gap-4 text-sm">
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Analyzes food category and type</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Provides specific storage location (fridge, freezer, counter)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Recommends optimal temperature</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Tells you "best within" timeframe</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Advises on freezing (can/cannot, how to)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Provides food-specific tips</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Warns about common mistakes</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-green-600 font-bold">✓</span>
+                    <span>Calculates days until expiration</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-xl font-bold mb-4">Test with Sample Foods</h2>
+              <p className="text-sm text-gray-600 mb-4">
+                Click any food item to see AI-powered storage guidance
+              </p>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {testFoods.map(food => (
+                  <button
+                    key={food.id}
+                    onClick={() => setSelectedFood(food)}
+                    className="text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
+                  >
+                    <div className="text-3xl mb-2">
+                      {food.category === 'produce' && '🥬'}
+                      {food.category === 'prepared' && '🍱'}
+                      {food.category === 'bakery' && '🥖'}
+                      {food.category === 'fruit' && '🍎'}
+                      {food.category === 'leftovers' && '🍽️'}
+                      {food.category === 'water' && '💧'}
+                    </div>
+                    <div className="font-bold text-lg mb-1">{food.title}</div>
+                    <div className="text-sm text-gray-600 mb-2">{food.description}</div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className={`px-2 py-1 rounded ${food.perishability === 'high' ? 'bg-red-100 text-red-700' :
+                          food.perishability === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-green-100 text-green-700'
+                        }`}>
+                        {food.perishability}
+                      </span>
+                      <span className="text-gray-500">{food.qty} {food.unit}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+              <h3 className="font-bold mb-2">💡 Pro Tips</h3>
+              <ul className="text-sm space-y-1">
+                <li>• Try different food types to see specific recommendations</li>
+                <li>• Notice how bread advice is different from produce</li>
+                <li>• Check freezing guidance - some foods shouldn't be frozen</li>
+                <li>• Look for food-specific tips (e.g., tomatoes should NOT be refrigerated)</li>
+                <li>• Pay attention to expiration warnings based on days remaining</li>
+              </ul>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg p-6">
+              <h2 className="text-xl font-bold mb-4">Knowledge Base Coverage</h2>
+              <div className="grid md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <div className="font-bold mb-2 text-green-600">✓ Produce</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Lettuce, spinach, carrots</div>
+                    <div>Bell peppers, cucumbers</div>
+                    <div>Potatoes, onions</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-bold mb-2 text-blue-600">✓ Prepared Meals</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Cooked meals, leftovers</div>
+                    <div>Meat, poultry, fish</div>
+                    <div>Soup, rice, pasta</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-bold mb-2 text-orange-600">✓ Bakery</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Bread, bagels, muffins</div>
+                    <div>Never refrigerate bread!</div>
+                    <div>Freezing recommendations</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-bold mb-2 text-red-600">✓ Fruits</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Bananas, apples, berries</div>
+                    <div>Oranges, grapes</div>
+                    <div>Tomatoes (room temp!)</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-bold mb-2 text-purple-600">✓ Dairy</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Milk, cheese, yogurt</div>
+                    <div>Eggs (not in door!)</div>
+                    <div>Temperature requirements</div>
+                  </div>
+                </div>
+                <div>
+                  <div className="font-bold mb-2 text-gray-600">✓ Packaged</div>
+                  <div className="text-gray-600 space-y-1">
+                    <div>Canned goods</div>
+                    <div>Shelf-stable items</div>
+                    <div>Follow label instructions</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-6 text-center">
+              <a href="/" className="text-blue-600 hover:underline">
+                ← Back to main app
+              </a>
+            </div>
+          </div>
+
+          {selectedFood && window.SmartStorageCoach && (
+            <window.SmartStorageCoach
+              listing={selectedFood}
+              onClose={() => setSelectedFood(null)}
+            />
+          )}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TestApp />);
+  </script>
+</body>
+
+</html>

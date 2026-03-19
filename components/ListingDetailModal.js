@@ -7,6 +7,8 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   const [contact, setContact] = React.useState(null);
   const [contactError, setContactError] = React.useState(null);
   const [contactLoading, setContactLoading] = React.useState(false);
+  const [isFavorite, setIsFavorite] = React.useState(false);
+  const [favoriteId, setFavoriteId] = React.useState(null);
   const [editData, setEditData] = React.useState({
     title: listing.title || '',
     description: listing.description || '',
@@ -94,6 +96,47 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
     }
     return () => { cancelled = true; };
   }, [listing.id, listing.status, userRole, isClaimedByMe, canEdit]);
+
+  // Check if this listing is favorited
+  React.useEffect(() => {
+    const checkFavorite = async () => {
+      if (!user || !window.databaseService?.getFavorites) return;
+      const result = await window.databaseService.getFavorites();
+      if (result.success) {
+        const fav = result.favorites.find(f => f.location_type === 'donor' && String(f.location_id) === String(listing.id));
+        setIsFavorite(!!fav);
+        setFavoriteId(fav?.id || null);
+      }
+    };
+    checkFavorite();
+  }, [listing.id, user]);
+
+  const toggleFavorite = async () => {
+    if (!user) {
+      if (typeof window.showAlert === 'function') window.showAlert('Please sign in to save favorites', { variant: 'error' });
+      return;
+    }
+    if (isFavorite && favoriteId) {
+      const result = await window.databaseService.removeFavorite(favoriteId);
+      if (result.success) {
+        setIsFavorite(false);
+        setFavoriteId(null);
+        if (typeof window.showAlert === 'function') window.showAlert('Removed from favorites', { variant: 'success' });
+      }
+    } else {
+      const result = await window.databaseService.addFavorite('donor', listing.id);
+      if (result.success) {
+        setIsFavorite(true);
+        if (typeof window.showAlert === 'function') window.showAlert('Added to favorites', { variant: 'success' });
+        // Refresh to get the new favorite ID
+        const favResult = await window.databaseService.getFavorites();
+        if (favResult.success) {
+          const fav = favResult.favorites.find(f => f.location_type === 'donor' && String(f.location_id) === String(listing.id));
+          setFavoriteId(fav?.id || null);
+        }
+      }
+    }
+  };
 
   const getStatusColor = (status) => {
     switch ((status || '').toString().toLowerCase()) {
@@ -237,6 +280,15 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-xl font-bold text-gray-900">Food Listing Details</h2>
           <div className="flex items-center gap-2">
+            {user && (
+              <button 
+                onClick={toggleFavorite}
+                className={`text-2xl px-3 py-2 rounded transition-all ${isFavorite ? 'hover:scale-110' : 'hover:scale-110 opacity-60'}`}
+                title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              >
+                {isFavorite ? '⭐' : '☆'}
+              </button>
+            )}
             {canEdit && (
               <button onClick={() => setIsEditing(prev => !prev)} className="text-sm px-3 py-2 bg-blue-50 border border-blue-100 rounded text-blue-700">
                 {isEditing ? 'Cancel' : 'Edit'}

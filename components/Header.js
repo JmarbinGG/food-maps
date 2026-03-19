@@ -22,13 +22,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
           />
         </a>
         <div className="flex items-center gap-2">
-          {/* Language Switcher */}
-          <LanguageSwitcherCompact />
-
+          <button
+            onClick={() => window.openFeedbackModal?.()}
+            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+            title="Send Feedback or Report an Issue"
+          >
+            <span>💬</span>
+            <span className="hidden sm:inline">Feedback</span>
+          </button>
           <button
             onClick={() => user ? window.showFoodSearch?.() : onAuthClick()}
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
-            data-i18n="nav.findFood"
           >
             🔍 Find Food
           </button>
@@ -53,6 +57,44 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     Profile Settings
                   </button>
+                  <button
+                    onClick={() => {
+                      window.openMessageSupport?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    💬 Message Support
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.openFeedbackModal?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    🐛 Report Issue
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.openFavoritesPanel?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-yellow-50"
+                  >
+                    ⭐ My Favorites
+                  </button>
+                  {user.role === 'donor' && (
+                    <button
+                      onClick={() => {
+                        window.openDonorImpact?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
+                    >
+                      ✨ My Impact
+                    </button>
+                  )}
                   {user.role === 'donor' && (
                     <button
                       onClick={() => {
@@ -64,6 +106,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       Share Food
                     </button>
                   )}
+                  {user.role === 'donor' && (
+                    <button
+                      onClick={() => {
+                        window.openDonationScheduler?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                    >
+                      📅 Donation Scheduler
+                    </button>
+                  )}
                   <button
                     onClick={() => {
                       window.openDistributionMap?.();
@@ -73,6 +126,102 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🏪 Distribution Centers
                   </button>
+                  <button
+                    onClick={() => {
+                      window.openTutorial?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-t border-gray-200"
+                  >
+                    🎓 How to Use
+                  </button>
+                  <a
+                    href="/voice-search.html"
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
+                    onClick={() => setShowDropdown(false)}
+                  >
+                    🎤 Voice Search
+                  </a>
+                  <button
+                    onClick={() => {
+                      window.openSmartNotifications?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
+                  >
+                    🔔 Smart Notifications
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.openStorageCoach?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
+                  >
+                    🤖 Storage Coach
+                  </button>
+                  {user?.role === 'recipient' && (
+                    <button
+                      onClick={() => {
+                        window.openSpoilageAlerts?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
+                    >
+                      ⚠️ Spoilage Alerts
+                    </button>
+                  )}
+                  {user?.role === 'recipient' && (
+                    <button
+                      onClick={() => {
+                        window.openMealSuggestions?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
+                    >
+                      👨‍🍳 Meal Suggestions
+                    </button>
+                  )}
+                  <button
+                    onClick={() => {
+                      window.openSafetyCenter?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    🛡️ Safety & Trust
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.openSMSConsent?.();
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-indigo-50 font-semibold border-t-2 border-indigo-200"
+                  >
+                    📱 SMS Text Notifications
+                  </button>
+                  {user.role === 'recipient' && (
+                    <button
+                      onClick={() => {
+                        window.openPickupReminders?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
+                    >
+                      🔔 Pickup Reminders
+                    </button>
+                  )}
+                  {user.role === 'recipient' && (
+                    <button
+                      onClick={() => {
+                        window.openDietaryPreferences?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
+                    >
+                      🥗 Dietary Preferences
+                    </button>
+                  )}
                   {user.role === 'donor' && (
                     <button
                       onClick={() => {

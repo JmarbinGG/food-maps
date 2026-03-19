@@ -40,8 +40,10 @@ function DistributionCenterMap({ user, onCenterSelect }) {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-122.4194, 37.7749], // San Francisco
-        zoom: 12
+        center: [-119.4179, 36.7783], // California center
+        zoom: 6,
+        minZoom: 3,
+        maxZoom: 18
       });
 
       map.current.on('load', () => {
@@ -92,7 +94,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
 
       el.addEventListener('click', () => handleCenterClick(center));
 
-      const marker = new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([center.coords_lng, center.coords_lat])
         .addTo(map.current);
 
@@ -224,8 +226,8 @@ function DistributionCenterMap({ user, onCenterSelect }) {
                             </span>
                             {item.perishability && (
                               <span className={`px-2 py-1 rounded ${item.perishability === 'high' ? 'bg-red-100 text-red-800' :
-                                  item.perishability === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-blue-100 text-blue-800'
+                                item.perishability === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-blue-100 text-blue-800'
                                 }`}>
                                 {item.perishability} perishability
                               </span>

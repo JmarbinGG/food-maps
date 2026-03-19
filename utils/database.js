@@ -192,6 +192,76 @@ window.databaseService = {
       const errorMessage = error && error.message ? String(error.message) : 'Network error';
       return { success: false, error: errorMessage };
     }
+  },
+
+  addFavorite: async function (locationType, locationId, notes = '') {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return { success: false, error: 'Not authenticated' };
+
+      const response = await fetch('/api/favorites', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ location_type: locationType, location_id: locationId, notes })
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: error.detail || 'Failed to add favorite' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Add favorite error:', error);
+      return { success: false, error: error.message || 'Network error' };
+    }
+  },
+
+  removeFavorite: async function (favoriteId) {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return { success: false, error: 'Not authenticated' };
+
+      const response = await fetch(`/api/favorites/${favoriteId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: error.detail || 'Failed to remove favorite' };
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Remove favorite error:', error);
+      return { success: false, error: error.message || 'Network error' };
+    }
+  },
+
+  getFavorites: async function () {
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return { success: false, error: 'Not authenticated' };
+
+      const response = await fetch('/api/favorites', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        return { success: false, error: error.detail || 'Failed to fetch favorites' };
+      }
+
+      const data = await response.json();
+      return { success: true, favorites: data };
+    } catch (error) {
+      console.error('Get favorites error:', error);
+      return { success: false, error: error.message || 'Network error' };
+    }
   }
 };
 

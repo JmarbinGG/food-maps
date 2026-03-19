@@ -1,0 +1,35 @@
+[Unit]
+Description=Food Maps API Server
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/home/ec2-user/project/backend
+
+# Environment
+Environment="PATH=/home/ec2-user/.local/bin:/home/ec2-user/project/backend/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/home/ec2-user/project"
+EnvironmentFile=/home/ec2-user/project/.env
+
+# Start script
+ExecStart=/bin/bash /home/ec2-user/project/backend/start_server.sh
+
+# Auto-restart configuration
+Restart=always
+RestartSec=5
+StartLimitInterval=0
+
+# Resource limits
+LimitNOFILE=65536
+TimeoutStopSec=30
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=foodmaps
+
+[Install]
+WantedBy=multi-user.target

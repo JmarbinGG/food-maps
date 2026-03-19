@@ -9,6 +9,28 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   const [selectedCenter, setSelectedCenter] = React.useState(null);
   const [centerInventory, setCenterInventory] = React.useState([]);
 
+  // Global function to add/remove favorites from map popups
+  React.useEffect(() => {
+    window.toggleMapFavorite = async (type, id) => {
+      if (!user) {
+        if (typeof window.showAlert === 'function') window.showAlert('Please sign in to save favorites', { variant: 'error' });
+        return;
+      }
+      const result = await window.databaseService.getFavorites();
+      if (result.success) {
+        const fav = result.favorites.find(f => f.location_type === type && String(f.location_id) === String(id));
+        if (fav) {
+          await window.databaseService.removeFavorite(fav.id);
+          if (typeof window.showAlert === 'function') window.showAlert('Removed from favorites', { variant: 'success' });
+        } else {
+          await window.databaseService.addFavorite(type, id);
+          if (typeof window.showAlert === 'function') window.showAlert('Added to favorites', { variant: 'success' });
+        }
+      }
+    };
+    return () => { delete window.toggleMapFavorite; };
+  }, [user]);
+
   // Load distribution centers
   React.useEffect(() => {
     loadDistributionCenters();
@@ -63,10 +85,24 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/light-v11',
-        center: [-122.4194, 37.7749],
-        zoom: 12
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: [-119.4179, 36.7783], // California center
+        zoom: 6,
+        minZoom: 3,
+        maxZoom: 18,
+        attributionControl: true, // Keep attribution but we'll style it smaller
+        logoPosition: 'bottom-left'
       });
+
+      // Customize attribution control position to not block content
+      map.current.addControl(
+        new mapboxgl.NavigationControl({
+          showCompass: true,
+          showZoom: true,
+          visualizePitch: false
+        }),
+        'top-right'
+      );
 
       map.current.on('load', () => {
         setMapLoaded(true);
@@ -158,7 +194,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             listing.status === 'picked_up' ? '#374151' : '#991b1b';
         const statusText = (listing.status || 'available').charAt(0).toUpperCase() + (listing.status || 'available').slice(1);
 
-        const marker = new mapboxgl.Marker(el)
+        const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([listing.coords_lng, listing.coords_lat])
           .setPopup(
             new mapboxgl.Popup({ offset: 25, maxWidth: '320px' })
@@ -210,6 +246,29 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                         onmouseout="this.style.backgroundColor='#2563eb'"
                       >
                         <span style="font-size: 18px;">ℹ️</span> View Details
+                      </button>
+                      <button 
+                        onclick="window.toggleMapFavorite('donor', ${listing.id})"
+                        style="
+                          background-color: #f59e0b;
+                          color: white;
+                          padding: 12px 16px;
+                          border-radius: 8px;
+                          border: none;
+                          font-size: 15px;
+                          font-weight: 600;
+                          cursor: pointer;
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          gap: 8px;
+                          transition: background-color 0.2s;
+                        "
+                        onmouseover="this.style.backgroundColor='#d97706'"
+                        onmouseout="this.style.backgroundColor='#f59e0b'"
+                      >
+                        <span style="font-size: 18px;">⭐</span> Save
                       </button>
                       <button 
                         onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${listing.coords_lat},${listing.coords_lng}', '_blank')"
@@ -292,7 +351,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
       el.addEventListener('click', () => handleCenterClick(center));
 
-      const marker = new mapboxgl.Marker(el)
+      const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([center.coords_lng, center.coords_lat])
         .setPopup(
           new mapboxgl.Popup({ offset: 25 })
@@ -301,22 +360,38 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                 <h3 style="font-weight: bold; margin-bottom: 4px; color: ${color};">🏪 ${center.name}</h3>
                 <p style="font-size: 12px; color: #666; margin-bottom: 4px;">${center.address}</p>
                 ${center.phone ? `<p style="font-size: 11px; color: #666;">📞 ${center.phone}</p>` : ''}
-                <button 
-                  onclick="window.viewCenterDetails(${center.id})"
-                  style="
-                    background-color: ${color};
-                    color: white;
-                    padding: 4px 12px;
-                    border-radius: 4px;
-                    border: none;
-                    font-size: 12px;
-                    cursor: pointer;
-                    margin-top: 6px;
-                    width: 100%;
-                  "
-                >
-                  View Inventory
-                </button>
+                <div style="display: flex; gap: 4px; margin-top: 6px;">
+                  <button 
+                    onclick="window.viewCenterDetails(${center.id})"
+                    style="
+                      background-color: ${color};
+                      color: white;
+                      padding: 4px 12px;
+                      border-radius: 4px;
+                      border: none;
+                      font-size: 12px;
+                      cursor: pointer;
+                      flex: 1;
+                    "
+                  >
+                    View Inventory
+                  </button>
+                  <button 
+                    onclick="window.toggleMapFavorite('center', ${center.id})"
+                    style="
+                      background-color: #f59e0b;
+                      color: white;
+                      padding: 4px 8px;
+                      border-radius: 4px;
+                      border: none;
+                      font-size: 12px;
+                      cursor: pointer;
+                    "
+                    title="Save to favorites"
+                  >
+                    ⭐
+                  </button>
+                </div>
               </div>
             `)
         );
@@ -328,21 +403,39 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       markersRef.current.push(marker);
     });
 
-    // Fit bounds to show all markers
+    // Fit bounds to show all markers (both listings and distribution centers)
     if (markersRef.current.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
 
+      // Add all food listings to bounds
       safeListings.forEach(listing => {
         if (listing.coords_lat && listing.coords_lng) {
           bounds.extend([listing.coords_lng, listing.coords_lat]);
         }
       });
 
+      // Add all distribution centers to bounds
       centers.forEach(center => {
-        bounds.extend([center.coords_lng, center.coords_lat]);
+        if (center.coords_lat && center.coords_lng) {
+          bounds.extend([center.coords_lng, center.coords_lat]);
+        }
       });
 
-      map.current.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+      // Fit map to show all markers with appropriate padding
+      try {
+        map.current.fitBounds(bounds, {
+          padding: { top: 80, bottom: 80, left: 80, right: 80 },
+          maxZoom: 14, // Prevent zooming in too close
+          duration: 1000
+        });
+      } catch (error) {
+        console.error('Error fitting bounds:', error);
+        // Fallback to California center if bounds fail
+        map.current.flyTo({ center: [-119.4179, 36.7783], zoom: 6 });
+      }
+    } else {
+      // No markers yet - show California by default
+      console.log('No markers to display, showing default California view');
     }
   }, [mapLoaded, safeListings, centers]);
 
@@ -391,13 +484,13 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         </div>
       )}
 
-      {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-sm">
-        <div className="font-semibold mb-2">Map Legend</div>
-        <div className="flex items-center gap-2 mb-1">
+      {/* Legend - Compact and semi-transparent */}
+      <div className="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg shadow-md p-2 text-xs max-w-[150px]">
+        <div className="font-semibold mb-1 text-gray-800">Legend</div>
+        <div className="flex items-center gap-1 mb-1">
           <div style={{
-            width: '20px',
-            height: '20px',
+            width: '16px',
+            height: '16px',
             borderRadius: '50% 50% 50% 0',
             transform: 'rotate(-45deg)',
             backgroundColor: '#f59e0b',
@@ -405,14 +498,14 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <span style={{ transform: 'rotate(45deg)', fontSize: '12px' }}>🍎</span>
+            <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🍎</span>
           </div>
-          <span className="text-xs">Food Listings</span>
+          <span>Food</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <div style={{
-            width: '20px',
-            height: '20px',
+            width: '16px',
+            height: '16px',
             borderRadius: '50% 50% 50% 0',
             transform: 'rotate(-45deg)',
             backgroundColor: '#10b981',
@@ -420,9 +513,9 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <span style={{ transform: 'rotate(45deg)', fontSize: '12px' }}>🏪</span>
+            <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🏪</span>
           </div>
-          <span className="text-xs">Distribution Centers</span>
+          <span>Centers</span>
         </div>
       </div>
 
@@ -437,8 +530,23 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center p-6 border-b bg-green-50">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">🏪 {selectedCenter.name}</h2>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-2xl font-bold text-gray-900">🏪 {selectedCenter.name}</h2>
+                  {user && (
+                    <button
+                      onClick={async () => {
+                        if (window.toggleMapFavorite) {
+                          await window.toggleMapFavorite('center', selectedCenter.id);
+                        }
+                      }}
+                      className="text-2xl hover:scale-110 transition-transform"
+                      title="Save to favorites"
+                    >
+                      ⭐
+                    </button>
+                  )}
+                </div>
                 <p className="text-sm text-gray-600 mt-1">📍 {selectedCenter.address}</p>
                 {selectedCenter.phone && (
                   <p className="text-sm text-gray-600">📞 {selectedCenter.phone}</p>

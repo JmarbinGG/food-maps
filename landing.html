@@ -24,9 +24,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
 
-    <!-- Translation System -->
-    <script src="utils/translations.js"></script>
-
     <style type="text/tailwindcss">
         @layer theme {
         :root {
@@ -107,6 +104,50 @@
     @keyframes pulseGlow {
         0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
         50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); }
+    }
+
+    /* Slideshow Styles */
+    .slide {
+        display: none;
+        position: absolute;
+        inset: 0;
+        animation: slideIn 0.8s ease-in-out;
+    }
+
+    .slide.active {
+        display: block;
+    }
+
+    .slide img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .slide-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.5);
+        cursor: pointer;
+        transition: all 0.3s;
+        backdrop-filter: blur(4px);
+    }
+
+    .slide-indicator.active {
+        background-color: white;
+        width: 32px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
     </style>
 
@@ -240,31 +281,22 @@
                 <!-- Desktop Menu -->
                 <div class="hidden md:flex items-center space-x-8">
                     <a href="#features" onclick="scrollToSection('features')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer"
-                        data-i18n="nav.features">Features</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Features</a>
                     <a href="#how-it-works" onclick="scrollToSection('how-it-works')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer"
-                        data-i18n="nav.howItWorks">How It
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">How It
                         Works</a>
                     <a href="#impact" onclick="scrollToSection('impact')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer"
-                        data-i18n="nav.impact">Impact</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact</a>
                     <a href="impactStory.html"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer"
-                        data-i18n="nav.impactStory">Impact
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact
                         Story</a>
 
-                    <!-- Language Switcher -->
-                    <div id="language-switcher-desktop" class="inline-flex"></div>
-
                     <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg"
-                        data-i18n="nav.donate">
+                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg">
                         Donate
                     </button>
                     <button onclick="window.location.href='index.html'"
-                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg"
-                        data-i18n="nav.getStarted">
+                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg">
                         Get Started
                     </button>
                 </div>
@@ -282,31 +314,22 @@
             <div id="mobile-menu" class="md:hidden hidden bg-white/95 backdrop-blur-lg border-t border-gray-200 pb-4">
                 <div class="flex flex-col space-y-4 pt-4">
                     <a href="#features" onclick="scrollToSection('features'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        data-i18n="nav.features">Features</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Features</a>
                     <a href="#how-it-works" onclick="scrollToSection('how-it-works'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        data-i18n="nav.howItWorks">How
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">How
                         It Works</a>
                     <a href="#impact" onclick="scrollToSection('impact'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        data-i18n="nav.impact">Impact</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact</a>
                     <a href="impactStory.html"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer"
-                        data-i18n="nav.impactStory">Impact
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact
                         Story</a>
 
-                    <!-- Language Switcher for Mobile -->
-                    <div id="language-switcher-mobile" class="px-2"></div>
-
                     <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2"
-                        data-i18n="nav.donate">
+                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Donate
                     </button>
                     <button onclick="window.location.href='index.html'"
-                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2"
-                        data-i18n="nav.getStarted">
+                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Get Started
                     </button>
                 </div>
@@ -314,15 +337,95 @@
         </div>
     </nav>
 
+    <!-- Admin Edit Button for Slideshow -->
+    <button id="slideshow-admin-btn"
+        class="hidden fixed top-32 right-6 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-all">
+        <div class="flex items-center gap-2">
+            <div class="icon-edit text-xl"></div>
+            <span>Edit Slideshow</span>
+        </div>
+    </button>
+
+    <!-- Slideshow Admin Modal -->
+    <div id="slideshow-admin-modal" class="hidden fixed inset-0 bg-black/70 z-50 overflow-y-auto">
+        <div class="min-h-screen px-4 flex items-center justify-center">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold text-gray-900">Manage Slideshow Photos</h2>
+                    <button id="close-slideshow-modal" class="text-gray-500 hover:text-gray-700">
+                        <div class="icon-x text-3xl"></div>
+                    </button>
+                </div>
+
+                <!-- Add New Photo -->
+                <div class="mb-8 p-6 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Add New Photo</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Photo URL</label>
+                            <input type="text" id="new-photo-url" placeholder="https://example.com/image.jpg"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Caption (Optional)</label>
+                            <input type="text" id="new-photo-caption" placeholder="Enter a caption for this photo"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <button id="add-photo-btn"
+                            class="w-full bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-all">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="icon-plus text-xl"></div>
+                                <span>Add Photo</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Current Photos -->
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Current Photos</h3>
+                    <div id="admin-photo-list" class="space-y-4 max-h-96 overflow-y-auto">
+                        <!-- Photo items will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-4">
+                    <button id="cancel-slideshow-edit"
+                        class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all">
+                        Cancel
+                    </button>
+                    <button id="save-slideshow-changes"
+                        class="px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-all">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Hero Section -->
     <section class="relative min-h-screen overflow-hidden">
-        <!-- Animated Background -->
-        <div class="absolute inset-0">
-            <div class="absolute inset-0 bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900"></div>
-            <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 60" height="60" viewBox="0 0 60 60"
-                xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
-                fill-opacity="0.03" %3E%3Ccircle cx="30" cy="30" r="4" /%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] animate-pulse">
-            </div>
+        <!-- Slideshow Background -->
+        <div id="slideshow-container" class="absolute inset-0">
+            <!-- Slides will be dynamically inserted here -->
+        </div>
+
+        <!-- Dark Overlay for readability -->
+        <div class="absolute inset-0 bg-black/40"></div>
+
+        <!-- Slideshow Controls -->
+        <button id="prev-slide"
+            class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-10">
+            <div class="icon-chevron-left text-2xl"></div>
+        </button>
+        <button id="next-slide"
+            class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-10">
+            <div class="icon-chevron-right text-2xl"></div>
+        </button>
+
+        <!-- Slide Indicators -->
+        <div id="slide-indicators" class="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            <!-- Indicators will be dynamically inserted here -->
         </div>
 
         <!-- Floating Food Icons -->
@@ -582,38 +685,55 @@
                 </p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div
+                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    <div class="text-6xl mb-4">🏫</div>
+                    <div class="text-5xl font-bold text-emerald-400 mb-3 group-hover:scale-110 transition-transform">
+                        25+</div>
+                    <div class="text-emerald-200 text-lg font-medium mb-2">Schools Served</div>
+                    <div class="text-gray-400 text-sm">Supporting education</div>
+                </div>
+                <div
+                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    <div class="text-6xl mb-4">🤝</div>
+                    <div class="text-5xl font-bold text-blue-400 mb-3 group-hover:scale-110 transition-transform">50+
+                    </div>
+                    <div class="text-blue-200 text-lg font-medium mb-2">Non-Profits Helped</div>
+                    <div class="text-gray-400 text-sm">Community partners</div>
+                </div>
+                <div
+                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    <div class="text-6xl mb-4">♻️</div>
+                    <div class="text-5xl font-bold text-purple-400 mb-3 group-hover:scale-110 transition-transform">
+                        100K+
+                    </div>
+                    <div class="text-purple-200 text-lg font-medium mb-2">Pounds Saved</div>
+                    <div class="text-gray-400 text-sm">From being wasted</div>
+                </div>
                 <div
                     class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
                     <div class="text-6xl mb-4">🍽️</div>
-                    <div class="text-5xl font-bold text-emerald-400 mb-3 group-hover:scale-110 transition-transform">
-                        50K+</div>
-                    <div class="text-emerald-200 text-lg font-medium mb-2">Meals Rescued</div>
-                    <div class="text-gray-400 text-sm">From going to waste</div>
+                    <div class="text-5xl font-bold text-orange-400 mb-3 group-hover:scale-110 transition-transform">85K+
+                    </div>
+                    <div class="text-orange-200 text-lg font-medium mb-2">Pounds Provided</div>
+                    <div class="text-gray-400 text-sm">To those in need</div>
                 </div>
                 <div
                     class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
                     <div class="text-6xl mb-4">👨‍👩‍👧‍👦</div>
-                    <div class="text-5xl font-bold text-blue-400 mb-3 group-hover:scale-110 transition-transform">2,500
+                    <div class="text-5xl font-bold text-pink-400 mb-3 group-hover:scale-110 transition-transform">2,500+
                     </div>
-                    <div class="text-blue-200 text-lg font-medium mb-2">Families Helped</div>
+                    <div class="text-pink-200 text-lg font-medium mb-2">Families Helped</div>
                     <div class="text-gray-400 text-sm">Access to nutrition</div>
                 </div>
                 <div
                     class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
                     <div class="text-6xl mb-4">⚡</div>
-                    <div class="text-5xl font-bold text-purple-400 mb-3 group-hover:scale-110 transition-transform">15
+                    <div class="text-5xl font-bold text-yellow-400 mb-3 group-hover:scale-110 transition-transform">15
                     </div>
-                    <div class="text-purple-200 text-lg font-medium mb-2">Avg Response</div>
+                    <div class="text-yellow-200 text-lg font-medium mb-2">Avg Response</div>
                     <div class="text-gray-400 text-sm">Minutes to match</div>
-                </div>
-                <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
-                    <div class="text-6xl mb-4">💚</div>
-                    <div class="text-5xl font-bold text-orange-400 mb-3 group-hover:scale-110 transition-transform">98%
-                    </div>
-                    <div class="text-orange-200 text-lg font-medium mb-2">Satisfaction</div>
-                    <div class="text-gray-400 text-sm">User happiness</div>
                 </div>
             </div>
 
@@ -808,46 +928,280 @@
         </div>
     </footer>
 
-    <!-- Language Switcher Component -->
-    <script type="text/babel" src="components/LanguageSwitcher.js"></script>
-    <script type="text/babel">
-        // Initialize language system
-        document.addEventListener('DOMContentLoaded', () => {
-            // Check if i18n is available
-            if (!window.i18n) {
-                console.error('Translation system not loaded');
+    <!-- Slideshow JavaScript -->
+    <script>
+        // Default slideshow photos
+        const defaultPhotos = [
+            {
+                url: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200',
+                caption: 'Fresh produce donated to local families'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=1200',
+                caption: 'Community volunteers preparing food packages'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1509099652299-30938b0aeb63?w=1200',
+                caption: 'Healthy meals ready for distribution'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=1200',
+                caption: 'Making a difference in our community'
+            }
+        ];
+
+        // Slideshow state
+        let slideshowPhotos = [];
+        let currentSlide = 0;
+        let slideInterval;
+
+        // Check admin access
+        function checkSlideshowAdminAccess() {
+            try {
+                // Verify admin access with backend instead of trusting localStorage
+                const token = localStorage.getItem('auth_token');
+                const adminBtn = document.getElementById('slideshow-admin-btn');
+
+                if (token && adminBtn) {
+                    // Fetch actual user data from backend to verify role
+                    fetch('/api/user/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(user => {
+                            if (user && user.role === 'admin') {
+                                adminBtn.classList.remove('hidden');
+                            }
+                        })
+                        .catch(err => console.error('Admin verification failed:', err));
+                }
+            } catch (error) {
+                console.error('Admin access check error:', error);
+            }
+        }
+
+        // Load slideshow photos
+        function loadSlideshowPhotos() {
+            try {
+                const saved = localStorage.getItem('slideshowPhotos');
+                slideshowPhotos = saved ? JSON.parse(saved) : [...defaultPhotos];
+                renderSlideshow();
+            } catch (error) {
+                console.error('Load slideshow error:', error);
+                slideshowPhotos = [...defaultPhotos];
+                renderSlideshow();
+            }
+        }
+
+        // Render slideshow
+        function renderSlideshow() {
+            const container = document.getElementById('slideshow-container');
+            const indicators = document.getElementById('slide-indicators');
+
+            if (!container || !indicators) return;
+
+            // Clear existing content
+            container.innerHTML = '';
+            indicators.innerHTML = '';
+
+            // Create slides
+            slideshowPhotos.forEach((photo, index) => {
+                const slide = document.createElement('div');
+                slide.className = `slide ${index === currentSlide ? 'active' : ''}`;
+                slide.innerHTML = `
+                    <img src="${photo.url}" alt="${photo.caption || 'Background image'}" loading="lazy">
+                `;
+                container.appendChild(slide);
+
+                // Create indicator
+                const indicator = document.createElement('div');
+                indicator.className = `slide-indicator ${index === currentSlide ? 'active' : ''}`;
+                indicator.onclick = () => goToSlide(index);
+                indicators.appendChild(indicator);
+            });
+        }
+
+        // Navigate slides
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % slideshowPhotos.length;
+            renderSlideshow();
+        }
+
+        function prevSlide() {
+            currentSlide = (currentSlide - 1 + slideshowPhotos.length) % slideshowPhotos.length;
+            renderSlideshow();
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            renderSlideshow();
+        }
+
+        // Auto-advance slideshow
+        function startSlideshow() {
+            stopSlideshow();
+            slideInterval = setInterval(nextSlide, 5000); // Change slide every 5 seconds
+        }
+
+        function stopSlideshow() {
+            if (slideInterval) {
+                clearInterval(slideInterval);
+            }
+        }
+
+        // Admin modal functions
+        function openSlideshowModal() {
+            const modal = document.getElementById('slideshow-admin-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                renderAdminPhotoList();
+                stopSlideshow();
+            }
+        }
+
+        function closeSlideshowModal() {
+            const modal = document.getElementById('slideshow-admin-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                startSlideshow();
+            }
+        }
+
+        // Render admin photo list
+        function renderAdminPhotoList() {
+            const list = document.getElementById('admin-photo-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            if (slideshowPhotos.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-center py-8">No photos added yet</p>';
                 return;
             }
 
-            window.i18n.initLanguageSystem();
+            slideshowPhotos.forEach((photo, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200';
+                item.innerHTML = `
+                    <img src="${photo.url}" alt="Photo ${index + 1}" class="w-24 h-24 object-cover rounded-lg">
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900 truncate">${photo.url}</p>
+                        <p class="text-sm text-gray-600">${photo.caption || 'No caption'}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="movePhotoUp(${index})" class="p-2 text-gray-600 hover:text-emerald-600 transition-colors" ${index === 0 ? 'disabled' : ''}>
+                            <div class="icon-chevron-up text-xl"></div>
+                        </button>
+                        <button onclick="movePhotoDown(${index})" class="p-2 text-gray-600 hover:text-emerald-600 transition-colors" ${index === slideshowPhotos.length - 1 ? 'disabled' : ''}>
+                            <div class="icon-chevron-down text-xl"></div>
+                        </button>
+                        <button onclick="removePhoto(${index})" class="p-2 text-red-600 hover:text-red-700 transition-colors">
+                            <div class="icon-trash-2 text-xl"></div>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
 
-            // Render language switcher for desktop
-            const desktopContainer = document.getElementById('language-switcher-desktop');
-            if (desktopContainer) {
-                try {
-                    const root = ReactDOM.createRoot(desktopContainer);
-                    root.render(React.createElement(LanguageSwitcher));
-                    console.log('Desktop language switcher rendered');
-                } catch (error) {
-                    console.error('Error rendering desktop language switcher:', error);
-                }
+        // Add new photo
+        function addNewPhoto() {
+            const urlInput = document.getElementById('new-photo-url');
+            const captionInput = document.getElementById('new-photo-caption');
+
+            if (!urlInput || !captionInput) return;
+
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('Please enter a photo URL');
+                return;
             }
 
-            // Render language switcher for mobile
-            const mobileContainer = document.getElementById('language-switcher-mobile');
-            if (mobileContainer) {
-                try {
-                    const root = ReactDOM.createRoot(mobileContainer);
-                    root.render(React.createElement(LanguageSwitcher));
-                    console.log('Mobile language switcher rendered');
-                } catch (error) {
-                    console.error('Error rendering mobile language switcher:', error);
-                }
+            slideshowPhotos.push({
+                url: url,
+                caption: captionInput.value.trim()
+            });
+
+            urlInput.value = '';
+            captionInput.value = '';
+            renderAdminPhotoList();
+        }
+
+        // Remove photo
+        function removePhoto(index) {
+            if (confirm('Are you sure you want to remove this photo?')) {
+                slideshowPhotos.splice(index, 1);
+                renderAdminPhotoList();
+            }
+        }
+
+        // Move photo up
+        function movePhotoUp(index) {
+            if (index > 0) {
+                [slideshowPhotos[index], slideshowPhotos[index - 1]] = [slideshowPhotos[index - 1], slideshowPhotos[index]];
+                renderAdminPhotoList();
+            }
+        }
+
+        // Move photo down
+        function movePhotoDown(index) {
+            if (index < slideshowPhotos.length - 1) {
+                [slideshowPhotos[index], slideshowPhotos[index + 1]] = [slideshowPhotos[index + 1], slideshowPhotos[index]];
+                renderAdminPhotoList();
+            }
+        }
+
+        // Save slideshow changes
+        function saveSlideshowChanges() {
+            try {
+                localStorage.setItem('slideshowPhotos', JSON.stringify(slideshowPhotos));
+                currentSlide = 0;
+                renderSlideshow();
+                closeSlideshowModal();
+                alert('Slideshow updated successfully!');
+            } catch (error) {
+                console.error('Save slideshow error:', error);
+                alert('Failed to save slideshow changes');
+            }
+        }
+
+        // Initialize slideshow on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check admin access
+            checkSlideshowAdminAccess();
+
+            // Load and render slideshow
+            loadSlideshowPhotos();
+            startSlideshow();
+
+            // Event listeners
+            const prevBtn = document.getElementById('prev-slide');
+            const nextBtn = document.getElementById('next-slide');
+            const adminBtn = document.getElementById('slideshow-admin-btn');
+            const closeModalBtn = document.getElementById('close-slideshow-modal');
+            const cancelBtn = document.getElementById('cancel-slideshow-edit');
+            const saveBtn = document.getElementById('save-slideshow-changes');
+            const addPhotoBtn = document.getElementById('add-photo-btn');
+
+            if (prevBtn) prevBtn.onclick = prevSlide;
+            if (nextBtn) nextBtn.onclick = nextSlide;
+            if (adminBtn) adminBtn.onclick = openSlideshowModal;
+            if (closeModalBtn) closeModalBtn.onclick = closeSlideshowModal;
+            if (cancelBtn) cancelBtn.onclick = closeSlideshowModal;
+            if (saveBtn) saveBtn.onclick = saveSlideshowChanges;
+            if (addPhotoBtn) addPhotoBtn.onclick = addNewPhoto;
+
+            // Pause slideshow on hover
+            const slideshowContainer = document.getElementById('slideshow-container');
+            if (slideshowContainer) {
+                slideshowContainer.addEventListener('mouseenter', stopSlideshow);
+                slideshowContainer.addEventListener('mouseleave', startSlideshow);
             }
 
-            // Listen for language changes
-            window.addEventListener('languageChanged', () => {
-                window.i18n.translatePage();
+            // Keyboard navigation
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowLeft') prevSlide();
+                if (e.key === 'ArrowRight') nextSlide();
             });
         });
     </script>

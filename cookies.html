@@ -12,6 +12,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
 
+    <!-- React and Translation System -->
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+
     <style type="text/tailwindcss">
         @layer theme {
         :root {
@@ -37,10 +44,13 @@
                         <p class="text-gray-600">Last updated: September 4, 2025</p>
                     </div>
                 </div>
-                <a href="landing.html" class="flex items-center text-green-600 hover:text-green-700 font-medium">
-                    <div class="icon-arrow-left mr-2"></div>
-                    Back to Home
-                </a>
+                <div class="flex items-center gap-4">
+                    <div id="language-switcher"></div>
+                    <a href="landing.html" class="flex items-center text-green-600 hover:text-green-700 font-medium">
+                        <div class="icon-arrow-left mr-2"></div>
+                        Back to Home
+                    </a>
+                </div>
             </div>
         </div>
     </header>
@@ -407,6 +417,47 @@
             <p class="text-gray-600">&copy; 2025 Food Maps. All rights reserved.</p>
         </div>
     </footer>
+
+    <!-- Language Switcher Component -->
+    <script type="text/babel" src="components/LanguageSwitcher.js"></script>
+    <script type="text/babel">
+        function initLanguageSwitcher() {
+            if (!window.i18n) {
+                console.error('Translation system not loaded');
+                return;
+            }
+
+            if (typeof LanguageSwitcherCompact === 'undefined') {
+                console.error('LanguageSwitcherCompact component not loaded');
+                return;
+            }
+
+            window.i18n.initLanguageSystem();
+
+            const container = document.getElementById('language-switcher');
+            if (container) {
+                try {
+                    const root = ReactDOM.createRoot(container);
+                    root.render(<LanguageSwitcherCompact />);
+                    console.log('Language switcher rendered on cookies page');
+                } catch (error) {
+                    console.error('Error rendering language switcher:', error);
+                }
+            }
+
+            window.addEventListener('languageChanged', () => {
+                window.i18n.translatePage();
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(initLanguageSwitcher, 100);
+            });
+        } else {
+            setTimeout(initLanguageSwitcher, 100);
+        }
+    </script>
 </body>
 
 </html>

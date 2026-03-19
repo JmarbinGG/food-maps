@@ -37,10 +37,8 @@
     <!-- Mapbox Search JS (Autofill Web Component) -->
     <script src="https://api.mapbox.com/search-js/v1.0.0/web.js"></script>
     <link href="https://api.mapbox.com/search-js/v1.0.0/web.css" rel="stylesheet" />
-
-    <!-- Translation System -->
-    <script src="utils/translations.js"></script>
-    <script src="utils/useTranslation.js"></script>
+    <!-- html2canvas for screenshot capture -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
     <style type="text/tailwindcss">
         @layer theme {
@@ -74,6 +72,34 @@
         .mapboxgl-canvas-container {
             width: 100% !important;
             height: 100% !important;
+        }
+
+        /* Fix Mapbox attribution covering map */
+        .mapboxgl-ctrl-bottom-right,
+        .mapboxgl-ctrl-bottom-left {
+            opacity: 0.7;
+            pointer-events: auto;
+        }
+
+        .mapboxgl-ctrl-bottom-right:hover,
+        .mapboxgl-ctrl-bottom-left:hover {
+            opacity: 1;
+        }
+
+        .mapboxgl-ctrl-attrib {
+            background-color: rgba(255, 255, 255, 0.8) !important;
+            max-width: 200px !important;
+            font-size: 10px !important;
+        }
+
+        .mapboxgl-ctrl-logo {
+            width: 60px !important;
+            height: 20px !important;
+        }
+
+        /* Ensure controls don't block map interaction */
+        .mapboxgl-ctrl {
+            pointer-events: auto !important;
         }
         
         .mapboxgl-popup-content {
@@ -362,16 +388,29 @@
 
 <body>
     <div id="root"></div>
+    <div id="notification-toggle-container"></div>
 
     <script type="text/babel" src="utils/mockData.js"></script>
     <script type="text/babel" src="utils/database.js"></script>
     <script type="text/babel" src="utils/supabaseExport.js"></script>
     <script type="text/babel" src="utils/mapbox.js"></script>
     <script type="text/babel" src="utils/api.js"></script>
+    <script type="text/babel" src="utils/favoritesAPI.js"></script>
     <script type="text/babel" src="utils/agentAPI.js"></script>
     <script type="text/babel" src="utils/agents.js"></script>
     <script type="text/babel" src="components/Header.js"></script>
     <script type="text/babel" src="components/FilterPanel.js"></script>
+    <script type="text/babel" src="components/TrustBadge.js"></script>
+    <script type="text/babel" src="components/StorageGuidance.js"></script>
+    <script type="text/babel" src="components/ExpirationEducation.js"></script>
+    <script type="text/babel" src="components/AllergenDietaryFlags.js"></script>
+    <script type="text/babel" src="components/MealBuilder.js"></script>
+    <script type="text/babel" src="components/VoiceSearch.js"></script>
+    <script type="text/babel" src="components/SmartNotifications.js"></script>
+    <script type="text/babel" src="components/SmartStorageCoach.js"></script>
+    <script type="text/babel" src="components/SpoilageRiskAlerts.js"></script>
+    <script type="text/babel" src="components/SmartMealSuggestions.js"></script>
+    <script type="text/babel" src="components/SMSConsentManager.js"></script>
     <script type="text/babel" src="components/ListingCard.js"></script>
     <script type="text/babel" src="components/StoreMenu.js"></script>
     <script type="text/babel" src="components/Map.js"></script>
@@ -389,6 +428,19 @@
     <script type="text/babel" src="components/AIFoodSearch.js"></script>
     <script type="text/babel" src="components/FoodSearch.js"></script>
     <script type="text/babel" src="components/ConsumptionTracker.js"></script>
+    <script type="text/babel" src="components/MessageSupport.js"></script>
+    <script type="text/babel" src="components/FeedbackModal.js"></script>
+    <script type="text/babel" src="components/FeedbackViewer.js"></script>
+    <script type="text/babel" src="components/ErrorBoundary.js"></script>
+    <script type="text/babel" src="components/DonorImpactDashboard.js"></script>
+    <script type="text/babel" src="components/DietaryPreferences.js"></script>
+    <script type="text/babel" src="components/FavoritesPanel.js"></script>
+    <script type="text/babel" src="components/PickupVerification.js"></script>
+    <script type="text/babel" src="components/TutorialMode.js"></script>
+    <script type="text/babel" src="components/SafetyCenter.js"></script>
+    <script type="text/babel" src="components/FoodSafetyChecklist.js"></script>
+    <script type="text/babel" src="components/PickupReminders.js"></script>
+    <script type="text/babel" src="components/AdminMessagePanel.js"></script>
     <script type="text/babel" src="components/AdminPanel.js"></script>
     <script type="text/babel" src="components/EmergencyResponse.js"></script>
     <script type="text/babel" src="components/NutritionTracker.js"></script>
@@ -401,6 +453,7 @@
     <script type="text/babel" src="components/UserProfile.js"></script>
     <script type="text/babel" src="components/DistributionCenterMap.js"></script>
     <script type="text/babel" src="components/StoreOwnerDashboard.js"></script>
+    <script type="text/babel" src="components/DonationScheduler.js"></script>
     <script type="text/babel" src="components/Dashboard.js"></script>
     <script type="text/babel" src="components/ListingDetailModal.js"></script>
     <script type="text/babel" src="components/DetailedModal.js"></script>
@@ -416,21 +469,60 @@
     <script type="text/babel" src="components/Auth/PhoneModal.js"></script>
     <script type="text/babel" src="components/ConfirmationModal.js"></script>
     <script type="text/babel" src="components/ClaimConfirmationModal.js"></script>
-    <script type="text/babel" src="components/LanguageSwitcher.js"></script>
     <script type="text/babel" src="app.js"></script>
 
-    <script>
-        // Initialize language system
-        document.addEventListener('DOMContentLoaded', () => {
-            window.i18n.initLanguageSystem();
+    <!-- Voice Search Floating Button -->
+    <script type="text/babel">
+        const VoiceButtonContainer = () => {
+            return <VoiceSearchButton />;
+        };
 
-            // Listen for language changes to update all components
-            window.addEventListener('languageChanged', () => {
-                window.i18n.translatePage();
-                // Force React components to re-render
-                window.location.reload();
-            });
-        });
+        // Add floating voice button to page
+        const voiceButtonRoot = document.createElement('div');
+        voiceButtonRoot.id = 'voice-button-root';
+        document.body.appendChild(voiceButtonRoot);
+
+        setTimeout(() => {
+            const root = ReactDOM.createRoot(voiceButtonRoot);
+            root.render(<VoiceButtonContainer />);
+        }, 1000);
+    </script>
+
+    <!-- Smart Notifications Toggle -->
+    <script type="text/babel">
+        const NotificationToggleContainer = () => {
+            const [user, setUser] = React.useState(null);
+
+            React.useEffect(() => {
+                const checkAuth = () => {
+                    const token = localStorage.getItem('token');
+                    if (token) {
+                        try {
+                            const payload = JSON.parse(atob(token.split('.')[1]));
+                            setUser(payload);
+                        } catch (e) {
+                            console.error('Error parsing token:', e);
+                        }
+                    }
+                };
+
+                checkAuth();
+                // Check auth periodically in case user logs in/out
+                const interval = setInterval(checkAuth, 2000);
+                return () => clearInterval(interval);
+            }, []);
+
+            if (!user) return null;
+            return <NotificationToggle />;
+        };
+
+        setTimeout(() => {
+            const toggleContainer = document.getElementById('notification-toggle-container');
+            if (toggleContainer) {
+                const root = ReactDOM.createRoot(toggleContainer);
+                root.render(<NotificationToggleContainer />);
+            }
+        }, 1500);
     </script>
 </body>
 

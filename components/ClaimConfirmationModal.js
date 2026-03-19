@@ -13,7 +13,7 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!code || code.trim().length !== 4) {
       setError('Please enter the 4-digit code');
       return;
@@ -48,20 +48,25 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
       }
 
       if (result.success) {
+        // Show success alert
         if (typeof window.showAlert === 'function') {
-          window.showAlert('Claim confirmed! You can now pick up the food.', { 
-            title: 'Success', 
-            variant: 'success' 
+          window.showAlert('Claim confirmed! Now take a before-pickup photo.', {
+            title: 'Success',
+            variant: 'success'
           });
         }
-        
-        // Refresh the page to show updated listing status
-        setTimeout(() => {
-          window.location.reload();
-        }, 1000);
-        
-        if (onConfirm) onConfirm(result);
+
+        // Close this modal
         onClose();
+
+        // Open before-photo verification modal after a short delay
+        setTimeout(() => {
+          if (typeof window.openBeforePhotoVerification === 'function') {
+            window.openBeforePhotoVerification(listing);
+          }
+        }, 500);
+
+        if (onConfirm) onConfirm(result);
       } else {
         setError(result.message || 'Confirmation failed');
         setIsSubmitting(false);
@@ -86,7 +91,7 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
       <div className="bg-white rounded-lg max-w-md w-full p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">Confirm Your Claim</h2>
-          <button 
+          <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
@@ -145,11 +150,10 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
             <button
               type="submit"
               disabled={isSubmitting || code.length !== 4}
-              className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
-                isSubmitting || code.length !== 4
+              className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${isSubmitting || code.length !== 4
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-green-600 text-white hover:bg-green-700'
-              }`}
+                }`}
             >
               {isSubmitting ? (
                 <span className="flex items-center justify-center">

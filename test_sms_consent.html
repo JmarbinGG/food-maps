@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMS Consent Manager Test - Food Maps</title>
+  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+  <script crossorigin
+    src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+  <div class="min-h-screen p-8">
+    <div class="max-w-4xl mx-auto">
+      <!-- Header -->
+      <div class="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg p-8 mb-8 shadow-lg">
+        <h1 class="text-4xl font-bold mb-2">📱 SMS Consent Manager Test</h1>
+        <p class="text-lg opacity-90">Twilio-compliant SMS opt-in with explicit user consent</p>
+      </div>
+
+      <!-- Feature Description -->
+      <div class="bg-white rounded-lg p-6 mb-8 shadow">
+        <h2 class="text-2xl font-bold mb-4">Twilio Compliance Features:</h2>
+        <div class="space-y-3 text-gray-700">
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">✅</span>
+            <div>
+              <strong>Explicit Opt-In Required</strong> - Users must actively check boxes and confirm consent
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">🎯</span>
+            <div>
+              <strong>Granular Control</strong> - 8 notification types with toggles for each one
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">📋</span>
+            <div>
+              <strong>Legal Compliance</strong> - Records consent date, IP address, and opt-out status
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">🔄</span>
+            <div>
+              <strong>Easy Opt-Out</strong> - Clear opt-out button + STOP command in every message
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <span class="text-2xl">📞</span>
+            <div>
+              <strong>Phone Verification</strong> - Checks phone number exists before enabling SMS
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notification Types -->}
+      <div class="bg-white rounded-lg p-6 mb-8 shadow">
+        <h2 class="text-2xl font-bold mb-4">8 SMS Notification Types:</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="border-2 border-blue-200 rounded-lg p-4 bg-blue-50">
+            <div class="text-3xl mb-2">🆕</div>
+            <strong>New Listings Nearby</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Fresh produce just arrived 0.4 miles away"
+            </div>
+          </div>
+          <div class="border-2 border-green-200 rounded-lg p-4 bg-green-50">
+            <div class="text-3xl mb-2">✅</div>
+            <strong>Pickup Ready</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Your chicken & vegetables are ready"
+            </div>
+          </div>
+          <div class="border-2 border-yellow-200 rounded-lg p-4 bg-yellow-50">
+            <div class="text-3xl mb-2">⏰</div>
+            <strong>Expiration Reminders</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Your milk expires in 2 hours"
+            </div>
+          </div>
+          <div class="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+            <div class="text-3xl mb-2">⚠️</div>
+            <strong>Spoilage Warnings</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "URGENT: Food at room temp for 6 hours"
+            </div>
+          </div>
+          <div class="border-2 border-indigo-200 rounded-lg p-4 bg-indigo-50">
+            <div class="text-3xl mb-2">🔔</div>
+            <strong>Pickup Reminders</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Reminder: Pickup at 3:00 PM (15 minutes)"
+            </div>
+          </div>
+          <div class="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+            <div class="text-3xl mb-2">⭐</div>
+            <strong>Favorite Locations</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Community Pantry just restocked produce"
+            </div>
+          </div>
+          <div class="border-2 border-orange-200 rounded-lg p-4 bg-orange-50">
+            <div class="text-3xl mb-2">👨‍🍳</div>
+            <strong>Meal Ideas</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              "Chicken + greens expiring - 15-min meal"
+            </div>
+          </div>
+          <div class="border-2 border-gray-300 rounded-lg p-4 bg-gray-100">
+            <div class="text-3xl mb-2">🚨</div>
+            <strong>Urgent Only</strong>
+            <div class="text-sm text-gray-600 mt-1">
+              Only critical safety & same-day pickups
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Database Schema -->}
+      <div class="bg-white rounded-lg p-6 mb-8 shadow">
+        <h2 class="text-2xl font-bold mb-4">Database Fields Added:</h2>
+        <div class="bg-gray-50 p-4 rounded border-2 border-gray-200 font-mono text-sm space-y-2">
+          <div><strong>sms_consent_given:</strong> BOOLEAN (default FALSE)</div>
+          <div><strong>sms_consent_date:</strong> DATETIME (when consent given)</div>
+          <div><strong>sms_notification_types:</strong> TEXT (JSON array)</div>
+          <div><strong>sms_opt_out_date:</strong> DATETIME (when opted out)</div>
+          <div><strong>sms_consent_ip:</strong> VARCHAR(50) (IP for compliance)</div>
+        </div>
+      </div>
+
+      <!-- API Endpoints -->}
+      <div class="bg-white rounded-lg p-6 mb-8 shadow">
+        <h2 class="text-2xl font-bold mb-4">API Endpoints:</h2>
+        <div class="space-y-3">
+          <div class="bg-blue-50 p-3 rounded border-l-4 border-blue-500">
+            <strong>GET /api/sms-consent</strong> - Get user's consent status
+          </div>
+          <div class="bg-green-50 p-3 rounded border-l-4 border-green-500">
+            <strong>PUT /api/sms-consent</strong> - Update consent and preferences
+          </div>
+          <div class="bg-purple-50 p-3 rounded border-l-4 border-purple-500">
+            <strong>check_sms_consent()</strong> - Verify before sending SMS
+          </div>
+        </div>
+      </div>
+
+      <!-- Test Button -->}
+      <div id="root"></div>
+
+      <!-- Legal Info -->}
+      <div class="mt-8 bg-purple-50 border-2 border-purple-200 rounded-lg p-6">
+        <h3 class="font-bold text-lg mb-3">📋 Twilio Compliance Checklist:</h3>
+        <div class="space-y-2 text-sm">
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>Explicit opt-in required (no pre-checked boxes)</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>Clear disclosure of message frequency</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>"Message and data rates may apply" notice</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>STOP command to opt out anytime</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>HELP command for assistance</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>Consent date and IP logged for compliance</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>Easy opt-out button in settings</span>
+          </div>
+          <div class="flex items-start gap-2">
+            <span class="text-green-600 font-bold">✓</span>
+            <span>Backend checks consent before every SMS</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/babel" src="components/SMSConsentManager.js"></script>
+
+  <script type="text/babel">
+    const TestApp = () => {
+      const [showModal, setShowModal] = React.useState(false);
+
+      // Mock user with phone number
+      const mockUser = {
+        id: 1,
+        name: "Test User",
+        email: "test@example.com",
+        role: "recipient",
+        phone: "+1234567890",
+        phone_verified: true
+      };
+
+      const handleUpdate = () => {
+        console.log('User updated SMS preferences');
+      };
+
+      return (
+        <div>
+          {/* Test Button */}
+          <button
+            onClick={() => setShowModal(true)}
+            className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 py-4 rounded-lg font-bold text-lg hover:shadow-lg transition-all"
+          >
+            📱 Open SMS Consent Manager
+          </button>
+
+          {/* Info */}
+          <div className="mt-4 text-center text-sm text-gray-600">
+            Click to see the full consent UI with all 8 notification types
+          </div>
+
+          {/* Modal */}
+          {showModal && (
+            <SMSConsentManager
+              user={mockUser}
+              onClose={() => setShowModal(false)}
+              onUpdate={handleUpdate}
+            />
+          )}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TestApp />);
+  </script>
+</body>
+
+</html>

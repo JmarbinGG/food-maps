@@ -19,6 +19,7 @@ function AdminPanel({ onClose }) {
     const [referralLoading, setReferralLoading] = React.useState(false);
     const [listings, setListings] = React.useState([]);
     const [listingsLoading, setListingsLoading] = React.useState(false);
+    const [showFeedbackViewer, setShowFeedbackViewer] = React.useState(false);
 
     React.useEffect(() => {
       loadDatabaseStats();
@@ -276,6 +277,8 @@ function AdminPanel({ onClose }) {
                 { id: 'centers', label: 'Distribution Centers', icon: 'map-pin' },
                 { id: 'listings', label: 'Listings', icon: 'package' },
                 { id: 'referrals', label: 'Referrals', icon: 'users' },
+                { id: 'feedback', label: 'Feedback', icon: 'message-square' },
+                { id: 'messages', label: 'Messages', icon: 'message-circle' },
                 { id: 'database', label: 'Database', icon: 'database' },
                 { id: 'export', label: 'Export', icon: 'download' }
               ].map(tab => (
@@ -419,7 +422,12 @@ function AdminPanel({ onClose }) {
                             return;
                           }
                           try {
-                            const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(centerForm.address)}.json?access_token=pk.eyJ1Ijoiamhhbm1hcmJpbiIsImEiOiJjbTQ4ZTgxZjYwMzNjMmtzNnBienoyMmljIn0.Sz0YC4asDk_vgqA8V0OlsQ&limit=1`);
+                            const mapboxToken = window.MAPBOX_ACCESS_TOKEN;
+                            if (!mapboxToken) {
+                              alert('Mapbox token not configured');
+                              return;
+                            }
+                            const response = await fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(centerForm.address)}.json?access_token=${encodeURIComponent(mapboxToken)}&limit=1`);
                             const data = await response.json();
                             if (data.features && data.features[0]) {
                               const [lng, lat] = data.features[0].center;
@@ -709,8 +717,8 @@ function AdminPanel({ onClose }) {
                                     <p><strong>Posted by:</strong> {listing.user_name || 'Unknown'}</p>
                                     <p><strong>Status:</strong>
                                       <span className={`ml-1 px-2 py-1 rounded-full text-xs ${listing.status === 'available' ? 'bg-green-100 text-green-800' :
-                                          listing.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
-                                            'bg-gray-100 text-gray-800'
+                                        listing.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
+                                          'bg-gray-100 text-gray-800'
                                         }`}>
                                         {listing.status}
                                       </span>
@@ -822,7 +830,29 @@ function AdminPanel({ onClose }) {
               </div>
             </div>
           )}
+
+          {activeTab === 'feedback' && (
+            <div>
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">User Feedback & Bug Reports</h3>
+                <button
+                  onClick={() => setShowFeedbackViewer(true)}
+                  className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700"
+                >
+                  View All Feedback
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'messages' && (
+            <AdminMessagePanel />
+          )}
         </div>
+
+        {showFeedbackViewer && (
+          <FeedbackViewer onClose={() => setShowFeedbackViewer(false)} />
+        )}
       </div>
     );
   } catch (error) {

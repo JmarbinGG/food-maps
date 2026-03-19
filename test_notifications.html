@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Smart Notifications Test - Food Maps</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50">
+  <div id="root"></div>
+
+  <script type="text/babel" src="components/SmartNotifications.js"></script>
+
+  <script type="text/babel">
+    const TestApp = () => {
+      const [user, setUser] = React.useState(null);
+      const [showNotifications, setShowNotifications] = React.useState(false);
+
+      React.useEffect(() => {
+        // Get user from localStorage
+        const token = localStorage.getItem('token');
+        if (token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            setUser({
+              id: payload.sub,
+              name: payload.name,
+              email: payload.email,
+              role: payload.role
+            });
+          } catch (e) {
+            console.error('Error parsing token:', e);
+          }
+        }
+      }, []);
+
+      if (!user) {
+        return (
+          <div className="min-h-screen flex items-center justify-center">
+            <div className="text-center">
+              <h1 className="text-2xl font-bold mb-4">Smart Notifications Test</h1>
+              <p className="text-gray-600 mb-4">Please log in first</p>
+              <a href="/" className="text-blue-600 hover:underline">
+                Go to main app
+              </a>
+            </div>
+          </div>
+        );
+      }
+
+      return (
+        <div className="min-h-screen p-8">
+          <div className="max-w-4xl mx-auto">
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h1 className="text-3xl font-bold mb-2">🔔 Smart Notifications Test</h1>
+              <p className="text-gray-600 mb-4">
+                Testing the AI-powered notification system that learns your preferences
+              </p>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="text-sm text-gray-600">
+                  Logged in as: <span className="font-semibold">{user.name}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              <h2 className="text-xl font-bold mb-4">Features to Test</h2>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>Permission Request:</strong> Click "Enable Notifications" and grant browser permission</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>Preferences:</strong> Set max distance, daily limit, quiet hours</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>Categories:</strong> Select which food categories you want notifications for</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>Dietary Tags:</strong> Filter by dietary preferences (vegetarian, gluten-free, etc.)</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>Test Notification:</strong> Send a test notification to verify it works</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 font-bold">✓</span>
+                  <span><strong>AI Learning Insights:</strong> View what the AI has learned about your behavior</span>
+                </li>
+              </ul>
+            </div>
+
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
+              <h3 className="font-bold mb-2">🤖 How the AI Works</h3>
+              <p className="text-sm text-gray-700 mb-2">
+                The notification system uses a smart scoring algorithm (0-100+ points) based on:
+              </p>
+              <ul className="text-sm space-y-1 ml-4">
+                <li>• Category preference (learns from clicks) ±30 points</li>
+                <li>• Dietary tag matching +15 per tag</li>
+                <li>• Favorite location +40 points</li>
+                <li>• Distance preference +20 points</li>
+                <li>• Urgency (expiring soon) +25 points</li>
+                <li>• Freshness (just posted) +15 points</li>
+              </ul>
+              <p className="text-sm text-gray-700 mt-2">
+                Notifications are only sent if the score exceeds threshold (40-60 based on your response rate)
+              </p>
+            </div>
+
+            <button
+              onClick={() => setShowNotifications(true)}
+              className="w-full bg-blue-600 text-white px-6 py-4 rounded-lg font-bold text-lg hover:bg-blue-700 transition-colors"
+            >
+              Open Smart Notifications Panel
+            </button>
+
+            <div className="mt-6 text-center">
+              <a href="/" className="text-blue-600 hover:underline">
+                ← Back to main app
+              </a>
+            </div>
+          </div>
+
+          {showNotifications && window.SmartNotifications && (
+            <window.SmartNotifications
+              user={user}
+              onClose={() => setShowNotifications(false)}
+            />
+          )}
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<TestApp />);
+  </script>
+</body>
+
+</html>

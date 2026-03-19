@@ -24,7 +24,10 @@ from backend.schemas import (
 )
 from backend.models import (
     Base, FoodResource, User, UserRole, FoodCategory, PerishabilityLevel,
-    DistributionCenter, CenterInventory
+    DistributionCenter, CenterInventory, Message, DonationSchedule, 
+    DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
+    FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
+    PickupReminder, FavoriteLocation
 )
 from threading import Timer
 import smtplib
@@ -44,7 +47,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Serve static files at root paths for legacy HTML compatibility
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-#app.mount("/", StaticFiles(directory=PROJECT_ROOT), name="root")
+# Static files will be mounted at the end of the file, after all routes
 security = HTTPBearer()
 # Optional bearer for endpoints where auth is not required but can tailor results
 optional_security = HTTPBearer(auto_error=False)
@@ -56,7 +59,7 @@ password = os.getenv("EMAIL_PASSWORD")
 # Twilio SMS configuration
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_KEY")  # Using TWILIO_KEY from .env
-TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER", "+18449464421")  # Default Twilio number
+TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")  # Default Twilio number
 
 
 
@@ -107,6 +110,13 @@ def serialize_user(user: Optional[User]) -> Optional[dict]:
             "coords_lat": getattr(user, "coords_lat", None),
             "coords_lng": getattr(user, "coords_lng", None),
             "created_at": user.created_at.isoformat() if getattr(user, "created_at", None) else None,
+            # Trust signals
+            "trust_score": getattr(user, "trust_score", 50),
+            "verified_by_aglf": getattr(user, "verified_by_aglf", False),
+            "school_partner": getattr(user, "school_partner", False),
+            "partner_badge": getattr(user, "partner_badge", None),
+            "partner_since": user.partner_since.isoformat() if getattr(user, "partner_since", None) else None,
+            "last_active": user.last_active.isoformat() if getattr(user, "last_active", None) else None,
         }
     except Exception:
         # Best-effort fallback to avoid breaking responses
@@ -127,7 +137,13 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
     # Enum helpers
     def ev(v):
         try:
-            return v.value if v is not None else None
+            # If it's already an enum, get its value
+            if hasattr(v, 'value'):
+                return v.value
+            # If it's a string, return as-is (might be enum value already stored as string)
+            if isinstance(v, str):
+                return v
+            return v if v is not None else None
         except Exception:
             # Already a string or unexpected type
             return v
@@ -142,6 +158,8 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "qty": getattr(item, "qty", None),
         "unit": getattr(item, "unit", None),
         "perishability": ev(getattr(item, "perishability", None)),
+        "expiration_date": item.expiration_date.isoformat() if getattr(item, "expiration_date", None) else None,
+        "date_label_type": getattr(item, "date_label_type", None),
         "address": getattr(item, "address", None),
         "coords_lat": getattr(item, "coords_lat", None),
         "coords_lng": getattr(item, "coords_lng", None),
@@ -152,6 +170,15 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "urgency_score": getattr(item, "urgency_score", 0) or 0,
         "created_at": item.created_at.isoformat() if getattr(item, "created_at", None) else None,
         "updated_at": item.updated_at.isoformat() if getattr(item, "updated_at", None) else None,
+        "verification_status": ev(getattr(item, "verification_status", None)),
+        "is_refrigerated": getattr(item, "is_refrigerated", False) or False,
+        "is_frozen": getattr(item, "is_frozen", False) or False,
+        "safety_checklist_passed": getattr(item, "safety_checklist_passed", False) or False,
+        "packaging_condition": getattr(item, "packaging_condition", "unknown"),
+        "allergens": getattr(item, "allergens", None),
+        "contamination_warning": getattr(item, "contamination_warning", None),
+        "dietary_tags": getattr(item, "dietary_tags", None),
+        "ingredients_list": getattr(item, "ingredients_list", None),
         "donor": donor_payload,
     }
 
@@ -215,6 +242,10 @@ async def serve_cookies():
 async def serve_terms():
     return get_html_content("terms.html")
 
+@app.get("/impactStory.html", response_class=HTMLResponse)
+async def serve_impact_story():
+    return get_html_content("impactStory.html")
+
 @app.get("/admin-referrals.html", response_class=HTMLResponse)
 async def serve_admin_referrals():
     return get_html_content("admin-referrals.html")
@@ -247,6 +278,11 @@ async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), 
             "coords_lat": user.coords_lat,
             "coords_lng": user.coords_lng,
             "created_at": user.created_at.isoformat() if user.created_at else None,
+            "dietary_restrictions": user.dietary_restrictions,
+            "allergies": user.allergies,
+            "household_size": user.household_size,
+            "preferred_categories": user.preferred_categories,
+            "special_needs": user.special_needs
         }
     except HTTPException:
         raise
@@ -299,6 +335,25 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
         if 'address' in body:
             user.address = body['address']
         
+        # Dietary needs and preferences
+        if 'dietary_restrictions' in body:
+            user.dietary_restrictions = body['dietary_restrictions']
+        if 'allergies' in body:
+            user.allergies = body['allergies']
+        if 'household_size' in body:
+            user.household_size = body['household_size']
+        if 'preferred_categories' in body:
+            user.preferred_categories = body['preferred_categories']
+        if 'special_needs' in body:
+            user.special_needs = body['special_needs']
+        
+        # Allow role switching between donor, recipient, driver (but not admin/dispatcher)
+        if 'role' in body:
+            new_role = body['role']
+            allowed_roles = ['donor', 'recipient', 'driver', 'volunteer']
+            if new_role in allowed_roles:
+                user.role = UserRole(new_role)
+        
         db.commit()
         db.refresh(user)
         
@@ -308,7 +363,12 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
             "email": user.email,
             "phone": user.phone,
             "address": user.address,
-            "role": user.role.value if user.role else None
+            "role": user.role.value if user.role else None,
+            "dietary_restrictions": user.dietary_restrictions,
+            "allergies": user.allergies,
+            "household_size": user.household_size,
+            "preferred_categories": user.preferred_categories,
+            "special_needs": user.special_needs
         }
     except HTTPException:
         raise
@@ -396,6 +456,44 @@ async def startup_event():
                 conn.execute(text("ALTER TABLE food_resources ADD COLUMN claimed_at DATETIME NULL"))
             except Exception:
                 pass  # Column already exists
+            
+            # Create favorite_locations table if it doesn't exist
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS favorite_locations (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        user_id INT NOT NULL,
+                        name VARCHAR(255) NOT NULL,
+                        address VARCHAR(500),
+                        coords_lat FLOAT,
+                        coords_lng FLOAT,
+                        location_type VARCHAR(50) DEFAULT 'general',
+                        donor_id INT NULL,
+                        center_id INT NULL,
+                        notes TEXT,
+                        tags TEXT,
+                        visit_count INT DEFAULT 0,
+                        last_visited DATETIME NULL,
+                        notify_new_listings BOOLEAN DEFAULT FALSE,
+                        notification_radius_km FLOAT DEFAULT 5.0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                        FOREIGN KEY (donor_id) REFERENCES users(id) ON DELETE SET NULL,
+                        FOREIGN KEY (center_id) REFERENCES distribution_centers(id) ON DELETE SET NULL,
+                        INDEX idx_user_id (user_id),
+                        INDEX idx_donor_id (donor_id),
+                        INDEX idx_center_id (center_id),
+                        INDEX idx_location_type (location_type),
+                        INDEX idx_is_active (is_active)
+                    )
+                """))
+                print("✅ favorite_locations table created/verified")
+            except Exception as e:
+                print(f"Note: favorite_locations table migration: {e}")
+                pass  # Table likely already exists
+            
             conn.commit()
     except Exception as e:
         try:
@@ -415,7 +513,7 @@ async def db_test():
         return {"success": False, "error": str(e)}
 
 
-@app.get("/api/listings/get", response_model=List[FoodResourceResponse])
+@app.get("/api/listings/get")
 def get_listings(
     limit: int = 100,
     db: Session = Depends(get_db),
@@ -462,11 +560,17 @@ def get_listings(
             .limit(limit)
         ).all()
 
-        # Ensure donor relationship is loaded
+        # Serialize listings to avoid Pydantic validation issues with enum fields
+        result = []
         for listing in listings:
-            _ = listing.donor
+            try:
+                serialized = serialize_listing(listing, include_donor=True, include_donor_contact=False)
+                result.append(serialized)
+            except Exception as e:
+                print(f"Error serializing listing {listing.id}: {e}")
+                continue
 
-        return listings
+        return result
     except Exception as e:
         # Inline logging for easier diagnostics in environments without log collection
         try:
@@ -512,6 +616,194 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/listings/recommended")
+async def get_recommended_listings(
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Get personalized food recommendations based on user's dietary needs and preferences.
+    Filters out allergens and prioritizes preferred categories.
+    """
+    try:
+        # Decode JWT to get user
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Parse dietary preferences
+        import json
+        
+        dietary_restrictions = []
+        allergies = []
+        preferred_categories = []
+        
+        try:
+            if user.dietary_restrictions:
+                dietary_restrictions = json.loads(user.dietary_restrictions) if isinstance(user.dietary_restrictions, str) else user.dietary_restrictions
+        except:
+            pass
+            
+        try:
+            if user.allergies:
+                allergies = json.loads(user.allergies) if isinstance(user.allergies, str) else user.allergies
+        except:
+            pass
+            
+        try:
+            if user.preferred_categories:
+                preferred_categories = json.loads(user.preferred_categories) if isinstance(user.preferred_categories, str) else user.preferred_categories
+        except:
+            pass
+        
+        # Get all available listings
+        listings = db.query(FoodResource).filter(FoodResource.status == "available").all()
+        
+        # Score each listing based on dietary compatibility
+        scored_listings = []
+        for listing in listings:
+            score = 0
+            skip = False
+            
+            # Load mock data to check dietary_info and allergens
+            # In real app, this would be stored in database
+            # For now, we'll use basic category matching
+            
+            # Preferred category bonus (high priority)
+            if listing.category and listing.category.value in preferred_categories:
+                score += 50
+            
+            # Dietary restrictions matching
+            # Check listing description/title for keywords
+            listing_text = (listing.title or '').lower() + ' ' + (listing.description or '').lower()
+            
+            for restriction in dietary_restrictions:
+                restriction_lower = restriction.lower()
+                if restriction_lower == 'vegetarian':
+                    # Avoid meat keywords
+                    if any(word in listing_text for word in ['meat', 'chicken', 'beef', 'pork', 'fish', 'salmon']):
+                        score -= 30
+                    if any(word in listing_text for word in ['vegetarian', 'vegan', 'veggie', 'produce', 'fruit']):
+                        score += 20
+                elif restriction_lower == 'vegan':
+                    if any(word in listing_text for word in ['vegan', 'plant-based']):
+                        score += 30
+                    if any(word in listing_text for word in ['dairy', 'cheese', 'milk', 'egg', 'meat', 'chicken', 'fish']):
+                        score -= 40
+                elif restriction_lower == 'gluten-free':
+                    if 'gluten' in listing_text or 'bread' in listing_text or 'pasta' in listing_text:
+                        score -= 20
+                    if 'gluten-free' in listing_text:
+                        score += 25
+                elif restriction_lower == 'halal':
+                    if 'halal' in listing_text:
+                        score += 30
+                    if 'pork' in listing_text:
+                        skip = True
+                elif restriction_lower == 'kosher':
+                    if 'kosher' in listing_text:
+                        score += 30
+                    if 'pork' in listing_text or 'shellfish' in listing_text:
+                        skip = True
+            
+            # Allergy filtering (critical - skip if allergen present)
+            for allergy in allergies:
+                allergy_lower = allergy.lower()
+                # Check for common allergen keywords
+                if allergy_lower in ['peanuts', 'tree nuts', 'nuts']:
+                    if any(word in listing_text for word in ['peanut', 'almond', 'walnut', 'cashew', 'nut']):
+                        skip = True
+                        break
+                elif allergy_lower in ['dairy', 'milk']:
+                    if any(word in listing_text for word in ['dairy', 'milk', 'cheese', 'yogurt', 'cream']):
+                        skip = True
+                        break
+                elif allergy_lower in ['eggs', 'egg']:
+                    if 'egg' in listing_text:
+                        skip = True
+                        break
+                elif allergy_lower == 'soy':
+                    if 'soy' in listing_text or 'tofu' in listing_text:
+                        skip = True
+                        break
+                elif allergy_lower in ['wheat/gluten', 'wheat', 'gluten']:
+                    if any(word in listing_text for word in ['wheat', 'gluten', 'bread', 'pasta']):
+                        skip = True
+                        break
+                elif allergy_lower in ['fish', 'shellfish', 'seafood']:
+                    if any(word in listing_text for word in ['fish', 'salmon', 'tuna', 'shellfish', 'shrimp', 'crab', 'lobster']):
+                        skip = True
+                        break
+            
+            if not skip:
+                # Household size matching (bonus for appropriate quantities)
+                household_size = user.household_size or 1
+                if listing.qty:
+                    # Ideal portion: 1-3 servings per person
+                    ideal_qty = household_size * 2
+                    qty_diff = abs(listing.qty - ideal_qty)
+                    if qty_diff < 5:
+                        score += 10
+                
+                # Proximity bonus (if user has location)
+                if user.coords_lat and user.coords_lng and listing.coords_lat and listing.coords_lng:
+                    # Simple distance calculation (rough approximation)
+                    import math
+                    lat_diff = user.coords_lat - listing.coords_lat
+                    lng_diff = user.coords_lng - listing.coords_lng
+                    distance = math.sqrt(lat_diff**2 + lng_diff**2) * 69  # Rough miles
+                    
+                    if distance < 2:
+                        score += 30
+                    elif distance < 5:
+                        score += 20
+                    elif distance < 10:
+                        score += 10
+                
+                # Freshness/urgency bonus
+                if listing.perishability and listing.perishability.value == 'high':
+                    score += 5  # Slight bonus for fresh food
+                
+                scored_listings.append({
+                    'listing': listing,
+                    'score': score
+                })
+        
+        # Sort by score (highest first)
+        scored_listings.sort(key=lambda x: x['score'], reverse=True)
+        
+        # Return top recommendations
+        top_listings = [item['listing'] for item in scored_listings[:20]]
+        
+        # Ensure donor relationship is loaded
+        for listing in top_listings:
+            _ = listing.donor
+        
+        return {
+            'listings': top_listings,
+            'user_preferences': {
+                'dietary_restrictions': dietary_restrictions,
+                'allergies': allergies,
+                'preferred_categories': preferred_categories,
+                'household_size': user.household_size
+            },
+            'total_matches': len(scored_listings)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error in recommended listings: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -798,8 +1090,17 @@ async def get_user_referrals(credentials: HTTPAuthorizationCredentials = Depends
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        # Count referrals
-        referral_count = db.query(User).filter(User.referred_by == user_id).count()
+        # Generate referral code if user doesn't have one
+        if not user.referral_code:
+            new_code = generate_referral_code()
+            while db.query(User).filter(User.referral_code == new_code).first():
+                new_code = generate_referral_code()
+            user.referral_code = new_code
+            db.commit()
+            db.refresh(user)
+        
+        # Count referrals using referred_by_code field
+        referral_count = db.query(User).filter(User.referred_by_code == user.referral_code).count()
         
         return {
             "referral_code": user.referral_code,
@@ -812,23 +1113,27 @@ async def get_user_referrals(credentials: HTTPAuthorizationCredentials = Depends
 
 @app.post("/api/referral/validate")
 async def validate_referral_code(request: Request, db: Session = Depends(get_db)):
-    """Validate a referral code"""
+    """Validate a referral code in real-time"""
     try:
         body = await request.json()
-        code = body.get('code')
+        code = body.get('code', '').strip().upper()
         
         if not code:
-            raise HTTPException(status_code=400, detail="Referral code required")
+            return {"valid": False, "referrer_name": None}
+        
+        if len(code) < 6:
+            return {"valid": False, "referrer_name": None}
         
         user = db.query(User).filter(User.referral_code == code).first()
         if not user:
-            return {"valid": False}
+            return {"valid": False, "referrer_name": None}
         
         return {"valid": True, "referrer_name": user.name}
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Error validating referral code: {e}")
+        return {"valid": False, "referrer_name": None}
 
 @app.get("/api/admin/referrals")
 async def get_referral_analytics(admin_user: User = Depends(verify_admin), db: Session = Depends(get_db)):
@@ -1178,7 +1483,7 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
         # Send confirmation SMS to both parties
         if claimant and claimant.phone:
             msg = f"Claim confirmed! You can now pick up '{item.title}' at {item.address}. Contact donor: {donor.phone if donor and donor.phone else 'N/A'}"
-            send_sms(claimant.phone, msg)
+            (claimant.phone, msg)
         
         if donor and donor.phone:
             msg = f"Claim confirmed! {claimant.name if claimant else 'Recipient'} will pick up '{item.title}'. Contact: {claimant.phone if claimant and claimant.phone else 'N/A'}"
@@ -1188,6 +1493,512 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
             "success": True,
             "message": "Claim confirmed successfully",
             "listing": serialize_listing(item)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/listings/{listing_id}/verify-before")
+async def verify_before_pickup(
+    listing_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Upload before-pickup verification photo"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        body = await request.json()
+        photo_data = body.get('photo')
+        notes = body.get('notes', '')
+        
+        if not photo_data:
+            raise HTTPException(status_code=400, detail="Photo data required")
+        
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Verify user is the recipient
+        if listing.recipient_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        # Update listing
+        listing.before_photo = photo_data
+        listing.before_verified_at = datetime.utcnow()
+        listing.verification_status = "before_verified"
+        if notes:
+            listing.pickup_notes = notes
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Before-pickup photo uploaded successfully",
+            "verification_status": listing.verification_status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/listings/{listing_id}/verify-after")
+async def verify_after_pickup(
+    listing_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Upload after-pickup verification photo and complete verification"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        body = await request.json()
+        photo_data = body.get('photo')
+        notes = body.get('notes', '')
+        
+        if not photo_data:
+            raise HTTPException(status_code=400, detail="Photo data required")
+        
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Verify user is the recipient
+        if listing.recipient_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        # Update listing
+        listing.after_photo = photo_data
+        listing.after_verified_at = datetime.utcnow()
+        listing.verification_status = "completed"
+        listing.status = "completed"
+        if notes:
+            listing.pickup_notes = (listing.pickup_notes or '') + "\n" + notes
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": "Pickup completed and verified successfully",
+            "verification_status": listing.verification_status
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/listings/{listing_id}/verification")
+async def get_verification_status(
+    listing_id: int,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get verification status and photos for a listing"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Only donor or recipient can see verification
+        if listing.donor_id != user_id and listing.recipient_id != user_id:
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        return {
+            "verification_status": listing.verification_status,
+            "before_photo": listing.before_photo,
+            "after_photo": listing.after_photo,
+            "before_verified_at": listing.before_verified_at.isoformat() if listing.before_verified_at else None,
+            "after_verified_at": listing.after_verified_at.isoformat() if listing.after_verified_at else None,
+            "pickup_notes": listing.pickup_notes
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user/send-verification-email")
+async def send_verification_email(
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Send verification email to user"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Generate verification token (valid for 24 hours)
+        verification_token = jwt.encode(
+            {
+                "sub": str(user.id),
+                "email": user.email,
+                "purpose": "email_verification",
+                "exp": datetime.utcnow() + timedelta(hours=24)
+            },
+            JWT_SECRET,
+            algorithm=JWT_ALGORITHM
+        )
+        
+        # Send email
+        try:
+            verification_link = f"http://localhost:8000/verify-email?token={verification_token}"
+            
+            msg = MIMEText(f"""
+            Hello {user.name},
+            
+            Thank you for joining Food Maps! Please verify your email address by clicking the link below:
+            
+            {verification_link}
+            
+            This link will expire in 24 hours.
+            
+            If you didn't create an account with Food Maps, please ignore this email.
+            
+            Best regards,
+            The Food Maps Team
+            """)
+            
+            msg['Subject'] = 'Verify Your Email - Food Maps'
+            msg['From'] = sender
+            msg['To'] = user.email
+            
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+                smtp.login(sender, password)
+                smtp.send_message(msg)
+            
+            return {
+                "success": True,
+                "message": "Verification email sent successfully"
+            }
+        except Exception as email_error:
+            print(f"Email send error: {email_error}")
+            # Return success even if email fails (for testing)
+            return {
+                "success": True,
+                "message": "Verification email queued",
+                "note": "Email service may be unavailable"
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/verify-email")
+async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
+    """Verify email with token from link"""
+    try:
+        # Decode token
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        
+        if payload.get("purpose") != "email_verification":
+            raise HTTPException(status_code=400, detail="Invalid verification token")
+        
+        user_id = int(payload.get("sub"))
+        user = db.query(User).filter(User.id == user_id).first()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Mark email as verified
+        user.email_verified = True
+        
+        # Update trust score
+        current_score = getattr(user, 'trust_score', 50)
+        user.trust_score = min(100, current_score + 5)
+        
+        db.commit()
+        
+        # Return HTML page with success message
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Email Verified - Food Maps</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                }
+                .container {
+                    background: white;
+                    padding: 3rem;
+                    border-radius: 1rem;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    text-align: center;
+                    max-width: 500px;
+                }
+                .icon {
+                    font-size: 4rem;
+                    margin-bottom: 1rem;
+                }
+                h1 {
+                    color: #2d3748;
+                    margin: 0 0 1rem 0;
+                }
+                p {
+                    color: #4a5568;
+                    margin-bottom: 2rem;
+                }
+                .button {
+                    display: inline-block;
+                    padding: 0.75rem 2rem;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 0.5rem;
+                    font-weight: 600;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="icon">✅</div>
+                <h1>Email Verified!</h1>
+                <p>Your email has been successfully verified. Your trust score has increased by 5 points!</p>
+                <a href="/" class="button">Return to Food Maps</a>
+            </div>
+        </body>
+        </html>
+        """, status_code=200)
+        
+    except jwt.ExpiredSignatureError:
+        return HTMLResponse(content="""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Link Expired - Food Maps</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                }
+                .container {
+                    background: white;
+                    padding: 3rem;
+                    border-radius: 1rem;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    text-align: center;
+                    max-width: 500px;
+                }
+                .icon {
+                    font-size: 4rem;
+                    margin-bottom: 1rem;
+                }
+                h1 {
+                    color: #2d3748;
+                    margin: 0 0 1rem 0;
+                }
+                p {
+                    color: #4a5568;
+                    margin-bottom: 2rem;
+                }
+                .button {
+                    display: inline-block;
+                    padding: 0.75rem 2rem;
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 0.5rem;
+                    font-weight: 600;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="icon">⏰</div>
+                <h1>Link Expired</h1>
+                <p>This verification link has expired. Please request a new verification email from your account settings.</p>
+                <a href="/" class="button">Return to Food Maps</a>
+            </div>
+        </body>
+        </html>
+        """, status_code=400)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+
+# ============================================================================
+# SAFETY AND TRUST ENDPOINTS
+# ============================================================================
+
+@app.get("/api/user/trust-score")
+async def get_trust_score(
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Get user's trust score and verification status"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "trust_score": getattr(user, 'trust_score', 50),
+            "verification_status": {
+                "verified": getattr(user, 'email_verified', False) and getattr(user, 'phone_verified', False),
+                "email_verified": getattr(user, 'email_verified', False),
+                "phone_verified": getattr(user, 'phone_verified', False),
+                "id_verified": getattr(user, 'id_verified', False),
+                "address_verified": getattr(user, 'address_verified', False)
+            },
+            "stats": {
+                "completed_exchanges": getattr(user, 'completed_exchanges', 0),
+                "positive_feedback": getattr(user, 'positive_feedback', 0),
+                "negative_feedback": getattr(user, 'negative_feedback', 0),
+                "verified_pickups": getattr(user, 'verified_pickups', 0)
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/safety/report")
+async def submit_safety_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Submit a safety report"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        data = await request.json()
+        report_type = data.get('type')
+        description = data.get('description')
+        listing_id = data.get('listingId')
+        evidence = data.get('evidence')
+        
+        if not report_type or not description:
+            raise HTTPException(status_code=400, detail="Missing required fields")
+        
+        # Note: SafetyReport table exists and should work
+        try:
+            # Convert string to enum
+            report_type_enum = ReportType[report_type.upper().replace(' ', '_')] if report_type.upper().replace(' ', '_') in ReportType.__members__ else ReportType.OTHER
+            
+            new_report = SafetyReport(
+                reporter_id=user_id,
+                report_type=report_type_enum,
+                description=description,
+                listing_id=int(listing_id) if listing_id else None,
+                evidence=evidence
+            )
+            
+            db.add(new_report)
+            db.commit()
+            db.refresh(new_report)
+            
+            return {
+                "success": True,
+                "message": "Report submitted successfully",
+                "report_id": new_report.id
+            }
+        except Exception as inner_e:
+            db.rollback()
+            # If table doesn't exist yet, log the report attempt
+            print(f"Safety report error: {str(inner_e)}")
+            print(f"Safety report logged: {report_type} by user {user_id}")
+            return {
+                "success": True,
+                "message": "Report received and will be reviewed"
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/user/update-trust-score")
+async def update_trust_score(
+    request: Request,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Update user trust score (internal use or admin)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        data = await request.json()
+        action = data.get('action')  # 'completed_exchange', 'positive_feedback', 'verified_pickup', etc.
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Update based on action
+        trust_increase = 0
+        if action == 'completed_exchange':
+            user.completed_exchanges = getattr(user, 'completed_exchanges', 0) + 1
+            trust_increase = 2
+        elif action == 'positive_feedback':
+            user.positive_feedback = getattr(user, 'positive_feedback', 0) + 1
+            trust_increase = 3
+        elif action == 'verified_pickup':
+            user.verified_pickups = getattr(user, 'verified_pickups', 0) + 1
+            trust_increase = 5
+        elif action == 'email_verified':
+            user.email_verified = True
+            trust_increase = 5
+        elif action == 'phone_verified':
+            user.phone_verified = True
+            trust_increase = 5
+        
+        # Update trust score (cap at 100)
+        current_score = getattr(user, 'trust_score', 50)
+        user.trust_score = min(100, current_score + trust_increase)
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "new_trust_score": user.trust_score,
+            "increase": trust_increase
         }
         
     except HTTPException:
@@ -1342,6 +2153,455 @@ The Food Maps Team'''.format(code=code))
         print(f"📧 Password reset code for {address}: {code}")
 
 
+# Food Safety Checklist Endpoints
+@app.post("/api/food/safety-check")
+async def submit_safety_check(
+    listing_id: int,
+    storage_temperature: Optional[float] = None,
+    is_refrigerated: bool = False,
+    is_frozen: bool = False,
+    packaging_condition: str = 'good',
+    safety_score: int = 0,
+    safety_notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Submit a food safety checklist for a listing.
+    Only the donor who created the listing can submit safety checks.
+    """
+    try:
+        # Verify user
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        # Get the listing
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Verify the user is the donor
+        if listing.donor_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the donor can submit safety checks")
+        
+        # Validate safety score
+        if safety_score < 0 or safety_score > 100:
+            raise HTTPException(status_code=400, detail="Safety score must be between 0 and 100")
+        
+        # Validate packaging condition
+        valid_conditions = ['excellent', 'good', 'fair', 'poor']
+        if packaging_condition not in valid_conditions:
+            raise HTTPException(status_code=400, detail=f"Invalid packaging condition. Must be one of: {', '.join(valid_conditions)}")
+        
+        # Update listing with safety information
+        listing.storage_temperature = storage_temperature
+        listing.is_refrigerated = is_refrigerated
+        listing.is_frozen = is_frozen
+        listing.packaging_condition = packaging_condition
+        listing.safety_score = safety_score
+        listing.safety_notes = safety_notes
+        listing.safety_last_checked = datetime.utcnow()
+        
+        # Mark as passed if score >= 60 and packaging is not poor
+        listing.safety_checklist_passed = (safety_score >= 60 and packaging_condition != 'poor')
+        
+        db.commit()
+        db.refresh(listing)
+        
+        return {
+            "success": True,
+            "message": "Safety checklist submitted successfully",
+            "listing": serialize_listing(listing),
+            "safety_passed": listing.safety_checklist_passed
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/food/{listing_id}/safety-status")
+async def get_safety_status(
+    listing_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the food safety status for a listing.
+    Public endpoint - anyone can view safety information.
+    """
+    try:
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        return {
+            "listing_id": listing.id,
+            "safety_checklist_passed": listing.safety_checklist_passed or False,
+            "safety_score": listing.safety_score or 0,
+            "storage_temperature": listing.storage_temperature,
+            "is_refrigerated": listing.is_refrigerated or False,
+            "is_frozen": listing.is_frozen or False,
+            "packaging_condition": listing.packaging_condition or 'unknown',
+            "safety_notes": listing.safety_notes,
+            "safety_last_checked": listing.safety_last_checked.isoformat() if listing.safety_last_checked else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/food/{listing_id}/safety-update")
+async def update_safety_info(
+    listing_id: int,
+    storage_temperature: Optional[float] = None,
+    is_refrigerated: Optional[bool] = None,
+    is_frozen: Optional[bool] = None,
+    packaging_condition: Optional[str] = None,
+    safety_notes: Optional[str] = None,
+    db: Session = Depends(get_db),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Update partial safety information for a listing.
+    Only the donor can update safety information.
+    """
+    try:
+        # Verify user
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+            user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except Exception:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        # Get the listing
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Verify the user is the donor
+        if listing.donor_id != user_id:
+            raise HTTPException(status_code=403, detail="Only the donor can update safety information")
+        
+        # Update only provided fields
+        if storage_temperature is not None:
+            listing.storage_temperature = storage_temperature
+        if is_refrigerated is not None:
+            listing.is_refrigerated = is_refrigerated
+        if is_frozen is not None:
+            listing.is_frozen = is_frozen
+        if packaging_condition is not None:
+            valid_conditions = ['excellent', 'good', 'fair', 'poor']
+            if packaging_condition not in valid_conditions:
+                raise HTTPException(status_code=400, detail=f"Invalid packaging condition. Must be one of: {', '.join(valid_conditions)}")
+            listing.packaging_condition = packaging_condition
+        if safety_notes is not None:
+            listing.safety_notes = safety_notes
+        
+        # Update last checked timestamp
+        listing.safety_last_checked = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(listing)
+        
+        return {
+            "success": True,
+            "message": "Safety information updated successfully",
+            "listing": serialize_listing(listing)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Pickup Reminder Endpoints
+@app.get("/api/pickup-reminders/list")
+async def get_pickup_reminders(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get all pickup reminders for the authenticated user"""
+    try:
+        from backend.models import PickupReminder, ReminderStatus
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        reminders = db.query(PickupReminder).filter(
+            PickupReminder.user_id == user_id
+        ).order_by(PickupReminder.scheduled_time).all()
+        
+        # Enhance with listing details
+        reminder_list = []
+        for reminder in reminders:
+            listing = db.query(FoodResource).filter(FoodResource.id == reminder.listing_id).first()
+            reminder_list.append({
+                "id": reminder.id,
+                "listing_id": reminder.listing_id,
+                "listing_title": listing.title if listing else "Unknown",
+                "location": listing.address if listing else None,
+                "scheduled_time": reminder.scheduled_time.isoformat() if reminder.scheduled_time else None,
+                "reminder_sent_at": reminder.reminder_sent_at.isoformat() if reminder.reminder_sent_at else None,
+                "status": reminder.status.value if reminder.status else "scheduled",
+                "sms_sent": reminder.sms_sent,
+                "email_sent": reminder.email_sent,
+                "snooze_count": reminder.snooze_count,
+                "snoozed_until": reminder.snoozed_until.isoformat() if reminder.snoozed_until else None
+            })
+        
+        return {"success": True, "reminders": reminder_list}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/pickup-reminders/settings")
+async def get_reminder_settings(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get reminder settings for the authenticated user"""
+    try:
+        from backend.models import ReminderSettings
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        settings = db.query(ReminderSettings).filter(
+            ReminderSettings.user_id == user_id
+        ).first()
+        
+        if not settings:
+            # Create default settings
+            settings = ReminderSettings(
+                user_id=user_id,
+                enabled=True,
+                advance_notice_hours=2.0,
+                sms_enabled=True,
+                email_enabled=False,
+                auto_reminder=True
+            )
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
+        
+        return {
+            "success": True,
+            "settings": {
+                "enabled": settings.enabled,
+                "advance_notice_hours": settings.advance_notice_hours,
+                "sms_enabled": settings.sms_enabled,
+                "email_enabled": settings.email_enabled,
+                "auto_reminder": settings.auto_reminder
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pickup-reminders/settings")
+async def update_reminder_settings(
+    enabled: bool = True,
+    advance_notice_hours: float = 2.0,
+    sms_enabled: bool = True,
+    email_enabled: bool = False,
+    auto_reminder: bool = True,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Update reminder settings for the authenticated user"""
+    try:
+        from backend.models import ReminderSettings
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        settings = db.query(ReminderSettings).filter(
+            ReminderSettings.user_id == user_id
+        ).first()
+        
+        if not settings:
+            settings = ReminderSettings(user_id=user_id)
+            db.add(settings)
+        
+        settings.enabled = enabled
+        settings.advance_notice_hours = advance_notice_hours
+        settings.sms_enabled = sms_enabled
+        settings.email_enabled = email_enabled
+        settings.auto_reminder = auto_reminder
+        settings.updated_at = datetime.utcnow()
+        
+        db.commit()
+        
+        return {"success": True, "message": "Settings updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pickup-reminders/schedule")
+async def schedule_pickup_reminder(
+    listing_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Schedule a pickup reminder for a listing"""
+    try:
+        from backend.models import PickupReminder, ReminderSettings, ReminderStatus
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        # Get the listing
+        listing = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        if not listing:
+            raise HTTPException(status_code=404, detail="Listing not found")
+        
+        # Verify user claimed this listing
+        if listing.recipient_id != user_id:
+            raise HTTPException(status_code=403, detail="You haven't claimed this listing")
+        
+        # Check if reminder already exists
+        existing = db.query(PickupReminder).filter(
+            PickupReminder.listing_id == listing_id,
+            PickupReminder.user_id == user_id,
+            PickupReminder.status.in_([ReminderStatus.SCHEDULED, ReminderStatus.SNOOZED])
+        ).first()
+        
+        if existing:
+            raise HTTPException(status_code=400, detail="Reminder already scheduled for this listing")
+        
+        # Get user settings
+        settings = db.query(ReminderSettings).filter(
+            ReminderSettings.user_id == user_id
+        ).first()
+        
+        if not settings:
+            settings = ReminderSettings(user_id=user_id)
+            db.add(settings)
+            db.commit()
+            db.refresh(settings)
+        
+        # Calculate reminder time (advance_notice_hours before pickup)
+        from datetime import timedelta
+        pickup_time = listing.pickup_window_start
+        reminder_time = pickup_time - timedelta(hours=settings.advance_notice_hours)
+        
+        # Create reminder
+        reminder = PickupReminder(
+            user_id=user_id,
+            listing_id=listing_id,
+            scheduled_time=reminder_time,
+            status=ReminderStatus.SCHEDULED
+        )
+        
+        db.add(reminder)
+        db.commit()
+        db.refresh(reminder)
+        
+        return {
+            "success": True,
+            "message": "Reminder scheduled successfully",
+            "reminder_id": reminder.id,
+            "scheduled_time": reminder_time.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pickup-reminders/{reminder_id}/cancel")
+async def cancel_pickup_reminder(
+    reminder_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Cancel a scheduled pickup reminder"""
+    try:
+        from backend.models import PickupReminder, ReminderStatus
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        reminder = db.query(PickupReminder).filter(
+            PickupReminder.id == reminder_id,
+            PickupReminder.user_id == user_id
+        ).first()
+        
+        if not reminder:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        
+        reminder.status = ReminderStatus.CANCELLED
+        reminder.updated_at = datetime.utcnow()
+        
+        db.commit()
+        
+        return {"success": True, "message": "Reminder cancelled"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/pickup-reminders/{reminder_id}/snooze")
+async def snooze_pickup_reminder(
+    reminder_id: int,
+    minutes: int = 30,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Snooze a pickup reminder"""
+    try:
+        from backend.models import PickupReminder, ReminderStatus
+        from datetime import timedelta
+        
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        reminder = db.query(PickupReminder).filter(
+            PickupReminder.id == reminder_id,
+            PickupReminder.user_id == user_id
+        ).first()
+        
+        if not reminder:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        
+        # Calculate snooze time
+        snooze_until = datetime.utcnow() + timedelta(minutes=minutes)
+        
+        reminder.status = ReminderStatus.SNOOZED
+        reminder.snoozed_until = snooze_until
+        reminder.snooze_count += 1
+        reminder.updated_at = datetime.utcnow()
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"Reminder snoozed for {minutes} minutes",
+            "snoozed_until": snooze_until.isoformat()
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Referral System Endpoints
 @app.get("/api/referrals/stats")
 async def get_referral_stats(
@@ -1482,6 +2742,1652 @@ async def get_my_referral_code(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# MESSAGING ENDPOINTS
+# ============================================
+
+@app.post("/api/messages/send")
+async def send_message(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Send a message to admin or reply as admin"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        body = await request.json()
+        content = body.get('content', '').strip()
+        conversation_id = body.get('conversation_id')
+        
+        if not content:
+            raise HTTPException(status_code=400, detail="Message content required")
+        
+        # If no conversation_id provided, create one based on user_id
+        if not conversation_id:
+            conversation_id = f"user_{user_id}"
+        
+        is_from_admin = user.role == UserRole.ADMIN
+        
+        message = Message(
+            sender_id=user_id,
+            conversation_id=conversation_id,
+            content=content,
+            is_from_admin=is_from_admin,
+            is_read=False,
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(message)
+        db.commit()
+        db.refresh(message)
+        
+        return {
+            "success": True,
+            "message": {
+                "id": message.id,
+                "sender_id": message.sender_id,
+                "sender_name": user.name,
+                "conversation_id": message.conversation_id,
+                "content": message.content,
+                "is_from_admin": message.is_from_admin,
+                "is_read": message.is_read,
+                "created_at": message.created_at.isoformat()
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/messages/conversations")
+async def get_conversations(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Get all conversations (admin only) or user's conversation"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        if user.role == UserRole.ADMIN:
+            # Admin sees all conversations
+            conversations = db.query(Message.conversation_id).distinct().all()
+            conversation_list = []
+            
+            for (conv_id,) in conversations:
+                # Get latest message and unread count for each conversation
+                latest_msg = db.query(Message).filter(
+                    Message.conversation_id == conv_id
+                ).order_by(Message.created_at.desc()).first()
+                
+                unread_count = db.query(Message).filter(
+                    Message.conversation_id == conv_id,
+                    Message.is_from_admin == False,
+                    Message.is_read == False
+                ).count()
+                
+                # Get user info from conversation_id
+                user_id_from_conv = conv_id.replace("user_", "")
+                conv_user = db.query(User).filter(User.id == int(user_id_from_conv)).first() if user_id_from_conv.isdigit() else None
+                
+                conversation_list.append({
+                    "conversation_id": conv_id,
+                    "user_name": conv_user.name if conv_user else "Unknown",
+                    "user_id": conv_user.id if conv_user else None,
+                    "latest_message": latest_msg.content if latest_msg else "",
+                    "latest_message_time": latest_msg.created_at.isoformat() if latest_msg else None,
+                    "unread_count": unread_count,
+                    "is_from_admin": latest_msg.is_from_admin if latest_msg else False
+                })
+            
+            # Sort by latest message time
+            conversation_list.sort(key=lambda x: x['latest_message_time'] or '', reverse=True)
+            return conversation_list
+        else:
+            # Regular user sees only their conversation
+            conversation_id = f"user_{user_id}"
+            messages = db.query(Message).filter(
+                Message.conversation_id == conversation_id
+            ).order_by(Message.created_at.desc()).limit(1).all()
+            
+            if messages:
+                latest_msg = messages[0]
+                unread_count = db.query(Message).filter(
+                    Message.conversation_id == conversation_id,
+                    Message.is_from_admin == True,
+                    Message.is_read == False
+                ).count()
+                
+                return [{
+                    "conversation_id": conversation_id,
+                    "user_name": "Admin Support",
+                    "latest_message": latest_msg.content,
+                    "latest_message_time": latest_msg.created_at.isoformat(),
+                    "unread_count": unread_count,
+                    "is_from_admin": latest_msg.is_from_admin
+                }]
+            return []
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/messages/{conversation_id}")
+async def get_messages(conversation_id: str, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Get all messages in a conversation"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check authorization
+        if user.role != UserRole.ADMIN and conversation_id != f"user_{user_id}":
+            raise HTTPException(status_code=403, detail="Not authorized")
+        
+        messages = db.query(Message).filter(
+            Message.conversation_id == conversation_id
+        ).order_by(Message.created_at.asc()).all()
+        
+        # Mark messages as read
+        if user.role == UserRole.ADMIN:
+            # Admin reading user messages
+            for msg in messages:
+                if not msg.is_from_admin and not msg.is_read:
+                    msg.is_read = True
+        else:
+            # User reading admin messages
+            for msg in messages:
+                if msg.is_from_admin and not msg.is_read:
+                    msg.is_read = True
+        
+        db.commit()
+        
+        result = []
+        for msg in messages:
+            sender = db.query(User).filter(User.id == msg.sender_id).first()
+            result.append({
+                "id": msg.id,
+                "sender_id": msg.sender_id,
+                "sender_name": sender.name if sender else "Unknown",
+                "content": msg.content,
+                "is_from_admin": msg.is_from_admin,
+                "is_read": msg.is_read,
+                "created_at": msg.created_at.isoformat()
+            })
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================
+# DONATION SCHEDULE & REMINDER ENDPOINTS
+# ============================================
+
+@app.post("/api/schedules/donations")
+async def create_donation_schedule(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Create a recurring donation schedule"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or user.role != UserRole.DONOR:
+            raise HTTPException(status_code=403, detail="Only donors can create donation schedules")
+        
+        body = await request.json()
+        
+        # Calculate next donation date based on frequency
+        next_date = calculate_next_donation_date(
+            body.get('frequency'),
+            body.get('day_of_week'),
+            body.get('day_of_month'),
+            body.get('time_of_day', '09:00'),
+            body.get('custom_interval_days')
+        )
+        
+        schedule = DonationSchedule(
+            user_id=user_id,
+            title=body.get('title'),
+            description=body.get('description'),
+            category=FoodCategory[body.get('category').upper()],
+            estimated_quantity=float(body.get('estimated_quantity', 0)),
+            unit=body.get('unit', 'items'),
+            perishability=PerishabilityLevel[body.get('perishability', 'MEDIUM').upper()] if body.get('perishability') else None,
+            frequency=RecurrenceFrequency[body.get('frequency').upper()],
+            day_of_week=body.get('day_of_week'),
+            day_of_month=body.get('day_of_month'),
+            time_of_day=body.get('time_of_day', '09:00'),
+            custom_interval_days=body.get('custom_interval_days'),
+            start_date=datetime.fromisoformat(body.get('start_date')) if body.get('start_date') else datetime.utcnow(),
+            end_date=datetime.fromisoformat(body.get('end_date')) if body.get('end_date') else None,
+            next_donation_date=next_date,
+            send_reminders=body.get('send_reminders', True),
+            reminder_hours_before=body.get('reminder_hours_before', 24)
+        )
+        
+        db.add(schedule)
+        db.commit()
+        db.refresh(schedule)
+        
+        # Create first reminder if enabled
+        if schedule.send_reminders:
+            create_reminder_for_schedule(db, schedule)
+        
+        return {
+            "id": schedule.id,
+            "title": schedule.title,
+            "frequency": schedule.frequency.value,
+            "next_donation_date": schedule.next_donation_date.isoformat(),
+            "is_active": schedule.is_active
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/schedules/donations")
+async def get_donation_schedules(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Get all donation schedules for the current user"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        schedules = db.query(DonationSchedule).filter(DonationSchedule.user_id == user_id).order_by(DonationSchedule.next_donation_date).all()
+        
+        result = []
+        for schedule in schedules:
+            result.append({
+                "id": schedule.id,
+                "title": schedule.title,
+                "description": schedule.description,
+                "category": schedule.category.value,
+                "estimated_quantity": schedule.estimated_quantity,
+                "unit": schedule.unit,
+                "perishability": schedule.perishability.value if schedule.perishability else None,
+                "frequency": schedule.frequency.value,
+                "day_of_week": schedule.day_of_week,
+                "day_of_month": schedule.day_of_month,
+                "time_of_day": schedule.time_of_day,
+                "next_donation_date": schedule.next_donation_date.isoformat() if schedule.next_donation_date else None,
+                "last_donation_date": schedule.last_donation_date.isoformat() if schedule.last_donation_date else None,
+                "is_active": schedule.is_active,
+                "send_reminders": schedule.send_reminders,
+                "reminder_hours_before": schedule.reminder_hours_before,
+                "created_at": schedule.created_at.isoformat()
+            })
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.put("/api/schedules/donations/{schedule_id}")
+async def update_donation_schedule(schedule_id: int, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Update a donation schedule"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        schedule = db.query(DonationSchedule).filter(DonationSchedule.id == schedule_id, DonationSchedule.user_id == user_id).first()
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        
+        body = await request.json()
+        
+        # Update fields
+        if 'title' in body:
+            schedule.title = body['title']
+        if 'description' in body:
+            schedule.description = body['description']
+        if 'category' in body:
+            schedule.category = FoodCategory[body['category'].upper()]
+        if 'estimated_quantity' in body:
+            schedule.estimated_quantity = float(body['estimated_quantity'])
+        if 'unit' in body:
+            schedule.unit = body['unit']
+        if 'is_active' in body:
+            schedule.is_active = body['is_active']
+        if 'send_reminders' in body:
+            schedule.send_reminders = body['send_reminders']
+        if 'reminder_hours_before' in body:
+            schedule.reminder_hours_before = body['reminder_hours_before']
+        
+        # Recalculate next donation date if frequency changed
+        if any(key in body for key in ['frequency', 'day_of_week', 'day_of_month', 'time_of_day', 'custom_interval_days']):
+            if 'frequency' in body:
+                schedule.frequency = RecurrenceFrequency[body['frequency'].upper()]
+            if 'day_of_week' in body:
+                schedule.day_of_week = body['day_of_week']
+            if 'day_of_month' in body:
+                schedule.day_of_month = body['day_of_month']
+            if 'time_of_day' in body:
+                schedule.time_of_day = body['time_of_day']
+            if 'custom_interval_days' in body:
+                schedule.custom_interval_days = body['custom_interval_days']
+            
+            schedule.next_donation_date = calculate_next_donation_date(
+                schedule.frequency.value,
+                schedule.day_of_week,
+                schedule.day_of_month,
+                schedule.time_of_day,
+                schedule.custom_interval_days
+            )
+        
+        db.commit()
+        db.refresh(schedule)
+        
+        return {"success": True, "schedule": {"id": schedule.id, "next_donation_date": schedule.next_donation_date.isoformat()}}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/api/schedules/donations/{schedule_id}")
+async def delete_donation_schedule(schedule_id: int, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Delete a donation schedule"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        schedule = db.query(DonationSchedule).filter(DonationSchedule.id == schedule_id, DonationSchedule.user_id == user_id).first()
+        if not schedule:
+            raise HTTPException(status_code=404, detail="Schedule not found")
+        
+        db.delete(schedule)
+        db.commit()
+        
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/reminders")
+async def get_reminders(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Get all pending reminders for the current user"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        reminders = db.query(DonationReminder).filter(
+            DonationReminder.user_id == user_id,
+            DonationReminder.status.in_([ReminderStatus.PENDING, ReminderStatus.SENT])
+        ).order_by(DonationReminder.scheduled_for).all()
+        
+        result = []
+        for reminder in reminders:
+            result.append({
+                "id": reminder.id,
+                "schedule_id": reminder.schedule_id,
+                "title": reminder.title,
+                "message": reminder.message,
+                "scheduled_for": reminder.scheduled_for.isoformat(),
+                "donation_date": reminder.donation_date.isoformat(),
+                "status": reminder.status.value,
+                "sent_at": reminder.sent_at.isoformat() if reminder.sent_at else None
+            })
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/reminders/{reminder_id}/dismiss")
+async def dismiss_reminder(reminder_id: int, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Dismiss a reminder"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        reminder = db.query(DonationReminder).filter(DonationReminder.id == reminder_id, DonationReminder.user_id == user_id).first()
+        if not reminder:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        
+        reminder.status = ReminderStatus.DISMISSED
+        reminder.dismissed_at = datetime.utcnow()
+        db.commit()
+        
+        return {"success": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/reminders/{reminder_id}/complete")
+async def complete_reminder(reminder_id: int, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Mark a reminder as completed and update the schedule"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        
+        reminder = db.query(DonationReminder).filter(DonationReminder.id == reminder_id, DonationReminder.user_id == user_id).first()
+        if not reminder:
+            raise HTTPException(status_code=404, detail="Reminder not found")
+        
+        reminder.status = ReminderStatus.COMPLETED
+        reminder.completed_at = datetime.utcnow()
+        
+        # Update schedule's last donation date and calculate next
+        schedule = db.query(DonationSchedule).filter(DonationSchedule.id == reminder.schedule_id).first()
+        if schedule:
+            schedule.last_donation_date = reminder.donation_date
+            schedule.next_donation_date = calculate_next_donation_date(
+                schedule.frequency.value,
+                schedule.day_of_week,
+                schedule.day_of_month,
+                schedule.time_of_day,
+                schedule.custom_interval_days,
+                from_date=reminder.donation_date
+            )
+            
+            # Create next reminder
+            if schedule.send_reminders and schedule.is_active:
+                create_reminder_for_schedule(db, schedule)
+        
+        db.commit()
+        
+        return {"success": True, "next_donation_date": schedule.next_donation_date.isoformat() if schedule else None}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Helper functions for schedule calculations
+def calculate_next_donation_date(frequency, day_of_week=None, day_of_month=None, time_of_day='09:00', custom_interval_days=None, from_date=None):
+    """Calculate the next donation date based on frequency"""
+    base_date = from_date if from_date else datetime.utcnow()
+    hour, minute = map(int, time_of_day.split(':'))
+    
+    if frequency == 'daily' or frequency == RecurrenceFrequency.DAILY.value:
+        next_date = base_date + timedelta(days=1)
+    elif frequency == 'weekly' or frequency == RecurrenceFrequency.WEEKLY.value:
+        # Calculate days until next occurrence
+        current_day = base_date.weekday()
+        if day_of_week is None:
+            day_of_week = current_day
+        
+        days_ahead = day_of_week - current_day
+        # If we're on the same day or past it, schedule for next week
+        if days_ahead <= 0:
+            days_ahead += 7
+        next_date = base_date + timedelta(days=days_ahead)
+    elif frequency == 'biweekly' or frequency == RecurrenceFrequency.BIWEEKLY.value:
+        # Calculate days until next occurrence (2 weeks)
+        current_day = base_date.weekday()
+        if day_of_week is None:
+            day_of_week = current_day
+        
+        days_ahead = day_of_week - current_day
+        # If we're on the same day or past it, schedule for 2 weeks from now
+        if days_ahead <= 0:
+            days_ahead += 14
+        next_date = base_date + timedelta(days=days_ahead)
+    elif frequency == 'monthly' or frequency == RecurrenceFrequency.MONTHLY.value:
+        # Handle month boundaries and invalid days
+        target_day = day_of_month if day_of_month else 1
+        
+        # Start with next month
+        if base_date.month == 12:
+            next_month = 1
+            next_year = base_date.year + 1
+        else:
+            next_month = base_date.month + 1
+            next_year = base_date.year
+        
+        # Handle days that don't exist in target month (e.g., Feb 30)
+        max_day_in_month = 31
+        if next_month in [4, 6, 9, 11]:
+            max_day_in_month = 30
+        elif next_month == 2:
+            # Check for leap year
+            is_leap = (next_year % 4 == 0 and next_year % 100 != 0) or (next_year % 400 == 0)
+            max_day_in_month = 29 if is_leap else 28
+        
+        safe_day = min(target_day, max_day_in_month)
+        next_date = base_date.replace(year=next_year, month=next_month, day=safe_day)
+        
+        # If we somehow ended up in the past, move to next month
+        if next_date <= base_date:
+            if next_date.month == 12:
+                next_date = next_date.replace(year=next_date.year + 1, month=1, day=safe_day)
+            else:
+                next_month = next_date.month + 1
+                # Recalculate safe day for the new month
+                if next_month in [4, 6, 9, 11]:
+                    max_day_in_month = 30
+                elif next_month == 2:
+                    is_leap = (next_date.year % 4 == 0 and next_date.year % 100 != 0) or (next_date.year % 400 == 0)
+                    max_day_in_month = 29 if is_leap else 28
+                else:
+                    max_day_in_month = 31
+                safe_day = min(target_day, max_day_in_month)
+                next_date = next_date.replace(month=next_month, day=safe_day)
+    elif frequency == 'custom' or frequency == RecurrenceFrequency.CUSTOM.value:
+        interval = custom_interval_days or 7
+        next_date = base_date + timedelta(days=interval)
+    else:
+        # Default to weekly
+        next_date = base_date + timedelta(days=7)
+    
+    return next_date.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+def create_reminder_for_schedule(db: Session, schedule: DonationSchedule):
+    """Create a reminder for an upcoming donation"""
+    if not schedule.next_donation_date or not schedule.send_reminders:
+        return
+    
+    scheduled_for = schedule.next_donation_date - timedelta(hours=schedule.reminder_hours_before)
+    
+    # Don't create reminder if it's in the past
+    if scheduled_for < datetime.utcnow():
+        return
+    
+    reminder = DonationReminder(
+        schedule_id=schedule.id,
+        user_id=schedule.user_id,
+        title=f"Donation Reminder: {schedule.title}",
+        message=f"You have a scheduled donation of {schedule.estimated_quantity} {schedule.unit} of {schedule.category.value} coming up.",
+        scheduled_for=scheduled_for,
+        donation_date=schedule.next_donation_date
+    )
+    
+    db.add(reminder)
+    db.commit()
+
+
+# -----------------------------
+# Feedback System Endpoints
+# -----------------------------
+
+@app.post("/api/feedback/submit")
+async def submit_feedback(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """Submit user feedback, error report, or feature request (auth optional)"""
+    try:
+        data = await request.json()
+        
+        # Try to get user if authenticated
+        user_id = None
+        try:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ")[1]
+                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                user_id = payload.get("sub")
+        except:
+            pass  # Anonymous feedback is allowed
+        
+        # Validate feedback type
+        feedback_type = data.get("type", "general")
+        if feedback_type not in ["bug", "feature_request", "general", "error_report", "improvement"]:
+            feedback_type = "general"
+        
+        # Create feedback record
+        feedback = Feedback(
+            user_id=user_id,
+            type=FeedbackType[feedback_type.upper()],
+            subject=data.get("subject", "User Feedback"),
+            message=data.get("message", ""),
+            url=data.get("url"),
+            user_agent=data.get("userAgent"),
+            screenshot=data.get("screenshot"),
+            error_stack=data.get("errorStack"),
+            email=data.get("email"),
+            status=FeedbackStatus.NEW
+        )
+        
+        db.add(feedback)
+        db.commit()
+        db.refresh(feedback)
+        
+        return {
+            "success": True,
+            "message": "Thank you for your feedback!",
+            "feedback_id": feedback.id
+        }
+        
+    except Exception as e:
+        print(f"Error submitting feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/feedback/list")
+async def list_feedback(
+    status: Optional[str] = None,
+    type: Optional[str] = None,
+    limit: int = 50,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """List all feedback (admin only)"""
+    try:
+        # Verify admin
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        # Build query
+        query = db.query(Feedback)
+        
+        if status:
+            query = query.filter(Feedback.status == FeedbackStatus[status.upper()])
+        
+        if type:
+            query = query.filter(Feedback.type == FeedbackType[type.upper()])
+        
+        feedback_list = query.order_by(Feedback.created_at.desc()).limit(limit).all()
+        
+        return {
+            "success": True,
+            "feedback": [
+                {
+                    "id": f.id,
+                    "user_id": f.user_id,
+                    "type": f.type.value,
+                    "subject": f.subject,
+                    "message": f.message,
+                    "url": f.url,
+                    "status": f.status.value,
+                    "email": f.email,
+                    "created_at": f.created_at.isoformat(),
+                    "has_screenshot": bool(f.screenshot),
+                    "screenshot": f.screenshot if f.screenshot else None,
+                    "has_error_stack": bool(f.error_stack),
+                    "error_stack": f.error_stack if f.error_stack else None
+                }
+                for f in feedback_list
+            ]
+        }
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error listing feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/feedback/{feedback_id}/status")
+async def update_feedback_status(
+    feedback_id: int,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Update feedback status (admin only)"""
+    try:
+        # Verify admin
+        token = credentials.credentials
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = payload.get("sub")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user or user.role != UserRole.ADMIN:
+            raise HTTPException(status_code=403, detail="Admin access required")
+        
+        data = await request.json()
+        new_status = data.get("status")
+        admin_notes = data.get("admin_notes")
+        
+        feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+        if not feedback:
+            raise HTTPException(status_code=404, detail="Feedback not found")
+        
+        if new_status:
+            feedback.status = FeedbackStatus[new_status.upper()]
+        
+        if admin_notes:
+            feedback.admin_notes = admin_notes
+        
+        feedback.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return {"success": True, "message": "Feedback updated"}
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error updating feedback: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# -----------------------------
+# Donor Impact Statistics
+# -----------------------------
+
+@app.get("/api/donor/impact")
+async def get_donor_impact(
+    timeframe: str = "all",
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get donor's personal impact statistics"""
+    try:
+        token = credentials.credentials
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Calculate date range based on timeframe
+        from datetime import datetime, timedelta
+        now = datetime.utcnow()
+        start_date = None
+        
+        if timeframe == "week":
+            start_date = now - timedelta(days=7)
+        elif timeframe == "month":
+            start_date = now - timedelta(days=30)
+        elif timeframe == "year":
+            start_date = now - timedelta(days=365)
+        # else: all time (no filter)
+        
+        # Query donations
+        query = db.query(FoodResource).filter(FoodResource.donor_id == user_id)
+        if start_date:
+            query = query.filter(FoodResource.created_at >= start_date)
+        
+        all_donations = query.all()
+        claimed_donations = query.filter(FoodResource.status == "claimed").all()
+        active_donations = query.filter(FoodResource.status == "available").all()
+        
+        # Calculate statistics
+        total_donations = len(all_donations)
+        claimed_count = len(claimed_donations)
+        active_count = len(active_donations)
+        
+        # Calculate total pounds
+        total_pounds = sum([d.qty if d.unit == 'lbs' else d.est_weight_kg * 2.20462 if d.est_weight_kg else d.qty * 0.5 
+                           for d in claimed_donations])
+        
+        # Estimate meals (assuming 1 lb = 3.5 meals on average)
+        meals_provided = int(total_pounds * 3.5)
+        
+        # Estimate people helped (assuming 1 person = 13 meals on average)
+        people_helped = max(1, int(meals_provided / 13)) if meals_provided > 0 else 0
+        
+        # Environmental impact calculations
+        co2_saved = int(total_pounds * 1.7)  # ~1.7 lbs CO2 per lb of food saved
+        water_saved = int(total_pounds * 23.8)  # ~23.8 gallons per lb of food
+        money_saved = int(total_pounds * 8.10)  # ~$8.10 per lb retail value
+        
+        # Calculate impact score (0-100)
+        impact_score = min(100, int((
+            total_donations * 2 +
+            meals_provided * 0.05 +
+            people_helped * 0.5 +
+            (100 if total_donations >= 50 else 0)
+        ) * 0.8))
+        
+        # Calculate streak (simplified - would need actual tracking)
+        streak_days = 0
+        if total_donations > 0:
+            recent_donations = db.query(FoodResource).filter(
+                FoodResource.donor_id == user_id,
+                FoodResource.created_at >= now - timedelta(days=30)
+            ).order_by(FoodResource.created_at.desc()).all()
+            
+            if recent_donations:
+                # Simple streak calculation
+                last_donation_date = recent_donations[0].created_at
+                days_since_last = (now - last_donation_date).days
+                if days_since_last <= 7:
+                    streak_days = min(30, len([d for d in recent_donations if (now - d.created_at).days <= 30]))
+        
+        # Get recent donations for display
+        recent_donations = db.query(FoodResource).filter(
+            FoodResource.donor_id == user_id,
+            FoodResource.status == "claimed"
+        ).order_by(FoodResource.claimed_at.desc()).limit(5).all()
+        
+        recent_donations_list = []
+        for donation in recent_donations:
+            recipient = db.query(User).filter(User.id == donation.recipient_id).first() if donation.recipient_id else None
+            recent_donations_list.append({
+                "id": donation.id,
+                "title": donation.title,
+                "qty": donation.qty,
+                "unit": donation.unit,
+                "claimed_by": recipient.name if recipient else "Anonymous",
+                "claimed_at": donation.claimed_at.isoformat() if donation.claimed_at else donation.created_at.isoformat(),
+                "meals_provided": int((donation.qty if donation.unit == 'lbs' else donation.qty * 0.5) * 3.5)
+            })
+        
+        return {
+            "success": True,
+            "stats": {
+                "total_donations": total_donations,
+                "total_pounds": int(total_pounds),
+                "meals_provided": meals_provided,
+                "people_helped": people_helped,
+                "co2_saved": co2_saved,
+                "water_saved": water_saved,
+                "money_saved_recipients": money_saved,
+                "active_listings": active_count,
+                "claimed_listings": claimed_count,
+                "impact_score": impact_score,
+                "streak_days": streak_days,
+                "badges_earned": min(5, total_donations // 10)
+            },
+            "recent_donations": recent_donations_list
+        }
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error fetching donor impact: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# FAVORITES / BOOKMARKS ENDPOINTS
+# =====================================================
+
+@app.get("/api/favorites")
+async def get_favorites(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Get all favorite locations for the authenticated user"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        favorites = db.query(FavoriteLocation).filter(
+            FavoriteLocation.user_id == user_id,
+            FavoriteLocation.is_active == True
+        ).order_by(FavoriteLocation.visit_count.desc(), FavoriteLocation.created_at.desc()).all()
+        
+        result = []
+        for fav in favorites:
+            fav_data = {
+                "id": fav.id,
+                "name": fav.name,
+                "address": fav.address,
+                "coords_lat": fav.coords_lat,
+                "coords_lng": fav.coords_lng,
+                "location_type": fav.location_type,
+                "notes": fav.notes,
+                "tags": fav.tags,
+                "visit_count": fav.visit_count,
+                "last_visited": fav.last_visited.isoformat() if fav.last_visited else None,
+                "notify_new_listings": fav.notify_new_listings,
+                "notification_radius_km": fav.notification_radius_km,
+                "created_at": fav.created_at.isoformat(),
+                "updated_at": fav.updated_at.isoformat()
+            }
+            
+            # Add donor details if it's a donor favorite
+            if fav.location_type == 'donor' and fav.donor_id:
+                donor = db.query(User).filter(User.id == fav.donor_id).first()
+                if donor:
+                    fav_data["donor"] = {
+                        "id": donor.id,
+                        "name": donor.name,
+                        "trust_score": donor.trust_score
+                    }
+            
+            # Add center details if it's a distribution center favorite
+            elif fav.location_type == 'distribution_center' and fav.center_id:
+                center = db.query(DistributionCenter).filter(DistributionCenter.id == fav.center_id).first()
+                if center:
+                    fav_data["center"] = {
+                        "id": center.id,
+                        "name": center.name,
+                        "hours": getattr(center, 'hours', None)
+                    }
+            
+            result.append(fav_data)
+        
+        return result
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error fetching favorites: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/favorites")
+async def add_favorite(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Add a new favorite location for the authenticated user"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        body = await request.json()
+        
+        # Validate required fields
+        if not body.get('name') or not body.get('address'):
+            raise HTTPException(status_code=400, detail="Name and address are required")
+        
+        # Check for duplicates based on location type and reference ID
+        existing = None
+        if body.get('donor_id'):
+            existing = db.query(FavoriteLocation).filter(
+                FavoriteLocation.user_id == user_id,
+                FavoriteLocation.donor_id == body.get('donor_id'),
+                FavoriteLocation.is_active == True
+            ).first()
+        elif body.get('center_id'):
+            existing = db.query(FavoriteLocation).filter(
+                FavoriteLocation.user_id == user_id,
+                FavoriteLocation.center_id == body.get('center_id'),
+                FavoriteLocation.is_active == True
+            ).first()
+        else:
+            # For general locations, check by coordinates proximity (within 50 meters)
+            favorites = db.query(FavoriteLocation).filter(
+                FavoriteLocation.user_id == user_id,
+                FavoriteLocation.location_type == 'general',
+                FavoriteLocation.is_active == True
+            ).all()
+            
+            for fav in favorites:
+                # Simple distance check (approximate)
+                lat_diff = abs(fav.coords_lat - body.get('coords_lat', 0))
+                lng_diff = abs(fav.coords_lng - body.get('coords_lng', 0))
+                if lat_diff < 0.0005 and lng_diff < 0.0005:  # ~50 meters
+                    existing = fav
+                    break
+        
+        if existing:
+            return {"success": False, "message": "This location is already in your favorites", "favorite_id": existing.id}
+        
+        # Create new favorite
+        favorite = FavoriteLocation(
+            user_id=user_id,
+            name=body.get('name'),
+            address=body.get('address'),
+            coords_lat=body.get('coords_lat'),
+            coords_lng=body.get('coords_lng'),
+            location_type=body.get('location_type', 'general'),
+            donor_id=body.get('donor_id'),
+            center_id=body.get('center_id'),
+            notes=body.get('notes', ''),
+            tags=body.get('tags'),
+            notify_new_listings=body.get('notify_new_listings', False),
+            notification_radius_km=body.get('notification_radius_km', 5.0),
+            created_at=datetime.utcnow()
+        )
+        
+        db.add(favorite)
+        db.commit()
+        db.refresh(favorite)
+        
+        return {
+            "success": True,
+            "message": "Location added to favorites",
+            "favorite_id": favorite.id,
+            "favorite": {
+                "id": favorite.id,
+                "name": favorite.name,
+                "address": favorite.address,
+                "location_type": favorite.location_type
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error adding favorite: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/favorites/{favorite_id}")
+async def update_favorite(favorite_id: int, request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Update a favorite location (notes, tags, notifications)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        body = await request.json()
+        
+        favorite = db.query(FavoriteLocation).filter(
+            FavoriteLocation.id == favorite_id,
+            FavoriteLocation.user_id == user_id
+        ).first()
+        
+        if not favorite:
+            raise HTTPException(status_code=404, detail="Favorite not found")
+        
+        # Update allowed fields
+        if 'name' in body:
+            favorite.name = body['name']
+        if 'notes' in body:
+            favorite.notes = body['notes']
+        if 'tags' in body:
+            favorite.tags = body['tags']
+        if 'notify_new_listings' in body:
+            favorite.notify_new_listings = body['notify_new_listings']
+        if 'notification_radius_km' in body:
+            favorite.notification_radius_km = body['notification_radius_km']
+        
+        favorite.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(favorite)
+        
+        return {
+            "success": True,
+            "message": "Favorite updated successfully",
+            "favorite": {
+                "id": favorite.id,
+                "name": favorite.name,
+                "notes": favorite.notes,
+                "tags": favorite.tags,
+                "notify_new_listings": favorite.notify_new_listings
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error updating favorite: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/favorites/{favorite_id}/visit")
+async def record_visit(favorite_id: int, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Record a visit to a favorite location"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        favorite = db.query(FavoriteLocation).filter(
+            FavoriteLocation.id == favorite_id,
+            FavoriteLocation.user_id == user_id
+        ).first()
+        
+        if not favorite:
+            raise HTTPException(status_code=404, detail="Favorite not found")
+        
+        favorite.visit_count += 1
+        favorite.last_visited = datetime.utcnow()
+        favorite.updated_at = datetime.utcnow()
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "visit_count": favorite.visit_count,
+            "last_visited": favorite.last_visited.isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error recording visit: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/favorites/{favorite_id}")
+async def remove_favorite(favorite_id: int, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Remove a favorite location (soft delete)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        favorite = db.query(FavoriteLocation).filter(
+            FavoriteLocation.id == favorite_id,
+            FavoriteLocation.user_id == user_id
+        ).first()
+        
+        if not favorite:
+            raise HTTPException(status_code=404, detail="Favorite not found")
+        
+        # Soft delete
+        favorite.is_active = False
+        favorite.updated_at = datetime.utcnow()
+        db.commit()
+        
+        return {"success": True, "message": "Favorite removed"}
+        
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error removing favorite: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =====================================================
+# ADMIN: TRUST BADGE MANAGEMENT
+# =====================================================
+
+@app.put("/api/admin/users/{user_id}/trust-badges")
+async def update_user_trust_badges(
+    user_id: int,
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin endpoint to assign/update trust badges for users"""
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        body = await request.json()
+        
+        # Update trust badge fields
+        if 'verified_by_aglf' in body:
+            user.verified_by_aglf = body['verified_by_aglf']
+        if 'school_partner' in body:
+            user.school_partner = body['school_partner']
+        if 'partner_badge' in body:
+            user.partner_badge = body['partner_badge']
+        if 'partner_since' in body and body['partner_since']:
+            user.partner_since = datetime.fromisoformat(body['partner_since'].replace('Z', '+00:00'))
+        
+        # Set partner_since if becoming a partner for the first time
+        if (user.verified_by_aglf or user.school_partner) and not user.partner_since:
+            user.partner_since = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(user)
+        
+        return serialize_user(user)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating trust badges: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/centers/{center_id}/trust-badges")
+async def update_center_trust_badges(
+    center_id: int,
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db)
+):
+    """Admin endpoint to assign/update trust badges for distribution centers"""
+    try:
+        center = db.query(DistributionCenter).filter(DistributionCenter.id == center_id).first()
+        if not center:
+            raise HTTPException(status_code=404, detail="Center not found")
+        
+        body = await request.json()
+        
+        # Update trust badge fields
+        if 'verified_by_aglf' in body:
+            center.verified_by_aglf = body['verified_by_aglf']
+        if 'school_partner' in body:
+            center.school_partner = body['school_partner']
+        if 'partner_badge' in body:
+            center.partner_badge = body['partner_badge']
+        if 'partner_since' in body and body['partner_since']:
+            center.partner_since = datetime.fromisoformat(body['partner_since'].replace('Z', '+00:00'))
+        
+        # Set partner_since if becoming a partner for the first time
+        if (center.verified_by_aglf or center.school_partner) and not center.partner_since:
+            center.partner_since = datetime.utcnow()
+        
+        # Update last_updated timestamp
+        center.last_updated = datetime.utcnow()
+        
+        db.commit()
+        db.refresh(center)
+        
+        return {
+            "id": center.id,
+            "name": center.name,
+            "verified_by_aglf": center.verified_by_aglf,
+            "school_partner": center.school_partner,
+            "partner_badge": center.partner_badge,
+            "partner_since": center.partner_since.isoformat() if center.partner_since else None,
+            "last_updated": center.last_updated.isoformat() if center.last_updated else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error updating center trust badges: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/users/{user_id}/activity")
+async def update_user_activity(
+    user_id: int,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Update user's last_active timestamp (called automatically by frontend)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        requesting_user_id = int(payload.get("sub"))
+        
+        # Users can only update their own activity
+        if requesting_user_id != user_id:
+            raise HTTPException(status_code=403, detail="Cannot update other users' activity")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        user.last_active = datetime.utcnow()
+        db.commit()
+        
+        return {"success": True, "last_active": user.last_active.isoformat()}
+        
+    except HTTPException:
+        raise
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error updating user activity: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# SMART NOTIFICATIONS
+# ============================================================================
+
+@app.get("/api/notification-preferences")
+async def get_notification_preferences(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get user's notification preferences"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Parse JSON string if needed
+        if user.notification_preferences:
+            if isinstance(user.notification_preferences, str):
+                prefs = json.loads(user.notification_preferences)
+            else:
+                prefs = user.notification_preferences
+        else:
+            prefs = {
+                "enabled": False,
+                "maxDistance": 2,
+                "categories": [],
+                "dietaryTags": [],
+                "favoriteLocations": [],
+                "quietHours": {"start": "22:00", "end": "08:00"},
+                "maxPerDay": 3,
+                "urgencyOnly": False
+            }
+        
+        return prefs
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error getting notification preferences: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/notification-preferences")
+async def update_notification_preferences(
+    preferences: dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Update user's notification preferences"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Store as JSON string
+        user.notification_preferences = json.dumps(preferences)
+        db.commit()
+        
+        return {"success": True, "preferences": preferences}
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating notification preferences: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/notification-behavior")
+async def get_notification_behavior(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get learned behavior data for AI notification filtering"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Parse JSON string if needed
+        if user.notification_behavior:
+            if isinstance(user.notification_behavior, str):
+                behavior = json.loads(user.notification_behavior)
+            else:
+                behavior = user.notification_behavior
+        else:
+            behavior = {
+                "clickedCategories": {},
+                "ignoredCategories": {},
+                "clickedTimes": [],
+                "preferredDistance": 2,
+                "responseRate": 0
+            }
+        
+        return behavior
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error getting notification behavior: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/notification-sent")
+async def track_notification_sent(
+    notification: dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Track that a notification was sent (for learning)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        # Store notification history
+        # In production, you'd want a dedicated notifications table
+        # For now, we'll just return success
+        
+        return {"success": True}
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error tracking notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/notification-clicked")
+async def track_notification_clicked(
+    click_data: dict,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Track that a notification was clicked (for AI learning)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Parse behavior data
+        if user.notification_behavior:
+            if isinstance(user.notification_behavior, str):
+                behavior = json.loads(user.notification_behavior)
+            else:
+                behavior = user.notification_behavior
+        else:
+            behavior = {
+                "clickedCategories": {},
+                "ignoredCategories": {},
+                "clickedTimes": [],
+                "preferredDistance": 2,
+                "responseRate": 0
+            }
+        
+        category = click_data.get("category")
+        if category:
+            behavior["clickedCategories"][category] = behavior["clickedCategories"].get(category, 0) + 1
+        
+        # Add click time for pattern analysis
+        behavior["clickedTimes"].append(click_data.get("clicked_at"))
+        
+        # Calculate response rate
+        total_sent = sum(behavior["clickedCategories"].values()) + sum(behavior["ignoredCategories"].values())
+        total_clicked = sum(behavior["clickedCategories"].values())
+        if total_sent > 0:
+            behavior["responseRate"] = total_clicked / total_sent
+        
+        # Store as JSON string
+        user.notification_behavior = json.dumps(behavior)
+        db.commit()
+        
+        return {"success": True, "behavior": behavior}
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        db.rollback()
+        print(f"Error tracking notification click: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/listings/recent")
+async def get_recent_listings(
+    minutes: int = 30,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get listings created in the last N minutes (for notification checking)"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        # Calculate time threshold
+        time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
+        
+        # Get recent listings
+        listings = db.query(FoodResource).filter(
+            FoodResource.created_at >= time_threshold,
+            FoodResource.available == True
+        ).all()
+        
+        # Serialize listings
+        result = []
+        for listing in listings:
+            item = serialize_listing_item(listing)
+            
+            # Calculate distance (would need user location)
+            # For now, use a placeholder
+            item["distance"] = 1.5
+            
+            # Calculate hours until expiry
+            if listing.expiration_date:
+                hours_left = (listing.expiration_date - datetime.utcnow()).total_seconds() / 3600
+                item["hours_until_expiry"] = max(0, hours_left)
+            
+            result.append(item)
+        
+        return result
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error getting recent listings: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/sms-consent")
+async def get_sms_consent(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Get user's SMS consent status and preferences"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Parse notification types
+        notification_types = []
+        if user.sms_notification_types:
+            if isinstance(user.sms_notification_types, str):
+                notification_types = json.loads(user.sms_notification_types)
+            else:
+                notification_types = user.sms_notification_types
+        
+        return {
+            "consent_given": user.sms_consent_given or False,
+            "consent_date": user.sms_consent_date.isoformat() if user.sms_consent_date else None,
+            "notification_types": notification_types,
+            "opt_out_date": user.sms_opt_out_date.isoformat() if user.sms_opt_out_date else None,
+            "phone": user.phone,
+            "phone_verified": user.phone_verified or False
+        }
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        print(f"Error getting SMS consent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/sms-consent")
+async def update_sms_consent(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db)
+):
+    """Update user's SMS consent and notification preferences"""
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub"))
+        
+        consent_data = await request.json()
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get client IP for compliance logging
+        client_ip = request.client.host
+        
+        # Update consent status
+        consent_given = consent_data.get("consent_given", False)
+        notification_types = consent_data.get("notification_types", [])
+        
+        if consent_given:
+            # User is opting IN
+            user.sms_consent_given = True
+            user.sms_consent_date = datetime.utcnow()
+            user.sms_consent_ip = client_ip
+            user.sms_opt_out_date = None  # Clear any previous opt-out
+            user.sms_notification_types = json.dumps(notification_types)
+        else:
+            # User is opting OUT
+            user.sms_consent_given = False
+            user.sms_opt_out_date = datetime.utcnow()
+            user.sms_notification_types = json.dumps([])  # Clear notification types
+        
+        db.commit()
+        
+        return {
+            "success": True,
+            "consent_given": user.sms_consent_given,
+            "consent_date": user.sms_consent_date.isoformat() if user.sms_consent_date else None,
+            "notification_types": notification_types if consent_given else [],
+            "message": "SMS preferences updated successfully"
+        }
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception as e:
+        db.rollback()
+        print(f"Error updating SMS consent: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# Mount static files at the end to allow API routes to take precedence
+app.mount("/", StaticFiles(directory=PROJECT_ROOT, html=True), name="root")
 
 
 

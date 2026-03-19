@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice Search - Food Maps</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    }
+
+    .hero-gradient {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+  </style>
+</head>
+
+<body class="bg-gray-50">
+  <!-- Header -->
+  <header class="hero-gradient text-white shadow-lg">
+    <div class="container mx-auto px-4 py-6">
+      <div class="flex justify-between items-center">
+        <h1 class="text-3xl font-bold">💬 Smart Search</h1>
+        <a href="/" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+          ← Back to Home
+        </a>
+      </div>
+      <p class="mt-2 text-purple-100">Speak or type to find food near you</p>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="container mx-auto px-4 py-8">
+    <!-- Accessibility Notice -->
+    <div class="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
+      <h2 class="text-2xl font-bold text-blue-900 mb-3">♿ Designed for Everyone</h2>
+      <div class="grid md:grid-cols-3 gap-4 text-blue-800">
+        <div>
+          <div class="text-3xl mb-2">👴👵</div>
+          <div class="font-semibold">Seniors</div>
+          <div class="text-sm">Speak or type - easy for everyone</div>
+        </div>
+        <div>
+          <div class="text-3xl mb-2">📖</div>
+          <div class="font-semibold">Low Literacy</div>
+          <div class="text-sm">Simple interface with clear examples</div>
+        </div>
+        <div>
+          <div class="text-3xl mb-2">🙌</div>
+          <div class="font-semibold">Hands-Free</div>
+          <div class="text-sm">Voice input when available</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice Search Interface -->
+    <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
+      <div id="voice-search-root" class="flex flex-col items-center"></div>
+    </div>
+
+    <!-- Features -->
+    <div class="grid md:grid-cols-2 gap-6 mb-8">
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">🗣️ Natural Language</h3>
+        <p class="text-gray-600 mb-3">
+          Speak or type naturally - no need to learn special commands. Ask questions the same way
+          you'd ask a friend.
+        </p>
+        <div class="bg-gray-50 rounded p-3 text-sm text-gray-700">
+          <strong>Example:</strong> "Where can I get fresh vegetables near me?"
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">🎯 Smart Understanding</h3>
+        <p class="text-gray-600 mb-3">
+          Our system understands location, time, dietary needs, allergens, and more.
+        </p>
+        <div class="bg-gray-50 rounded p-3 text-sm text-gray-700">
+          <strong>Example:</strong> "Is anything open after 6 PM tonight?"
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">🔊 Audio Responses</h3>
+        <p class="text-gray-600 mb-3">
+          Hear the results spoken back to you when voice is available - no need to read the screen.
+        </p>
+        <div class="bg-gray-50 rounded p-3 text-sm text-gray-700">
+          Works in Chrome, Edge, and Safari browsers
+        </div>
+      </div>
+
+      <div class="bg-white rounded-lg shadow p-6">
+        <h3 class="text-xl font-bold text-gray-800 mb-4">💬 Works Everywhere</h3>
+        <p class="text-gray-600 mb-3">
+          Text input fallback works in all browsers. Voice input available in Chrome, Edge, and Safari.
+        </p>
+        <div class="bg-gray-50 rounded p-3 text-sm text-gray-700">
+          Same smart search, multiple ways to interact
+        </div>
+      </div>
+    </div>
+
+    <!-- How to Use -->
+    <div class="bg-white rounded-lg shadow-lg p-8 mb-8">
+      <h2 class="text-2xl font-bold text-gray-800 mb-6">📋 How to Use Smart Search</h2>
+
+      <div class="space-y-6">
+        <div class="flex items-start">
+          <div
+            class="bg-purple-100 text-purple-700 rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 flex-shrink-0">
+            1
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-800 mb-2">Open the Search Interface</h3>
+            <p class="text-gray-600">Click the button below or the floating icon at bottom-right. You'll see either a
+              microphone (voice) or text input (type).</p>
+          </div>
+        </div>
+
+        <div class="flex items-start">
+          <div
+            class="bg-purple-100 text-purple-700 rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 flex-shrink-0">
+            2
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-800 mb-2">Ask Your Question</h3>
+            <p class="text-gray-600">Speak or type your question naturally. Examples: "Where can I get produce near me?"
+              or "Show
+              me vegetarian options."</p>
+          </div>
+        </div>
+
+        <div class="flex items-start">
+          <div
+            class="bg-purple-100 text-purple-700 rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 flex-shrink-0">
+            3
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-800 mb-2">Get Results</h3>
+            <p class="text-gray-600">The system will process your request and show you the results. With voice support,
+              you'll also hear responses.</p>
+          </div>
+        </div>
+
+        <div class="flex items-start">
+          <div
+            class="bg-purple-100 text-purple-700 rounded-full w-8 h-8 flex items-center justify-center font-bold mr-4 flex-shrink-0">
+            4
+          </div>
+          <div>
+            <h3 class="font-semibold text-gray-800 mb-2">Continue Searching</h3>
+            <p class="text-gray-600">Ask follow-up questions or start a new search. Your conversation history is saved.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Browser Compatibility -->
+    <div class="bg-green-50 border border-green-200 rounded-lg p-6">
+      <h3 class="text-lg font-bold text-green-900 mb-3">✅ Works in All Browsers</h3>
+      <div class="grid md:grid-cols-2 gap-4">
+        <div>
+          <p class="font-semibold text-green-800 mb-2">🎤 Voice Input Available:</p>
+          <ul class="list-disc list-inside text-green-700 space-y-1 text-sm">
+            <li>Google Chrome (recommended)</li>
+            <li>Microsoft Edge</li>
+            <li>Safari (iOS/macOS)</li>
+          </ul>
+        </div>
+        <div>
+          <p class="font-semibold text-green-800 mb-2">💬 Text Input Always Works:</p>
+          <ul class="list-disc list-inside text-green-700 space-y-1 text-sm">
+            <li>Firefox</li>
+            <li>All other browsers</li>
+            <li>Same smart search features</li>
+          </ul>
+        </div>
+      </div>
+      <p class="text-green-700 text-sm mt-3">
+        💡 Tip: For voice input, allow microphone access when prompted by your browser.
+      </p>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-white py-8 mt-12">
+    <div class="container mx-auto px-4 text-center">
+      <p>&copy; 2026 Food Maps. Making food access easier for everyone.</p>
+    </div>
+  </footer>
+
+  <!-- Load VoiceSearch Component -->
+  <script src="components/VoiceSearch.js" type="text/babel"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function VoiceSearchPage() {
+      return (
+        <div className="w-full">
+          <VoiceSearch />
+        </div>
+      );
+    }
+
+    // Render the component
+    const root = ReactDOM.createRoot(document.getElementById('voice-search-root'));
+    root.render(<VoiceSearchPage />);
+  </script>
+</body>
+
+</html>

@@ -126,9 +126,13 @@ function StoreOwnerDashboard({ user, onClose }) {
 
       if (response.ok) {
         await loadInventory(myCenter.id);
+      } else {
+        const error = await response.json();
+        alert('Error: ' + (error.detail || 'Failed to update item'));
       }
     } catch (error) {
       console.error('Error updating item:', error);
+      alert('Network error. Please try again.');
     }
   };
 
@@ -211,8 +215,8 @@ function StoreOwnerDashboard({ user, onClose }) {
             <button
               onClick={() => setActiveTab('inventory')}
               className={`flex-1 py-3 px-4 text-center font-medium ${activeTab === 'inventory'
-                  ? 'border-b-2 border-green-500 text-green-600'
-                  : 'text-gray-500 hover:text-gray-700'
+                ? 'border-b-2 border-green-500 text-green-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               Inventory ({inventory.length})
@@ -220,8 +224,8 @@ function StoreOwnerDashboard({ user, onClose }) {
             <button
               onClick={() => setActiveTab('info')}
               className={`flex-1 py-3 px-4 text-center font-medium ${activeTab === 'info'
-                  ? 'border-b-2 border-green-500 text-green-600'
-                  : 'text-gray-500 hover:text-gray-700'
+                ? 'border-b-2 border-green-500 text-green-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
             >
               Center Info
@@ -390,8 +394,8 @@ function StoreOwnerDashboard({ user, onClose }) {
                         <div className="flex items-center gap-2 mb-2">
                           <h3 className="text-lg font-semibold">{item.name}</h3>
                           <span className={`px-2 py-1 text-xs rounded ${item.is_available
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-gray-100 text-gray-600'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-600'
                             }`}>
                             {item.is_available ? 'Available' : 'Unavailable'}
                           </span>
@@ -408,8 +412,8 @@ function StoreOwnerDashboard({ user, onClose }) {
                           </span>
                           {item.perishability && (
                             <span className={`px-2 py-1 rounded ${item.perishability === 'high' ? 'bg-red-100 text-red-800' :
-                                item.perishability === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                  'bg-green-100 text-green-800'
+                              item.perishability === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-green-100 text-green-800'
                               }`}>
                               {item.perishability}
                             </span>
@@ -425,8 +429,8 @@ function StoreOwnerDashboard({ user, onClose }) {
                         <button
                           onClick={() => handleToggleAvailability(item.id, item.is_available)}
                           className={`px-3 py-1 rounded text-sm ${item.is_available
-                              ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
-                              : 'bg-green-100 text-green-800 hover:bg-green-200'
+                            ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                            : 'bg-green-100 text-green-800 hover:bg-green-200'
                             }`}
                         >
                           {item.is_available ? 'Hide' : 'Show'}
@@ -457,7 +461,7 @@ function StoreOwnerDashboard({ user, onClose }) {
                 {isEditingCenter ? 'Cancel' : 'Edit Info'}
               </button>
             </div>
-            
+
             {isEditingCenter ? (
               <form onSubmit={async (e) => {
                 e.preventDefault();
@@ -471,7 +475,7 @@ function StoreOwnerDashboard({ user, onClose }) {
                     },
                     body: JSON.stringify(centerFormData)
                   });
-                  
+
                   if (response.ok) {
                     const result = await response.json();
                     setMyCenter(result.center);
@@ -589,8 +593,8 @@ function StoreOwnerDashboard({ user, onClose }) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                   <span className={`px-3 py-1 rounded ${myCenter.is_active
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-red-100 text-red-800'
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-800'
                     }`}>
                     {myCenter.is_active ? 'Active' : 'Inactive'}
                   </span>

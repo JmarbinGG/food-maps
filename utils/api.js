@@ -1,6 +1,6 @@
 // API utilities
 window.listingAPI = {
-  getAll: async function() {
+  getAll: async function () {
     try {
       const response = await fetch('/api/listings/get');
       if (!response.ok) throw new Error('Failed to fetch');
@@ -10,8 +10,8 @@ window.listingAPI = {
       return [];
     }
   },
-  
-  claim: async function(listingId, userId) {
+
+  claim: async function (listingId, userId) {
     try {
       const token = localStorage.getItem('auth_token');
       const response = await fetch(`/api/listings/claim/${listingId}`, {
@@ -32,13 +32,13 @@ window.listingAPI = {
     }
   },
 
-  getCounterparty: async function(listingId, options = {}) {
+  getCounterparty: async function (listingId, options = {}) {
     try {
       const token = localStorage.getItem('auth_token');
       const controller = new AbortController();
       const timeout = options.timeout || 10000;
       const timer = setTimeout(() => controller.abort(), timeout);
-      
+
       const response = await fetch(`/api/listings/user-details/${listingId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -46,14 +46,14 @@ window.listingAPI = {
         },
         signal: controller.signal
       });
-      
+
       clearTimeout(timer);
-      
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `API Error: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -63,39 +63,71 @@ window.listingAPI = {
       throw error;
     }
   }
-};
 
-window.userAPI = {
-  getMeV2: async function() {
-    try {
+window.favoritesAPI = {
+    list: async function () {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/user/me', {
+      const response = await fetch('/api/favorites', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
-      if (!response.ok) throw new Error('Failed to get user');
+      if (!response.ok) throw new Error('Failed to fetch favorites');
       return await response.json();
-    } catch (error) {
-      console.error('User API error:', error);
-      return null;
-    }
-  },
-  
-  updatePhone: async function(phone) {
-    try {
+    },
+    add: async function ({ name, address, coords_lat, coords_lng, notes }) {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/user/phone', {
-        method: 'PUT',
+      const response = await fetch('/api/favorites', {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ name, address, coords_lat, coords_lng, notes })
       });
-      if (!response.ok) throw new Error('Failed to update phone');
+      if (!response.ok) throw new Error('Failed to add favorite');
       return await response.json();
-    } catch (error) {
-      console.error('Phone update error:', error);
-      throw error;
+    },
+    remove: async function (favoriteId) {
+      const token = localStorage.getItem('auth_token');
+      const response = await fetch(`/api/favorites/${favoriteId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!response.ok) throw new Error('Failed to remove favorite');
+      return await response.json();
     }
-  }
-};
+  };
+
+  window.userAPI = {
+    getMeV2: async function () {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/user/me', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!response.ok) throw new Error('Failed to get user');
+        return await response.json();
+      } catch (error) {
+        console.error('User API error:', error);
+        return null;
+      }
+    },
+
+    updatePhone: async function (phone) {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/user/phone', {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ phone })
+        });
+        if (!response.ok) throw new Error('Failed to update phone');
+        return await response.json();
+      } catch (error) {
+        console.error('Phone update error:', error);
+        throw error;
+      }
+    }
+  };

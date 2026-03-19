@@ -7,6 +7,7 @@ class UserRole(str, Enum):
     DONOR = "donor"
     RECIPIENT = "recipient"
     VOLUNTEER = "volunteer"
+    DRIVER = "driver"
     DISPATCHER = "dispatcher"
     ADMIN = "admin"
 
@@ -64,12 +65,23 @@ class FoodResourceResponse(BaseModel):
     qty: float
     unit: str
     perishability: str
+    expiration_date: Optional[datetime] = None
+    date_label_type: Optional[str] = None
     status: str
     address: str
     coords_lat: Optional[float] = None
     coords_lng: Optional[float] = None
     urgency_score: Optional[int] = 0
     created_at: datetime
+    verification_status: Optional[str] = None
+    is_refrigerated: Optional[bool] = False
+    is_frozen: Optional[bool] = False
+    safety_checklist_passed: Optional[bool] = False
+    packaging_condition: Optional[str] = "unknown"
+    allergens: Optional[str] = None
+    contamination_warning: Optional[str] = None
+    dietary_tags: Optional[str] = None
+    ingredients_list: Optional[str] = None
     donor: UserResponse
 
     class Config:

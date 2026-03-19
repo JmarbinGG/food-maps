@@ -27,9 +27,9 @@ function LogisticsMapComponent({ currentView, routes = [], drivers = [], stores 
       const map = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-122.4194, 37.7749],
-        zoom: 11,
-        minZoom: 8,
+        center: [-119.4179, 36.7783], // California center
+        zoom: 6,
+        minZoom: 3,
         maxZoom: 20,
         pitch: 0,
         bearing: 0,

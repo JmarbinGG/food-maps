@@ -11,6 +11,13 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
 
+    <!-- React and Translation System -->
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+
     <style type="text/tailwindcss">
         @layer theme {
         :root {
@@ -33,13 +40,16 @@
                         alt="Food Maps" class="w-12 h-12 rounded-lg">
                     <div>
                         <h1 class="text-2xl font-bold text-gray-900">Terms of Service</h1>
-                        <p class="text-gray-600">Last updated: September 4, 2025</p>
+                        <p class="text-gray-600">Last updated: February 6, 2026</p>
                     </div>
                 </div>
-                <a href="landing.html" class="flex items-center text-green-600 hover:text-green-700 font-medium">
-                    <div class="icon-arrow-left mr-2"></div>
-                    Back to Home
-                </a>
+                <div class="flex items-center gap-4">
+                    <div id="language-switcher"></div>
+                    <a href="landing.html" class="flex items-center text-green-600 hover:text-green-700 font-medium">
+                        <div class="icon-arrow-left mr-2"></div>
+                        Back to Home
+                    </a>
+                </div>
             </div>
         </div>
     </header>
@@ -60,20 +70,100 @@
             <section>
                 <h2 class="text-xl font-bold text-gray-900 mb-4">2. Description of Service</h2>
                 <div class="space-y-4 text-gray-700">
-                    <p>Food Maps is an AI-powered platform that connects food donors with recipients through intelligent
-                        matching, automated routing, and real-time logistics optimization.</p>
+                    <p><strong>Program Name:</strong> Food Maps - AI-Powered Food Distribution Platform</p>
+                    <p><strong>Program Description:</strong> Food Maps is an intelligent platform that connects food
+                        donors with recipients through automated matching, route optimization, and real-time logistics
+                        coordination. Our mission is to reduce food waste and address food insecurity by making food
+                        distribution more efficient and accessible.</p>
                     <p>Our services include:</p>
                     <ul class="list-disc pl-6 space-y-2">
                         <li>Food donation and distribution coordination</li>
                         <li>Route optimization and volunteer management</li>
                         <li>Real-time tracking and communication tools</li>
+                        <li>SMS notifications for pickups, deliveries, and service updates</li>
                         <li>Impact analytics and reporting</li>
                     </ul>
                 </div>
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">3. User Accounts and Registration</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">3. SMS Messaging Program Terms</h2>
+                <div class="space-y-4 text-gray-700">
+                    <div class="bg-blue-50 p-6 rounded-lg border border-blue-200 mb-6">
+                        <h3 class="font-bold text-lg mb-3">SMS Program Overview</h3>
+                        <p><strong>Program Name:</strong> Food Maps SMS Notifications</p>
+                        <p><strong>Program Description:</strong> When you opt-in to our SMS notification service, you
+                            agree to receive text messages related to food pickups, deliveries, service updates, and
+                            important account notifications.</p>
+                    </div>
+
+                    <h3 class="font-semibold text-lg">Message Types and Frequency</h3>
+                    <p>By opting into SMS notifications, you consent to receive the following types of messages:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li><strong>Pickup Reminders:</strong> Notifications about upcoming food collection appointments
+                        </li>
+                        <li><strong>Delivery Updates:</strong> Real-time updates about food delivery status and routes
+                        </li>
+                        <li><strong>Service Announcements:</strong> Important platform updates and service changes</li>
+                        <li><strong>Safety Alerts:</strong> Time-sensitive communications regarding food safety or
+                            service issues</li>
+                    </ul>
+
+                    <p class="mt-4"><strong>Message Frequency:</strong> Message frequency varies based on your activity
+                        level. You may receive:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li>1-3 messages per scheduled pickup or delivery</li>
+                        <li>Occasional service announcements (typically less than 5 per month)</li>
+                        <li>Urgent notifications as needed for time-sensitive matters</li>
+                    </ul>
+
+                    <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200 my-4">
+                        <p class="font-semibold">Message and Data Rates</p>
+                        <p>Message and data rates may apply. Standard text messaging rates from your mobile carrier will
+                            apply to all SMS messages sent and received. Food Maps does not charge for messages, but
+                            your carrier's rates will apply.</p>
+                    </div>
+
+                    <h3 class="font-semibold text-lg mt-6">Opt-Out Instructions</h3>
+                    <p>You can opt-out of SMS notifications at any time using the following methods:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li><strong>Text <span class="font-bold">STOP</span>:</strong> Reply with <strong>STOP</strong>
+                            to any message to immediately unsubscribe from all SMS notifications</li>
+                        <li><strong>Account Settings:</strong> Update your notification preferences in your Food Maps
+                            account settings</li>
+                        <li><strong>Contact Support:</strong> Email us at info@allgoodlivingfoundation.org or call (510)
+                            522-6288</li>
+                    </ul>
+                    <p class="mt-2 italic">After texting <strong>STOP</strong>, you will receive one final confirmation
+                        message, and then you will not receive any further messages unless you re-opt-in.</p>
+
+                    <h3 class="font-semibold text-lg mt-6">Help and Support</h3>
+                    <p>For assistance with SMS notifications or any questions about the program:</p>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li><strong>Text <span class="font-bold">HELP</span>:</strong> Reply with <strong>HELP</strong>
+                            to any message for support information</li>
+                        <li><strong>Email:</strong> info@allgoodlivingfoundation.org</li>
+                        <li><strong>Phone:</strong> (510) 522-6288</li>
+                        <li><strong>Address:</strong> 1900 Thau Way, Alameda, CA 94501</li>
+                    </ul>
+
+                    <h3 class="font-semibold text-lg mt-6">Supported Carriers</h3>
+                    <p>Our SMS service is compatible with all major U.S. carriers including AT&T, T-Mobile, Verizon,
+                        Sprint, and most regional carriers. For questions about carrier compatibility, please contact
+                        support.</p>
+
+                    <h3 class="font-semibold text-lg mt-6">Important Notices</h3>
+                    <ul class="list-disc pl-6 space-y-2">
+                        <li>Opting out of SMS notifications will not affect your ability to use Food Maps services</li>
+                        <li>You may miss important time-sensitive updates if you opt-out of SMS</li>
+                        <li>We will never sell or share your phone number for marketing purposes</li>
+                        <li>SMS messages are for informational purposes related to Food Maps services only</li>
+                    </ul>
+                </div>
+            </section>
+
+            <section>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">4. User Accounts and Registration</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>To use certain features of our service, you must register for an account. You agree to:</p>
                     <ul class="list-disc pl-6 space-y-2">
@@ -87,7 +177,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">4. User Conduct and Responsibilities</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">5. User Conduct and Responsibilities</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>You agree not to:</p>
                     <ul class="list-disc pl-6 space-y-2">
@@ -102,7 +192,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">5. Food Safety and Quality</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">6. Food Safety and Quality</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>Food donors and volunteers acknowledge that:</p>
                     <ul class="list-disc pl-6 space-y-2">
@@ -117,7 +207,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">6. Intellectual Property</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">7. Intellectual Property</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>The Service and its original content, features, and functionality are owned by Food Maps and are
                         protected by international copyright, trademark, and other intellectual property laws.</p>
@@ -131,7 +221,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">7. Privacy and Data Protection</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">8. Privacy and Data Protection</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>Your privacy is important to us. Our collection and use of personal information is governed by
                         our Privacy Policy, which is incorporated into these Terms by reference.</p>
@@ -141,7 +231,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">8. Disclaimers and Limitations</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">9. Disclaimers and Limitations</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND. WE DISCLAIM ALL WARRANTIES,
                         EXPRESS OR IMPLIED, INCLUDING:</p>
@@ -155,7 +245,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">9. Limitation of Liability</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">10. Limitation of Liability</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, FOOD MAPS SHALL NOT BE LIABLE FOR ANY INDIRECT,
                         INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES ARISING FROM:</p>
@@ -170,7 +260,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">10. Indemnification</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">11. Indemnification</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>You agree to indemnify and hold harmless Food Maps from any claims, damages, or expenses arising
                         from:</p>
@@ -184,7 +274,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">11. Termination</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">12. Termination</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>We may terminate or suspend your account and access to the service immediately, without prior
                         notice, for any reason including:</p>
@@ -198,7 +288,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">12. Governing Law</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">13. Governing Law</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>These Terms shall be governed by and construed in accordance with the laws of the State of
                         California, without regard to conflict of law provisions.</p>
@@ -208,7 +298,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">13. Changes to Terms</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">14. Changes to Terms</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>We reserve the right to modify these Terms at any time. We will notify users of material changes
                         by:</p>
@@ -222,19 +312,21 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">14. Contact Information</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">15. Contact Information</h2>
                 <div class="space-y-4 text-gray-700">
-                    <p>If you have questions about these Terms, please contact us:</p>
+                    <p>If you have questions about these Terms of Service, please contact us:</p>
                     <div class="bg-gray-50 p-4 rounded-lg">
-                        <p><strong>Email:</strong> info@allgoodlivingfoundation.org/</p>
+                        <p><strong>Email:</strong> info@allgoodlivingfoundation.org</p>
                         <p><strong>Phone:</strong> (510) 522-6288</p>
                         <p><strong>Address:</strong> 1900 Thau Way, Alameda, CA 94501</p>
+                        <p class="mt-2"><strong>For SMS Support:</strong> Text <strong>HELP</strong> to any message or
+                            call (510) 522-6288</p>
                     </div>
                 </div>
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">15. Severability</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">16. Severability</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>If any provision of these Terms is found to be unenforceable or invalid, that provision will be
                         limited or eliminated to the minimum extent necessary so that the Terms will otherwise remain in
@@ -243,7 +335,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">16. Entire Agreement</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">17. Entire Agreement</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>These Terms constitute the entire agreement between you and Food Maps regarding the use of the
                         service, superseding any prior agreements between you and Food Maps relating to your use of the
@@ -252,7 +344,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">17. Waiver</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">18. Waiver</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>The failure of Food Maps to enforce any right or provision of these Terms will not be deemed a
                         waiver of such right or provision.</p>
@@ -260,7 +352,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">18. Force Majeure</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">19. Force Majeure</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>Food Maps shall not be liable for any failure to perform its obligations where such failure
                         results from any cause beyond Food Maps' reasonable control, including natural disasters, war,
@@ -270,7 +362,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">19. Assignment</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">20. Assignment</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>You may not assign or transfer these Terms or your rights and obligations under these Terms
                         without Food Maps' prior written consent. Food Maps may assign these Terms at any time without
@@ -279,7 +371,7 @@
             </section>
 
             <section>
-                <h2 class="text-xl font-bold text-gray-900 mb-4">20. Survival</h2>
+                <h2 class="text-xl font-bold text-gray-900 mb-4">21. Survival</h2>
                 <div class="space-y-4 text-gray-700">
                     <p>The provisions of these Terms which by their nature should survive termination shall survive
                         termination, including ownership provisions, warranty disclaimers, indemnity, and limitations of
@@ -292,9 +384,50 @@
     <!-- Footer -->
     <footer class="bg-white border-t mt-16">
         <div class="max-w-4xl mx-auto px-4 py-8 text-center">
-            <p class="text-gray-600">&copy; 2025 Food Maps. All rights reserved.</p>
+            <p class="text-gray-600">&copy; 2026 Food Maps. All rights reserved.</p>
         </div>
     </footer>
+
+    <!-- Language Switcher Component -->
+    <script type="text/babel" src="components/LanguageSwitcher.js"></script>
+    <script type="text/babel">
+        function initLanguageSwitcher() {
+            if (!window.i18n) {
+                console.error('Translation system not loaded');
+                return;
+            }
+
+            if (typeof LanguageSwitcherCompact === 'undefined') {
+                console.error('LanguageSwitcherCompact component not loaded');
+                return;
+            }
+
+            window.i18n.initLanguageSystem();
+
+            const container = document.getElementById('language-switcher');
+            if (container) {
+                try {
+                    const root = ReactDOM.createRoot(container);
+                    root.render(<LanguageSwitcherCompact />);
+                    console.log('Language switcher rendered on terms page');
+                } catch (error) {
+                    console.error('Error rendering language switcher:', error);
+                }
+            }
+
+            window.addEventListener('languageChanged', () => {
+                window.i18n.translatePage();
+            });
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(initLanguageSwitcher, 100);
+            });
+        } else {
+            setTimeout(initLanguageSwitcher, 100);
+        }
+    </script>
 </body>
 
 </html>
