@@ -64,6 +64,8 @@ window.listingAPI = {
     }
   }
 
+};
+
 window.favoritesAPI = {
     list: async function () {
       const token = localStorage.getItem('auth_token');

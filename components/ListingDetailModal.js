@@ -64,14 +64,43 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         setContactError(null);
         setContact(null);
         setContactLoading(true);
-        if (!window.listingAPI || typeof window.listingAPI.getCounterparty !== 'function') {
-          throw new Error('Contact API not available');
-        }
         const token = localStorage.getItem('auth_token');
         if (!token) {
           throw new Error('Not signed in');
         }
-        const data = await window.listingAPI.getCounterparty(listing.id, { timeout: 10000 });
+
+        let data = null;
+        if (window.listingAPI && typeof window.listingAPI.getCounterparty === 'function') {
+          data = await window.listingAPI.getCounterparty(listing.id, { timeout: 10000 });
+        } else {
+          // Fallback path if API helpers failed to load.
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 10000);
+          try {
+            const response = await fetch(`/api/listings/user-details/${listing.id}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              signal: controller.signal
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(errorData.detail || `API Error: ${response.status}`);
+            }
+
+            data = await response.json();
+          } catch (error) {
+            if (error && error.name === 'AbortError') {
+              throw new Error('Request timeout');
+            }
+            throw error;
+          } finally {
+            clearTimeout(timer);
+          }
+        }
+
         if (!cancelled) setContact(data || null);
       } catch (e) {
         if (!cancelled) setContactError(e?.message || 'Failed to fetch contact');
