@@ -81,7 +81,34 @@ function FoodSearch({ onClose, onSelectFood, user }) {
   const performStandardSearch = async (request) => {
     // Use normalized async fetch to get an array of listings
     const listings = Array.isArray(await (window.databaseService && window.databaseService.fetchListingsArray ? window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []))) ? await window.databaseService.fetchListingsArray() : (typeof window.getListingsArray === 'function' ? window.getListingsArray() : []);
-    let filtered = listings.filter(listing => listing.status === 'AVAILABLE' || listing.status === 'available');
+    const getEffectiveStatus = (listing) => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.getEffectiveListingStatus === 'function') {
+          return String(window.getEffectiveListingStatus(listing) || '').toLowerCase();
+        }
+      } catch (_) {
+        // Fall through to local calculation.
+      }
+
+      const rawStatus = String(listing?.status || '').toLowerCase();
+      if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+      const toTimestamp = (value) => {
+        if (!value) return null;
+        const ts = new Date(value).getTime();
+        return Number.isFinite(ts) ? ts : null;
+      };
+
+      const deadlines = [
+        toTimestamp(listing?.pickup_window_end),
+        toTimestamp(listing?.expiration_date)
+      ].filter((value) => value != null);
+
+      if (deadlines.length && Math.min(...deadlines) <= Date.now()) return 'expired';
+      return rawStatus || 'available';
+    };
+
+    let filtered = listings.filter(listing => getEffectiveStatus(listing) === 'available');
 
     // Apply filters
     if (request.category !== 'all') {

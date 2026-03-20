@@ -9,8 +9,12 @@ window.databaseService = {
       params.append('limit', limit);
       params.append('include_claimed_for_me', include_claimed_for_me);
 
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+
       const response = await fetch(`/api/listings/get?${params.toString()}`, {
-        method: 'GET'
+        method: 'GET',
+        headers
       });
 
       if (response.status === 401) {

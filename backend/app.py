@@ -560,11 +560,49 @@ def get_listings(
             .limit(limit)
         ).all()
 
-        # Serialize listings to avoid Pydantic validation issues with enum fields
+        def _to_timestamp(value):
+            if not value:
+                return None
+            try:
+                ts = datetime.fromisoformat(str(value).replace('Z', '+00:00')).timestamp()
+                return ts
+            except Exception:
+                return None
+
+        def _effective_status(serialized_listing):
+            raw_status = str(serialized_listing.get('status') or '').lower()
+            if raw_status and raw_status != 'available':
+                return raw_status
+
+            deadlines = [
+                _to_timestamp(serialized_listing.get('pickup_window_end')),
+                _to_timestamp(serialized_listing.get('expiration_date')),
+            ]
+            deadlines = [d for d in deadlines if d is not None]
+
+            if deadlines and min(deadlines) <= datetime.now().timestamp():
+                return 'expired'
+
+            return raw_status or 'available'
+
+        # Serialize listings and apply role-aware visibility rules.
         result = []
         for listing in listings:
             try:
                 serialized = serialize_listing(listing, include_donor=True, include_donor_contact=False)
+
+                effective_status = _effective_status(serialized)
+                serialized['status'] = effective_status
+
+                if user_role == 'recipient':
+                    recipient_id = serialized.get('recipient_id')
+                    is_claimed = effective_status in ('claimed', 'pending_confirmation')
+                    is_mine = user_id is not None and recipient_id is not None and str(recipient_id) == str(user_id)
+
+                    # Recipients may only see available listings and listings claimed by themselves.
+                    if not (effective_status == 'available' or (is_claimed and is_mine)):
+                        continue
+
                 result.append(serialized)
             except Exception as e:
                 print(f"Error serializing listing {listing.id}: {e}")

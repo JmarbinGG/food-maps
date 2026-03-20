@@ -653,8 +653,13 @@ function App() {
           return Array.isArray(arr) && arr.includes(String(l.id));
         } catch (_) { return false; }
       };
-      const statusOf = (l) => String(l?.status || '').toLowerCase();
+      const statusOf = (l) => getEffectiveListingStatus(l);
       const isClaimedStatus = (s) => s === 'claimed' || s === 'pending_confirmation';
+
+      // Recipients should never see expired listings.
+      if (role === 'recipient') {
+        base = base.filter(l => statusOf(l) !== 'expired');
+      }
 
       if (statusFilter === 'available') {
         const availableOnly = base.filter(l => statusOf(l) === 'available');
