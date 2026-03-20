@@ -840,10 +840,15 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         qty = body.get('qty') if 'qty' in body else None
         unit = body.get('unit') if 'unit' in body else None
         perishability_val = body.get('perishability') if 'perishability' in body else None
-        pickup_start = body.get('pickup_start') if 'pickup_start' in body else None
-        pickup_end = body.get('pickup_end') if 'pickup_end' in body else None
+        pickup_start_provided = 'pickup_start' in body
+        pickup_end_provided = 'pickup_end' in body
+        expiration_date_provided = 'expiration_date' in body
+        recipient_id_provided = 'recipient_id' in body
+        pickup_start = body.get('pickup_start') if pickup_start_provided else None
+        pickup_end = body.get('pickup_end') if pickup_end_provided else None
+        expiration_date = body.get('expiration_date') if expiration_date_provided else None
         status = body.get('status') if 'status' in body else None
-        recipient_id = body.get('recipient_id') if 'recipient_id' in body else None
+        recipient_id = body.get('recipient_id') if recipient_id_provided else None
         address = body.get('address') if 'address' in body else None
 
         if title is not None:
@@ -867,13 +872,15 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
                 item.perishability = perishability_val
             except Exception:
                 pass
-        if pickup_start is not None:
+        if pickup_start_provided:
             item.pickup_window_start = pickup_start
-        if pickup_end is not None:
+        if pickup_end_provided:
             item.pickup_window_end = pickup_end
+        if expiration_date_provided:
+            item.expiration_date = expiration_date
         if status is not None:
             item.status = status
-        if recipient_id is not None:
+        if recipient_id_provided:
             item.recipient_id = recipient_id
         if address is not None and address != item.address:
             item.address = address

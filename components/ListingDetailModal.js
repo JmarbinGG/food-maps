@@ -1,3 +1,48 @@
+function getEffectiveStatusFromListing(listing) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.getEffectiveListingStatus === 'function') {
+      return String(window.getEffectiveListingStatus(listing) || '').toLowerCase();
+    }
+  } catch (_) {
+    // Fall through to local calculation.
+  }
+
+  const rawStatus = String(listing?.status || '').toLowerCase();
+  if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+  const toTimestamp = (value) => {
+    if (!value) return null;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const deadlines = [
+    toTimestamp(listing?.pickup_window_end),
+    toTimestamp(listing?.expiration_date)
+  ].filter((value) => value != null);
+
+  if (deadlines.length && Math.min(...deadlines) <= Date.now()) return 'expired';
+  return rawStatus || 'available';
+}
+
+function toDateTimeLocalValue(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function getRelistDefaults() {
+  const now = new Date();
+  const start = new Date(now.getTime() + 30 * 60 * 1000);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return {
+    pickupStart: toDateTimeLocalValue(start.toISOString()),
+    pickupEnd: toDateTimeLocalValue(end.toISOString())
+  };
+}
+
 function ListingDetailModal({ listing, onClose, onClaim, user }) {
   if (!listing) return null;
 
@@ -9,15 +54,19 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   const [contactLoading, setContactLoading] = React.useState(false);
   const [isFavorite, setIsFavorite] = React.useState(false);
   const [favoriteId, setFavoriteId] = React.useState(null);
+  const relistDefaults = getRelistDefaults();
   const [editData, setEditData] = React.useState({
     title: listing.title || '',
     description: listing.description || '',
     qty: listing.qty || '',
     unit: listing.unit || '',
-    address: listing.address || ''
+    address: listing.address || '',
+    pickupStart: toDateTimeLocalValue(listing.pickup_window_start) || relistDefaults.pickupStart,
+    pickupEnd: toDateTimeLocalValue(listing.pickup_window_end || listing.expiration_date) || relistDefaults.pickupEnd
   });
 
-  const canClaim = user && String(user.role).toLowerCase() === 'recipient' && ((listing.status || '').toString().toLowerCase() === 'available');
+  const listingStatus = getEffectiveStatusFromListing(listing);
+  const canClaim = user && String(user.role).toLowerCase() === 'recipient' && listingStatus === 'available';
   // Only the listing owner can edit; detect owner robustly
   let currentUserId = null;
   // Prefer prop.user.id if present
@@ -43,7 +92,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
   // Determine if this listing is claimed by me (recipient) using backend field or local fallback
   const isClaimedByMe = React.useMemo(() => {
     if (!currentUserId) return false;
-    const status = String(listing.status || '').toLowerCase();
+    const status = listingStatus;
     if (status !== 'claimed') return false;
     const rid = listing.recipient_id ?? listing.recipientId ?? null;
     if (rid != null && String(rid) === String(currentUserId)) return true;
@@ -54,7 +103,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       const arr = raw ? JSON.parse(raw) : [];
       return Array.isArray(arr) && arr.some(id => String(id) === String(listing.id));
     } catch (_) { return false; }
-  }, [listing, currentUserId]);
+  }, [listing, currentUserId, listingStatus]);
 
   // Fetch counterparty contact if eligible
   React.useEffect(() => {
@@ -109,7 +158,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       }
     }
 
-    const status = String(listing.status || '').toLowerCase();
+    const status = listingStatus;
     const shouldFetch = (
       status === 'claimed' && (
         (userRole === 'recipient' && isClaimedByMe) ||
@@ -124,7 +173,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       setContactLoading(false);
     }
     return () => { cancelled = true; };
-  }, [listing.id, listing.status, userRole, isClaimedByMe, canEdit]);
+  }, [listing.id, listingStatus, userRole, isClaimedByMe, canEdit]);
 
   // Check if this listing is favorited
   React.useEffect(() => {
@@ -172,6 +221,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       case 'available': return 'bg-green-100 text-green-800 border-green-200';
       case 'claimed': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'pending_confirmation': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'expired': return 'bg-red-100 text-red-800 border-red-200';
       case 'completed': return 'bg-gray-100 text-gray-800 border-gray-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
@@ -179,8 +229,12 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
 
   const getDisplayStatus = (status) => {
     const statusLower = (status || '').toString().toLowerCase();
+    if (!statusLower) return 'Unknown';
     if (statusLower === 'pending_confirmation') return 'Pending Confirmation';
-    return statusLower.charAt(0).toUpperCase() + statusLower.slice(1);
+    return statusLower
+      .split('_')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   };
 
   const saveEdits = async () => {
@@ -190,15 +244,43 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
           window.showAlert('You are not authorized to edit this listing.', { title: 'Not allowed', variant: 'error' }); 
         return; 
       }
+
+      const startTs = editData.pickupStart ? new Date(editData.pickupStart).getTime() : null;
+      const endTs = editData.pickupEnd ? new Date(editData.pickupEnd).getTime() : null;
+      if (startTs != null && endTs != null) {
+        if (!Number.isFinite(startTs) || !Number.isFinite(endTs)) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert('Please enter valid pickup dates.', { title: 'Invalid dates', variant: 'error' });
+          }
+          return;
+        }
+        if (endTs <= startTs) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert('Pickup end must be after pickup start.', { title: 'Invalid dates', variant: 'error' });
+          }
+          return;
+        }
+      }
+
+      const relistingFromExpired = listingStatus === 'expired' && Number.isFinite(endTs) && endTs > Date.now();
+      const payload = {
+        title: editData.title,
+        desc: editData.description,
+        qty: editData.qty,
+        unit: editData.unit,
+        address: editData.address,
+        pickup_start: editData.pickupStart ? new Date(editData.pickupStart).toISOString() : null,
+        pickup_end: editData.pickupEnd ? new Date(editData.pickupEnd).toISOString() : null,
+        expiration_date: editData.pickupEnd ? new Date(editData.pickupEnd).toISOString() : null
+      };
+
+      if (relistingFromExpired) {
+        payload.status = 'available';
+        payload.recipient_id = null;
+      }
       
       if (window.databaseService && window.databaseService.updateListing) {
-        const resp = await window.databaseService.updateListing(listing.id, {
-          title: editData.title,
-          desc: editData.description,
-          qty: editData.qty,
-          unit: editData.unit,
-          address: editData.address
-        });
+        const resp = await window.databaseService.updateListing(listing.id, payload);
         
         if (!resp || !resp.success) {
           if (typeof window.showAlert === 'function') 
@@ -207,7 +289,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         }
         
         if (typeof window.showAlert === 'function') 
-          window.showAlert('Listing updated successfully!', { title: 'Success', variant: 'success' });
+          window.showAlert(relistingFromExpired ? 'Listing relisted successfully!' : 'Listing updated successfully!', { title: 'Success', variant: 'success' });
         
         setIsEditing(false);
         
@@ -330,8 +412,8 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         <div className="p-6 space-y-6">
           <div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">{listing.title}</h3>
-            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(listing.status)}`}>
-              {getDisplayStatus(listing.status)}
+            <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(listingStatus)}`}>
+              {getDisplayStatus(listingStatus)}
             </span>
           </div>
 
@@ -359,6 +441,40 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
                 <label className="block text-sm text-gray-600">Address</label>
                 <input value={editData.address} onChange={(e) => setEditData({ ...editData, address: e.target.value })} className="w-full p-2 border rounded" />
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-sm text-gray-600">Pickup Start</label>
+                  <input
+                    type="datetime-local"
+                    value={editData.pickupStart}
+                    onChange={(e) => setEditData({ ...editData, pickupStart: e.target.value })}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-600">Pickup End</label>
+                  <input
+                    type="datetime-local"
+                    value={editData.pickupEnd}
+                    onChange={(e) => setEditData({ ...editData, pickupEnd: e.target.value })}
+                    className="w-full p-2 border rounded"
+                  />
+                </div>
+              </div>
+              {listingStatus === 'expired' && (
+                <div className="p-3 rounded border border-amber-200 bg-amber-50">
+                  <div className="text-sm text-amber-900 font-medium mb-2">Relist this expired listing quickly</div>
+                  <button
+                    onClick={() => {
+                      const defaults = getRelistDefaults();
+                      setEditData(prev => ({ ...prev, pickupStart: defaults.pickupStart, pickupEnd: defaults.pickupEnd }));
+                    }}
+                    className="text-sm px-3 py-2 bg-amber-100 border border-amber-200 rounded text-amber-800"
+                  >
+                    Use next 24 hours
+                  </button>
+                </div>
+              )}
               <div className="flex gap-2">
                 <button onClick={saveEdits} className="btn-primary">Save</button>
                 <button onClick={() => setIsEditing(false)} className="btn-secondary">Cancel</button>
@@ -367,6 +483,23 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
             </div>
           ) : (
             <div className="space-y-6">
+              {listingStatus === 'expired' && canEdit && (
+                <div className="p-4 rounded-lg border border-red-200 bg-red-50">
+                  <div className="text-sm font-semibold text-red-900 mb-1">This listing has expired</div>
+                  <div className="text-sm text-red-800 mb-3">Update the pickup window to relist it.</div>
+                  <button
+                    onClick={() => {
+                      const defaults = getRelistDefaults();
+                      setEditData(prev => ({ ...prev, pickupStart: defaults.pickupStart, pickupEnd: defaults.pickupEnd }));
+                      setIsEditing(true);
+                    }}
+                    className="px-4 py-2 rounded bg-red-600 text-white text-sm font-medium hover:bg-red-700"
+                  >
+                    Relist Now
+                  </button>
+                </div>
+              )}
+
               {/* Description Section */}
               {listing.description && (
                 <div className="bg-gray-50 rounded-lg p-4">
@@ -474,8 +607,8 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <div className="text-xs text-gray-600 mb-1">Status</div>
-                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(listing.status)}`}>
-                      {getDisplayStatus(listing.status)}
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(listingStatus)}`}>
+                      {getDisplayStatus(listingStatus)}
                     </span>
                   </div>
                   {listing.created_at && (
@@ -494,7 +627,7 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
               </div>
 
               {/* Contact info for counterpart when claimed and authorized */}
-              {(String(listing.status || '').toLowerCase() === 'claimed' || String(listing.status || '').toLowerCase() === 'pending_confirmation') && (
+              {(listingStatus === 'claimed' || listingStatus === 'pending_confirmation') && (
                 (userRole === 'recipient' && isClaimedByMe) || (userRole === 'donor' && canEdit)
               ) && (
                   <div className="mt-2 p-3 border border-blue-200 rounded bg-blue-50">
@@ -519,8 +652,10 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
               <div className="flex space-x-3 pt-4">
                 {canClaim ? (
                   <button onClick={() => { onClaim(listing.id); onClose(); }} className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg">Claim This Food</button>
-                ) : listing.status === 'claimed' ? (
+                ) : (listingStatus === 'claimed' || listingStatus === 'pending_confirmation') ? (
                   <div className="flex-1 bg-yellow-100 text-yellow-800 px-4 py-2 rounded-lg text-center">Already Claimed</div>
+                ) : listingStatus === 'expired' ? (
+                  <div className="flex-1 bg-red-100 text-red-800 px-4 py-2 rounded-lg text-center">Expired</div>
                 ) : (
                   <div className="flex-1 bg-gray-100 text-gray-800 px-4 py-2 rounded-lg text-center">{userRole === 'donor' ? 'Only recipients can claim food' : 'Not Available'}</div>
                 )}

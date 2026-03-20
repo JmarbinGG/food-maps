@@ -1,4 +1,31 @@
 // Detailed Modal Component for Food Listings
+function getEffectiveStatusFromListing(listing) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.getEffectiveListingStatus === 'function') {
+      return String(window.getEffectiveListingStatus(listing) || '').toLowerCase();
+    }
+  } catch (_) {
+    // Fall through to local calculation.
+  }
+
+  const rawStatus = String(listing?.status || '').toLowerCase();
+  if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+  const toTimestamp = (value) => {
+    if (!value) return null;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const deadlines = [
+    toTimestamp(listing?.pickup_window_end),
+    toTimestamp(listing?.expiration_date)
+  ].filter((value) => value != null);
+
+  if (deadlines.length && Math.min(...deadlines) <= Date.now()) return 'expired';
+  return rawStatus || 'available';
+}
+
 function DetailedModal({ listing, onClose, onClaim }) {
   const [contactInfo, setContactInfo] = React.useState(null);
   const [loadingContact, setLoadingContact] = React.useState(false);
@@ -7,7 +34,7 @@ function DetailedModal({ listing, onClose, onClaim }) {
 
   if (!listing) return null;
 
-  const listingStatus = String(listing.status || '').toLowerCase();
+  const listingStatus = getEffectiveStatusFromListing(listing);
   const isClaimed = listingStatus === 'claimed' || listingStatus === 'pending_confirmation';
 
   // Get current user from localStorage
@@ -199,9 +226,20 @@ function DetailedModal({ listing, onClose, onClaim }) {
     const statusMap = {
       'available': 'bg-green-100 text-green-800 border-green-200',
       'claimed': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'pending_confirmation': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'expired': 'bg-red-100 text-red-800 border-red-200',
       'completed': 'bg-gray-100 text-gray-800 border-gray-200'
     };
     return statusMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+  };
+
+  const getDisplayStatus = (status) => {
+    if (!status) return 'Unknown';
+    if (status === 'pending_confirmation') return 'Pending Confirmation';
+    return status
+      .split('_')
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+      .join(' ');
   };
 
   const getUrgencyDisplay = () => {
@@ -241,9 +279,9 @@ function DetailedModal({ listing, onClose, onClaim }) {
 
   const urgencyDisplay = getUrgencyDisplay();
 
-  const statusBadgeClass = getStatusBadgeClass(listing.status);
+  const statusBadgeClass = getStatusBadgeClass(listingStatus);
   const categoryImage = getCategoryImage(listing.category);
-  const canClaim = listing.status === 'available';
+  const canClaim = listingStatus === 'available';
 
   return React.createElement('div', {
     className: 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4',
@@ -306,7 +344,7 @@ function DetailedModal({ listing, onClose, onClaim }) {
 
         React.createElement('span', {
           className: `inline-block px-3 py-1 text-sm font-semibold rounded-full border ${statusBadgeClass} mb-4`
-        }, listing.status.charAt(0).toUpperCase() + listing.status.slice(1)),
+        }, getDisplayStatus(listingStatus)),
 
         // Description
         listing.description && React.createElement('div', { className: 'mb-4' },

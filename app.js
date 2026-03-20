@@ -1,3 +1,35 @@
+function getListingDeadlineTimestamp(listing) {
+  const toTimestamp = (value) => {
+    if (!value) return null;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const candidates = [
+    toTimestamp(listing?.pickup_window_end),
+    toTimestamp(listing?.expiration_date)
+  ].filter((value) => value != null);
+
+  if (!candidates.length) return null;
+  return Math.min(...candidates);
+}
+
+function getEffectiveListingStatus(listing) {
+  const rawStatus = String(listing?.status || '').toLowerCase();
+  if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+  const deadline = getListingDeadlineTimestamp(listing);
+  if (deadline != null && deadline <= Date.now()) return 'expired';
+
+  return rawStatus || 'available';
+}
+
+try {
+  window.getEffectiveListingStatus = getEffectiveListingStatus;
+} catch (_) {
+  // Ignore non-browser contexts.
+}
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -714,9 +746,14 @@ function App() {
 
     // Ensure listing is available
     const listing = (listings || []).find(l => String(l.id) === String(listingId));
-    const status = String(listing?.status || '').toLowerCase();
+    const status = getEffectiveListingStatus(listing);
     if (status && status !== 'available') {
-      if (typeof window.showAlert === 'function') window.showAlert(status === 'claimed' ? 'This listing has already been claimed.' : 'This listing is not available to claim.', { title: 'Unavailable', variant: 'error' });
+      const message = (status === 'claimed' || status === 'pending_confirmation')
+        ? 'This listing has already been claimed.'
+        : (status === 'expired'
+          ? 'This listing has expired.'
+          : 'This listing is not available to claim.');
+      if (typeof window.showAlert === 'function') window.showAlert(message, { title: 'Unavailable', variant: 'error' });
       return;
     }
 

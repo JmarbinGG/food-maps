@@ -1,3 +1,30 @@
+function getEffectiveStatusFromListing(listing) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.getEffectiveListingStatus === 'function') {
+      return String(window.getEffectiveListingStatus(listing) || '').toLowerCase();
+    }
+  } catch (_) {
+    // Fall through to local calculation.
+  }
+
+  const rawStatus = String(listing?.status || '').toLowerCase();
+  if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+  const toTimestamp = (value) => {
+    if (!value) return null;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const deadlines = [
+    toTimestamp(listing?.pickup_window_end),
+    toTimestamp(listing?.expiration_date)
+  ].filter((value) => value != null);
+
+  if (deadlines.length && Math.min(...deadlines) <= Date.now()) return 'expired';
+  return rawStatus || 'available';
+}
+
 function MapComponent({ listings = [], selectedListing, onListingSelect, user }) {
   const mapContainer = React.useRef(null);
   const map = React.useRef(null);
@@ -186,13 +213,19 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           minute: '2-digit'
         }) : 'N/A';
 
-        const statusBgColor = listing.status === 'available' ? '#d1fae5' :
-          listing.status === 'reserved' ? '#fef3c7' :
-            listing.status === 'picked_up' ? '#e5e7eb' : '#fee2e2';
-        const statusTextColor = listing.status === 'available' ? '#065f46' :
-          listing.status === 'reserved' ? '#92400e' :
-            listing.status === 'picked_up' ? '#374151' : '#991b1b';
-        const statusText = (listing.status || 'available').charAt(0).toUpperCase() + (listing.status || 'available').slice(1);
+        const listingStatus = getEffectiveStatusFromListing(listing);
+        const statusBgColor = (listingStatus === 'available') ? '#d1fae5' :
+          (listingStatus === 'reserved' || listingStatus === 'claimed' || listingStatus === 'pending_confirmation') ? '#fef3c7' :
+            (listingStatus === 'picked_up' || listingStatus === 'completed') ? '#e5e7eb' : '#fee2e2';
+        const statusTextColor = (listingStatus === 'available') ? '#065f46' :
+          (listingStatus === 'reserved' || listingStatus === 'claimed' || listingStatus === 'pending_confirmation') ? '#92400e' :
+            (listingStatus === 'picked_up' || listingStatus === 'completed') ? '#374151' : '#991b1b';
+        const statusText = listingStatus === 'pending_confirmation'
+          ? 'Pending Confirmation'
+          : listingStatus
+            .split('_')
+            .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ');
 
         const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([listing.coords_lng, listing.coords_lat])

@@ -1,3 +1,30 @@
+function getEffectiveStatusFromListing(listing) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.getEffectiveListingStatus === 'function') {
+      return String(window.getEffectiveListingStatus(listing) || '').toLowerCase();
+    }
+  } catch (_) {
+    // Fall through to local calculation.
+  }
+
+  const rawStatus = String(listing?.status || '').toLowerCase();
+  if (rawStatus && rawStatus !== 'available') return rawStatus;
+
+  const toTimestamp = (value) => {
+    if (!value) return null;
+    const ts = new Date(value).getTime();
+    return Number.isFinite(ts) ? ts : null;
+  };
+
+  const deadlines = [
+    toTimestamp(listing?.pickup_window_end),
+    toTimestamp(listing?.expiration_date)
+  ].filter((value) => value != null);
+
+  if (deadlines.length && Math.min(...deadlines) <= Date.now()) return 'expired';
+  return rawStatus || 'available';
+}
+
 function ListingCard({ listing, onClaim, onSelect, user }) {
   const [contactInfo, setContactInfo] = React.useState(null);
   const [loadingContact, setLoadingContact] = React.useState(false);
@@ -84,7 +111,7 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
   };
 
   // Check if listing is in a claimed state
-  const listingStatus = String(listing.status || '').toLowerCase();
+  const listingStatus = getEffectiveStatusFromListing(listing);
   const isClaimed = listingStatus === 'claimed' || listingStatus === 'pending_confirmation';
 
   // Display user-friendly status
