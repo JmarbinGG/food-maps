@@ -511,11 +511,19 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 const StorageCoachButton = ({ listing, compact = false }) => {
   const [showCoach, setShowCoach] = React.useState(false);
 
+  const handleOpenCoach = React.useCallback((event) => {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    setShowCoach(true);
+  }, []);
+
   if (compact) {
     return (
       <>
         <button
-          onClick={() => setShowCoach(true)}
+          onClick={handleOpenCoach}
           className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
           title="Get storage advice"
         >
@@ -535,7 +543,7 @@ const StorageCoachButton = ({ listing, compact = false }) => {
   return (
     <>
       <button
-        onClick={() => setShowCoach(true)}
+        onClick={handleOpenCoach}
         className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition-all flex items-center justify-center gap-2"
       >
         <span className="text-xl">🤖</span>
