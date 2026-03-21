@@ -23,7 +23,8 @@ window.listingAPI = {
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Failed to claim');
+        const detail = errorData.detail || `Failed to claim (HTTP ${response.status})`;
+        throw new Error(detail);
       }
       return await response.json();
     } catch (error) {

@@ -1409,7 +1409,9 @@ async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Support both legacy and canonical claim routes.
 @app.patch("/api/listings/get/{listing_id}")
+@app.post("/api/listings/claim/{listing_id}")
 async def claim_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Claim a listing with SMS confirmation requirement."""
     try:

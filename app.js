@@ -787,77 +787,60 @@ function App() {
         console.warn('Phone precheck failed or unavailable; proceeding to server enforcement');
       }
 
+      if (!window.listingAPI || typeof window.listingAPI.claim !== 'function') {
+        throw new Error('Claim service is unavailable. Please refresh and try again.');
+      }
+
       let updatedListing = null;
-
-      // Use dedicated claim endpoint
-      if (window.listingAPI && typeof window.listingAPI.claim === 'function') {
-        try {
-          const resp = await window.listingAPI.claim(listingId, user.id, { timeout: 10000 });
-          // Backend returns { success, message } or possibly an updated listing
-          if (resp && resp.listing) {
-            updatedListing = resp.listing;
-          }
-        } catch (err) {
-          // Surface helpful messages on auth/permission/network
-          const msg = String(err?.message || '');
-          if (/401/.test(msg)) {
-            if (typeof window.showAlert === 'function') window.showAlert('Your session has expired. Please sign in again.', { title: 'Session expired', variant: 'error' });
-            setShowAuthModal(true);
-            return;
-          }
-          if (/403/.test(msg)) {
-            if (typeof window.showAlert === 'function') window.showAlert('You are not allowed to claim this listing.', { title: 'Not allowed', variant: 'error' });
-            return;
-          }
-          if (/timeout|abort/i.test(msg)) {
-            if (typeof window.showAlert === 'function') window.showAlert('The server did not respond in time. Please try again.', { title: 'Timeout', variant: 'error' });
-            return;
-          }
-          console.warn('listingAPI.claim failed:', err);
+      try {
+        const resp = await window.listingAPI.claim(listingId, user.id, { timeout: 10000 });
+        if (!resp || resp.success !== true || !resp.listing) {
+          const detail = (resp && (resp.detail || resp.message)) ? String(resp.detail || resp.message) : 'Failed to claim listing.';
+          throw new Error(detail);
         }
-      }
-
-      // Fallback: try updating locally if API did not return listing
-      if (!updatedListing && databaseConnected && window.databaseService && typeof window.databaseService.updateListingStatus === 'function') {
-        try {
-          const result = await window.databaseService.updateListingStatus(listingId, 'claimed', user.id);
-          if (result && result.success && result.data) {
-            updatedListing = result.data;
-          }
-        } catch (e) {
-          console.warn('databaseService.updateListingStatus failed:', e);
+        updatedListing = resp.listing;
+      } catch (err) {
+        // Surface helpful messages on auth/permission/network
+        const msg = String(err?.message || '');
+        if (/401|invalid token|session/i.test(msg)) {
+          if (typeof window.showAlert === 'function') window.showAlert('Your session has expired. Please sign in again.', { title: 'Session expired', variant: 'error' });
+          setShowAuthModal(true);
+          return;
         }
+        if (/403|not allowed|not authorized/i.test(msg)) {
+          if (typeof window.showAlert === 'function') window.showAlert('You are not allowed to claim this listing.', { title: 'Not allowed', variant: 'error' });
+          return;
+        }
+        if (/phone number required/i.test(msg)) {
+          if (typeof window.showAlert === 'function') window.showAlert('A phone number is required to claim food.', { title: 'Phone required', variant: 'error' });
+          return;
+        }
+        if (/already|not available|expired|405|method not allowed/i.test(msg)) {
+          if (typeof window.showAlert === 'function') window.showAlert(msg, { title: 'Unable to claim', variant: 'error' });
+          return;
+        }
+        if (/timeout|abort/i.test(msg)) {
+          if (typeof window.showAlert === 'function') window.showAlert('The server did not respond in time. Please try again.', { title: 'Timeout', variant: 'error' });
+          return;
+        }
+        console.warn('listingAPI.claim failed:', err);
+        if (typeof window.showAlert === 'function') window.showAlert('Failed to claim listing. Please try again.', { title: 'Error', variant: 'error' });
+        return;
       }
 
-      // Update client state
-      if (updatedListing) {
-        const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'claimed'), recipient_id: (updatedListing.recipient_id ?? user.id) }) : l);
-        setListings(updatedListings);
-        setFilteredListings(updatedListings);
-        // Sync snapshot so map and other globals see latest state
-        try {
-          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
-            const idx = window.databaseService.listings.findIndex(li => String(li.id) === String(listingId));
-            if (idx !== -1) {
-              window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: (updatedListing.status || 'claimed'), recipient_id: (updatedListing.recipient_id ?? user.id) };
-            }
+      // Update client state from authoritative server response
+      const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'pending_confirmation'), recipient_id: (updatedListing.recipient_id ?? user.id) }) : l);
+      setListings(updatedListings);
+      setFilteredListings(updatedListings);
+      // Sync snapshot so map and other globals see latest state
+      try {
+        if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+          const idx = window.databaseService.listings.findIndex(li => String(li.id) === String(listingId));
+          if (idx !== -1) {
+            window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: (updatedListing.status || 'pending_confirmation'), recipient_id: (updatedListing.recipient_id ?? user.id) };
           }
-        } catch (_) { }
-      } else {
-        // optimistic update
-        const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, status: 'claimed', recipient_id: user.id }) : l);
-        setListings(updatedListings);
-        setFilteredListings(updatedListings);
-        // Sync snapshot
-        try {
-          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
-            const idx = window.databaseService.listings.findIndex(li => String(li.id) === String(listingId));
-            if (idx !== -1) {
-              window.databaseService.listings[idx] = { ...window.databaseService.listings[idx], status: 'claimed', recipient_id: user.id };
-            }
-          }
-        } catch (_) { }
-      }
+        }
+      } catch (_) { }
 
       // Always show confirmation modal for pending_confirmation status
       const needsConfirmation = updatedListing && (updatedListing.status === 'pending_confirmation' || updatedListing.needs_confirmation);
@@ -1648,9 +1631,13 @@ function App() {
               setShowConfirmationModal(false);
               setPendingClaimId(null);
             }}
-            onConfirmed={() => {
-              // Refresh listings after confirmation
-              window.location.reload();
+            onConfirmed={async () => {
+              // Refresh listings in-app to avoid full-page reload.
+              try {
+                await initializeApp();
+              } catch (e) {
+                console.warn('Failed to refresh listings after confirmation:', e);
+              }
             }}
           />
         )}
@@ -1664,11 +1651,15 @@ function App() {
               setShowClaimConfirmationModal(false);
               setPendingClaimListing(null);
             }}
-            onConfirm={() => {
+            onConfirm={async () => {
               setShowClaimConfirmationModal(false);
               setPendingClaimListing(null);
-              // Refresh listings
-              window.location.reload();
+              // Refresh listings in-app to avoid full-page reload.
+              try {
+                await initializeApp();
+              } catch (e) {
+                console.warn('Failed to refresh listings after claim confirmation:', e);
+              }
             }}
           />
         )}
@@ -1761,11 +1752,13 @@ function App() {
             listing={verificationModal.listing}
             verificationType={verificationModal.type}
             onClose={() => setVerificationModal({ show: false, listing: null, type: null })}
-            onSuccess={() => {
-              // Refresh listings to show updated verification status
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+            onSuccess={async () => {
+              // Refresh listings in-app to avoid full-page reload.
+              try {
+                await initializeApp();
+              } catch (e) {
+                console.warn('Failed to refresh listings after pickup verification:', e);
+              }
             }}
           />
         )}
