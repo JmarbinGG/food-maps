@@ -67,7 +67,14 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
-  const [user, setUser] = React.useState(null);
+  const [user, setUser] = React.useState(() => {
+    try {
+      const stored = localStorage.getItem('current_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (_) {
+      return null;
+    }
+  });
   const [listings, setListings] = React.useState([]);
   const [filteredListings, setFilteredListings] = React.useState([]);
   const [showAuthModal, setShowAuthModal] = React.useState(false);
@@ -126,6 +133,21 @@ function App() {
   const [alertOpen, setAlertOpen] = React.useState(false);
   const [alertData, setAlertData] = React.useState({ title: 'Notice', message: '', variant: 'default' });
   const alertResolveRef = React.useRef(null);
+
+  React.useEffect(() => {
+    try {
+      if (typeof window.hideBootLoader === 'function') {
+        window.hideBootLoader();
+      } else {
+        const rootEl = document.getElementById('root');
+        if (rootEl) {
+          rootEl.classList.remove('app-root--hidden');
+        }
+      }
+    } catch (_) {
+      // Ignore loader cleanup failures.
+    }
+  }, []);
 
   const requestPhone = React.useCallback(() => {
     return new Promise((resolve) => {
@@ -191,23 +213,6 @@ function App() {
       return () => { };
     } catch (error) {
       console.error('App initialization error:', error);
-    }
-  }, []);
-
-  // Hydrate user from localStorage on mount
-  React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem('current_user');
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          setUser(parsed);
-        } catch (e) {
-          console.error('Failed to parse stored user', e);
-        }
-      }
-    } catch (e) {
-      console.error('Error hydrating user from localStorage', e);
     }
   }, []);
 
