@@ -34,7 +34,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             onClick={() => user ? window.showFoodSearch?.() : onAuthClick()}
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
           >
-            🔍 Find Food
+            {user && String(user.role).toLowerCase() === 'donor' ? '📦 Share Food' : '🔍 Find Food'}
           </button>
           {user ? (
             <div className="relative dropdown-container">
