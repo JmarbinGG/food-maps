@@ -35,6 +35,12 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   const [showCenterModal, setShowCenterModal] = React.useState(false);
   const [selectedCenter, setSelectedCenter] = React.useState(null);
   const [centerInventory, setCenterInventory] = React.useState([]);
+  const userRole = String(user?.role || '').toLowerCase();
+  const showDistributionCenters = userRole !== 'donor';
+  const visibleCenters = React.useMemo(
+    () => (showDistributionCenters ? centers : []),
+    [showDistributionCenters, centers]
+  );
 
   // Global function to add/remove favorites from map popups
   React.useEffect(() => {
@@ -60,7 +66,14 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
   // Load distribution centers
   React.useEffect(() => {
-    loadDistributionCenters();
+    if (showDistributionCenters) {
+      loadDistributionCenters();
+    } else {
+      setCenters([]);
+      setShowCenterModal(false);
+      setSelectedCenter(null);
+      setCenterInventory([]);
+    }
 
     // Set up global function for popup buttons to trigger the detail modal
     window.handleListingDetailsClick = (listingId) => {
@@ -80,9 +93,14 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     return () => {
       delete window.handleListingDetailsClick;
     };
-  }, [safeListings, onListingSelect]);
+  }, [safeListings, onListingSelect, showDistributionCenters]);
 
   const loadDistributionCenters = async () => {
+    if (!showDistributionCenters) {
+      setCenters([]);
+      return;
+    }
+
     try {
       console.log('Loading distribution centers...');
       const response = await fetch('/api/centers');
@@ -147,8 +165,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       return;
     }
 
-    console.log('Updating markers. Listings:', safeListings.length, 'Centers:', centers.length);
-    console.log('Centers data:', JSON.stringify(centers, null, 2));
+    console.log('Updating markers. Listings:', safeListings.length, 'Centers:', visibleCenters.length);
+    console.log('Centers data:', JSON.stringify(visibleCenters, null, 2));
 
     // Clear existing markers
     markersRef.current.forEach(marker => marker.remove());
@@ -351,8 +369,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     ];
 
     // Add distribution center markers with unique colors
-    console.log('Adding', centers.length, 'distribution center markers');
-    centers.forEach((center, index) => {
+    console.log('Adding', visibleCenters.length, 'distribution center markers');
+    visibleCenters.forEach((center, index) => {
       if (!center.coords_lat || !center.coords_lng) {
         console.warn('Skipping center with missing coordinates:', center.name);
         return;
@@ -448,7 +466,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       });
 
       // Add all distribution centers to bounds
-      centers.forEach(center => {
+      visibleCenters.forEach(center => {
         if (center.coords_lat && center.coords_lng) {
           bounds.extend([center.coords_lng, center.coords_lat]);
         }
@@ -470,9 +488,10 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       // No markers yet - show California by default
       console.log('No markers to display, showing default California view');
     }
-  }, [mapLoaded, safeListings, centers]);
+  }, [mapLoaded, safeListings, visibleCenters, showDistributionCenters, user]);
 
   const handleCenterClick = async (center) => {
+    if (!showDistributionCenters) return;
     setSelectedCenter(center);
     await loadCenterInventory(center.id);
     setShowCenterModal(true);
@@ -492,8 +511,13 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
   // Setup global function for popup buttons
   React.useEffect(() => {
+    if (!showDistributionCenters) {
+      delete window.viewCenterDetails;
+      return () => { delete window.viewCenterDetails; };
+    }
+
     window.viewCenterDetails = (centerId) => {
-      const center = centers.find(c => c.id === centerId);
+      const center = visibleCenters.find(c => c.id === centerId);
       if (center) {
         handleCenterClick(center);
       }
@@ -502,7 +526,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     return () => {
       delete window.viewCenterDetails;
     };
-  }, [centers]);
+  }, [visibleCenters, showDistributionCenters]);
 
   return (
     <div className="w-full h-full relative flex flex-col">
@@ -535,25 +559,27 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           </div>
           <span>Food</span>
         </div>
-        <div className="flex items-center gap-1">
-          <div style={{
-            width: '16px',
-            height: '16px',
-            borderRadius: '50% 50% 50% 0',
-            transform: 'rotate(-45deg)',
-            backgroundColor: '#10b981',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}>
-            <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🏪</span>
+        {showDistributionCenters && (
+          <div className="flex items-center gap-1">
+            <div style={{
+              width: '16px',
+              height: '16px',
+              borderRadius: '50% 50% 50% 0',
+              transform: 'rotate(-45deg)',
+              backgroundColor: '#10b981',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}>
+              <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🏪</span>
+            </div>
+            <span>Centers</span>
           </div>
-          <span>Centers</span>
-        </div>
+        )}
       </div>
 
       {/* Distribution Center Inventory Modal */}
-      {showCenterModal && selectedCenter && (
+      {showDistributionCenters && showCenterModal && selectedCenter && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
           onClick={() => setShowCenterModal(false)}
