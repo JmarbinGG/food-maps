@@ -223,14 +223,11 @@ function DetailedModal({ listing, onClose, onClaim }) {
   };
 
   const getStatusBadgeClass = (status) => {
-    const statusMap = {
-      'available': 'bg-green-100 text-green-800 border-green-200',
-      'claimed': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'pending_confirmation': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'expired': 'bg-red-100 text-red-800 border-red-200',
-      'completed': 'bg-gray-100 text-gray-800 border-gray-200'
-    };
-    return statusMap[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+    const normalized = String(status || '').toLowerCase();
+    if (['available', 'claimed', 'pending_confirmation', 'expired', 'completed'].includes(normalized)) {
+      return `status-${normalized}`;
+    }
+    return 'bg-gray-100 text-gray-800';
   };
 
   const getDisplayStatus = (status) => {
@@ -343,7 +340,7 @@ function DetailedModal({ listing, onClose, onClaim }) {
         ),
 
         React.createElement('span', {
-          className: `inline-block px-3 py-1 text-sm font-semibold rounded-full border ${statusBadgeClass} mb-4`
+          className: `inline-block px-3 py-1 text-sm font-semibold rounded-full ${statusBadgeClass} mb-4`
         }, getDisplayStatus(listingStatus)),
 
         // Description
