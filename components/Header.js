@@ -31,7 +31,19 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             <span className="hidden sm:inline">Feedback</span>
           </button>
           <button
-            onClick={() => user ? window.showFoodSearch?.() : onAuthClick()}
+            onClick={() => {
+                if(user){
+                  if(String(user.role).toLowerCase() === 'donor'){
+                    onViewChange?.('create');
+                    setShowDropdown(false);
+                  }else{
+                    window.showFoodSearch?.();
+                  }
+                }else{
+                  onAuthClick();
+                }
+              }
+            }
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
           >
             {user && String(user.role).toLowerCase() === 'donor' ? '📦 Share Food' : '🔍 Find Food'}
