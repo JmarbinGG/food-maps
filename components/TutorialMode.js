@@ -454,19 +454,28 @@ function TutorialMode({ user, onClose, onComplete }) {
           )}
 
           {/* Navigation buttons */}
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <button
-              onClick={handlePrevious}
-              disabled={currentStep === 0}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${currentStep === 0
-                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                }`}
-            >
-              Previous
-            </button>
+          <div className="mb-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handlePrevious}
+                disabled={currentStep === 0}
+                className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors ${currentStep === 0
+                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                Previous
+              </button>
 
-            <div className="flex gap-1">
+              <button
+                onClick={handleNext}
+                className="flex-1 sm:flex-none px-4 sm:px-6 py-2 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-green-600 transition-all shadow-lg hover:shadow-xl"
+              >
+                {currentStep === steps.length - 1 ? 'Finish' : 'Next'}
+              </button>
+            </div>
+
+            <div className="flex justify-center gap-1">
               {steps.map((_, index) => (
                 <div
                   key={index}
@@ -479,13 +488,6 @@ function TutorialMode({ user, onClose, onComplete }) {
                 />
               ))}
             </div>
-
-            <button
-              onClick={handleNext}
-              className="px-6 py-2 bg-gradient-to-r from-blue-500 to-green-500 text-white rounded-lg font-medium hover:from-blue-600 hover:to-green-600 transition-all shadow-lg hover:shadow-xl"
-            >
-              {currentStep === steps.length - 1 ? 'Finish' : 'Next'}
-            </button>
           </div>
 
           {/* Skip option - only show on non-final steps */}

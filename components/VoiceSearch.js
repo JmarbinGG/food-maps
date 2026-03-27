@@ -783,15 +783,15 @@ const VoiceSearchButton = ({ onTranscript, className = '' }) => {
 
   return (
     <>
-      {/* Floating button */}
-      <button
+      {/* voice search + smart search button, commented out for now */}
+      {/* <button
         onClick={() => setShowFullInterface(true)}
         className={`voice-search-fab ${className}`}
         aria-label={hasVoiceSupport ? "Voice search" : "Smart search"}
         title={hasVoiceSupport ? "Voice search - Tap to speak" : "Smart search - Type your question"}
       >
         {hasVoiceSupport ? '🎤' : '💬'}
-      </button>
+      </button> */}
 
       {/* Full interface modal */}
       {showFullInterface && (

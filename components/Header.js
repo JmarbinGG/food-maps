@@ -21,7 +21,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             className="w-10 h-10 rounded-lg"
           />
         </a>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
           <button
             onClick={() => window.openFeedbackModal?.()}
             className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
@@ -149,13 +149,14 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🎓 How to Use
                   </button>
-                  <a
+                  {/*voice search not implemented correctly, hiding it for now*/}
+                  {/* <a
                     href="/voice-search.html"
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
                     onClick={() => setShowDropdown(false)}
                   >
                     🎤 Voice Search
-                  </a>
+                  </a> */}
                   <button
                     onClick={() => {
                       window.openSmartNotifications?.();
