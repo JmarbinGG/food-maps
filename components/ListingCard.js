@@ -25,6 +25,18 @@ function getEffectiveStatusFromListing(listing) {
   return rawStatus || 'available';
 }
 
+const FAVORITES_UPDATED_EVENT = 'foodmaps:favorites-updated';
+
+function dispatchFavoritesUpdated(detail = {}) {
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent === 'function') {
+      window.dispatchEvent(new CustomEvent(FAVORITES_UPDATED_EVENT, { detail }));
+    }
+  } catch (_) {
+    // Ignore broadcast failures.
+  }
+}
+
 function ListingCard({ listing, onClaim, onSelect, user }) {
   const [contactInfo, setContactInfo] = React.useState(null);
   const [loadingContact, setLoadingContact] = React.useState(false);
@@ -32,6 +44,118 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
   const [urgencyLevel, setUrgencyLevel] = React.useState(null);
   const [isFavorite, setIsFavorite] = React.useState(false);
   const [savingFavorite, setSavingFavorite] = React.useState(false);
+
+  const normalizeRole = React.useCallback((value) => {
+    if (value == null) return '';
+    const raw = String(value).trim().toLowerCase();
+    if (!raw) return '';
+    if (raw.includes('donor')) return 'donor';
+    if (raw.includes('recipient')) return 'recipient';
+    if (raw.includes('volunteer')) return 'volunteer';
+    if (raw.includes('driver')) return 'driver';
+    if (raw.includes('dispatcher')) return 'dispatcher';
+    if (raw.includes('admin')) return 'admin';
+    return raw;
+  }, []);
+
+  const userRole = React.useMemo(() => {
+    const fromUser = normalizeRole(
+      user?.role ?? user?.user_role ?? user?.userType ?? user?.user_type ?? user?.account_type ?? user?.location_type
+    );
+    if (fromUser) return fromUser;
+    try {
+      const stored = JSON.parse(localStorage.getItem('current_user') || 'null');
+      return normalizeRole(
+        stored?.role ?? stored?.user_role ?? stored?.userType ?? stored?.user_type ?? stored?.account_type ?? stored?.location_type
+      );
+    } catch (_) {
+      // Fall through to token role parsing.
+    }
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (token) {
+        const parts = token.split('.');
+        if (parts.length >= 2) {
+          let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          const pad = payload.length % 4;
+          if (pad) payload += '='.repeat(4 - pad);
+          const decoded = JSON.parse(atob(payload));
+          return normalizeRole(decoded?.role ?? decoded?.user_role ?? decoded?.userType ?? decoded?.user_type ?? decoded?.location_type);
+        }
+      }
+    } catch (_) { }
+
+    return '';
+  }, [user, normalizeRole]);
+  const canFavoriteListing = userRole !== 'donor';
+  const currentUserId = React.useMemo(() => {
+    if (user?.id != null) return String(user.id);
+    if (user?.user_id != null) return String(user.user_id);
+    if (user?.sub != null) return String(user.sub);
+    try {
+      const stored = JSON.parse(localStorage.getItem('current_user') || 'null');
+      const value = stored?.id ?? stored?.user_id ?? stored?.sub;
+      return value != null ? String(value) : null;
+    } catch (_) {
+      return null;
+    }
+  }, [user]);
+  const listingId = React.useMemo(() => {
+    const value = listing?.id ?? listing?.listing_id ?? listing?.objectId;
+    return value != null ? String(value) : null;
+  }, [listing]);
+  const listingDonorId = React.useMemo(() => {
+    const value = listing?.donor_id ?? listing?.donorId ?? listing?.donor?.id;
+    return value != null ? String(value) : null;
+  }, [listing]);
+
+  const getListingFavoritesMap = React.useCallback(() => {
+    if (!currentUserId) return {};
+    try {
+      const raw = JSON.parse(localStorage.getItem(`favorite_listing_ids:${currentUserId}`) || '{}');
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      return raw;
+    } catch (_) {
+      return {};
+    }
+  }, [currentUserId]);
+
+  const setListingFavoritesMap = React.useCallback((map) => {
+    if (!currentUserId) return;
+    try {
+      localStorage.setItem(`favorite_listing_ids:${currentUserId}`, JSON.stringify(map || {}));
+    } catch (_) {
+      // Ignore persistence failures.
+    }
+  }, [currentUserId]);
+
+  const findListingFavorite = React.useCallback((favorites) => {
+    if (!Array.isArray(favorites) || !listingDonorId) return null;
+
+    return favorites.find((fav) => {
+      if (String(fav?.location_type || '').toLowerCase() !== 'donor') return false;
+      const favoriteDonorId = fav?.donor?.id ?? fav?.donor_id;
+      return favoriteDonorId != null && String(favoriteDonorId) === listingDonorId;
+    }) || null;
+  }, [listingDonorId]);
+
+  const refreshFavoriteState = React.useCallback(async () => {
+    if (!user || !canFavoriteListing || !currentUserId || !listingDonorId || !listingId) {
+      setIsFavorite(false);
+      return;
+    }
+
+    try {
+      const favoriteMap = getListingFavoritesMap();
+      const donorListingIds = Array.isArray(favoriteMap[listingDonorId])
+        ? favoriteMap[listingDonorId].map((id) => String(id))
+        : [];
+      setIsFavorite(donorListingIds.includes(listingId));
+    } catch (err) {
+      console.error('Error checking favorite:', err);
+    }
+  }, [user, canFavoriteListing, currentUserId, listingDonorId, listingId, getListingFavoritesMap]);
 
   // Check if this listing is claimed by the current user
   const isClaimedByMe = React.useMemo(() => {
@@ -54,54 +178,103 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
 
   // Check if listing is favorited
   React.useEffect(() => {
-    if (!user) return;
+    refreshFavoriteState();
+  }, [refreshFavoriteState]);
 
-    const checkFavorite = async () => {
-      try {
-        const isFav = await window.favoritesAPI.isFavorited(listing.donor_id);
-        setIsFavorite(isFav);
-      } catch (err) {
-        console.error('Error checking favorite:', err);
+  React.useEffect(() => {
+    const onFavoritesUpdated = (event) => {
+      const changedListingId = event?.detail?.listingId != null ? String(event.detail.listingId) : null;
+      if (!changedListingId || !listingId || changedListingId === listingId) {
+        refreshFavoriteState();
       }
     };
 
-    if (window.favoritesAPI) {
-      checkFavorite();
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener(FAVORITES_UPDATED_EVENT, onFavoritesUpdated);
     }
-  }, [user, listing.donor_id]);
+
+    return () => {
+      if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+        window.removeEventListener(FAVORITES_UPDATED_EVENT, onFavoritesUpdated);
+      }
+    };
+  }, [listingId, refreshFavoriteState]);
 
   // Toggle favorite
   const toggleFavorite = async (e) => {
     e.stopPropagation();
     if (!user || savingFavorite) return;
+    if (!canFavoriteListing) {
+      if (window.showAlert) {
+        window.showAlert('Donor accounts cannot save favorites.', { variant: 'error' });
+      }
+      return;
+    }
+
+    if (!listingDonorId || !listingId || !currentUserId) {
+      if (window.showAlert) {
+        window.showAlert('Unable to save this listing right now. Please refresh and try again.', { variant: 'error' });
+      }
+      return;
+    }
 
     setSavingFavorite(true);
 
     try {
+      const previousMap = getListingFavoritesMap();
+      const previousDonorListingIds = Array.isArray(previousMap[listingDonorId])
+        ? previousMap[listingDonorId].map((id) => String(id))
+        : [];
+      const donorListingSet = new Set(previousDonorListingIds);
+      const wasFavorite = donorListingSet.has(listingId);
+
+      if (wasFavorite) {
+        donorListingSet.delete(listingId);
+      } else {
+        donorListingSet.add(listingId);
+      }
+
+      const nextMap = { ...previousMap };
+      if (donorListingSet.size > 0) {
+        nextMap[listingDonorId] = Array.from(donorListingSet);
+      } else {
+        delete nextMap[listingDonorId];
+      }
+
+      setListingFavoritesMap(nextMap);
+      setIsFavorite(!wasFavorite);
+      dispatchFavoritesUpdated({ donorId: listingDonorId, listingId });
+
       if (isFavorite) {
         // Remove from favorites - find the favorite ID first
-        const favorites = await window.favoritesAPI.getAll();
-        const existingFav = favorites.find(f => f.donor && f.donor.id === listing.donor_id);
-
-        if (existingFav) {
-          await window.favoritesAPI.remove(existingFav.id);
-          setIsFavorite(false);
-
-          if (window.showAlert) {
-            window.showAlert('Removed from favorites', { variant: 'success' });
+        if (donorListingSet.size === 0) {
+          const favorites = await window.favoritesAPI.getAll();
+          const existingFav = findListingFavorite(favorites);
+          if (existingFav) {
+            await window.favoritesAPI.remove(existingFav.id);
           }
         }
       } else {
         // Add to favorites using the API
-        await window.favoritesAPI.addFromListing(listing);
-        setIsFavorite(true);
-
-        if (window.showAlert) {
-          window.showAlert('⭐ Added to favorites! Access it from your profile menu.', { variant: 'success' });
-        }
+        await window.favoritesAPI.addFromListing({ ...listing, donor_id: listingDonorId });
       }
     } catch (err) {
       console.error('Error toggling favorite:', err);
+      const rollbackMap = getListingFavoritesMap();
+      const rollbackSet = new Set(Array.isArray(rollbackMap[listingDonorId]) ? rollbackMap[listingDonorId].map((id) => String(id)) : []);
+      if (isFavorite) {
+        rollbackSet.add(listingId);
+      } else {
+        rollbackSet.delete(listingId);
+      }
+      if (rollbackSet.size > 0) {
+        rollbackMap[listingDonorId] = Array.from(rollbackSet);
+      } else {
+        delete rollbackMap[listingDonorId];
+      }
+      setListingFavoritesMap(rollbackMap);
+      setIsFavorite(isFavorite);
+      dispatchFavoritesUpdated({ donorId: listingDonorId, listingId });
       if (window.showAlert) {
         window.showAlert('Failed to update favorites', { variant: 'error' });
       }
@@ -376,7 +549,7 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
   return (
     <div className="card mb-4 cursor-pointer relative" onClick={() => onSelect(listing)}>
       {/* Favorite Button */}
-      {user && (
+      {user && canFavoriteListing && (
         <button
           onClick={toggleFavorite}
           disabled={savingFavorite}

@@ -35,12 +35,36 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   const [showCenterModal, setShowCenterModal] = React.useState(false);
   const [selectedCenter, setSelectedCenter] = React.useState(null);
   const [centerInventory, setCenterInventory] = React.useState([]);
-  const userRole = String(user?.role || '').toLowerCase();
+  const userRole = React.useMemo(() => {
+    const fromUser = user?.role != null ? String(user.role).toLowerCase() : '';
+    if (fromUser) return fromUser;
+    try {
+      const stored = JSON.parse(localStorage.getItem('current_user') || 'null');
+      return stored?.role ? String(stored.role).toLowerCase() : '';
+    } catch (_) {
+      return '';
+    }
+  }, [user]);
+  const currentUserId = React.useMemo(() => {
+    if (user?.id != null) return String(user.id);
+    if (user?.user_id != null) return String(user.user_id);
+    if (user?.sub != null) return String(user.sub);
+    try {
+      const stored = JSON.parse(localStorage.getItem('current_user') || 'null');
+      const sid = stored?.id ?? stored?.user_id ?? stored?.sub;
+      if (sid != null) return String(sid);
+    } catch (_) { }
+    return null;
+  }, [user]);
   const showDistributionCenters = userRole !== 'donor';
   const visibleCenters = React.useMemo(
     () => (showDistributionCenters ? centers : []),
     [showDistributionCenters, centers]
   );
+  const getListingDonorId = React.useCallback((listing) => {
+    const donorId = listing?.donor_id ?? listing?.donorId ?? listing?.owner_id ?? listing?.ownerId ?? listing?.donor?.id;
+    return donorId != null ? String(donorId) : null;
+  }, []);
 
   // Global function to add/remove favorites from map popups
   React.useEffect(() => {
@@ -49,6 +73,18 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         if (typeof window.showAlert === 'function') window.showAlert('Please sign in to save favorites', { variant: 'error' });
         return;
       }
+
+      if (type === 'donor' && userRole === 'donor' && currentUserId) {
+        const listing = safeListings.find((item) => String(item.id) === String(id));
+        const donorId = listing ? getListingDonorId(listing) : null;
+        if (!donorId || donorId === currentUserId) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert('You cannot favorite your own listing.', { variant: 'error' });
+          }
+          return;
+        }
+      }
+
       const result = await window.databaseService.getFavorites();
       if (result.success) {
         const fav = result.favorites.find(f => f.location_type === type && String(f.location_id) === String(id));
@@ -62,7 +98,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       }
     };
     return () => { delete window.toggleMapFavorite; };
-  }, [user]);
+  }, [user, userRole, currentUserId, safeListings, getListingDonorId]);
 
   // Load distribution centers
   React.useEffect(() => {
@@ -244,6 +280,33 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             .split('_')
             .map(part => part.charAt(0).toUpperCase() + part.slice(1))
             .join(' ');
+        const listingDonorId = getListingDonorId(listing);
+        const canFavoriteListing = userRole !== 'donor' || (currentUserId && listingDonorId && listingDonorId !== currentUserId);
+        const saveButtonHtml = canFavoriteListing ? `
+                      <button 
+                        onclick="window.toggleMapFavorite('donor', ${listing.id})"
+                        style="
+                          background-color: #f59e0b;
+                          color: white;
+                          padding: 12px 16px;
+                          border-radius: 8px;
+                          border: none;
+                          font-size: 15px;
+                          font-weight: 600;
+                          cursor: pointer;
+                          width: 100%;
+                          display: flex;
+                          align-items: center;
+                          justify-content: center;
+                          gap: 8px;
+                          transition: background-color 0.2s;
+                        "
+                        onmouseover="this.style.backgroundColor='#d97706'"
+                        onmouseout="this.style.backgroundColor='#f59e0b'"
+                      >
+                        <span style="font-size: 18px;">⭐</span> Save
+                      </button>
+                    ` : '';
 
         const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
           .setLngLat([listing.coords_lng, listing.coords_lat])
@@ -298,29 +361,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                       >
                         <span style="font-size: 18px;">ℹ️</span> View Details
                       </button>
-                      <button 
-                        onclick="window.toggleMapFavorite('donor', ${listing.id})"
-                        style="
-                          background-color: #f59e0b;
-                          color: white;
-                          padding: 12px 16px;
-                          border-radius: 8px;
-                          border: none;
-                          font-size: 15px;
-                          font-weight: 600;
-                          cursor: pointer;
-                          width: 100%;
-                          display: flex;
-                          align-items: center;
-                          justify-content: center;
-                          gap: 8px;
-                          transition: background-color 0.2s;
-                        "
-                        onmouseover="this.style.backgroundColor='#d97706'"
-                        onmouseout="this.style.backgroundColor='#f59e0b'"
-                      >
-                        <span style="font-size: 18px;">⭐</span> Save
-                      </button>
+                      ${saveButtonHtml}
                       <button 
                         onclick="window.open('https://www.google.com/maps/dir/?api=1&destination=${listing.coords_lat},${listing.coords_lng}', '_blank')"
                         style="

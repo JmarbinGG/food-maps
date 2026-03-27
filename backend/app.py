@@ -3747,6 +3747,20 @@ async def add_favorite(request: Request, credentials: HTTPAuthorizationCredentia
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
         body = await request.json()
+
+        # Donors cannot favorite their own listings.
+        if body.get('location_type') == 'donor':
+            donor_id = body.get('donor_id')
+            if donor_id is None and body.get('location_id') is not None:
+                try:
+                    listing_id = int(body.get('location_id'))
+                    item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+                    donor_id = item.donor_id if item else None
+                except Exception:
+                    donor_id = None
+
+            if donor_id is not None and str(donor_id) == str(user_id):
+                raise HTTPException(status_code=400, detail="You cannot favorite your own listing")
         
         # Validate required fields
         if not body.get('name') or not body.get('address'):
