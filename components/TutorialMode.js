@@ -84,11 +84,13 @@ function TutorialMode({ user, onClose, onComplete }) {
         },
         {
           title: "Get Support 💬",
-          description: "Need help? Click the green support button (bottom right) anytime to message our team!",
-          target: "button[class*='support'], .fixed.bottom-6.right-6",
+          description: "Need help? Open your profile menu and tap 'Message Support' to chat with our team anytime.",
+          target: "[data-tutorial='message-support-button'], [data-tutorial='profile-menu-toggle']",
           position: "left",
           action: () => {
-            const supportBtn = document.querySelector("button[class*='support'], .fixed.bottom-6.right-6");
+            const menuToggle = document.querySelector("[data-tutorial='profile-menu-toggle']");
+            if (menuToggle) menuToggle.click();
+            const supportBtn = document.querySelector("[data-tutorial='message-support-button']");
             if (supportBtn) {
               supportBtn.style.animation = "bounce 1s infinite";
             }
@@ -149,11 +151,13 @@ function TutorialMode({ user, onClose, onComplete }) {
         },
         {
           title: "Get Support 💬",
-          description: "Questions? Click the green support button (bottom right) to message our team anytime!",
-          target: "button[class*='support'], .fixed.bottom-6.right-6",
+          description: "Questions? Open your profile menu and select 'Message Support' to reach our team anytime.",
+          target: "[data-tutorial='message-support-button'], [data-tutorial='profile-menu-toggle']",
           position: "left",
           action: () => {
-            const supportBtn = document.querySelector("button[class*='support'], .fixed.bottom-6.right-6");
+            const menuToggle = document.querySelector("[data-tutorial='profile-menu-toggle']");
+            if (menuToggle) menuToggle.click();
+            const supportBtn = document.querySelector("[data-tutorial='message-support-button']");
             if (supportBtn) {
               supportBtn.style.animation = "bounce 1s infinite";
             }
@@ -215,6 +219,15 @@ function TutorialMode({ user, onClose, onComplete }) {
       el.style.animation = '';
     });
 
+    // Execute step action before target lookup so steps can reveal hidden targets (e.g., dropdown items).
+    if (currentStepData?.action) {
+      try {
+        currentStepData.action();
+      } catch (e) {
+        console.warn('Error executing step action', e);
+      }
+    }
+
     if (currentStepData?.target) {
       const targets = currentStepData.target.split(',').map(s => s.trim());
       let element = null;
@@ -246,15 +259,6 @@ function TutorialMode({ user, onClose, onComplete }) {
       }
     } else {
       setHighlightElement(null);
-    }
-
-    // Execute step action
-    if (currentStepData?.action) {
-      try {
-        currentStepData.action();
-      } catch (e) {
-        console.warn('Error executing step action', e);
-      }
     }
 
     return () => {

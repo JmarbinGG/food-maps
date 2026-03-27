@@ -52,6 +52,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             <div className="relative dropdown-container">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
+                data-tutorial="profile-menu-toggle"
                 className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium text-sm transition-colors"
               >
                 {user.name}
@@ -74,6 +75,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       window.openMessageSupport?.();
                       setShowDropdown(false);
                     }}
+                    data-tutorial="message-support-button"
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     💬 Message Support
