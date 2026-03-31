@@ -29,8 +29,12 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   const mapContainer = React.useRef(null);
   const map = React.useRef(null);
   const markersRef = React.useRef([]);
+  const mapInitAttemptsRef = React.useRef(0);
+  const mapInitTimerRef = React.useRef(null);
+  const mapResizeObserverRef = React.useRef(null);
   const safeListings = Array.isArray(listings) ? listings : [];
   const [mapLoaded, setMapLoaded] = React.useState(false);
+  const [mapInitError, setMapInitError] = React.useState(null);
   const [centers, setCenters] = React.useState([]);
   const [showCenterModal, setShowCenterModal] = React.useState(false);
   const [selectedCenter, setSelectedCenter] = React.useState(null);
@@ -154,44 +158,110 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
   };
 
   React.useEffect(() => {
-    if (map.current || !mapContainer.current) return;
+    let isUnmounted = false;
 
-    if (typeof mapboxgl === 'undefined') {
-      console.warn('Mapbox not available');
-      return;
+    const clearInitTimer = () => {
+      if (mapInitTimerRef.current) {
+        clearTimeout(mapInitTimerRef.current);
+        mapInitTimerRef.current = null;
+      }
+    };
+
+    const initializeMap = () => {
+      if (isUnmounted || map.current || !mapContainer.current) return;
+
+      if (typeof mapboxgl === 'undefined') {
+        mapInitAttemptsRef.current += 1;
+        if (mapInitAttemptsRef.current <= 20) {
+          mapInitTimerRef.current = setTimeout(initializeMap, 150);
+        } else {
+          setMapInitError('Map failed to load. Please refresh the page.');
+          console.warn('Mapbox not available after retries');
+        }
+        return;
+      }
+
+      try {
+        setMapInitError(null);
+        mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
+
+        map.current = new mapboxgl.Map({
+          container: mapContainer.current,
+          style: 'mapbox://styles/mapbox/streets-v12',
+          center: [-119.4179, 36.7783], // California center
+          zoom: 6,
+          minZoom: 3,
+          maxZoom: 18,
+          attributionControl: true, // Keep attribution but we'll style it smaller
+          logoPosition: 'bottom-left'
+        });
+
+        map.current.addControl(
+          new mapboxgl.NavigationControl({
+            showCompass: true,
+            showZoom: true,
+            visualizePitch: false
+          }),
+          'top-right'
+        );
+
+        // Wait for first idle frame to avoid rendering a blank canvas as "loaded".
+        map.current.once('idle', () => {
+          if (isUnmounted) return;
+          setMapLoaded(true);
+          try {
+            map.current && map.current.resize();
+          } catch (_) {
+            // Ignore resize failures during startup race conditions.
+          }
+        });
+
+        map.current.on('error', (event) => {
+          const message = event?.error?.message;
+          if (message) {
+            console.error('Map runtime error:', message);
+          }
+        });
+
+      } catch (error) {
+        console.error('Map initialization error:', error);
+        setMapInitError('Map failed to initialize. Please refresh the page.');
+      }
+    };
+
+    initializeMap();
+
+    const handleResize = () => {
+      if (!map.current) return;
+      try {
+        map.current.resize();
+      } catch (_) {
+        // Ignore transient resize issues.
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
+    if (typeof ResizeObserver !== 'undefined' && mapContainer.current) {
+      mapResizeObserverRef.current = new ResizeObserver(() => handleResize());
+      mapResizeObserverRef.current.observe(mapContainer.current);
     }
 
-    try {
-      mapboxgl.accessToken = window.MAPBOX_ACCESS_TOKEN;
-
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-119.4179, 36.7783], // California center
-        zoom: 6,
-        minZoom: 3,
-        maxZoom: 18,
-        attributionControl: true, // Keep attribution but we'll style it smaller
-        logoPosition: 'bottom-left'
-      });
-
-      // Customize attribution control position to not block content
-      map.current.addControl(
-        new mapboxgl.NavigationControl({
-          showCompass: true,
-          showZoom: true,
-          visualizePitch: false
-        }),
-        'top-right'
-      );
-
-      map.current.on('load', () => {
-        setMapLoaded(true);
-      });
-
-    } catch (error) {
-      console.error('Map error:', error);
-    }
+    return () => {
+      isUnmounted = true;
+      clearInitTimer();
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
+      if (mapResizeObserverRef.current) {
+        mapResizeObserverRef.current.disconnect();
+        mapResizeObserverRef.current = null;
+      }
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+    };
   }, []);
 
   // Update markers when listings or centers change
@@ -571,13 +641,14 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
   return (
     <div className="w-full h-full relative flex flex-col">
-      <div ref={mapContainer} className="w-full flex-1 min-h-[300px]" />
+      <div id="map-container" ref={mapContainer} className="map-container w-full flex-1 min-h-[300px] bg-gray-100" />
 
       {!mapLoaded && (
         <div className="absolute inset-0 bg-gray-100 flex items-center justify-center">
           <div className="text-center">
             <div className="text-4xl mb-2">🗺️</div>
-            <p className="text-gray-600">Loading Map...</p>
+            <p className="text-gray-600">Loading map...</p>
+            {mapInitError && <p className="text-xs text-red-600 mt-2">{mapInitError}</p>}
           </div>
         </div>
       )}
