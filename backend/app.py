@@ -73,6 +73,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def add_cache_control_headers(request: Request, call_next):
+    """Avoid stale frontend assets requiring hard refreshes in development and production."""
+    response = await call_next(request)
+
+    # Keep API responses unchanged; only control cache behavior for frontend routes/assets.
+    path = request.url.path.lower()
+    if not path.startswith("/api"):
+        if path in {"/", ""} or path.endswith(".html"):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+        elif path.endswith((".js", ".css", ".map")):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
+    return response
+
 # Database setup - MySQL only
 DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
@@ -3553,7 +3573,7 @@ async def get_donor_impact(
     """Get donor's personal impact statistics"""
     try:
         token = credentials.credentials
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = payload.get("sub")
         
         user = db.query(User).filter(User.id == user_id).first()

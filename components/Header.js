@@ -1,5 +1,6 @@
 function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
+  const role = String(user?.role || '').toLowerCase();
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -33,8 +34,11 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
           <button
             onClick={() => {
                 if(user){
-                  if(String(user.role).toLowerCase() === 'donor'){
+                  if(role === 'donor'){
                     onViewChange?.('create');
+                    setShowDropdown(false);
+                  }else if(role === 'admin'){
+                    window.openAdminPanel?.();
                     setShowDropdown(false);
                   }else{
                     window.showFoodSearch?.();
@@ -46,7 +50,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             }
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
           >
-            {user && String(user.role).toLowerCase() === 'donor' ? '📦 Share Food' : '🔍 Find Food'}
+            {user && role === 'donor' ? '📦 Share Food' : user && role === 'admin' ? '⚙️ Admin Panel' : '🔍 Find Food'}
           </button>
           {user ? (
             <div className="relative dropdown-container">
@@ -98,7 +102,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     ⭐ My Favorites
                   </button>
-                  {user.role === 'donor' && (
+                  {role === 'donor' && (
                     <button
                       onClick={() => {
                         window.openDonorImpact?.();
@@ -109,7 +113,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       ✨ My Impact
                     </button>
                   )}
-                  {user.role === 'donor' && (
+                  {role === 'donor' && (
                     <button
                       onClick={() => {
                         onViewChange?.('create');
@@ -120,7 +124,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       Share Food
                     </button>
                   )}
-                  {user.role === 'donor' && (
+                  {role === 'donor' && (
                     <button
                       onClick={() => {
                         window.openDonationScheduler?.();
@@ -175,7 +179,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🤖 Storage Coach
                   </button>
-                  {user?.role === 'recipient' && (
+                  {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openSpoilageAlerts?.();
@@ -186,7 +190,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       ⚠️ Spoilage Alerts
                     </button>
                   )}
-                  {user?.role === 'recipient' && (
+                  {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openMealSuggestions?.();
@@ -215,7 +219,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     📱 SMS Text Notifications
                   </button>
-                  {user.role === 'recipient' && (
+                  {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openPickupReminders?.();
@@ -226,7 +230,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       🔔 Pickup Reminders
                     </button>
                   )}
-                  {user.role === 'recipient' && (
+                  {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openDietaryPreferences?.();
@@ -237,7 +241,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       🥗 Dietary Preferences
                     </button>
                   )}
-                  {user.role === 'donor' && (
+                  {role === 'donor' && (
                     <button
                       onClick={() => {
                         window.openStoreOwnerDashboard?.();
@@ -248,7 +252,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       📦 Manage My Store
                     </button>
                   )}
-                  {user.role === 'admin' && (
+                  {/* commented out admin panel in sidebar as it is in top right corner */}
+                  {/* {user.role === 'admin' && (
                     <button
                       onClick={() => {
                         window.openAdminPanel?.();
@@ -258,7 +263,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       ⚙️ Admin Panel
                     </button>
-                  )}
+                  )} */}
                   <button
                     onClick={() => {
                       onLogout?.();
