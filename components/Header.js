@@ -124,7 +124,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       Share Food
                     </button>
                   )}
-                  {role === 'donor' && (
+                  {/* taken out for now as it is not clear what it does and not needed currently*/}
+                  {/* {role === 'donor' && (
                     <button
                       onClick={() => {
                         window.openDonationScheduler?.();
@@ -134,7 +135,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       📅 Donation Scheduler
                     </button>
-                  )}
+                  )} */}
                   <button
                     onClick={() => {
                       window.openDistributionMap?.();
