@@ -425,7 +425,7 @@ class ReportStatus(enum.Enum):
     RESOLVED = "resolved"
     DISMISSED = "dismissed"
 
-class ReminderStatus(enum.Enum):
+class PickupReminderStatus(enum.Enum):
     SCHEDULED = "scheduled"
     SENT = "sent"
     SNOOZED = "snoozed"
@@ -470,7 +470,7 @@ class PickupReminder(Base):
     # Reminder details
     scheduled_time = Column(DateTime)  # When to send the reminder
     reminder_sent_at = Column(DateTime, nullable=True)  # When reminder was actually sent
-    status = Column(SQLEnum(ReminderStatus), default=ReminderStatus.SCHEDULED)
+    status = Column(SQLEnum(PickupReminderStatus), default=PickupReminderStatus.SCHEDULED)
     
     # Notification channels
     sms_sent = Column(Boolean, default=False)

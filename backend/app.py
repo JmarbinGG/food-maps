@@ -27,7 +27,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
-    PickupReminder, FavoriteLocation
+    PickupReminder, PickupReminderStatus, FavoriteLocation
 )
 from threading import Timer
 import smtplib
@@ -2395,7 +2395,7 @@ async def get_pickup_reminders(
 ):
     """Get all pickup reminders for the authenticated user"""
     try:
-        from backend.models import PickupReminder, ReminderStatus
+        from backend.models import PickupReminder
         
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
@@ -2525,7 +2525,7 @@ async def schedule_pickup_reminder(
 ):
     """Schedule a pickup reminder for a listing"""
     try:
-        from backend.models import PickupReminder, ReminderSettings, ReminderStatus
+        from backend.models import PickupReminder, ReminderSettings, PickupReminderStatus
         
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
@@ -2543,7 +2543,7 @@ async def schedule_pickup_reminder(
         existing = db.query(PickupReminder).filter(
             PickupReminder.listing_id == listing_id,
             PickupReminder.user_id == user_id,
-            PickupReminder.status.in_([ReminderStatus.SCHEDULED, ReminderStatus.SNOOZED])
+            PickupReminder.status.in_([PickupReminderStatus.SCHEDULED, PickupReminderStatus.SNOOZED])
         ).first()
         
         if existing:
@@ -2570,7 +2570,7 @@ async def schedule_pickup_reminder(
             user_id=user_id,
             listing_id=listing_id,
             scheduled_time=reminder_time,
-            status=ReminderStatus.SCHEDULED
+            status=PickupReminderStatus.SCHEDULED
         )
         
         db.add(reminder)
@@ -2598,7 +2598,7 @@ async def cancel_pickup_reminder(
 ):
     """Cancel a scheduled pickup reminder"""
     try:
-        from backend.models import PickupReminder, ReminderStatus
+        from backend.models import PickupReminder, PickupReminderStatus
         
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub"))
@@ -2611,7 +2611,7 @@ async def cancel_pickup_reminder(
         if not reminder:
             raise HTTPException(status_code=404, detail="Reminder not found")
         
-        reminder.status = ReminderStatus.CANCELLED
+        reminder.status = PickupReminderStatus.CANCELLED
         reminder.updated_at = datetime.utcnow()
         
         db.commit()
@@ -2633,7 +2633,7 @@ async def snooze_pickup_reminder(
 ):
     """Snooze a pickup reminder"""
     try:
-        from backend.models import PickupReminder, ReminderStatus
+        from backend.models import PickupReminder, PickupReminderStatus
         from datetime import timedelta
         
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -2650,7 +2650,7 @@ async def snooze_pickup_reminder(
         # Calculate snooze time
         snooze_until = datetime.utcnow() + timedelta(minutes=minutes)
         
-        reminder.status = ReminderStatus.SNOOZED
+        reminder.status = PickupReminderStatus.SNOOZED
         reminder.snoozed_until = snooze_until
         reminder.snooze_count += 1
         reminder.updated_at = datetime.utcnow()

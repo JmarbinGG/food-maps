@@ -93,7 +93,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🐛 Report Issue
                   </button>
-                  <button
+                  {/* <button
                     onClick={() => {
                       window.openFavoritesPanel?.();
                       setShowDropdown(false);
@@ -101,7 +101,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-yellow-50"
                   >
                     ⭐ My Favorites
-                  </button>
+                  </button> */}
                   {role === 'donor' && (
                     <button
                       onClick={() => {
