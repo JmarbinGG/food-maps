@@ -68,7 +68,7 @@ def send_sms_real(phone: str, message: str) -> bool:
     try:
         # Twilio credentials from environment variables
         account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-        auth_token = os.getenv("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_KEY")
+        auth_token = os.getenv("TWILIO_AUTH_TOKEN")
         twilio_phone = os.getenv("TWILIO_PHONE_NUMBER")
         
         if not all([account_sid, auth_token, twilio_phone]):

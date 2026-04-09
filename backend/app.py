@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 from dotenv import load_dotenv
 import jwt
+import json
 import os
 import random
 import string
@@ -58,8 +59,7 @@ password = os.getenv("EMAIL_PASSWORD")
 
 # Twilio SMS configuration
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-# Prefer TWILIO_AUTH_TOKEN, keep TWILIO_KEY as legacy fallback.
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_KEY")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")  # Default Twilio number
 
 
@@ -3441,7 +3441,7 @@ async def submit_feedback(
             auth_header = request.headers.get("Authorization")
             if auth_header and auth_header.startswith("Bearer "):
                 token = auth_header.split(" ")[1]
-                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+                payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
                 user_id = payload.get("sub")
         except:
             pass  # Anonymous feedback is allowed
@@ -4373,7 +4373,7 @@ async def get_recent_listings(
         # Serialize listings
         result = []
         for listing in listings:
-            item = serialize_listing_item(listing)
+            item = serialize_listing(listing)
             
             # Calculate distance (would need user location)
             # For now, use a placeholder
