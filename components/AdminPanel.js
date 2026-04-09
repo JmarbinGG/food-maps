@@ -1,5 +1,6 @@
 function AdminPanel({ onClose }) {
   try {
+    const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200';
     const [activeTab, setActiveTab] = React.useState('overview');
     const [exportStatus, setExportStatus] = React.useState(null);
     const [dbStats, setDbStats] = React.useState({});
@@ -20,6 +21,21 @@ function AdminPanel({ onClose }) {
     const [listings, setListings] = React.useState([]);
     const [listingsLoading, setListingsLoading] = React.useState(false);
     const [showFeedbackViewer, setShowFeedbackViewer] = React.useState(false);
+    const [centersError, setCentersError] = React.useState('');
+    const [referralsError, setReferralsError] = React.useState('');
+    const [listingsError, setListingsError] = React.useState('');
+
+    const normalizeListing = (listing) => ({
+      id: listing.id,
+      image_url: listing.image_url || (Array.isArray(listing.images) ? listing.images[0] : null),
+      name: listing.name || listing.title || 'Untitled listing',
+      description: listing.description || '',
+      quantity: listing.quantity || (listing.qty != null ? `${listing.qty} ${listing.unit || ''}`.trim() : 'N/A'),
+      location: listing.location || listing.address || 'Unknown',
+      expiry_date: listing.expiry_date || listing.expiration_date,
+      user_name: listing.user_name || listing.donor?.name || 'Unknown',
+      status: listing.status || 'available'
+    });
 
     React.useEffect(() => {
       loadDatabaseStats();
@@ -34,6 +50,7 @@ function AdminPanel({ onClose }) {
 
     const loadCenters = async () => {
       try {
+        setCentersError('');
         const token = localStorage.getItem('auth_token');
         const headers = {};
         if (token) {
@@ -50,9 +67,11 @@ function AdminPanel({ onClose }) {
           console.error('AdminPanel: Failed to load centers:', response.status);
           const errorData = await response.json().catch(() => ({}));
           console.error('AdminPanel: Error details:', errorData);
+          setCentersError(errorData.detail || 'Failed to load centers');
         }
       } catch (error) {
         console.error('Error loading centers:', error);
+        setCentersError('Failed to load centers');
       }
     };
 
@@ -128,6 +147,7 @@ function AdminPanel({ onClose }) {
     const loadReferralStats = async () => {
       setReferralLoading(true);
       try {
+        setReferralsError('');
         const token = localStorage.getItem('auth_token');
         const response = await fetch('/api/admin/referrals', {
           headers: {
@@ -137,9 +157,13 @@ function AdminPanel({ onClose }) {
         if (response.ok) {
           const data = await response.json();
           setReferralStats(data);
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setReferralsError(error.detail || 'Failed to load referral analytics');
         }
       } catch (error) {
         console.error('Error loading referral stats:', error);
+        setReferralsError('Failed to load referral analytics');
       } finally {
         setReferralLoading(false);
       }
@@ -148,6 +172,7 @@ function AdminPanel({ onClose }) {
     const loadListings = async () => {
       setListingsLoading(true);
       try {
+        setListingsError('');
         const token = localStorage.getItem('auth_token');
         const response = await fetch('/api/listings/get', {
           headers: {
@@ -156,10 +181,14 @@ function AdminPanel({ onClose }) {
         });
         if (response.ok) {
           const data = await response.json();
-          setListings(data);
+          setListings(Array.isArray(data) ? data.map(normalizeListing) : []);
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setListingsError(error.detail || 'Failed to load listings');
         }
       } catch (error) {
         console.error('Error loading listings:', error);
+        setListingsError('Failed to load listings');
       } finally {
         setListingsLoading(false);
       }
@@ -194,31 +223,41 @@ function AdminPanel({ onClose }) {
 
     const loadDatabaseStats = async () => {
       try {
-        if (window.databaseService && window.databaseService.isConnected) {
-          // Get stats from database
-          const usersResult = await trickleListObjects('users', 10);
-          const listingsResult = await trickleListObjects('food_listings', 10);
-          const schedulesResult = await trickleListObjects('schedules', 10);
-          const tasksResult = await trickleListObjects('tasks', 10);
+        const token = localStorage.getItem('auth_token');
+        const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
+        const statsResp = await fetch('/api/admin/stats', { headers });
+        if (statsResp.ok) {
+          const stats = await statsResp.json();
           setDbStats({
-            users: usersResult.items?.length || 0,
-            listings: listingsResult.items?.length || 0,
-            schedules: schedulesResult.items?.length || 0,
-            tasks: tasksResult.items?.length || 0,
-            connected: true
+            users: stats.users || 0,
+            listings: stats.listings || 0,
+            schedules: stats.schedules || 0,
+            tasks: stats.tasks || 0,
+            connected: stats.connected !== false
           });
-        } else {
-          // setDbStats({
-          //   users: window.mockUsers?.length || 0,
-          //   listings: window.databaseService.getListings?.length || 0,
-          //   schedules: window.mockSchedules?.length || 0,
-          //   tasks: window.mockTasks?.length || 0,
-          //   connected: false
-          // });
+          return;
         }
+
+        // Fallback for non-admin sessions: show what we can and mark disconnected.
+        const [listingsResp, centersResp] = await Promise.all([
+          fetch('/api/listings/get?limit=500', { headers }),
+          fetch('/api/centers', { headers })
+        ]);
+
+        const listingsData = listingsResp.ok ? await listingsResp.json() : [];
+        const centersData = centersResp.ok ? await centersResp.json() : [];
+
+        setDbStats({
+          users: 0,
+          listings: Array.isArray(listingsData) ? listingsData.length : 0,
+          schedules: 0,
+          tasks: Array.isArray(centersData) ? centersData.filter(c => c.is_active).length : 0,
+          connected: false
+        });
       } catch (error) {
         console.error('Error loading database stats:', error);
+        setDbStats({ users: 0, listings: 0, schedules: 0, tasks: 0, connected: false });
       }
     };
 
@@ -259,19 +298,21 @@ function AdminPanel({ onClose }) {
     };
 
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-5"
         data-name="admin-panel" data-file="components/AdminPanel.js">
-        <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="bg-white rounded-lg w-[min(96vw,1100px)] max-h-[90dvh] overflow-hidden flex flex-col">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Admin Panel</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 px-4 pt-4 sm:px-6 sm:pt-6">Admin Panel</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <div className="icon-x text-2xl"></div>
             </button>
           </div>
 
+          <div className="px-4 pb-4 sm:px-6 sm:pb-6 overflow-y-auto overflow-x-hidden min-w-0">
+
           {/* Tabs */}
           <div className="border-b mb-6">
-            <div className="flex space-x-8">
+            <div className="flex flex-wrap gap-2">
               {[
                 { id: 'overview', label: 'Overview', icon: 'layout-dashboard' },
                 { id: 'centers', label: 'Distribution Centers', icon: 'map-pin' },
@@ -285,7 +326,7 @@ function AdminPanel({ onClose }) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center px-3 py-2 border-b-2 font-medium text-sm ${activeTab === tab.id
+                  className={`flex items-center px-3 py-2 border-b-2 font-medium text-sm whitespace-nowrap ${activeTab === tab.id
                     ? 'border-green-500 text-green-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'
                     }`}
@@ -374,20 +415,20 @@ function AdminPanel({ onClose }) {
                       placeholder="Center Name"
                       value={centerForm.name}
                       onChange={(e) => setCenterForm({ ...centerForm, name: e.target.value })}
-                      className="input"
+                      className={inputClass}
                     />
                     <input
                       type="text"
                       placeholder="Phone"
                       value={centerForm.phone}
                       onChange={(e) => setCenterForm({ ...centerForm, phone: e.target.value })}
-                      className="input"
+                      className={inputClass}
                     />
                     <textarea
                       placeholder="Description"
                       value={centerForm.description}
                       onChange={(e) => setCenterForm({ ...centerForm, description: e.target.value })}
-                      className="input md:col-span-2"
+                      className={`${inputClass} md:col-span-2`}
                       rows="2"
                     ></textarea>
                     <input
@@ -395,16 +436,16 @@ function AdminPanel({ onClose }) {
                       placeholder="Address"
                       value={centerForm.address}
                       onChange={(e) => setCenterForm({ ...centerForm, address: e.target.value })}
-                      className="input md:col-span-2"
+                      className={`${inputClass} md:col-span-2`}
                     />
-                    <div className="md:col-span-2 grid grid-cols-3 gap-4">
+                    <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <input
                         type="number"
                         step="any"
                         placeholder="Latitude"
                         value={centerForm.coords_lat}
                         onChange={(e) => setCenterForm({ ...centerForm, coords_lat: e.target.value })}
-                        className="input"
+                        className={inputClass}
                       />
                       <input
                         type="number"
@@ -412,7 +453,7 @@ function AdminPanel({ onClose }) {
                         placeholder="Longitude"
                         value={centerForm.coords_lng}
                         onChange={(e) => setCenterForm({ ...centerForm, coords_lng: e.target.value })}
-                        className="input"
+                        className={inputClass}
                       />
                       <button
                         type="button"
@@ -452,7 +493,7 @@ function AdminPanel({ onClose }) {
                       placeholder="Operating Hours (e.g., Mon-Fri 9AM-5PM)"
                       value={centerForm.hours}
                       onChange={(e) => setCenterForm({ ...centerForm, hours: e.target.value })}
-                      className="input md:col-span-2"
+                      className={`${inputClass} md:col-span-2`}
                     />
                   </div>
                   <div className="flex justify-end space-x-3 mt-4">
@@ -473,6 +514,9 @@ function AdminPanel({ onClose }) {
               )}
 
               <div className="grid gap-4">
+                {centersError && (
+                  <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">{centersError}</div>
+                )}
                 {centers.map(center => (
                   <div key={center.id} className="card">
                     <div className="flex justify-between items-start">
@@ -542,6 +586,9 @@ function AdminPanel({ onClose }) {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {referralsError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">{referralsError}</div>
+                  )}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="card bg-blue-50 border-blue-200">
                       <div className="flex items-center">
@@ -689,6 +736,9 @@ function AdminPanel({ onClose }) {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {listingsError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">{listingsError}</div>
+                  )}
                   {listings.length === 0 ? (
                     <div className="text-center py-8 text-gray-500">
                       No listings found.
@@ -713,7 +763,7 @@ function AdminPanel({ onClose }) {
                                   <div className="text-sm text-gray-500 space-y-1">
                                     <p><strong>Quantity:</strong> {listing.quantity}</p>
                                     <p><strong>Location:</strong> {listing.location}</p>
-                                    <p><strong>Expires:</strong> {new Date(listing.expiry_date).toLocaleDateString()}</p>
+                                    <p><strong>Expires:</strong> {listing.expiry_date ? new Date(listing.expiry_date).toLocaleDateString() : 'N/A'}</p>
                                     <p><strong>Posted by:</strong> {listing.user_name || 'Unknown'}</p>
                                     <p><strong>Status:</strong>
                                       <span className={`ml-1 px-2 py-1 rounded-full text-xs ${listing.status === 'available' ? 'bg-green-100 text-green-800' :
@@ -848,6 +898,7 @@ function AdminPanel({ onClose }) {
           {activeTab === 'messages' && (
             <AdminMessagePanel />
           )}
+          </div>
         </div>
 
         {showFeedbackViewer && (

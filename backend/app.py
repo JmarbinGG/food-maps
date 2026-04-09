@@ -1210,10 +1210,14 @@ async def get_referral_analytics(admin_user: User = Depends(verify_admin), db: S
         referral_stats = []
         for user in users:
             # Count how many people this user referred
-            referral_count = db.query(User).filter(User.referred_by == user.id).count()
+            referral_count = 0
+            referred_users = []
+            if user.referral_code:
+                referral_count = db.query(User).filter(User.referred_by_code == user.referral_code).count()
             
             # Get the actual referred users for recent referrals display
-            referred_users = db.query(User).filter(User.referred_by == user.id).all()
+            if user.referral_code:
+                referred_users = db.query(User).filter(User.referred_by_code == user.referral_code).all()
             
             referral_stats.append({
                 "id": user.id,
@@ -1231,6 +1235,28 @@ async def get_referral_analytics(admin_user: User = Depends(verify_admin), db: S
             })
         
         return referral_stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/admin/stats")
+async def get_admin_stats(admin_user: User = Depends(verify_admin), db: Session = Depends(get_db)):
+    """Get admin dashboard aggregate stats from the primary database."""
+    try:
+        total_users = db.query(User).count()
+        total_listings = db.query(FoodResource).count()
+        total_schedules = db.query(DonationSchedule).count()
+        active_tasks = db.query(DonationReminder).filter(
+            DonationReminder.status.in_([ReminderStatus.PENDING, ReminderStatus.SENT])
+        ).count()
+
+        return {
+            "users": total_users,
+            "listings": total_listings,
+            "schedules": total_schedules,
+            "tasks": active_tasks,
+            "connected": True,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
