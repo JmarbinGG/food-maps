@@ -58,7 +58,8 @@ password = os.getenv("EMAIL_PASSWORD")
 
 # Twilio SMS configuration
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = os.getenv("TWILIO_KEY")  # Using TWILIO_KEY from .env
+# Prefer TWILIO_AUTH_TOKEN, keep TWILIO_KEY as legacy fallback.
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN") or os.getenv("TWILIO_KEY")
 TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")  # Default Twilio number
 
 
