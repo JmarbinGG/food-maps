@@ -16,6 +16,10 @@ import os
 import random
 import string
 from passlib.context import CryptContext
+from backend.email_service import (
+    send_reset_email,
+    send_verification_email as send_verification_email_message,
+)
 from backend.schemas import (
     FoodResourceResponse,
     DistributionCenterCreate,
@@ -31,8 +35,6 @@ from backend.models import (
     PickupReminder, PickupReminderStatus, FavoriteLocation
 )
 from threading import Timer
-import smtplib
-from email.mime.text import MIMEText
 from twilio.rest import Client
 
 
@@ -52,10 +54,6 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 security = HTTPBearer()
 # Optional bearer for endpoints where auth is not required but can tailor results
 optional_security = HTTPBearer(auto_error=False)
-
-#email
-sender = "noreply.foodmaps@gmail.com"
-password = os.getenv("EMAIL_PASSWORD")
 
 # Twilio SMS configuration
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
@@ -1088,8 +1086,7 @@ async def forgot_password(request: Request, db: Session = Depends(get_db)):
             'expires_at': datetime.utcnow() + timedelta(minutes=15)
         }
         
-        # In production, send email here
-        sendEmail(email, reset_code)
+        send_reset_email(email, reset_code, user.name or "there")
         
         return {"success": True, "message": "Reset code sent"}
     except HTTPException:
@@ -1756,45 +1753,13 @@ async def send_verification_email(
             algorithm=JWT_ALGORITHM
         )
         
-        # Send email
-        try:
-            verification_link = f"http://localhost:8000/verify-email?token={verification_token}"
-            
-            msg = MIMEText(f"""
-            Hello {user.name},
-            
-            Thank you for joining Food Maps! Please verify your email address by clicking the link below:
-            
-            {verification_link}
-            
-            This link will expire in 24 hours.
-            
-            If you didn't create an account with Food Maps, please ignore this email.
-            
-            Best regards,
-            The Food Maps Team
-            """)
-            
-            msg['Subject'] = 'Verify Your Email - Food Maps'
-            msg['From'] = sender
-            msg['To'] = user.email
-            
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
-                smtp.login(sender, password)
-                smtp.send_message(msg)
-            
-            return {
-                "success": True,
-                "message": "Verification email sent successfully"
-            }
-        except Exception as email_error:
-            print(f"Email send error: {email_error}")
-            # Return success even if email fails (for testing)
-            return {
-                "success": True,
-                "message": "Verification email queued",
-                "note": "Email service may be unavailable"
-            }
+        verification_link = f"http://localhost:8000/verify-email?token={verification_token}"
+        send_verification_email_message(user.email, user.name or "there", verification_link)
+
+        return {
+            "success": True,
+            "message": "Verification email sent successfully"
+        }
         
     except HTTPException:
         raise
@@ -2222,29 +2187,6 @@ async def get_user_details(
             pass
         raise HTTPException(status_code=500, detail="Failed to fetch user details")   
 
-
-
-def sendEmail(address, code):
-        msg = MIMEText('''
-Hello,\n
-You're receiving this email because you requested to reset your password for your Food Maps account.\n
-
-
-To reset your password, enter the code below:\n
-
-{code}
-For your security, this code will expire in 15 minutes. If you did not request this reset, please ignore this email.\n
-
-Please do not reply to this email.\n
-Best regards,\n
-The Food Maps Team'''.format(code=code))
-        msg['Subject'] = "Food Maps Password Reset"
-        msg['From'] = sender
-        msg['To'] = address
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp_server:
-          smtp_server.login(sender, password)
-          smtp_server.sendmail(sender, address, msg.as_string())
-        print(f"📧 Password reset code for {address}: {code}")
 
 
 # Food Safety Checklist Endpoints

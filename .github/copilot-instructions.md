@@ -81,6 +81,7 @@ MAPBOX_ACCESS_TOKEN=pk.xxx          # Server-side geocoding for listings
 TWILIO_ACCOUNT_SID=ACxxx            # SMS for claim confirmations
 TWILIO_AUTH_TOKEN=xxx               # (falls back to console logs if missing)
 TWILIO_PHONE_NUMBER=+1234567890
+EMAIL_USERNAME=noreply.foodmaps@gmail.com  # Optional sender/login email
 EMAIL_PASSWORD=xxx                  # SMTP for password reset emails
 ```
 

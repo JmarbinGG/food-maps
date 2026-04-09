@@ -117,6 +117,8 @@ Minimum recommended for local development:
 JWT_SECRET=change-me
 DATABASE_URL=sqlite:///../food_maps.db
 MAPBOX_ACCESS_TOKEN=your_mapbox_public_token
+EMAIL_USERNAME=your_email
+EMAIL_PASSWORD=your_app_password
 ```
 
 ### 3) Run the API
@@ -150,6 +152,8 @@ Core
 Optional / feature-specific
 
 - Twilio-related variables for SMS features (if enabled)
+- EMAIL_USERNAME: optional sender/login email for SMTP account (defaults to `noreply.foodmaps@gmail.com`)
+- EMAIL_PASSWORD: SMTP app password used for password reset and verification emails
 
 ## API Highlights
 
