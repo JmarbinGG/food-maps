@@ -74,7 +74,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     Profile Settings
                   </button>
-                  <button
+                    {/* BUTTONS EXIST ELSEWHERE, REMOVED FROM DROPDOWN TO REDUCE CLUTTER */}
+                  {/* <button
                     onClick={() => {
                       window.openMessageSupport?.();
                       setShowDropdown(false);
@@ -83,8 +84,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     💬 Message Support
-                  </button>
-                  <button
+                  </button> */}
+                  {/* <button
                     onClick={() => {
                       window.openFeedbackModal?.();
                       setShowDropdown(false);
@@ -92,7 +93,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     🐛 Report Issue
-                  </button>
+                  </button> */}
                   {/* <button
                     onClick={() => {
                       window.openFavoritesPanel?.();
@@ -110,10 +111,11 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
                     >
-                      ✨ My Impact
+                       My Impact
                     </button>
                   )}
-                  {role === 'donor' && (
+                  {/* REDUNDANT, already in header */}
+                  {/* {role === 'donor' && (
                     <button
                       onClick={() => {
                         onViewChange?.('create');
@@ -123,7 +125,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       Share Food
                     </button>
-                  )}
+                  )} */}
                   {/* taken out for now as it is not clear what it does and not needed currently*/}
                   {/* {role === 'donor' && (
                     <button
@@ -162,7 +164,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     🎤 Voice Search
                   </a> */}
-                  <button
+                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
+                  {/* <button
                     onClick={() => {
                       window.openSmartNotifications?.();
                       setShowDropdown(false);
@@ -170,8 +173,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
                   >
                     🔔 Smart Notifications
-                  </button>
-                  <button
+                  </button> */}
+                  {/* <button
                     onClick={() => {
                       window.openStorageCoach?.();
                       setShowDropdown(false);
@@ -179,8 +182,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
                   >
                     🤖 Storage Coach
-                  </button>
-                  {role === 'recipient' && (
+                  </button> */}
+                  {/* {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openSpoilageAlerts?.();
@@ -190,8 +193,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       ⚠️ Spoilage Alerts
                     </button>
-                  )}
-                  {role === 'recipient' && (
+                  )} */}
+                  {/* {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openMealSuggestions?.();
@@ -201,8 +204,9 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       👨‍🍳 Meal Suggestions
                     </button>
-                  )}
-                  <button
+                  )} */}
+                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
+                  {/* <button
                     onClick={() => {
                       window.openSafetyCenter?.();
                       setShowDropdown(false);
@@ -210,7 +214,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     🛡️ Safety & Trust
-                  </button>
+                  </button> */}
                   <button
                     onClick={() => {
                       window.openSMSConsent?.();
@@ -231,7 +235,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       🔔 Pickup Reminders
                     </button>
                   )}
-                  {role === 'recipient' && (
+                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
+                  {/* {role === 'recipient' && (
                     <button
                       onClick={() => {
                         window.openDietaryPreferences?.();
@@ -241,8 +246,9 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     >
                       🥗 Dietary Preferences
                     </button>
-                  )}
-                  {role === 'donor' && (
+                  )} */}
+                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
+                  {/* {role === 'donor' && (
                     <button
                       onClick={() => {
                         window.openStoreOwnerDashboard?.();
