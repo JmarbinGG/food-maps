@@ -1048,12 +1048,46 @@ function App() {
 
     // Setup store owner dashboard callback
     window.openStoreOwnerDashboard = () => {
+      const role = String(user?.role || '').toLowerCase();
+      if (!user || role !== 'store_owner') {
+        if (typeof window.showAlert === 'function') {
+          window.showAlert('Store owner access required.', { title: 'Access Denied', variant: 'error' });
+        }
+        return;
+      }
       setShowStoreOwnerDashboard(true);
     };
 
     // Setup admin panel callback
-    window.openAdminPanel = () => {
-      setCurrentView('admin');
+    window.openAdminPanel = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert('Please sign in with an admin account.', { title: 'Access Denied', variant: 'error' });
+          }
+          return;
+        }
+
+        const response = await fetch('/api/admin/stats', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert('Admin access required.', { title: 'Access Denied', variant: 'error' });
+          }
+          return;
+        }
+
+        setCurrentView('admin');
+      } catch (_) {
+        if (typeof window.showAlert === 'function') {
+          window.showAlert('Unable to verify admin access right now.', { title: 'Access Denied', variant: 'error' });
+        }
+      }
     };
 
     // Setup message support callback
@@ -1088,10 +1122,22 @@ function App() {
 
     // Setup verification photo callbacks
     window.openBeforePhotoVerification = (listing) => {
+      if (!user) {
+        if (typeof window.showAlert === 'function') {
+          window.showAlert('Please sign in to verify pickup.', { title: 'Access Denied', variant: 'error' });
+        }
+        return;
+      }
       setVerificationModal({ show: true, listing, type: 'before' });
     };
 
     window.openAfterPhotoVerification = (listing) => {
+      if (!user) {
+        if (typeof window.showAlert === 'function') {
+          window.showAlert('Please sign in to verify pickup.', { title: 'Access Denied', variant: 'error' });
+        }
+        return;
+      }
       setVerificationModal({ show: true, listing, type: 'after' });
     };
 
@@ -1181,7 +1227,7 @@ function App() {
       delete window.openDietaryPreferences;
       delete window.triggerListingDetailModal;
     };
-  }, [handleClaimListing, handleShowDetails]);
+  }, [handleClaimListing, handleShowDetails, user]);
 
   const handleCloseDetailedModal = () => {
     setShowDetailedModal(false);
@@ -1273,6 +1319,17 @@ function App() {
           />
         );
       case 'admin':
+        if (String(user?.role || '').toLowerCase() !== 'admin') {
+          return (
+            <div className="flex h-[calc(100vh-64px)] items-center justify-center bg-[var(--background)]">
+              <div className="text-center p-8 bg-white rounded-lg border border-[var(--border-color)] shadow-sm">
+                <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">Access Denied</h2>
+                <p className="text-[var(--text-secondary)] mb-4">Admin privileges are required to view this panel.</p>
+                <button className="btn-primary" onClick={() => setCurrentView('map')}>Return to Map</button>
+              </div>
+            </div>
+          );
+        }
         return (
           <AdminPanel
             user={user}
@@ -1337,12 +1394,6 @@ function App() {
               ));
             }}
             onViewChange={setCurrentView}
-          />
-        );
-      case 'admin':
-        return (
-          <AdminPanel
-            onClose={() => setCurrentView('map')}
           />
         );
       default:
@@ -1699,7 +1750,7 @@ function App() {
         )}
 
         {/* Store Owner Dashboard */}
-        {showStoreOwnerDashboard && (
+        {showStoreOwnerDashboard && user && String(user.role || '').toLowerCase() === 'store_owner' && (
           <StoreOwnerDashboard
             user={user}
             onClose={() => setShowStoreOwnerDashboard(false)}
@@ -1752,7 +1803,7 @@ function App() {
         )}
 
         {/* Pickup Verification Modal */}
-        {verificationModal.show && verificationModal.listing && (
+        {user && verificationModal.show && verificationModal.listing && (
           <PickupVerification
             listing={verificationModal.listing}
             verificationType={verificationModal.type}
