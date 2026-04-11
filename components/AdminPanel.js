@@ -801,7 +801,7 @@ function AdminPanel({ onClose }) {
                 <div className="flex items-center mb-4">
                   <div className={`w-3 h-3 rounded-full mr-3 ${dbStats.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <span className={`font-medium ${dbStats.connected ? 'text-green-600' : 'text-red-600'}`}>
-                    {dbStats.connected ? 'Connected to Trickle Database' : 'Using Mock Data'}
+                    {dbStats.connected ? 'Connected to Database' : 'Database Error'}
                   </span>
                 </div>
                 <button
