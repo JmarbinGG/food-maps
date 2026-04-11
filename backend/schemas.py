@@ -28,6 +28,29 @@ class UserCreate(BaseModel):
     phone: Optional[str] = None
     address: Optional[str] = None
 
+
+class UserRegisterRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+    role: str
+    referral_code: Optional[str] = None
+
+
+class UserLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
+
 class UserResponse(BaseModel):
     id: int
     name: str

@@ -62,12 +62,12 @@ window.databaseService = {
 
   authLogin: async function (email, password) {
     try {
-      const params = new URLSearchParams();
-      params.append('email', email);
-      params.append('password', password);
-
-      const response = await fetch(`/api/user/login?${params.toString()}`, {
-        method: 'POST'
+      const response = await fetch('/api/user/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email, password })
       });
 
       const data = await response.json().catch(() => ({}));
@@ -90,17 +90,18 @@ window.databaseService = {
 
   authRegister: async function (userData) {
     try {
-      const params = new URLSearchParams();
-      params.append('name', userData.name);
-      params.append('email', userData.email);
-      params.append('password', userData.password);
-      params.append('role', userData.role);
-      if (userData.referral_code) {
-        params.append('referral_code', userData.referral_code);
-      }
-
-      const response = await fetch(`/api/user/create?${params.toString()}`, {
-        method: 'POST'
+      const response = await fetch('/api/user/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          name: userData.name,
+          email: userData.email,
+          password: userData.password,
+          role: userData.role,
+          referral_code: userData.referral_code || null
+        })
       });
 
       if (!response.ok) {

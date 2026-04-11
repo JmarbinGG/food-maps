@@ -18,12 +18,12 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('email', email);
-      
       const response = await fetch('/api/user/forgot-password', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ email })
       });
 
       const data = await response.json();
@@ -65,14 +65,16 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
     setError('');
 
     try {
-      const formData = new FormData();
-      formData.append('email', email);
-      formData.append('code', code);
-      formData.append('new_password', newPassword);
-      
       const response = await fetch('/api/user/reset-password', {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          email,
+          code,
+          new_password: newPassword
+        })
       });
 
       const data = await response.json();

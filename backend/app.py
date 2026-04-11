@@ -26,7 +26,11 @@ from backend.schemas import (
     DistributionCenterCreate,
     DistributionCenterResponse,
     DistributionCenterWithInventory,
-    CenterInventoryResponse
+    CenterInventoryResponse,
+    UserRegisterRequest,
+    UserLoginRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from backend.models import (
     Base, FoodResource, User, UserRole, FoodCategory, PerishabilityLevel,
@@ -989,8 +993,16 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/create")
-async def create_user(name: str, email: str, password: str, role: UserRole, referral_code: str = None, db: Session = Depends(get_db)):
+async def create_user(payload: UserRegisterRequest, db: Session = Depends(get_db)):
     try:    
+        email = payload.email
+        password = payload.password
+        referral_code = payload.referral_code
+        try:
+            role = UserRole(payload.role)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid role")
+
         # Check for existing user
         existing_user = db.query(User).filter(User.email == email).first()
         if existing_user:
@@ -1012,7 +1024,7 @@ async def create_user(name: str, email: str, password: str, role: UserRole, refe
         # Create new user
         user = User(
             email=email, 
-            name=name, 
+            name=payload.name,
             password_hash=pwd_context.hash(password), 
             role=role,
             referral_code=new_referral_code,
@@ -1031,8 +1043,10 @@ async def create_user(name: str, email: str, password: str, role: UserRole, refe
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/login")
-async def login_user(email: str = None, password: str = None, db: Session = Depends(get_db)):
+async def login_user(payload: UserLoginRequest, db: Session = Depends(get_db)):
     try:
+        email = payload.email
+        password = payload.password
         print(f"Login attempt for email: {email}")
         
         if not email or not password:
@@ -1072,11 +1086,10 @@ async def login_user(email: str = None, password: str = None, db: Session = Depe
 password_reset_codes = {}
 
 @app.post("/api/user/forgot-password")
-async def forgot_password(request: Request, db: Session = Depends(get_db)):
+async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """Send password reset code to user's email"""
     try:
-        form = await request.form()
-        email = form.get('email')
+        email = payload.email
         
         if not email:
             raise HTTPException(status_code=400, detail="Email is required")
@@ -1105,13 +1118,12 @@ async def forgot_password(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/reset-password")
-async def reset_password(request: Request, db: Session = Depends(get_db)):
+async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
     """Reset user password with verification code"""
     try:
-        form = await request.form()
-        email = form.get('email')
-        code = form.get('code')
-        new_password = form.get('new_password')
+        email = payload.email
+        code = payload.code
+        new_password = payload.new_password
         
         if not email or not code or not new_password:
             raise HTTPException(status_code=400, detail="Missing required fields")
