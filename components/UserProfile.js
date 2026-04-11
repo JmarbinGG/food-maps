@@ -287,8 +287,8 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                       >
                         <option value="donor">🎁 Donor - Share food donations</option>
                         <option value="recipient">🙏 Recipient - Request and claim food</option>
-                        <option value="driver">🚙 Driver - Deliver food donations</option>
-                        <option value="volunteer">🚗 Volunteer - Help with deliveries</option>
+                        {/* <option value="driver">🚙 Driver - Deliver food donations</option>
+                        <option value="volunteer">🚗 Volunteer - Help with deliveries</option> */}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">You can switch between these roles anytime</p>
                     </div>

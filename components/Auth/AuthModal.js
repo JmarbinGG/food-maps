@@ -329,8 +329,8 @@ function AuthModal({ onClose, onAuth }) {
                 >
                   <option value="recipient">Recipient</option>
                   <option value="donor">Donor</option>
-                  <option value="driver">Driver</option>
-                  <option value="store_owner">Store Owner</option>
+                  {/* <option value="driver">Driver</option>
+                  <option value="store_owner">Store Owner</option> */}
                 </select>
               </div>
             )}
