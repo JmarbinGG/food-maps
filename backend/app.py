@@ -3,8 +3,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum
-from sqlalchemy.orm import sessionmaker, Session, relationship
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime, timedelta
@@ -41,6 +41,7 @@ from backend.models import (
 )
 from threading import Timer
 from twilio.rest import Client
+from backend.db import engine, SessionLocal, get_db
 
 
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
@@ -97,12 +98,6 @@ async def add_cache_control_headers(request: Request, call_next):
 
     return response
 
-# Database setup - MySQL only
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # NOTE: Use Base imported from models; do not re-declare another Base here
 # JWT settings
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
@@ -115,13 +110,6 @@ if not PUBLIC_BASE_URL:
 def get_public_base_url() -> str:
     """Return the user-facing base URL configured in environment."""
     return PUBLIC_BASE_URL.rstrip("/")
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 # -----------------------------
 # Serialization helpers

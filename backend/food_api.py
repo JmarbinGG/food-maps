@@ -6,32 +6,17 @@ import os
 import httpx
 from backend.models import FoodResource, User, ConsumptionLog, Base
 from backend.schemas import FoodResourceCreate, FoodResourceResponse, ConsumptionLogCreate, ConsumptionLogResponse
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 import jwt
+from backend.db import get_db
 
 load_dotenv()
-
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable is required")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # JWT settings
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = "HS256"
 security = HTTPBearer()
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
