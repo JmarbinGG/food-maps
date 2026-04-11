@@ -1,4 +1,19 @@
 // Trust Badge Component - Shows verification and partner status
+function parseTimestamp(dateStr) {
+  if (!dateStr) return null;
+  try {
+    // Backend often sends naive ISO strings (no timezone). Treat them as UTC.
+    const raw = String(dateStr).trim();
+    const isoLike = raw.includes(' ') ? raw.replace(' ', 'T') : raw;
+    const hasTimezone = /([zZ]|[+\-]\d{2}:?\d{2})$/.test(raw);
+    const normalized = hasTimezone ? isoLike : `${isoLike}Z`;
+    const date = new Date(normalized);
+    return Number.isFinite(date.getTime()) ? date : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function TrustBadge({
   verifiedByAGLF,
   schoolPartner,
@@ -59,9 +74,10 @@ function TrustBadge({
   const getTimeSince = (dateStr) => {
     if (!dateStr) return null;
 
-    const date = new Date(dateStr);
+    const date = parseTimestamp(dateStr);
+    if (!date) return null;
     const now = new Date();
-    const diffMs = now - date;
+    const diffMs = Math.max(0, now - date);
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
@@ -83,9 +99,10 @@ function TrustBadge({
   const getFreshnessColor = () => {
     if (!timeSince) return 'text-gray-500';
 
-    const dateToCheck = new Date(lastUpdated || lastActive);
+    const dateToCheck = parseTimestamp(lastUpdated || lastActive);
+    if (!dateToCheck) return 'text-gray-500';
     const now = new Date();
-    const hoursSince = (now - dateToCheck) / 3600000;
+    const hoursSince = Math.max(0, (now - dateToCheck) / 3600000);
 
     if (hoursSince < 1) return 'text-green-600'; // Very fresh
     if (hoursSince < 24) return 'text-green-500'; // Fresh
@@ -123,7 +140,7 @@ function TrustBadge({
       {timeSince && showDetails && (
         <div
           className={`inline-flex items-center gap-1 ${getFreshnessColor()} text-sm`}
-          title={`Last ${lastUpdated ? 'updated' : 'active'}: ${new Date(lastUpdated || lastActive).toLocaleString()}`}
+          title={`Last ${lastUpdated ? 'updated' : 'active'}: ${(parseTimestamp(lastUpdated || lastActive) || new Date()).toLocaleString()}`}
         >
           <i className="lucide-clock" style={{ width: '14px', height: '14px' }}></i>
           <span>Updated {timeSince}</span>
@@ -160,13 +177,15 @@ function TrustBadgeCompact({ verifiedByAGLF, schoolPartner, partnerBadge, lastAc
 
   const getTimeSince = (dateStr) => {
     if (!dateStr) return null;
-    const date = new Date(dateStr);
+    const date = parseTimestamp(dateStr);
+    if (!date) return null;
     const now = new Date();
-    const diffMs = now - date;
+    const diffMs = Math.max(0, now - date);
+    const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffHours < 1) return 'Just now';
+    if (diffMins < 60) return `${Math.max(1, diffMins)}m`;
     if (diffHours < 24) return `${diffHours}h`;
     if (diffDays < 7) return `${diffDays}d`;
     return `${Math.floor(diffDays / 7)}w`;
