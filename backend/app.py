@@ -557,32 +557,27 @@ def get_listings(
     - Donors see: all their listings (available, claimed, expired)
     - Unauthenticated: only available listings
     """
+    payload = None
     if credentials is not None:
-            try:
-                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-            except jwt.ExpiredSignatureError:
-                print("JWT token expired")
-                raise HTTPException(status_code=401, detail="Invalid token")
-            except jwt.InvalidTokenError as e:
-                print(f"JWT token invalid: {e}")
-                raise HTTPException(status_code=401, detail="Invalid token")
-            except Exception as e:
-                print(f"JWT decode error: {e}")
-                raise HTTPException(status_code=401, detail="Invalid token")
+        try:
+            payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        except jwt.ExpiredSignatureError:
+            print("JWT token expired")
+            raise HTTPException(status_code=401, detail="Invalid token")
+        except jwt.InvalidTokenError as e:
+            print(f"JWT token invalid: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token")
+        except Exception as e:
+            print(f"JWT decode error: {e}")
+            raise HTTPException(status_code=401, detail="Invalid token")
     try:
         user_id = None
         user_role = None
         
-        # Decode JWT if provided
-        if credentials is not None:
-            try:
-                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-                user_id = str(payload.get("sub")) if payload else None
-                user_role = str(payload.get("role") or "").lower() if payload else None
-            except Exception as e:
-                print(f"JWT decode error: {e}")
-                user_id = None
-                user_role = None
+        # Use decoded JWT payload if provided
+        if payload is not None:
+            user_id = str(payload.get("sub")) if payload else None
+            user_role = str(payload.get("role") or "").lower() if payload else None
 
         # Return ALL listings - let frontend filter
         # This allows proper filtering for donors to see expired/claimed items
