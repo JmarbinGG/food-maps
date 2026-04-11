@@ -653,7 +653,8 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
                 raise HTTPException(status_code=401, detail="User not found")
             
             is_owner = str(item.donor_id) == user_id
-            is_admin = user.role and user.role.upper() == 'ADMIN'
+            role_value = user.role.value if hasattr(user.role, "value") else str(user.role or "")
+            is_admin = role_value.lower() == UserRole.ADMIN.value
             
             if not (is_owner or is_admin):
                 raise HTTPException(status_code=403, detail="Not authorized to delete this listing")
