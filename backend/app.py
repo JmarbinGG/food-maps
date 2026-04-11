@@ -15,6 +15,7 @@ import json
 import os
 import random
 import string
+from urllib.parse import quote
 from passlib.context import CryptContext
 from backend.email_service import (
     send_reset_email,
@@ -102,6 +103,14 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 # JWT settings
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = "HS256"
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")
+if not PUBLIC_BASE_URL:
+    raise RuntimeError("PUBLIC_BASE_URL environment variable is required")
+
+
+def get_public_base_url() -> str:
+    """Return the user-facing base URL configured in environment."""
+    return PUBLIC_BASE_URL.rstrip("/")
 
 def get_db():
     db = SessionLocal()
@@ -1753,7 +1762,9 @@ async def send_verification_email(
             algorithm=JWT_ALGORITHM
         )
         
-        verification_link = f"http://localhost:8000/verify-email?token={verification_token}"
+        base_url = get_public_base_url()
+        encoded_token = quote(verification_token, safe="")
+        verification_link = f"{base_url}/verify-email?token={encoded_token}"
         send_verification_email_message(user.email, user.name or "there", verification_link)
 
         return {

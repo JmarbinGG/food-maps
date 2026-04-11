@@ -119,6 +119,7 @@ DATABASE_URL=sqlite:///../food_maps.db
 MAPBOX_ACCESS_TOKEN=your_mapbox_public_token
 EMAIL_USERNAME=your_email
 EMAIL_PASSWORD=your_app_password
+PUBLIC_BASE_URL=http://localhost:8000
 ```
 
 ### 3) Run the API
@@ -154,6 +155,7 @@ Optional / feature-specific
 - Twilio-related variables for SMS features (if enabled)
 - EMAIL_USERNAME: optional sender/login email for SMTP account (defaults to `noreply.foodmaps@gmail.com`)
 - EMAIL_PASSWORD: SMTP app password used for password reset and verification emails
+- PUBLIC_BASE_URL: public app/api URL used to build email verification links (for production use your deployed domain)
 
 ## API Highlights
 
