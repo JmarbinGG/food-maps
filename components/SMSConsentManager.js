@@ -11,12 +11,36 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
     consent_given: false,
     consent_date: null,
     notification_types: [],
-    phone: '',
+    phone: user?.phone || '',
     phone_verified: false
   });
 
   const [selectedTypes, setSelectedTypes] = React.useState([]);
   const [showSuccess, setShowSuccess] = React.useState(false);
+
+  const getAuthToken = () => localStorage.getItem('auth_token') || localStorage.getItem('token');
+
+  const refreshUserProfile = async () => {
+    try {
+      const token = getAuthToken();
+      if (!token) return;
+      const response = await fetch('/api/user/me', {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (!response.ok) return;
+      const me = await response.json();
+      const existing = JSON.parse(localStorage.getItem('current_user') || 'null') || {};
+      const merged = { ...existing, ...me };
+      localStorage.setItem('current_user', JSON.stringify(merged));
+      if (typeof onUpdate === 'function') {
+        onUpdate(merged);
+      }
+    } catch (error) {
+      console.error('Error refreshing user profile after SMS update:', error);
+    }
+  };
 
   // Available SMS notification types
   const notificationTypes = [
@@ -82,13 +106,13 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
   React.useEffect(() => {
     const loadConsent = async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = getAuthToken();
         if (!token) {
           setLoading(false);
           return;
         }
 
-        const response = await fetch(`${window.API_BASE_URL || ''}/api/sms-consent`, {
+        const response = await fetch('/api/sms-consent', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -109,6 +133,9 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
     loadConsent();
   }, []);
 
+  const currentPhone = consent.phone || user?.phone || '';
+  const currentPhoneVerified = Boolean(consent.phone_verified || user?.phone_verified);
+
   const handleToggleType = (typeId) => {
     setSelectedTypes(prev => {
       if (prev.includes(typeId)) {
@@ -121,7 +148,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
   const handleSave = async () => {
     // Require phone number
-    if (!user.phone) {
+    if (!currentPhone) {
       alert('Please add a phone number to your profile before enabling SMS notifications.');
       return;
     }
@@ -131,7 +158,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
     if (isOptingIn && !consent.consent_given) {
       // Show confirmation dialog for first-time opt-in
-      const confirmMessage = `By clicking OK, you agree to receive text messages from Food Maps at ${user.phone}.\n\n` +
+      const confirmMessage = `By clicking OK, you agree to receive text messages from Food Maps at ${currentPhone}.\n\n` +
         `Message frequency varies. Message and data rates may apply. Reply STOP to opt out anytime.\n\n` +
         `You've selected ${selectedTypes.length} notification type(s).`;
 
@@ -142,8 +169,8 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${window.API_BASE_URL || ''}/api/sms-consent`, {
+      const token = getAuthToken();
+      const response = await fetch('/api/sms-consent', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -164,12 +191,10 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           notification_types: data.notification_types
         });
 
+        await refreshUserProfile();
+
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
-
-        if (onUpdate) {
-          onUpdate();
-        }
       } else {
         const error = await response.json();
         alert(`Error: ${error.detail || 'Failed to update SMS preferences'}`);
@@ -192,8 +217,8 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
     setSaving(true);
     try {
-      const token = localStorage.getItem('token');
-      const response = await fetch(`${window.API_BASE_URL || ''}/api/sms-consent`, {
+      const token = getAuthToken();
+      const response = await fetch('/api/sms-consent', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -212,6 +237,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           notification_types: []
         });
         setSelectedTypes([]);
+        await refreshUserProfile();
         setShowSuccess(true);
         setTimeout(() => setShowSuccess(false), 3000);
       }
@@ -276,21 +302,21 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           )}
 
           {/* Phone Number Status */}
-          <div className={`mb-6 rounded-lg p-4 border-2 ${user.phone
+          <div className={`mb-6 rounded-lg p-4 border-2 ${currentPhone
             ? 'bg-green-50 border-green-200'
             : 'bg-yellow-50 border-yellow-300'
             }`}>
             <div className="flex items-start gap-3">
-              <span className="text-2xl">{user.phone ? '✓' : '⚠️'}</span>
+              <span className="text-2xl">{currentPhone ? '✓' : '⚠️'}</span>
               <div className="flex-1">
                 <div className="font-semibold mb-1">
-                  {user.phone ? 'Phone Number on File' : 'Phone Number Required'}
+                  {currentPhone ? 'Phone Number on File' : 'Phone Number Required'}
                 </div>
                 <div className="text-sm">
-                  {user.phone ? (
+                  {currentPhone ? (
                     <span>
-                      {user.phone}
-                      {user.phone_verified && <span className="ml-2 text-green-600 font-semibold">✓ Verified</span>}
+                      {currentPhone}
+                      {currentPhoneVerified && <span className="ml-2 text-green-600 font-semibold">✓ Verified</span>}
                     </span>
                   ) : (
                     <div className="space-y-2">
@@ -343,14 +369,14 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
                     ? 'border-blue-500 bg-blue-50'
                     : 'border-gray-200 bg-white hover:border-blue-300'
                     }`}
-                  onClick={() => user.phone && handleToggleType(type.id)}
+                  onClick={() => currentPhone && handleToggleType(type.id)}
                 >
                   <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
                       checked={selectedTypes.includes(type.id)}
-                      onChange={() => user.phone && handleToggleType(type.id)}
-                      disabled={!user.phone}
+                      onChange={() => currentPhone && handleToggleType(type.id)}
+                      disabled={!currentPhone}
                       className="mt-1 w-5 h-5"
                     />
                     <div className="flex-1">
@@ -375,7 +401,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           <div className="mb-6 bg-purple-50 border-l-4 border-purple-500 p-4 text-sm">
             <div className="font-semibold mb-2">📋 Important Information:</div>
             <ul className="space-y-1 text-gray-700">
-              <li>• By enabling SMS, you agree to receive text messages at {user.phone || 'your phone number'}</li>
+              <li>• By enabling SMS, you agree to receive text messages at {currentPhone || 'your phone number'}</li>
               <li>• Message frequency varies based on selected notification types</li>
               <li>• Message and data rates may apply</li>
               <li>• You can opt out anytime by replying STOP to any message</li>
@@ -390,8 +416,8 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           <div className="flex gap-3">
             <button
               onClick={handleSave}
-              disabled={!user.phone || saving}
-              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${!user.phone
+              disabled={!currentPhone || saving}
+              className={`flex-1 px-6 py-3 rounded-lg font-semibold transition-all ${!currentPhone
                 ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                 : saving
                   ? 'bg-blue-400 text-white cursor-wait'
