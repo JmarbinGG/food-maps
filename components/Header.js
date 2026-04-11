@@ -138,15 +138,16 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       📅 Donation Scheduler
                     </button>
                   )} */}
-                  <button
-                    onClick={() => {
-                      window.openDistributionMap?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  {role === 'recipient' && (
+                    <button
+                      onClick={() => {
+                        window.openDistributionMap?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
                     🏪 Distribution Centers
-                  </button>
+                  </button>)}
                   <button
                     onClick={() => {
                       window.openTutorial?.();

@@ -3,6 +3,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
   const map = React.useRef(null);
   const markers = React.useRef([]);
   const [centers, setCenters] = React.useState([]);
+  const [mapReady, setMapReady] = React.useState(false);
   const [selectedCenter, setSelectedCenter] = React.useState(null);
   const [centerInventory, setCenterInventory] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -17,8 +18,14 @@ function DistributionCenterMap({ user, onCenterSelect }) {
     try {
       setLoading(true);
       const response = await fetch('/api/centers');
+      if (!response.ok) {
+        console.error('Failed to load distribution centers:', response.status);
+        return;
+      }
       const data = await response.json();
-      setCenters(data);
+      if (Array.isArray(data)) {
+        setCenters(data);
+      }
     } catch (error) {
       console.error('Error loading distribution centers:', error);
     } finally {
@@ -47,7 +54,12 @@ function DistributionCenterMap({ user, onCenterSelect }) {
       });
 
       map.current.on('load', () => {
-        updateMarkers();
+        try {
+          map.current.resize();
+        } catch (_) {
+          // Ignore transient resize errors during initial layout.
+        }
+        setMapReady(true);
       });
 
     } catch (error) {
@@ -56,18 +68,41 @@ function DistributionCenterMap({ user, onCenterSelect }) {
   };
 
   React.useEffect(() => {
-    if (map.current && centers.length > 0) {
+    if (map.current && mapReady && centers.length > 0) {
       updateMarkers();
     }
-  }, [centers]);
+  }, [centers, mapReady]);
+
+  React.useEffect(() => {
+    return () => {
+      markers.current.forEach(marker => marker.remove());
+      markers.current = [];
+      if (map.current) {
+        map.current.remove();
+        map.current = null;
+      }
+      setMapReady(false);
+    };
+  }, []);
 
   const updateMarkers = () => {
+    if (!map.current || typeof mapboxgl === 'undefined') return;
+
     // Clear existing markers
     markers.current.forEach(marker => marker.remove());
     markers.current = [];
+    const bounds = new mapboxgl.LngLatBounds();
+    let validMarkerCount = 0;
 
     // Add new markers for each center
     centers.forEach(center => {
+      try {
+        const lat = parseFloat(center?.coords_lat);
+        const lng = parseFloat(center?.coords_lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+
       // Create custom marker element
       const el = document.createElement('div');
       el.className = 'distribution-center-marker';
@@ -95,7 +130,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
       el.addEventListener('click', () => handleCenterClick(center));
 
       const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
-        .setLngLat([center.coords_lng, center.coords_lat])
+        .setLngLat([lng, lat])
         .addTo(map.current);
 
       // Add popup
@@ -124,7 +159,20 @@ function DistributionCenterMap({ user, onCenterSelect }) {
 
       marker.setPopup(popup);
       markers.current.push(marker);
+      bounds.extend([lng, lat]);
+      validMarkerCount += 1;
+      } catch (error) {
+        console.error('Failed to render center marker:', center, error);
+      }
     });
+
+    if (validMarkerCount > 0) {
+      try {
+        map.current.fitBounds(bounds, { padding: 60, maxZoom: 13 });
+      } catch (error) {
+        console.warn('Could not fit map bounds to center markers:', error);
+      }
+    }
   };
 
   const handleCenterClick = async (center) => {
