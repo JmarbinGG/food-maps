@@ -44,9 +44,9 @@ function DispatchApp() {
   React.useEffect(() => {
     const initializeDispatch = async () => {
       try {
-        // Set Mapbox access token
+        // Use the shared Mapbox token configured in utils/mapbox.js.
         if (!window.MAPBOX_ACCESS_TOKEN) {
-          window.MAPBOX_ACCESS_TOKEN = 'pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw';
+          console.warn('MAPBOX_ACCESS_TOKEN is missing. Ensure utils/mapbox.js is loaded before dispatch-app.js.');
         }
         
         // Initialize dispatch data
