@@ -91,9 +91,9 @@ function FavoritesManager({ user, onClose }) {
 
   const getLocationIcon = (type) => {
     switch (type) {
-      case 'donor': return '🏪';
-      case 'distribution_center': return '🏢';
-      default: return '📍';
+      case 'donor': return '';
+      case 'distribution_center': return '';
+      default: return '';
     }
   };
 
@@ -132,7 +132,7 @@ function FavoritesManager({ user, onClose }) {
             <div className="flex-1 min-w-[200px]">
               <input
                 type="text"
-                placeholder="🔍 Search favorites..."
+                placeholder=" Search favorites..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -204,7 +204,7 @@ function FavoritesManager({ user, onClose }) {
 
                   {fav.notes && (
                     <p className="text-gray-700 text-sm mb-3 italic bg-yellow-50 p-2 rounded border-l-4 border-yellow-300">
-                      💭 {fav.notes}
+                       {fav.notes}
                     </p>
                   )}
 
@@ -245,13 +245,13 @@ function FavoritesManager({ user, onClose }) {
                       onClick={() => recordVisit(fav.id)}
                       className="flex-1 bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 transition text-sm font-medium"
                     >
-                      ✓ Mark Visit
+                       Mark Visit
                     </button>
                     <button
                       onClick={() => openEditModal(fav)}
                       className="flex-1 bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 transition text-sm font-medium"
                     >
-                      ✏️ Edit
+                       Edit
                     </button>
                     <button
                       onClick={() => {
@@ -262,7 +262,7 @@ function FavoritesManager({ user, onClose }) {
                       className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition text-sm font-medium"
                       title="Get directions"
                     >
-                      🗺️
+                      
                     </button>
                   </div>
                 </div>

@@ -109,11 +109,11 @@ function FeedbackViewer({ onClose }) {
                 className="px-3 py-2 border border-gray-300 rounded-lg"
               >
                 <option value="all">All Types</option>
-                <option value="bug">🐛 Bug Reports</option>
-                <option value="error_report">⚠️ Error Reports</option>
-                <option value="feature_request">💡 Feature Requests</option>
-                <option value="improvement">✨ Improvements</option>
-                <option value="general">💬 General</option>
+                <option value="bug"> Bug Reports</option>
+                <option value="error_report"> Error Reports</option>
+                <option value="feature_request"> Feature Requests</option>
+                <option value="improvement"> Improvements</option>
+                <option value="general"> General</option>
               </select>
             </div>
             <div>
@@ -164,10 +164,10 @@ function FeedbackViewer({ onClose }) {
                           {feedback.status.replace('_', ' ')}
                         </span>
                         {feedback.has_screenshot && (
-                          <span className="text-xs text-gray-500">📷</span>
+                          <span className="text-xs text-gray-500"></span>
                         )}
                         {feedback.has_error_stack && (
-                          <span className="text-xs text-red-500">⚠️</span>
+                          <span className="text-xs text-red-500"></span>
                         )}
                       </div>
                       <h3 className="font-semibold text-gray-800">{feedback.subject}</h3>
@@ -178,10 +178,10 @@ function FeedbackViewer({ onClose }) {
                   </div>
                   <p className="text-sm text-gray-600 line-clamp-2">{feedback.message}</p>
                   {feedback.email && (
-                    <p className="text-xs text-gray-500 mt-2">📧 {feedback.email}</p>
+                    <p className="text-xs text-gray-500 mt-2"> {feedback.email}</p>
                   )}
                   {feedback.url && (
-                    <p className="text-xs text-gray-500 mt-1">🔗 {feedback.url}</p>
+                    <p className="text-xs text-gray-500 mt-1"> {feedback.url}</p>
                   )}
                 </div>
               ))}

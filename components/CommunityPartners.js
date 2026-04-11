@@ -53,12 +53,12 @@ function CommunityPartners({ user, onClose }) {
   };
 
   const partnerTypes = [
-    { value: 'restaurant', label: 'Restaurant/Cafe', icon: '🍽️' },
-    { value: 'grocery', label: 'Grocery Store', icon: '🛒' },
-    { value: 'farm', label: 'Farm/Garden', icon: '🌱' },
-    { value: 'food_bank', label: 'Food Bank', icon: '🏛️' },
-    { value: 'school', label: 'School/Institution', icon: '🏫' },
-    { value: 'corporate', label: 'Corporate Partner', icon: '🏢' }
+    { value: 'restaurant', label: 'Restaurant/Cafe', icon: '' },
+    { value: 'grocery', label: 'Grocery Store', icon: '' },
+    { value: 'farm', label: 'Farm/Garden', icon: '' },
+    { value: 'food_bank', label: 'Food Bank', icon: '' },
+    { value: 'school', label: 'School/Institution', icon: '' },
+    { value: 'corporate', label: 'Corporate Partner', icon: '' }
   ];
 
   const handleAddPartner = async (e) => {
@@ -101,7 +101,7 @@ function CommunityPartners({ user, onClose }) {
 
   const getTypeIcon = (type) => {
     const typeObj = partnerTypes.find(t => t.value === type);
-    return typeObj ? typeObj.icon : '🏢';
+    return typeObj ? typeObj.icon : '';
   };
 
   try {

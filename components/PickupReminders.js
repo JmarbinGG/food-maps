@@ -227,7 +227,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
-                <span className="text-2xl">🔔</span>
+                <div className="icon-bell text-2xl"></div>
               </div>
               <div>
                 <h2 className="text-2xl font-bold">Pickup Reminders</h2>
@@ -240,7 +240,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
                 className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition"
                 title="Settings"
               >
-                <span className="text-xl">⚙️</span>
+                <div className="icon-sliders text-xl"></div>
               </button>
               <button
                 onClick={onClose}
@@ -256,7 +256,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
         {settingsOpen && (
           <div className="bg-blue-50 border-b border-blue-200 p-4">
             <h3 className="font-semibold text-gray-900 mb-3 flex items-center">
-              <span className="mr-2">⚙️</span>
+              <div className="icon-sliders mr-2"></div>
               Reminder Settings
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -329,7 +329,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
         {listingsNeedingReminders.length > 0 && (
           <div className="bg-yellow-50 border-b border-yellow-200 p-4">
             <h3 className="font-semibold text-gray-900 mb-2 flex items-center">
-              <span className="mr-2">⚠️</span>
+              <div className="icon-alert-triangle mr-2"></div>
               Claimed Items Without Reminders ({listingsNeedingReminders.length})
             </h3>
             <div className="space-y-2">
@@ -362,7 +362,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
-            <span className="mr-2">📅</span>
+            <div className="icon-calendar mr-2 inline-block align-middle"></div>
             Upcoming ({filterReminders('upcoming').length})
           </button>
           <button
@@ -372,7 +372,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
-            <span className="mr-2">📨</span>
+            <div className="icon-send mr-2 inline-block align-middle"></div>
             Sent ({filterReminders('sent').length})
           </button>
           <button
@@ -382,7 +382,7 @@ const PickupReminders = ({ user, listings, onClose }) => {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
               }`}
           >
-            <span className="mr-2">✅</span>
+            <div className="icon-check-circle mr-2 inline-block align-middle"></div>
             History ({filterReminders('completed').length})
           </button>
         </div>
@@ -397,9 +397,9 @@ const PickupReminders = ({ user, listings, onClose }) => {
           ) : filteredReminders.length === 0 ? (
             <div className="text-center py-12">
               <div className="text-6xl mb-4">
-                {activeTab === 'upcoming' && '📭'}
-                {activeTab === 'sent' && '📪'}
-                {activeTab === 'completed' && '✅'}
+                {activeTab === 'upcoming' && <div className="icon-calendar text-5xl text-gray-300"></div>}
+                {activeTab === 'sent' && <div className="icon-send text-5xl text-gray-300"></div>}
+                {activeTab === 'completed' && <div className="icon-check-circle text-5xl text-gray-300"></div>}
               </div>
               <p className="text-gray-600 text-lg font-medium">
                 {activeTab === 'upcoming' && 'No upcoming reminders'}
@@ -429,11 +429,11 @@ const PickupReminders = ({ user, listings, onClose }) => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
                           <span className="text-2xl">
-                            {urgency === 'overdue' && '🚨'}
-                            {urgency === 'critical' && '⚠️'}
-                            {urgency === 'high' && '⏰'}
-                            {urgency === 'medium' && '🔔'}
-                            {urgency === 'low' && '📅'}
+                            {urgency === 'overdue' && <div className="icon-alert-circle text-red-600"></div>}
+                            {urgency === 'critical' && <div className="icon-alert-triangle text-orange-600"></div>}
+                            {urgency === 'high' && <div className="icon-clock text-yellow-600"></div>}
+                            {urgency === 'medium' && <div className="icon-bell text-blue-600"></div>}
+                            {urgency === 'low' && <div className="icon-calendar text-gray-500"></div>}
                           </span>
                           <h3 className="font-semibold text-gray-900">{reminder.listing_title}</h3>
                           {reminder.status === 'snoozed' && (
@@ -479,21 +479,21 @@ const PickupReminders = ({ user, listings, onClose }) => {
                             className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition text-sm font-medium"
                             title="Snooze for 30 minutes"
                           >
-                            😴 30m
+                             30m
                           </button>
                           <button
                             onClick={() => snoozeReminder(reminder.id, 60)}
                             className="px-3 py-1 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition text-sm font-medium"
                             title="Snooze for 1 hour"
                           >
-                            😴 1h
+                             1h
                           </button>
                           <button
                             onClick={() => cancelReminder(reminder.id)}
                             className="px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200 transition text-sm font-medium"
                             title="Cancel reminder"
                           >
-                            ❌
+                            
                           </button>
                         </div>
                       )}

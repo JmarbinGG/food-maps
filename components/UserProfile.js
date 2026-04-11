@@ -258,13 +258,13 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                               accountData.role === 'dispatcher' ? 'bg-orange-100 text-orange-800' :
                                 'bg-gray-100 text-gray-800'
                       }`}>
-                      {accountData.role === 'admin' && '👑 Admin'}
-                      {accountData.role === 'donor' && '🎁 Donor'}
-                      {accountData.role === 'recipient' && '🙏 Recipient'}
-                      {accountData.role === 'volunteer' && '🚗 Volunteer'}
-                      {accountData.role === 'driver' && '🚙 Driver'}
-                      {accountData.role === 'dispatcher' && '📋 Dispatcher'}
-                      {!accountData.role && '👤 User'}
+                      {accountData.role === 'admin' && 'Admin'}
+                      {accountData.role === 'donor' && 'Donor'}
+                      {accountData.role === 'recipient' && 'Recipient'}
+                      {accountData.role === 'volunteer' && 'Volunteer'}
+                      {accountData.role === 'driver' && 'Driver'}
+                      {accountData.role === 'dispatcher' && 'Dispatcher'}
+                      {!accountData.role && 'User'}
                     </span>
                     <span className="text-xs text-gray-500 italic">
                       {accountData.role === 'admin' && 'Full platform access'}
@@ -285,10 +285,10 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                         onChange={(e) => setAccountData({ ...accountData, role: e.target.value })}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                       >
-                        <option value="donor">🎁 Donor - Share food donations</option>
-                        <option value="recipient">🙏 Recipient - Request and claim food</option>
-                        {/* <option value="driver">🚙 Driver - Deliver food donations</option>
-                        <option value="volunteer">🚗 Volunteer - Help with deliveries</option> */}
+                        <option value="donor">Donor - Share food donations</option>
+                        <option value="recipient">Recipient - Request and claim food</option>
+                        {/* <option value="driver"> Driver - Deliver food donations</option>
+                        <option value="volunteer"> Volunteer - Help with deliveries</option> */}
                       </select>
                       <p className="text-xs text-gray-500 mt-1">You can switch between these roles anytime</p>
                     </div>
@@ -322,7 +322,7 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Phone Number
                   {!accountData.phone && (
-                    <span className="ml-2 text-xs text-blue-600 font-normal">📱 Required for SMS notifications</span>
+                    <span className="ml-2 text-xs text-blue-600 font-normal">Required for SMS notifications</span>
                   )}
                 </label>
                 <input
@@ -339,7 +339,7 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 )}
                 {accountData.phone && (
                   <p className="mt-1 text-xs text-green-600 flex items-center gap-1">
-                    ✓ Phone number saved - SMS notifications available
+                    Phone number saved - SMS notifications available
                   </p>
                 )}
               </div>
@@ -368,7 +368,7 @@ function UserProfile({ user, onClose, onUserUpdate }) {
             <div className="space-y-4">
               <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
                 <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                  🍽️ Dietary Preferences
+                  Dietary Preferences
                 </h3>
                 <p className="text-sm text-gray-600 mb-4">
                   Set your dietary needs to get personalized food recommendations that match your requirements.
@@ -380,27 +380,27 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                   }}
                   className="w-full px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition font-medium"
                 >
-                  ⚙️ Manage Dietary Preferences
+                  Manage Dietary Preferences
                 </button>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <h4 className="font-semibold text-blue-900 mb-2">✨ Benefits:</h4>
+                <h4 className="font-semibold text-blue-900 mb-2">Benefits:</h4>
                 <ul className="text-sm text-blue-800 space-y-2">
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Get personalized food recommendations</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Filter out allergens automatically</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>See portion sizes for your household</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Find food matching your dietary restrictions</span>
                   </li>
                 </ul>
@@ -473,7 +473,7 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                     className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700"
                     title="Copy to clipboard"
                   >
-                    {copied ? '✓' : 'Copy'}
+                    {copied ? '' : 'Copy'}
                   </button>
                 </div>
                 {copied && (

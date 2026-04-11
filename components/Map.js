@@ -374,7 +374,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                         onmouseover="this.style.backgroundColor='#d97706'"
                         onmouseout="this.style.backgroundColor='#f59e0b'"
                       >
-                        <span style="font-size: 18px;">⭐</span> Save
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg> Save
                       </button>
                     ` : '';
 
@@ -429,7 +429,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                         onmouseover="this.style.backgroundColor='#1d4ed8'"
                         onmouseout="this.style.backgroundColor='#2563eb'"
                       >
-                        <span style="font-size: 18px;">ℹ️</span> View Details
+                        Details
                       </button>
                       ${saveButtonHtml}
                       <button 
@@ -453,10 +453,10 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                         onmouseover="this.style.backgroundColor='#15803d'"
                         onmouseout="this.style.backgroundColor='#16a34a'"
                       >
-                        <span style="font-size: 18px;">🧭</span> Get Directions
+                        Directions
                       </button>
                     </div>
-                    ${isClaimedByMe && user?.role === 'recipient' ? '<div style="margin-top: 12px; padding: 8px 12px; background-color: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 13px; font-weight: 600; text-align: center;">✓ Claimed by you</div>' : ''}
+                    ${isClaimedByMe && user?.role === 'recipient' ? '<div style="margin-top: 12px; padding: 8px 12px; background-color: #dbeafe; color: #1e40af; border-radius: 6px; font-size: 13px; font-weight: 600; text-align: center;">Claimed by you</div>' : ''}
                   </div>
                 </div>
               `)
@@ -521,7 +521,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
               <div style="padding: 8px;">
                 <h3 style="font-weight: bold; margin-bottom: 4px; color: ${color};">🏪 ${center.name}</h3>
                 <p style="font-size: 12px; color: #666; margin-bottom: 4px;">${center.address}</p>
-                ${center.phone ? `<p style="font-size: 11px; color: #666;">📞 ${center.phone}</p>` : ''}
+                ${center.phone ? `<p style="font-size: 11px; color: #666;">Phone: ${center.phone}</p>` : ''}
                 <div style="display: flex; gap: 4px; margin-top: 6px;">
                   <button 
                     onclick="window.viewCenterDetails(${center.id})"
@@ -551,7 +551,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                     "
                     title="Save to favorites"
                   >
-                    ⭐
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                   </button>
                 </div>
               </div>
@@ -703,7 +703,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             <div className="flex justify-between items-center p-6 border-b bg-green-50">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-gray-900">🏪 {selectedCenter.name}</h2>
+                  <h2 className="text-2xl font-bold text-gray-900">{selectedCenter.name}</h2>
                   {user && (
                     <button
                       onClick={async () => {
@@ -711,19 +711,21 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                           await window.toggleMapFavorite('center', selectedCenter.id);
                         }
                       }}
-                      className="text-2xl hover:scale-110 transition-transform"
+                      className="text-2xl text-yellow-700 hover:scale-110 transition-transform"
                       title="Save to favorites"
                     >
-                      ⭐
+                      <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                      </svg>
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 mt-1">📍 {selectedCenter.address}</p>
+                <p className="text-sm text-gray-600 mt-1">{selectedCenter.address}</p>
                 {selectedCenter.phone && (
-                  <p className="text-sm text-gray-600">📞 {selectedCenter.phone}</p>
+                  <p className="text-sm text-gray-600">Phone: {selectedCenter.phone}</p>
                 )}
                 {selectedCenter.hours && (
-                  <p className="text-sm text-gray-600">🕒 {selectedCenter.hours}</p>
+                  <p className="text-sm text-gray-600">Hours: {selectedCenter.hours}</p>
                 )}
               </div>
               <button
@@ -739,7 +741,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
               {centerInventory.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  <div className="text-4xl mb-2">📦</div>
+                  <div className="text-xs mb-2 uppercase tracking-[0.2em] text-gray-400">Inventory</div>
                   <p>No items currently available</p>
                 </div>
               ) : (

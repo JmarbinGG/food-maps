@@ -159,7 +159,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
     if (riskLevel === 'danger') {
       if (storageMethod === 'counter' && category === 'prepared') {
         return {
-          icon: '🚨',
+          icon: '',
           title: 'UNSAFE TO EAT',
           message: `${title} has been at room temperature too long`,
           action: 'Discard immediately',
@@ -171,7 +171,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
 
       if (listing.expiration_date && new Date(listing.expiration_date) < new Date()) {
         return {
-          icon: '🚨',
+          icon: '',
           title: 'EXPIRED',
           message: `${title} expired ${Math.abs(Math.round((new Date() - new Date(listing.expiration_date)) / (1000 * 60 * 60 * 24)))} days ago`,
           action: 'This item may no longer be safe - discard',
@@ -182,7 +182,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
       }
 
       return {
-        icon: '⚠️',
+        icon: '',
         title: 'SPOILAGE RISK HIGH',
         message: `${title} has been in ${storageMethod} for ${Math.round(hoursSinceStorage)} hours`,
         action: 'This item may no longer be safe',
@@ -198,7 +198,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
 
       if (canFreeze && storageMethod === 'refrigerator') {
         return {
-          icon: '❄️',
+          icon: '',
           title: 'FREEZE NOW',
           message: `${title} should be frozen if not using today`,
           action: 'Freeze now to preserve',
@@ -209,7 +209,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
       }
 
       return {
-        icon: '🍽️',
+        icon: '',
         title: 'USE TONIGHT',
         message: `${title} should be consumed within 12-24 hours`,
         action: 'Use tonight or freeze',
@@ -223,7 +223,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
     if (riskLevel === 'caution') {
       if (storageMethod === 'refrigerator' && category === 'bakery') {
         return {
-          icon: '🥖',
+          icon: '',
           title: 'BREAD IN FRIDGE',
           message: `${title} goes stale faster in refrigerator`,
           action: 'Move to counter or freeze',
@@ -235,7 +235,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
 
       const daysLeft = Math.ceil(risk.profile.warning - hoursSinceStorage) / 24;
       return {
-        icon: '📅',
+        icon: '',
         title: 'PLAN TO USE SOON',
         message: `${title} is best within ${Math.round(daysLeft)} days`,
         action: `Plan to use within ${Math.round(daysLeft)} days`,
@@ -247,7 +247,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
 
     // Safe - just a reminder
     return {
-      icon: '✓',
+      icon: '',
       title: 'STILL FRESH',
       message: `${title} is properly stored`,
       action: 'No action needed',
@@ -342,7 +342,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-8 max-w-md">
           <div className="text-center">
-            <div className="text-6xl mb-4 animate-pulse">🤖</div>
+            <div className="text-6xl mb-4 animate-pulse"></div>
             <p className="text-gray-600">Analyzing spoilage risk...</p>
           </div>
         </div>
@@ -357,7 +357,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
         <div className="bg-gradient-to-r from-orange-600 to-red-600 text-white p-6 rounded-t-lg">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold mb-2">🤖 Spoilage Risk Alerts</h2>
+              <h2 className="text-2xl font-bold mb-2"> Spoilage Risk Alerts</h2>
               <p className="text-sm opacity-90">
                 AI-powered monitoring of your claimed food items
               </p>
@@ -374,7 +374,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
         <div className="p-6">
           {alerts.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-6xl mb-4">✅</div>
+              <div className="text-6xl mb-4"></div>
               <h3 className="text-xl font-bold mb-2">All Clear!</h3>
               <p className="text-gray-600">
                 No spoilage risks detected for your claimed items
@@ -482,9 +482,9 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
                                     : 'bg-white border border-gray-300 hover:bg-gray-50'
                                   }`}
                               >
-                                {method === 'refrigerator' && '🧊'}
-                                {method === 'freezer' && '❄️'}
-                                {method === 'counter' && '🏠'}
+                                {method === 'refrigerator' && ''}
+                                {method === 'freezer' && ''}
+                                {method === 'counter' && ''}
                                 {' '}
                                 {method}
                               </button>
@@ -502,7 +502,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
                               }}
                               className="flex-1 bg-blue-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-blue-700"
                             >
-                              ❄️ Moved to Freezer
+                               Moved to Freezer
                             </button>
                           )}
                           {(alert.nudge.actionType === 'use' || alert.nudge.actionType === 'discard') && (
@@ -511,13 +511,13 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
                                 onClick={() => markAsHandled(alert.listingId, 'used')}
                                 className="flex-1 bg-green-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-green-700"
                               >
-                                ✓ Used It
+                                 Used It
                               </button>
                               <button
                                 onClick={() => markAsHandled(alert.listingId, 'discarded')}
                                 className="flex-1 bg-gray-600 text-white px-3 py-2 rounded text-sm font-semibold hover:bg-gray-700"
                               >
-                                🗑️ Discarded
+                                 Discarded
                               </button>
                             </>
                           )}
@@ -540,7 +540,7 @@ const SpoilageRiskAlerts = ({ user, claimedListings, onClose }) => {
 
           {/* Info Box */}
           <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h4 className="font-bold mb-2 text-blue-900">🤖 How It Works</h4>
+            <h4 className="font-bold mb-2 text-blue-900"> How It Works</h4>
             <ul className="text-sm text-blue-800 space-y-1">
               <li>• Monitors time since pickup and storage method</li>
               <li>• Analyzes food type and perishability level</li>

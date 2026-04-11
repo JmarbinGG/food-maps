@@ -92,14 +92,14 @@ function DonorImpactDashboard({ user, onClose }) {
   ];
 
   const badges = [
-    { id: 'first_donation', name: 'First Share', icon: '🎉', earned: true },
+    { id: 'first_donation', name: 'First Share', icon: '', earned: true },
     { id: 'ten_donations', name: '10 Donations', icon: '⭐', earned: true },
-    { id: 'hundred_meals', name: '100 Meals', icon: '🍽️', earned: true },
-    { id: 'streak_7', name: '7 Day Streak', icon: '🔥', earned: true },
-    { id: 'eco_warrior', name: 'Eco Warrior', icon: '🌍', earned: true },
-    { id: 'fifty_donations', name: '50 Donations', icon: '💫', earned: false },
-    { id: 'hundred_donations', name: '100 Donations', icon: '🏆', earned: false },
-    { id: 'community_hero', name: 'Community Hero', icon: '👑', earned: false }
+    { id: 'hundred_meals', name: '100 Meals', icon: '', earned: true },
+    { id: 'streak_7', name: '7 Day Streak', icon: '', earned: true },
+    { id: 'eco_warrior', name: 'Eco Warrior', icon: '', earned: true },
+    { id: 'fifty_donations', name: '50 Donations', icon: '', earned: false },
+    { id: 'hundred_donations', name: '100 Donations', icon: '', earned: false },
+    { id: 'community_hero', name: 'Community Hero', icon: '', earned: false }
   ];
 
   if (loading) {
@@ -162,7 +162,7 @@ function DonorImpactDashboard({ user, onClose }) {
             </div>
             {impactStats.streak_days > 0 && (
               <div className="mt-4 flex items-center space-x-2 text-orange-600">
-                <span className="text-2xl">🔥</span>
+                <span className="text-2xl"></span>
                 <span className="font-semibold">{impactStats.streak_days} Day Streak!</span>
               </div>
             )}
@@ -173,7 +173,7 @@ function DonorImpactDashboard({ user, onClose }) {
             <div className="bg-white border-2 border-green-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">📦</span>
+                  <span className="text-2xl"></span>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-green-600">{impactStats.total_donations}</div>
@@ -185,7 +185,7 @@ function DonorImpactDashboard({ user, onClose }) {
             <div className="bg-white border-2 border-blue-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">⚖️</span>
+                  <span className="text-2xl"></span>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-blue-600">{impactStats.total_pounds}</div>
@@ -197,7 +197,7 @@ function DonorImpactDashboard({ user, onClose }) {
             <div className="bg-white border-2 border-orange-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">🍽️</span>
+                  <span className="text-2xl"></span>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-orange-600">{impactStats.meals_provided}</div>
@@ -209,7 +209,7 @@ function DonorImpactDashboard({ user, onClose }) {
             <div className="bg-white border-2 border-purple-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-2">
                 <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-                  <span className="text-2xl">👥</span>
+                  <span className="text-2xl"></span>
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-purple-600">{impactStats.people_helped}</div>
@@ -222,7 +222,7 @@ function DonorImpactDashboard({ user, onClose }) {
           {/* Environmental Impact */}
           <div className="mb-6 bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-200 rounded-lg p-6">
             <h3 className="text-xl font-bold text-green-800 mb-4 flex items-center">
-              <span className="text-2xl mr-2">🌍</span>
+              <span className="text-2xl mr-2"></span>
               Environmental Impact
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -247,7 +247,7 @@ function DonorImpactDashboard({ user, onClose }) {
           {/* Badges & Achievements */}
           <div className="mb-6 bg-white border-2 border-yellow-200 rounded-lg p-6">
             <h3 className="text-xl font-bold text-gray-800 mb-4 flex items-center">
-              <span className="text-2xl mr-2">🏅</span>
+              <span className="text-2xl mr-2"></span>
               Badges & Achievements
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -305,7 +305,7 @@ function DonorImpactDashboard({ user, onClose }) {
 
           {/* Call to Action */}
           <div className="mt-6 bg-gradient-to-r from-green-600 to-green-700 rounded-lg p-6 text-white text-center">
-            <h3 className="text-2xl font-bold mb-2">Keep Making a Difference! 🌟</h3>
+            <h3 className="text-2xl font-bold mb-2">Keep Making a Difference! </h3>
             <p className="mb-4">Your generosity is changing lives in your community.</p>
             <button
               onClick={() => {

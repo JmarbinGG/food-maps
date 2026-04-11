@@ -101,7 +101,7 @@ function RouteOptimizerComponent({ routes = [], stores = [] }) {
         {/* Optimization Results */}
         {optimizationResults && (
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg p-4 mb-6 border border-green-200">
-            <h4 className="font-bold text-green-900 mb-3">🎯 Optimization Complete!</h4>
+            <h4 className="font-bold text-green-900 mb-3"> Optimization Complete!</h4>
             {optimizationResults.error ? (
               <div className="text-red-600">{optimizationResults.error}</div>
             ) : (

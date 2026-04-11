@@ -106,7 +106,7 @@
         <div className="min-h-screen p-8">
           <div className="max-w-6xl mx-auto">
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-              <h1 className="text-3xl font-bold mb-2">🤖 Smart Storage Coach Test</h1>
+              <h1 className="text-3xl font-bold mb-2">Smart Storage Coach Test</h1>
               <p className="text-gray-600 mb-4">
                 Get AI-powered storage guidance for different types of food
               </p>
@@ -117,37 +117,37 @@
               <div className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Analyzes food category and type</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Provides specific storage location (fridge, freezer, counter)</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Recommends optimal temperature</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Tells you "best within" timeframe</span>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Advises on freezing (can/cannot, how to)</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Provides food-specific tips</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Warns about common mistakes</span>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-green-600 font-bold">✓</span>
+                    <span className="text-green-600 font-bold">Included</span>
                     <span>Calculates days until expiration</span>
                   </div>
                 </div>
@@ -167,12 +167,12 @@
                     className="text-left p-4 border-2 border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all"
                   >
                     <div className="text-3xl mb-2">
-                      {food.category === 'produce' && '🥬'}
-                      {food.category === 'prepared' && '🍱'}
-                      {food.category === 'bakery' && '🥖'}
-                      {food.category === 'fruit' && '🍎'}
-                      {food.category === 'leftovers' && '🍽️'}
-                      {food.category === 'water' && '💧'}
+                      {food.category === 'produce' && 'Produce'}
+                      {food.category === 'prepared' && 'Prepared'}
+                      {food.category === 'bakery' && 'Bakery'}
+                      {food.category === 'fruit' && 'Fruit'}
+                      {food.category === 'leftovers' && 'Meals'}
+                      {food.category === 'water' && 'Water'}
                     </div>
                     <div className="font-bold text-lg mb-1">{food.title}</div>
                     <div className="text-sm text-gray-600 mb-2">{food.description}</div>
@@ -191,7 +191,7 @@
             </div>
 
             <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
-              <h3 className="font-bold mb-2">💡 Pro Tips</h3>
+              <h3 className="font-bold mb-2">Pro Tips</h3>
               <ul className="text-sm space-y-1">
                 <li>• Try different food types to see specific recommendations</li>
                 <li>• Notice how bread advice is different from produce</li>
@@ -205,7 +205,7 @@
               <h2 className="text-xl font-bold mb-4">Knowledge Base Coverage</h2>
               <div className="grid md:grid-cols-3 gap-4 text-sm">
                 <div>
-                  <div className="font-bold mb-2 text-green-600">✓ Produce</div>
+                  <div className="font-bold mb-2 text-green-600">Produce</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Lettuce, spinach, carrots</div>
                     <div>Bell peppers, cucumbers</div>
@@ -213,7 +213,7 @@
                   </div>
                 </div>
                 <div>
-                  <div className="font-bold mb-2 text-blue-600">✓ Prepared Meals</div>
+                  <div className="font-bold mb-2 text-blue-600">Prepared Meals</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Cooked meals, leftovers</div>
                     <div>Meat, poultry, fish</div>
@@ -221,7 +221,7 @@
                   </div>
                 </div>
                 <div>
-                  <div className="font-bold mb-2 text-orange-600">✓ Bakery</div>
+                  <div className="font-bold mb-2 text-orange-600">Bakery</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Bread, bagels, muffins</div>
                     <div>Never refrigerate bread!</div>
@@ -229,7 +229,7 @@
                   </div>
                 </div>
                 <div>
-                  <div className="font-bold mb-2 text-red-600">✓ Fruits</div>
+                  <div className="font-bold mb-2 text-red-600">Fruits</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Bananas, apples, berries</div>
                     <div>Oranges, grapes</div>
@@ -237,7 +237,7 @@
                   </div>
                 </div>
                 <div>
-                  <div className="font-bold mb-2 text-purple-600">✓ Dairy</div>
+                  <div className="font-bold mb-2 text-purple-600">Dairy</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Milk, cheese, yogurt</div>
                     <div>Eggs (not in door!)</div>
@@ -245,7 +245,7 @@
                   </div>
                 </div>
                 <div>
-                  <div className="font-bold mb-2 text-gray-600">✓ Packaged</div>
+                  <div className="font-bold mb-2 text-gray-600">Packaged</div>
                   <div className="text-gray-600 space-y-1">
                     <div>Canned goods</div>
                     <div>Shelf-stable items</div>

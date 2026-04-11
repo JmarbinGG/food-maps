@@ -422,17 +422,17 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
       expired: 'bg-gray-600 text-white'
     };
 
-    const icons = {
-      critical: '🚨',
-      high: '⚠️',
-      medium: '⏰',
-      low: '✓',
-      expired: '❌'
+    const labels = {
+      critical: 'Critical',
+      high: 'High',
+      medium: 'Soon',
+      low: 'Fresh',
+      expired: 'Expired'
     };
 
     return (
       <div className={`px-2 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${badgeStyles[urgencyLevel]}`}>
-        <span>{icons[urgencyLevel]}</span>
+        <span>{labels[urgencyLevel]}</span>
         <span>{timeRemaining}</span>
       </div>
     );
@@ -445,9 +445,9 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
     const verificationStatus = listing.verification_status || 'pending';
 
     const badgeConfig = {
-      pending: { icon: '📸', label: 'Photo Needed', bg: 'bg-yellow-500', action: 'before' },
-      before_verified: { icon: '📦', label: 'Ready for Pickup', bg: 'bg-blue-500', action: 'after' },
-      completed: { icon: '✅', label: 'Verified', bg: 'bg-green-600', action: null },
+      pending: { label: 'Photo Needed', bg: 'bg-yellow-500', action: 'before' },
+      before_verified: { label: 'Ready for Pickup', bg: 'bg-blue-500', action: 'after' },
+      completed: { label: 'Verified', bg: 'bg-green-600', action: null },
       not_required: { icon: '', label: '', bg: '', action: null }
     };
 
@@ -469,7 +469,6 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
           }
         }}
       >
-        <span>{config.icon}</span>
         <span>{config.label}</span>
       </div>
     );
@@ -486,14 +485,12 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
     if (safetyPassed) {
       return (
         <div className="px-2 py-1 rounded-full text-xs font-bold bg-green-600 text-white flex items-center gap-1">
-          <span>🛡️</span>
           <span>Safety Verified {safetyScore}%</span>
         </div>
       );
     } else {
       return (
         <div className="px-2 py-1 rounded-full text-xs font-bold bg-gray-400 text-white flex items-center gap-1">
-          <span>⚠️</span>
           <span>Safety Check Needed</span>
         </div>
       );
@@ -507,7 +504,6 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
     if (listing.is_frozen) {
       return (
         <div className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 flex items-center gap-1">
-          <span>❄️</span>
           <span>Frozen</span>
         </div>
       );
@@ -516,7 +512,6 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
     if (listing.is_refrigerated) {
       return (
         <div className="px-2 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 flex items-center gap-1">
-          <span>🌡️</span>
           <span>Refrigerated</span>
         </div>
       );
@@ -529,10 +524,10 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
     if (!condition || condition === 'unknown') return null;
 
     const badgeConfig = {
-      excellent: { icon: '✨', label: 'Excellent', bg: 'bg-green-100', text: 'text-green-800' },
-      good: { icon: '👍', label: 'Good', bg: 'bg-blue-100', text: 'text-blue-800' },
-      fair: { icon: '⚠️', label: 'Fair', bg: 'bg-yellow-100', text: 'text-yellow-800' },
-      poor: { icon: '❌', label: 'Poor', bg: 'bg-red-100', text: 'text-red-800' }
+      excellent: { label: 'Excellent', bg: 'bg-green-100', text: 'text-green-800' },
+      good: { label: 'Good', bg: 'bg-blue-100', text: 'text-blue-800' },
+      fair: { label: 'Fair', bg: 'bg-yellow-100', text: 'text-yellow-800' },
+      poor: { label: 'Poor', bg: 'bg-red-100', text: 'text-red-800' }
     };
 
     const config = badgeConfig[condition];
@@ -540,7 +535,6 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
 
     return (
       <div className={`px-2 py-1 rounded-full text-xs font-medium flex items-center gap-1 ${config.bg} ${config.text}`}>
-        <span>{config.icon}</span>
         <span>Packaging: {config.label}</span>
       </div>
     );
@@ -556,14 +550,16 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
           className="absolute top-2 right-2 p-2 rounded-full bg-white shadow-md hover:shadow-lg transition-all z-10"
           title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
         >
-          <span className="text-2xl">{isFavorite ? '⭐' : '☆'}</span>
+          <svg className={`w-5 h-5 ${isFavorite ? 'text-yellow-700' : 'text-gray-500'}`} viewBox="0 0 24 24" fill={isFavorite ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
         </button>
       )}
 
       {/* Urgency Banner for Critical Items */}
       {urgencyLevel === 'critical' && listingStatus === 'available' && (
         <div className="mb-2 bg-gradient-to-r from-red-600 to-red-700 text-white px-3 py-2 rounded-lg flex items-center gap-2 animate-pulse">
-          <span className="text-lg">🚨</span>
+          <span className="text-xs font-semibold uppercase tracking-wide bg-white/20 px-2 py-1 rounded">Urgent</span>
           <div className="flex-1">
             <div className="font-bold text-sm">URGENT - Expires in {timeRemaining}!</div>
             <div className="text-xs opacity-90">Claim now before it expires</div>

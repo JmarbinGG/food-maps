@@ -28,7 +28,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
             title="Send Feedback or Report an Issue"
           >
-            <span>💬</span>
             <span className="hidden sm:inline">Feedback</span>
           </button>
           <button
@@ -50,7 +49,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             }
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
           >
-            {user && role === 'donor' ? '📦 Share Food' : user && role === 'admin' ? '⚙️ Admin Panel' : '🔍 Find Food'}
+            {user && role === 'donor' ? 'Share Food' : user && role === 'admin' ? 'Admin Panel' : 'Find Food'}
           </button>
           {user ? (
             <div className="relative dropdown-container">
@@ -83,7 +82,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     data-tutorial="message-support-button"
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
-                    💬 Message Support
+                     Message Support
                   </button> */}
                   {/* <button
                     onClick={() => {
@@ -92,7 +91,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
-                    🐛 Report Issue
+                     Report Issue
                   </button> */}
                   {/* <button
                     onClick={() => {
@@ -135,7 +134,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                     >
-                      📅 Donation Scheduler
+                       Donation Scheduler
                     </button>
                   )} */}
                   {role === 'recipient' && (
@@ -146,7 +145,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
-                    🏪 Distribution Centers
+                    Distribution Centers
                   </button>)}
                   <button
                     onClick={() => {
@@ -155,7 +154,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-t border-gray-200"
                   >
-                    🎓 How to Use
+                    How to Use
                   </button>
                   {/*voice search not implemented correctly, hiding it for now*/}
                   {/* <a
@@ -163,7 +162,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
                     onClick={() => setShowDropdown(false)}
                   >
-                    🎤 Voice Search
+                     Voice Search
                   </a> */}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
                   {/* <button
@@ -173,7 +172,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
                   >
-                    🔔 Smart Notifications
+                     Smart Notifications
                   </button> */}
                   {/* <button
                     onClick={() => {
@@ -182,7 +181,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
                   >
-                    🤖 Storage Coach
+                     Storage Coach
                   </button> */}
                   {/* {role === 'recipient' && (
                     <button
@@ -192,7 +191,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
                     >
-                      ⚠️ Spoilage Alerts
+                       Spoilage Alerts
                     </button>
                   )} */}
                   {/* {role === 'recipient' && (
@@ -203,7 +202,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
                     >
-                      👨‍🍳 Meal Suggestions
+                       Meal Suggestions
                     </button>
                   )} */}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
@@ -214,7 +213,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
-                    🛡️ Safety & Trust
+                     Safety & Trust
                   </button> */}
                   <button
                     onClick={() => {
@@ -223,7 +222,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-indigo-50 font-semibold border-t-2 border-indigo-200"
                   >
-                    📱 SMS Text Notifications
+                    SMS Text Notifications
                   </button>
                   {role === 'recipient' && (
                     <button
@@ -233,7 +232,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
                     >
-                      🔔 Pickup Reminders
+                      Pickup Reminders
                     </button>
                   )}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
@@ -245,7 +244,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
                     >
-                      🥗 Dietary Preferences
+                       Dietary Preferences
                     </button>
                   )} */}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
@@ -257,7 +256,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
                     >
-                      📦 Manage My Store
+                       Manage My Store
                     </button>
                   )}
                   {/* commented out admin panel in sidebar as it is in top right corner */}
@@ -269,7 +268,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       }}
                       className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
                     >
-                      ⚙️ Admin Panel
+                       Admin Panel
                     </button>
                   )} */}
                   <button

@@ -229,19 +229,19 @@ const SmartNotifications = () => {
     const distance = listing.distance?.toFixed(1) || '?';
 
     if (preferences.favoriteLocations.includes(listing.location_id)) {
-      return `🌟 Your saved location restocked!`;
+      return ` Your saved location restocked!`;
     }
 
     const minutesSincePosted = (Date.now() - new Date(listing.created_at).getTime()) / 60000;
     if (minutesSincePosted < 30) {
-      return `✨ Fresh ${listing.category} just arrived ${distance}mi away`;
+      return ` Fresh ${listing.category} just arrived ${distance}mi away`;
     }
 
     if (listing.hours_until_expiry && listing.hours_until_expiry < 6) {
-      return `⚡ Urgent: ${listing.category} expiring soon`;
+      return ` Urgent: ${listing.category} expiring soon`;
     }
 
-    return `🍽️ ${listing.category} available ${distance}mi away`;
+    return ` ${listing.category} available ${distance}mi away`;
   };
 
   const getNotificationBody = (listing) => {
@@ -374,14 +374,14 @@ const SmartNotifications = () => {
     <div className="smart-notifications-panel">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">🔔 Smart Notifications</h2>
+          <h2 className="text-2xl font-bold text-gray-800"> Smart Notifications</h2>
           <p className="text-sm text-gray-600">AI learns what you care about - no spam</p>
         </div>
         <button
           onClick={() => setShowSettings(!showSettings)}
           className="px-4 py-2 bg-gray-100 rounded-lg hover:bg-gray-200"
         >
-          ⚙️ Settings
+           Settings
         </button>
       </div>
 
@@ -418,7 +418,7 @@ const SmartNotifications = () => {
             <div className="flex justify-between items-center">
               <div>
                 <div className="font-semibold text-gray-800">
-                  {preferences.enabled ? '✅ Smart Notifications Active' : '⏸️ Notifications Paused'}
+                  {preferences.enabled ? ' Smart Notifications Active' : '⏸ Notifications Paused'}
                 </div>
                 <div className="text-sm text-gray-600">
                   {preferences.enabled
@@ -497,14 +497,14 @@ const SmartNotifications = () => {
                   }}
                   className="mr-2"
                 />
-                <span className="text-sm">⚡ Urgent Only</span>
+                <span className="text-sm"> Urgent Only</span>
               </label>
             </div>
           </div>
 
           {/* AI Learning Insights */}
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold text-purple-900 mb-3">🧠 AI Learning Your Preferences</h3>
+            <h3 className="font-semibold text-purple-900 mb-3"> AI Learning Your Preferences</h3>
             <div className="grid md:grid-cols-2 gap-4">
               <div>
                 <div className="text-sm text-purple-800 mb-2">Categories You Like:</div>
@@ -582,7 +582,7 @@ const SmartNotifications = () => {
                 onClick={testNotification}
                 className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
               >
-                🧪 Send Test Notification
+                 Send Test Notification
               </button>
             </div>
           )}
@@ -684,7 +684,7 @@ const NotificationToggle = () => {
         }`}
       title={enabled ? 'Notifications enabled' : 'Notifications disabled'}
     >
-      {enabled ? '🔔' : '🔕'} Notifications
+      {enabled ? '' : ''} Notifications
     </button>
   );
 };

@@ -256,7 +256,7 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
   return React.createElement('div', { className: 'meal-builder' },
     // Header
     React.createElement('div', { className: 'bg-gradient-to-r from-green-500 to-blue-500 text-white p-6 rounded-t-lg' },
-      React.createElement('h2', { className: 'text-2xl font-bold mb-2' }, '🍳 AI Meal Builder'),
+      React.createElement('h2', { className: 'text-2xl font-bold mb-2' }, ' AI Meal Builder'),
       React.createElement('p', { className: 'text-sm opacity-90' },
         'Turn your picked-up food into delicious meals!'
       )
@@ -301,9 +301,9 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
               generateSuggestions(selectedItems, e.target.value, culturalPreference);
             }
           },
-            React.createElement('option', { value: 'simple' }, '🍽️ Simple & Easy'),
-            React.createElement('option', { value: 'kidFriendly' }, '👶 Kid-Friendly'),
-            React.createElement('option', { value: 'noOven' }, '⚡ No Oven Required')
+            React.createElement('option', { value: 'simple' }, ' Simple & Easy'),
+            React.createElement('option', { value: 'kidFriendly' }, ' Kid-Friendly'),
+            React.createElement('option', { value: 'noOven' }, ' No Oven Required')
           )
         ),
 
@@ -318,12 +318,12 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
               generateSuggestions(selectedItems, preferenceType, e.target.value);
             }
           },
-            React.createElement('option', { value: 'any' }, '🌍 Any Style'),
-            React.createElement('option', { value: 'mexican' }, '🌮 Mexican'),
-            React.createElement('option', { value: 'asian' }, '🍜 Asian'),
-            React.createElement('option', { value: 'italian' }, '🍝 Italian'),
-            React.createElement('option', { value: 'american' }, '🍔 American'),
-            React.createElement('option', { value: 'mediterranean' }, '🫒 Mediterranean')
+            React.createElement('option', { value: 'any' }, ' Any Style'),
+            React.createElement('option', { value: 'mexican' }, ' Mexican'),
+            React.createElement('option', { value: 'asian' }, ' Asian'),
+            React.createElement('option', { value: 'italian' }, ' Italian'),
+            React.createElement('option', { value: 'american' }, ' American'),
+            React.createElement('option', { value: 'mediterranean' }, ' Mediterranean')
           )
         ),
 
@@ -333,7 +333,7 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
             onClick: handleQuickChallenge,
             className: `w-full p-2 rounded font-semibold ${quickChallengeMode ? 'bg-orange-500 text-white' : 'bg-orange-100 text-orange-800 hover:bg-orange-200'}`,
             type: 'button'
-          }, quickChallengeMode ? '🔥 Challenge Active!' : '🔥 3 Meals, 20 Min, No Oven')
+          }, quickChallengeMode ? ' Challenge Active!' : ' 3 Meals, 20 Min, No Oven')
         )
       ),
 
@@ -341,7 +341,7 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
       quickChallenge && React.createElement('div', { className: 'mb-6 p-4 bg-orange-50 border-2 border-orange-300 rounded-lg' },
         React.createElement('div', { className: 'flex items-center justify-between mb-3' },
           React.createElement('h3', { className: 'font-bold text-lg text-orange-900' },
-            '🔥 Quick Meal Challenge'
+            ' Quick Meal Challenge'
           ),
           React.createElement('div', { className: 'text-sm font-semibold text-orange-700' },
             `Total Time: ${quickChallenge.totalTime} minutes`
@@ -409,7 +409,7 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
 
       // Empty State
       selectedItems.length === 0 && React.createElement('div', { className: 'text-center py-8' },
-        React.createElement('div', { className: 'text-6xl mb-4' }, '🍽️'),
+        React.createElement('div', { className: 'text-6xl mb-4' }, ''),
         React.createElement('p', { className: 'text-gray-500 mb-4' },
           'Add your claimed items to start building meals'
         ),
@@ -439,7 +439,7 @@ function MealBuilder({ userLocation = null, claimedListings = [] }) {
         React.createElement('div', { className: 'mb-4' },
           React.createElement('div', { className: 'flex gap-4 text-sm mb-4' },
             React.createElement('span', { className: 'bg-blue-100 text-blue-800 px-3 py-1 rounded font-semibold' },
-              `⏱️ ${showModal.time} minutes`
+              `⏱ ${showModal.time} minutes`
             ),
             showModal.method && React.createElement('span', { className: 'bg-green-100 text-green-800 px-3 py-1 rounded font-semibold' },
               showModal.method
@@ -473,7 +473,7 @@ function MealBuilderButton({ onClick }) {
     type: 'button'
   },
     React.createElement('div', { className: 'flex items-center gap-3' },
-      React.createElement('span', { className: 'text-3xl' }, '🍳'),
+      React.createElement('span', { className: 'text-3xl' }, ''),
       React.createElement('div', { className: 'text-left' },
         React.createElement('div', { className: 'font-bold text-lg' }, 'AI Meal Builder'),
         React.createElement('div', { className: 'text-sm opacity-90' }, 'Turn your food into meals')

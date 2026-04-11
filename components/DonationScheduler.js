@@ -660,7 +660,7 @@ function DonationScheduler({ user, onClose }) {
                           <p className="text-sm text-gray-700 mb-2">{reminder.message}</p>
                           <div className="flex items-center gap-4 text-xs text-gray-600">
                             <span>
-                              📅 Donation: {new Date(reminder.donation_date).toLocaleDateString('en-US', {
+                               Donation: {new Date(reminder.donation_date).toLocaleDateString('en-US', {
                                 month: 'short',
                                 day: 'numeric',
                                 hour: '2-digit',
@@ -669,7 +669,7 @@ function DonationScheduler({ user, onClose }) {
                             </span>
                             {reminder.status === 'sent' && reminder.sent_at && (
                               <span>
-                                ✓ Sent {new Date(reminder.sent_at).toLocaleDateString()}
+                                 Sent {new Date(reminder.sent_at).toLocaleDateString()}
                               </span>
                             )}
                           </div>
@@ -679,7 +679,7 @@ function DonationScheduler({ user, onClose }) {
                             onClick={() => handleCompleteReminder(reminder.id)}
                             className="px-3 py-1 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 whitespace-nowrap"
                           >
-                            ✓ Mark Done
+                             Mark Done
                           </button>
                           <button
                             onClick={() => handleDismissReminder(reminder.id)}

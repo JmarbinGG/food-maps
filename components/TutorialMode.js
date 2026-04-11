@@ -16,7 +16,7 @@ function TutorialMode({ user, onClose, onComplete }) {
   const getTutorialSteps = () => {
     const baseSteps = [
       {
-        title: "Welcome to Food Maps! 🗺️",
+        title: "Welcome to Food Maps! ",
         description: "Let's take a quick tour to help you get started. This tutorial will show you how to make the most of our platform.",
         target: null,
         position: "center",
@@ -35,21 +35,21 @@ function TutorialMode({ user, onClose, onComplete }) {
       return [
         ...baseSteps,
         {
-          title: "Browse Food Listings 📋",
+          title: "Browse Food Listings ",
           description: "Switch between map and list view to find food near you. Listings show available food items from donors.",
           target: ".view-toggle, button[class*='view']",
           position: "bottom",
           action: null
         },
         {
-          title: "Urgency Indicators ⏰",
-          description: "Pay attention to urgency badges! Critical items (🚨) need to be claimed within 2 hours. High urgency (⚠️) items expire in 6 hours.",
+          title: "Urgency Indicators",
+          description: "Pay attention to urgency badges. Critical items need to be claimed within 2 hours. High urgency items expire in 6 hours.",
           target: ".status-available, .card",
           position: "left",
           action: null
         },
         {
-          title: "Set Your Dietary Needs 🥗",
+          title: "Set Your Dietary Needs ",
           description: "Click on your profile to set dietary preferences and allergies. The app will recommend food that matches your needs!",
           target: "button[class*='profile'], .user-menu",
           position: "bottom",
@@ -62,28 +62,28 @@ function TutorialMode({ user, onClose, onComplete }) {
           }
         },
         {
-          title: "Claim Food Items 🎯",
+          title: "Claim Food Items ",
           description: "When you find food you need, click the 'Claim' button. You'll receive an SMS code to confirm your claim.",
           target: ".btn-primary, button[class*='claim']",
           position: "top",
           action: null
         },
         {
-          title: "Verification Photos 📸",
+          title: "Verification Photos ",
           description: "After claiming, you'll take a BEFORE photo at pickup. Then take an AFTER photo when done. This builds trust in our community!",
           target: ".card, .listing-card",
           position: "right",
           action: null
         },
         {
-          title: "Filter & Search 🔍",
+          title: "Filter & Search ",
           description: "Use filters to find specific food types, adjust distance, or search by category. Make it easy to find what you need!",
           target: ".filter-panel, [class*='filter']",
           position: "right",
           action: null
         },
         {
-          title: "Get Support 💬",
+          title: "Get Support ",
           description: "Need help? Open your profile menu and tap 'Message Support' to chat with our team anytime.",
           target: "[data-tutorial='message-support-button'], [data-tutorial='profile-menu-toggle']",
           position: "left",
@@ -97,7 +97,7 @@ function TutorialMode({ user, onClose, onComplete }) {
           }
         },
         {
-          title: "You're All Set! 🎉",
+          title: "You're All Set! ",
           description: "You're ready to start finding food! Remember: claim items quickly if they're urgent, take verification photos, and enjoy your meals. Happy food hunting!",
           target: null,
           position: "center",
@@ -108,49 +108,49 @@ function TutorialMode({ user, onClose, onComplete }) {
       return [
         ...baseSteps,
         {
-          title: "Create Listings ➕",
+          title: "Create Listings ",
           description: "Click 'Donate Food' to create a new listing. Add photos, description, quantity, and expiration date.",
           target: "button[class*='donate'], .btn-primary",
           position: "bottom",
           action: null
         },
         {
-          title: "Set Urgency & Perishability ⏰",
+          title: "Set Urgency & Perishability",
           description: "Mark how perishable your food is. The app will automatically show urgency countdown timers to recipients!",
           target: ".card, form",
           position: "right",
           action: null
         },
         {
-          title: "Track Your Impact 📊",
+          title: "Track Your Impact ",
           description: "View your donor dashboard to see how many people you've helped and how much food you've saved from waste!",
           target: "button[class*='impact'], [class*='dashboard']",
           position: "bottom",
           action: null
         },
         {
-          title: "Manage Claims 📋",
+          title: "Manage Claims ",
           description: "When someone claims your food, you'll see their contact info. Send them an SMS confirmation code.",
           target: ".card, .listing-card",
           position: "left",
           action: null
         },
         {
-          title: "Verification System ✅",
+          title: "Verification System ",
           description: "Recipients take before/after photos when picking up. You can review these to confirm successful pickups!",
           target: ".card",
           position: "right",
           action: null
         },
         {
-          title: "Schedule Donations 📅",
+          title: "Schedule Donations ",
           description: "Set up recurring donations if you regularly have surplus food. Help feed your community consistently!",
           target: "button[class*='schedule']",
           position: "bottom",
           action: null
         },
         {
-          title: "Get Support 💬",
+          title: "Get Support ",
           description: "Questions? Open your profile menu and select 'Message Support' to reach our team anytime.",
           target: "[data-tutorial='message-support-button'], [data-tutorial='profile-menu-toggle']",
           position: "left",
@@ -164,7 +164,7 @@ function TutorialMode({ user, onClose, onComplete }) {
           }
         },
         {
-          title: "You're Ready to Give! 🎉",
+          title: "You're Ready to Give! ",
           description: "You're all set to start helping your community! Create listings, manage claims, and track your positive impact. Thank you for being generous!",
           target: null,
           position: "center",
@@ -176,21 +176,21 @@ function TutorialMode({ user, onClose, onComplete }) {
       return [
         ...baseSteps,
         {
-          title: "Sign Up to Get Started 🚀",
+          title: "Sign Up to Get Started ",
           description: "Create an account to claim food as a recipient or donate food as a donor. It's free and takes just a minute!",
           target: "button[class*='login'], button[class*='sign']",
           position: "bottom",
           action: null
         },
         {
-          title: "Explore the Map 🗺️",
+          title: "Explore the Map ",
           description: "See available food listings in your area. Each marker represents food available for pickup.",
           target: ".map-container",
           position: "center",
           action: null
         },
         {
-          title: "Ready to Join? 🎉",
+          title: "Ready to Join? ",
           description: "Sign up now to start claiming food or donating to your community. Together we can reduce food waste!",
           target: null,
           position: "center",
@@ -303,7 +303,7 @@ function TutorialMode({ user, onClose, onComplete }) {
   const handleComplete = () => {
     if (typeof window.showAlert === 'function') {
       window.showAlert('Great job! You\'re ready to use Food Maps. Explore and enjoy!', {
-        title: 'Tutorial Complete! 🎉',
+        title: 'Tutorial Complete! ',
         variant: 'success'
       });
     }
@@ -449,7 +449,7 @@ function TutorialMode({ user, onClose, onComplete }) {
           {/* Element not found warning */}
           {currentStepData.target && !highlightElement && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
-              <p>💡 <strong>Note:</strong> The element for this step is not currently visible. You can continue to the next step.</p>
+              <p> <strong>Note:</strong> The element for this step is not currently visible. You can continue to the next step.</p>
             </div>
           )}
 
@@ -565,7 +565,7 @@ function TutorialLauncher({ user, onLaunch }) {
         </svg>
       </button>
       <div className="flex items-start gap-3">
-        <div className="text-3xl">🎓</div>
+        <div className="text-3xl"></div>
         <div className="flex-1">
           <h4 className="font-bold text-gray-900 mb-1">New to Food Maps?</h4>
           <p className="text-sm text-gray-600 mb-3">Take a quick tour to learn how to use the app!</p>

@@ -22,10 +22,10 @@
             
             // Check if window.openUserProfile exists
             if (typeof window.openUserProfile === 'function') {
-                status.innerHTML = '✅ window.openUserProfile exists<br>Attempting to open...';
+                status.innerHTML = 'window.openUserProfile exists<br>Attempting to open...';
                 window.openUserProfile();
             } else {
-                status.innerHTML = '❌ window.openUserProfile is not defined<br>Make sure you are on the main app page';
+                status.innerHTML = 'window.openUserProfile is not defined<br>Make sure you are on the main app page';
             }
         }
         

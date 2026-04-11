@@ -31,7 +31,6 @@ function TrustBadge({
   if (verifiedByAGLF) {
     badges.push({
       type: 'aglf',
-      icon: '✓',
       label: 'AGLF Verified',
       color: 'bg-green-100 text-green-800 border-green-300',
       tooltip: 'Verified by All Good Living Foundation'
@@ -42,7 +41,6 @@ function TrustBadge({
   if (schoolPartner) {
     badges.push({
       type: 'school',
-      icon: '🎓',
       label: 'School Partner',
       color: 'bg-blue-100 text-blue-800 border-blue-300',
       tooltip: 'Official School Partner'
@@ -52,13 +50,12 @@ function TrustBadge({
   // Generic Partner Badge
   if (partnerBadge && !verifiedByAGLF && !schoolPartner) {
     const badgeConfig = {
-      'community': { icon: '🤝', label: 'Community Partner', color: 'bg-purple-100 text-purple-800 border-purple-300' },
-      'verified_donor': { icon: '⭐', label: 'Verified Donor', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
-      'trusted': { icon: '🛡️', label: 'Trusted Member', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' }
+      'community': { label: 'Community Partner', color: 'bg-purple-100 text-purple-800 border-purple-300' },
+      'verified_donor': { label: 'Verified Donor', color: 'bg-yellow-100 text-yellow-800 border-yellow-300' },
+      'trusted': { label: 'Trusted Member', color: 'bg-indigo-100 text-indigo-800 border-indigo-300' }
     };
 
     const config = badgeConfig[partnerBadge] || {
-      icon: '✓',
       label: 'Partner',
       color: 'bg-gray-100 text-gray-800 border-gray-300'
     };
@@ -128,7 +125,6 @@ function TrustBadge({
           className={`inline-flex items-center gap-1 ${badge.color} border rounded-full ${sizeClasses[size]} font-medium`}
           title={badge.tooltip}
         >
-          <span>{badge.icon}</span>
           <span>{badge.label}</span>
           {partnerDuration && showDetails && badge.type === 'aglf' && (
             <span className="text-xs opacity-75">({partnerDuration})</span>
@@ -169,10 +165,10 @@ function TrustBadge({
 function TrustBadgeCompact({ verifiedByAGLF, schoolPartner, partnerBadge, lastActive, lastUpdated }) {
   const badges = [];
 
-  if (verifiedByAGLF) badges.push({ icon: '✓', color: 'text-green-600', tooltip: 'AGLF Verified' });
-  if (schoolPartner) badges.push({ icon: '🎓', color: 'text-blue-600', tooltip: 'School Partner' });
+  if (verifiedByAGLF) badges.push({ label: 'AGLF', color: 'text-green-600', tooltip: 'AGLF Verified' });
+  if (schoolPartner) badges.push({ label: 'School', color: 'text-blue-600', tooltip: 'School Partner' });
   if (partnerBadge && !verifiedByAGLF && !schoolPartner) {
-    badges.push({ icon: '⭐', color: 'text-yellow-600', tooltip: 'Verified Partner' });
+    badges.push({ label: 'Partner', color: 'text-yellow-600', tooltip: 'Verified Partner' });
   }
 
   const getTimeSince = (dateStr) => {
@@ -203,7 +199,7 @@ function TrustBadgeCompact({ verifiedByAGLF, schoolPartner, partnerBadge, lastAc
           className={`${badge.color} font-medium`}
           title={badge.tooltip}
         >
-          {badge.icon}
+          {badge.label}
         </span>
       ))}
       {timeSince && (
@@ -278,7 +274,7 @@ function AssignTrustBadgeModal({ user, onClose, onUpdate }) {
               className="w-5 h-5"
             />
             <div>
-              <div className="font-medium text-green-700">✓ AGLF Verified</div>
+              <div className="font-medium text-green-700">AGLF Verified</div>
               <div className="text-xs text-gray-500">Verified by All Good Living Foundation</div>
             </div>
           </label>
@@ -291,7 +287,7 @@ function AssignTrustBadgeModal({ user, onClose, onUpdate }) {
               className="w-5 h-5"
             />
             <div>
-              <div className="font-medium text-blue-700">🎓 School Partner</div>
+              <div className="font-medium text-blue-700">School Partner</div>
               <div className="text-xs text-gray-500">Official school partnership status</div>
             </div>
           </label>
@@ -306,9 +302,9 @@ function AssignTrustBadgeModal({ user, onClose, onUpdate }) {
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500"
             >
               <option value="">None</option>
-              <option value="community">🤝 Community Partner</option>
-              <option value="verified_donor">⭐ Verified Donor</option>
-              <option value="trusted">🛡️ Trusted Member</option>
+              <option value="community">Community Partner</option>
+              <option value="verified_donor">Verified Donor</option>
+              <option value="trusted">Trusted Member</option>
             </select>
           </div>
         </div>

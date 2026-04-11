@@ -123,7 +123,7 @@ function RequestHelp({ onClose, onSuccess }) {
                   onClick={handleGeolocation}
                   className="text-sm text-blue-600 hover:underline"
                 >
-                  📍 Use my current location
+                   Use my current location
                 </button>
               </div>
             </div>

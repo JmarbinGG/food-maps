@@ -363,12 +363,12 @@ const VoiceSearch = () => {
     return (
       <div className="voice-search-container">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-4">
-          <h3 className="text-lg font-bold text-blue-900 mb-2">💬 Text Search Available</h3>
+          <h3 className="text-lg font-bold text-blue-900 mb-2"> Text Search Available</h3>
           <p className="text-blue-800 mb-3">
             Voice recognition isn't available in your browser, but you can still use our conversational search by typing!
           </p>
           <p className="text-sm text-blue-700">
-            ✅ Works in all browsers • 🔍 Same smart search • 📝 Type instead of speak
+             Works in all browsers •  Same smart search •  Type instead of speak
           </p>
         </div>
 
@@ -387,7 +387,7 @@ const VoiceSearch = () => {
               disabled={!textInput.trim() || isProcessing}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
             >
-              {isProcessing ? '⏳' : '🔍'}
+              {isProcessing ? '⏳' : ''}
             </button>
           </div>
         </form>
@@ -422,7 +422,7 @@ const VoiceSearch = () => {
                   }`}
               >
                 <div className="text-xs font-semibold mb-1">
-                  {msg.type === 'user' ? '👤 You' : '🤖 Assistant'}
+                  {msg.type === 'user' ? ' You' : ' Assistant'}
                 </div>
                 <div className="text-sm">{msg.text}</div>
               </div>
@@ -444,7 +444,7 @@ const VoiceSearch = () => {
 
             <div className="space-y-3">
               <div>
-                <div className="font-medium text-blue-800 mb-1">🗺️ Location-based:</div>
+                <div className="font-medium text-blue-800 mb-1"> Location-based:</div>
                 <div className="text-sm text-blue-700 space-y-1">
                   <div>"Where can I get produce near me?"</div>
                   <div>"Find food close to me"</div>
@@ -452,7 +452,7 @@ const VoiceSearch = () => {
               </div>
 
               <div>
-                <div className="font-medium text-blue-800 mb-1">🕐 Time-based:</div>
+                <div className="font-medium text-blue-800 mb-1"> Time-based:</div>
                 <div className="text-sm text-blue-700 space-y-1">
                   <div>"Is anything open after 6?"</div>
                   <div>"What's available now?"</div>
@@ -460,7 +460,7 @@ const VoiceSearch = () => {
               </div>
 
               <div>
-                <div className="font-medium text-blue-800 mb-1">🥗 Dietary preferences:</div>
+                <div className="font-medium text-blue-800 mb-1"> Dietary preferences:</div>
                 <div className="text-sm text-blue-700 space-y-1">
                   <div>"Do you have vegetarian food?"</div>
                   <div>"Find vegan options"</div>
@@ -468,7 +468,7 @@ const VoiceSearch = () => {
               </div>
 
               <div>
-                <div className="font-medium text-blue-800 mb-1">⚠️ Allergens:</div>
+                <div className="font-medium text-blue-800 mb-1"> Allergens:</div>
                 <div className="text-sm text-blue-700 space-y-1">
                   <div>"Food without nuts"</div>
                   <div>"No dairy please"</div>
@@ -521,12 +521,12 @@ const VoiceSearch = () => {
             <div className="pulse-ring"></div>
             <div className="pulse-ring delay-1"></div>
             <div className="pulse-ring delay-2"></div>
-            🎤
+            
           </>
         ) : isProcessing ? (
           '⏳'
         ) : (
-          '🎤'
+          ''
         )}
       </button>
 
@@ -571,7 +571,7 @@ const VoiceSearch = () => {
                 }`}
             >
               <div className="text-xs font-semibold mb-1">
-                {msg.type === 'user' ? '👤 You' : '🤖 Assistant'}
+                {msg.type === 'user' ? ' You' : ' Assistant'}
               </div>
               <div className="text-sm">{msg.text}</div>
             </div>
@@ -588,13 +588,13 @@ const VoiceSearch = () => {
               onClick={() => setShowHelp(false)}
               className="text-blue-600 hover:text-blue-800"
             >
-              ✕
+              
             </button>
           </div>
 
           <div className="space-y-3">
             <div>
-              <div className="font-medium text-blue-800 mb-1">🗺️ Location-based:</div>
+              <div className="font-medium text-blue-800 mb-1"> Location-based:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Where can I get produce near me?"</div>
                 <div>"Find food close to me"</div>
@@ -603,7 +603,7 @@ const VoiceSearch = () => {
             </div>
 
             <div>
-              <div className="font-medium text-blue-800 mb-1">🕐 Time-based:</div>
+              <div className="font-medium text-blue-800 mb-1"> Time-based:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Is anything open after 6?"</div>
                 <div>"What's available now?"</div>
@@ -612,7 +612,7 @@ const VoiceSearch = () => {
             </div>
 
             <div>
-              <div className="font-medium text-blue-800 mb-1">🥗 Dietary preferences:</div>
+              <div className="font-medium text-blue-800 mb-1"> Dietary preferences:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Do you have vegetarian food?"</div>
                 <div>"Find vegan options"</div>
@@ -621,7 +621,7 @@ const VoiceSearch = () => {
             </div>
 
             <div>
-              <div className="font-medium text-blue-800 mb-1">⚠️ Allergens:</div>
+              <div className="font-medium text-blue-800 mb-1"> Allergens:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Food without nuts"</div>
                 <div>"No dairy please"</div>
@@ -630,7 +630,7 @@ const VoiceSearch = () => {
             </div>
 
             <div>
-              <div className="font-medium text-blue-800 mb-1">📍 Distance:</div>
+              <div className="font-medium text-blue-800 mb-1"> Distance:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Within 2 miles"</div>
                 <div>"Less than 5 miles away"</div>
@@ -638,7 +638,7 @@ const VoiceSearch = () => {
             </div>
 
             <div>
-              <div className="font-medium text-blue-800 mb-1">🧭 Navigation:</div>
+              <div className="font-medium text-blue-800 mb-1"> Navigation:</div>
               <div className="text-sm text-blue-700 space-y-1">
                 <div>"Go to my profile"</div>
                 <div>"Show me the meal builder"</div>
@@ -649,7 +649,7 @@ const VoiceSearch = () => {
 
           <div className="mt-4 p-3 bg-white rounded border border-blue-200">
             <div className="text-sm text-blue-800">
-              💡 <strong>Tip for seniors & hands-free users:</strong> Just tap the microphone and speak naturally.
+               <strong>Tip for seniors & hands-free users:</strong> Just tap the microphone and speak naturally.
               I'll understand and help you find what you need!
             </div>
           </div>
@@ -669,7 +669,7 @@ const VoiceSearch = () => {
           onClick={() => setVoiceEnabled(!voiceEnabled)}
           className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200"
         >
-          {voiceEnabled ? '🔊' : '🔇'} Voice Response
+          {voiceEnabled ? '' : ''} Voice Response
         </button>
       </div>
 
@@ -790,7 +790,7 @@ const VoiceSearchButton = ({ onTranscript, className = '' }) => {
         aria-label={hasVoiceSupport ? "Voice search" : "Smart search"}
         title={hasVoiceSupport ? "Voice search - Tap to speak" : "Smart search - Type your question"}
       >
-        {hasVoiceSupport ? '🎤' : '💬'}
+        {hasVoiceSupport ? '' : ''}
       </button> */}
 
       {/* Full interface modal */}
@@ -799,13 +799,13 @@ const VoiceSearchButton = ({ onTranscript, className = '' }) => {
           <div className="voice-search-modal-content">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold text-gray-800">
-                {hasVoiceSupport ? '🎤 Voice Search' : '💬 Smart Search'}
+                {hasVoiceSupport ? ' Voice Search' : ' Smart Search'}
               </h2>
               <button
                 onClick={() => setShowFullInterface(false)}
                 className="text-gray-500 hover:text-gray-700 text-2xl"
               >
-                ✕
+                
               </button>
             </div>
 

@@ -34,10 +34,10 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
   };
 
   const packagingOptions = [
-    { value: 'excellent', label: 'Excellent', icon: '✨', color: 'green' },
-    { value: 'good', label: 'Good', icon: '👍', color: 'blue' },
-    { value: 'fair', label: 'Fair', icon: '⚠️', color: 'yellow' },
-    { value: 'poor', label: 'Poor', icon: '❌', color: 'red' }
+    { value: 'excellent', label: 'Excellent', icon: '', color: 'green' },
+    { value: 'good', label: 'Good', icon: '', color: 'blue' },
+    { value: 'fair', label: 'Fair', icon: '', color: 'yellow' },
+    { value: 'poor', label: 'Poor', icon: '', color: 'red' }
   ];
 
   const safetyCheckItems = [
@@ -203,7 +203,7 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-3">
           <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-            <span className="text-2xl">🛡️</span>
+            <span className="text-2xl"></span>
           </div>
           <div>
             <h3 className="text-lg font-semibold text-gray-900">Food Safety Checklist</h3>
@@ -245,7 +245,7 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
         </div>
         {!allRequiredPassed && (
           <p className="text-xs text-red-600 mt-2 flex items-center">
-            <span className="mr-1">⚠️</span>
+            <span className="mr-1"></span>
             Complete all required checks to pass safety standards
           </p>
         )}
@@ -254,7 +254,7 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
       {/* Temperature Section */}
       <div className="mb-6 p-4 border border-gray-200 rounded-lg">
         <h4 className="font-semibold text-gray-900 mb-3 flex items-center">
-          <span className="mr-2">🌡️</span>
+          <span className="mr-2"></span>
           Temperature & Storage
         </h4>
 
@@ -335,8 +335,8 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2">
               <span className="text-2xl">
-                {expirationInfo.isExpired ? '🚫' :
-                  expirationInfo.isNearExpiration ? '⚠️' : '✅'}
+                {expirationInfo.isExpired ? '' :
+                  expirationInfo.isNearExpiration ? '' : ''}
               </span>
               <div>
                 <p className="font-semibold text-gray-900">
@@ -441,7 +441,7 @@ const FoodSafetyChecklist = ({ foodItem, onSafetyUpdate, mode = 'create' }) => {
       {validationErrors.length > 0 && (
         <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
           <h5 className="font-semibold text-red-900 mb-2 flex items-center">
-            <span className="mr-2">⚠️</span>
+            <span className="mr-2"></span>
             Safety Validation Failed
           </h5>
           <ul className="list-disc list-inside space-y-1">

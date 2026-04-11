@@ -14,7 +14,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
   const storageDatabase = {
     // Produce
     produce: {
-      icon: '🥬',
+      icon: '',
       storage: 'refrigerator',
       temperature: '32-40°F (0-4°C)',
       location: 'crisper drawer',
@@ -32,7 +32,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Prepared meals
     prepared: {
-      icon: '🍱',
+      icon: '',
       storage: 'refrigerator',
       temperature: '40°F (4°C) or below',
       location: 'main shelf',
@@ -50,7 +50,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Bakery items
     bakery: {
-      icon: '🥖',
+      icon: '',
       storage: 'counter or freezer',
       temperature: 'room temperature or 0°F (-18°C)',
       location: 'bread box or freezer bag',
@@ -68,7 +68,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Packaged foods
     packaged: {
-      icon: '📦',
+      icon: '',
       storage: 'pantry or refrigerator',
       temperature: 'room temperature or 40°F (4°C)',
       location: 'depends on package',
@@ -86,7 +86,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Fruit
     fruit: {
-      icon: '🍎',
+      icon: '',
       storage: 'counter or refrigerator',
       temperature: 'room temp for ripening, then 40°F (4°C)',
       location: 'fruit bowl or crisper drawer',
@@ -104,7 +104,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Leftovers
     leftovers: {
-      icon: '🍽️',
+      icon: '',
       storage: 'refrigerator',
       temperature: '40°F (4°C) or below',
       location: 'main shelf',
@@ -122,7 +122,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
     // Water
     water: {
-      icon: '💧',
+      icon: '',
       storage: 'pantry or refrigerator',
       temperature: 'room temperature or chilled',
       location: 'any shelf',
@@ -215,13 +215,13 @@ const SmartStorageCoach = ({ listing, onClose }) => {
     // Add perishability-specific warnings
     if (foodItem.perishability === 'high') {
       advice.urgency = 'HIGH';
-      advice.urgencyMessage = '⚠️ HIGHLY PERISHABLE - Use within 1-2 days';
+      advice.urgencyMessage = ' HIGHLY PERISHABLE - Use within 1-2 days';
     } else if (foodItem.perishability === 'medium') {
       advice.urgency = 'MEDIUM';
-      advice.urgencyMessage = '🕐 MODERATELY PERISHABLE - Use within 3-5 days';
+      advice.urgencyMessage = ' MODERATELY PERISHABLE - Use within 3-5 days';
     } else {
       advice.urgency = 'LOW';
-      advice.urgencyMessage = '✓ STABLE - Can store for longer period';
+      advice.urgencyMessage = ' STABLE - Can store for longer period';
     }
 
     // Calculate days until expiration
@@ -232,13 +232,13 @@ const SmartStorageCoach = ({ listing, onClose }) => {
       advice.daysUntilExpiry = daysUntil;
 
       if (daysUntil <= 0) {
-        advice.expiryWarning = '🚨 EXPIRED - Do not consume';
+        advice.expiryWarning = ' EXPIRED - Do not consume';
       } else if (daysUntil <= 1) {
-        advice.expiryWarning = '⚡ EXPIRES TODAY - Use immediately';
+        advice.expiryWarning = ' EXPIRES TODAY - Use immediately';
       } else if (daysUntil <= 2) {
-        advice.expiryWarning = '⚠️ Expires in ' + daysUntil + ' days - Use soon';
+        advice.expiryWarning = ' Expires in ' + daysUntil + ' days - Use soon';
       } else {
-        advice.expiryWarning = '📅 Expires in ' + daysUntil + ' days';
+        advice.expiryWarning = ' Expires in ' + daysUntil + ' days';
       }
     }
 
@@ -284,7 +284,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg max-w-md w-full p-6">
           <div className="text-center">
-            <div className="text-6xl mb-4">🤖</div>
+            <div className="text-6xl mb-4"></div>
             <h2 className="text-2xl font-bold mb-4">Smart Storage Coach</h2>
             <p className="text-gray-600 mb-6">
               Get AI-powered storage guidance for your food items
@@ -311,7 +311,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg max-w-md w-full p-6">
-          <h2 className="text-2xl font-bold mb-4">🔍 What food do you have?</h2>
+          <h2 className="text-2xl font-bold mb-4"> What food do you have?</h2>
           <input
             type="text"
             value={customFood}
@@ -349,7 +349,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
       <div className="bg-white rounded-lg max-w-2xl w-full my-8">
         {loading ? (
           <div className="p-12 text-center">
-            <div className="text-6xl mb-4 animate-pulse">🤖</div>
+            <div className="text-6xl mb-4 animate-pulse"></div>
             <p className="text-gray-600">Analyzing storage requirements...</p>
           </div>
         ) : (
@@ -403,17 +403,17 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
               {/* Primary Storage Instruction */}
               <div className="bg-gradient-to-br from-blue-50 to-purple-50 p-6 rounded-lg border-2 border-blue-200">
-                <h3 className="text-xl font-bold mb-4 text-blue-900">📦 How to Store</h3>
+                <h3 className="text-xl font-bold mb-4 text-blue-900"> How to Store</h3>
                 <div className="space-y-3 text-lg">
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">📍</span>
+                    <span className="text-2xl"></span>
                     <div>
                       <div className="font-bold text-blue-900">Location</div>
                       <div className="text-gray-700 capitalize">{storageAdvice.storage} - {storageAdvice.location}</div>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl">🌡️</span>
+                    <span className="text-2xl"></span>
                     <div>
                       <div className="font-bold text-blue-900">Temperature</div>
                       <div className="text-gray-700">{storageAdvice.temperature}</div>
@@ -433,7 +433,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
               {storageAdvice.specificMatch?.special && (
                 <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
                   <div className="flex items-start gap-2">
-                    <span className="text-xl">💡</span>
+                    <span className="text-xl"></span>
                     <div>
                       <div className="font-bold text-purple-900 mb-1">Special Tip</div>
                       <div className="text-purple-800">{storageAdvice.specificMatch.special}</div>
@@ -446,10 +446,10 @@ const SmartStorageCoach = ({ listing, onClose }) => {
               <div className={`p-4 rounded-lg border-2 ${storageAdvice.canFreeze ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'
                 }`}>
                 <div className="flex items-start gap-3">
-                  <span className="text-2xl">❄️</span>
+                  <span className="text-2xl"></span>
                   <div className="flex-1">
                     <div className="font-bold mb-1">
-                      {storageAdvice.canFreeze ? '✓ Can Freeze' : '✗ Do Not Freeze'}
+                      {storageAdvice.canFreeze ? ' Can Freeze' : ' Do Not Freeze'}
                     </div>
                     <div className="text-sm text-gray-700">{storageAdvice.freezeAdvice}</div>
                   </div>
@@ -458,11 +458,11 @@ const SmartStorageCoach = ({ listing, onClose }) => {
 
               {/* Storage Tips */}
               <div className="space-y-2">
-                <h3 className="font-bold text-lg">📋 Storage Tips</h3>
+                <h3 className="font-bold text-lg"> Storage Tips</h3>
                 <ul className="space-y-2">
                   {storageAdvice.tips.map((tip, index) => (
                     <li key={index} className="flex items-start gap-2 text-sm">
-                      <span className="text-green-600 font-bold mt-0.5">✓</span>
+                      <span className="text-green-600 font-bold mt-0.5"></span>
                       <span className="text-gray-700">{tip}</span>
                     </li>
                   ))}
@@ -472,7 +472,7 @@ const SmartStorageCoach = ({ listing, onClose }) => {
               {/* Warnings */}
               <div className="bg-red-50 p-4 rounded-lg border border-red-200">
                 <h3 className="font-bold text-red-900 mb-2 flex items-center gap-2">
-                  <span>⚠️</span> Important Warnings
+                  <span></span> Important Warnings
                 </h3>
                 <ul className="space-y-1">
                   {storageAdvice.warnings.map((warning, index) => (
@@ -527,7 +527,7 @@ const StorageCoachButton = ({ listing, compact = false }) => {
           className="text-blue-600 hover:text-blue-700 text-sm font-medium flex items-center gap-1"
           title="Get storage advice"
         >
-          <span>🤖</span>
+          <span></span>
           <span>Storage Tips</span>
         </button>
         {showCoach && (
@@ -546,7 +546,7 @@ const StorageCoachButton = ({ listing, compact = false }) => {
         onClick={handleOpenCoach}
         className="w-full bg-gradient-to-r from-blue-500 to-purple-500 text-white px-4 py-3 rounded-lg font-semibold hover:from-blue-600 hover:to-purple-600 transition-all flex items-center justify-center gap-2"
       >
-        <span className="text-xl">🤖</span>
+        <span className="text-xl"></span>
         <span>Get Smart Storage Advice</span>
       </button>
       {showCoach && (

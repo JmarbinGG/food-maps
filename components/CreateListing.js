@@ -485,7 +485,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   {addressSelected && formData.address && (
                     <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                       <div className="flex items-start gap-2">
-                        <span className="text-green-600 text-lg">📍</span>
+                        <span className="text-green-600 text-lg"></span>
                         <div className="flex-1">
                           <p className="text-sm font-medium text-green-900">Selected Address:</p>
                           <p className="text-sm text-green-700 mt-1">{formData.address}</p>

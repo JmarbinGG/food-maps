@@ -75,12 +75,12 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
   ];
 
   const categoryOptions = [
-    { value: 'produce', label: '🥬 Fresh Produce', icon: '🥬' },
-    { value: 'prepared', label: '🍽️ Prepared Meals', icon: '🍽️' },
-    { value: 'packaged', label: '📦 Packaged Foods', icon: '📦' },
-    { value: 'bakery', label: '🥖 Bakery Items', icon: '🥖' },
-    { value: 'water', label: '💧 Beverages', icon: '💧' },
-    { value: 'fruit', label: '🍎 Fresh Fruit', icon: '🍎' }
+    { value: 'produce', label: ' Fresh Produce', icon: '' },
+    { value: 'prepared', label: ' Prepared Meals', icon: '' },
+    { value: 'packaged', label: ' Packaged Foods', icon: '' },
+    { value: 'bakery', label: ' Bakery Items', icon: '' },
+    { value: 'water', label: ' Beverages', icon: '' },
+    { value: 'fruit', label: ' Fresh Fruit', icon: '' }
   ];
 
   const toggleArrayItem = (array, item) => {
@@ -124,7 +124,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
         });
       }
 
-      alert('✅ Dietary preferences saved successfully!');
+      alert(' Dietary preferences saved successfully!');
       if (onClose) onClose();
     } catch (error) {
       console.error('Error saving dietary preferences:', error);
@@ -142,7 +142,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold flex items-center gap-2">
-                🍽️ Dietary Preferences
+                 Dietary Preferences
               </h2>
               <p className="text-green-50 text-sm mt-1">
                 Help us find the best food matches for your needs
@@ -164,7 +164,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           {/* Household Size */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              👥 Household Size
+               Household Size
             </label>
             <div className="flex items-center gap-4">
               <input
@@ -187,7 +187,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           {/* Dietary Restrictions */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-3">
-              🥗 Dietary Restrictions
+               Dietary Restrictions
             </label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {dietaryRestrictionOptions.map(restriction => (
@@ -211,7 +211,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           {/* Allergies */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-3">
-              ⚠️ Allergies & Food Sensitivities
+               Allergies & Food Sensitivities
             </label>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {allergyOptions.map(allergy => (
@@ -231,14 +231,14 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
               ))}
             </div>
             <p className="text-xs text-red-600 mt-2 font-medium">
-              ⚠️ We'll filter out foods containing these allergens
+               We'll filter out foods containing these allergens
             </p>
           </div>
 
           {/* Preferred Categories */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-3">
-              ❤️ Preferred Food Types
+               Preferred Food Types
             </label>
             <div className="grid grid-cols-2 gap-2">
               {categoryOptions.map(category => (
@@ -263,7 +263,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           {/* Special Needs */}
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-2">
-              📝 Additional Notes (Optional)
+               Additional Notes (Optional)
             </label>
             <textarea
               value={dietaryData.special_needs}
@@ -277,7 +277,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
           {/* Summary */}
           {(dietaryData.dietary_restrictions.length > 0 || dietaryData.allergies.length > 0) && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-semibold text-blue-900 mb-2">📋 Your Dietary Profile</h4>
+              <h4 className="font-semibold text-blue-900 mb-2"> Your Dietary Profile</h4>
               <div className="space-y-2 text-sm">
                 {dietaryData.dietary_restrictions.length > 0 && (
                   <p className="text-blue-800">
@@ -307,7 +307,7 @@ function DietaryPreferences({ user, onClose, onUpdate }) {
             disabled={saving}
             className="px-6 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition font-medium disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {saving ? 'Saving...' : '✓ Save Preferences'}
+            {saving ? 'Saving...' : ' Save Preferences'}
           </button>
         </div>
       </div>

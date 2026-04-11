@@ -175,7 +175,7 @@ function AIFoodSearch({ onClose, onSelectFood }) {
                     </p>
                     
                     <p className="text-xs text-gray-500 mb-3">
-                      📍 {match.donation.address}
+                       {match.donation.address}
                     </p>
                     
                     <button
@@ -204,9 +204,9 @@ function AIFoodSearch({ onClose, onSelectFood }) {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Your AI Food Agent is Ready</h3>
                 <p className="text-gray-600 mb-4">I can help you find exactly what you need using natural language</p>
                 <div className="text-sm text-gray-500 space-y-1">
-                  <p>💬 Just tell me what you're looking for</p>
-                  <p>🎯 I'll find the best matches nearby</p>
-                  <p>📍 I consider distance, freshness, and your preferences</p>
+                  <p> Just tell me what you're looking for</p>
+                  <p> I'll find the best matches nearby</p>
+                  <p> I consider distance, freshness, and your preferences</p>
                 </div>
               </div>
             ) : null}

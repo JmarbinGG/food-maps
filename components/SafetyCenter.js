@@ -205,49 +205,49 @@ function SafetyCenter({ user, onClose }) {
 
   const safetyGuidelines = [
     {
-      icon: '🔒',
+      icon: '',
       title: 'Meet in Public Places',
       description: 'Always arrange pickups in well-lit, public locations. Avoid private residences when possible.',
       priority: 'high'
     },
     {
-      icon: '📸',
+      icon: '',
       title: 'Use Photo Verification',
       description: 'Take before and after photos for all pickups. This builds trust and provides accountability.',
       priority: 'high'
     },
     {
-      icon: '🕐',
+      icon: '',
       title: 'Stick to Pickup Windows',
       description: 'Arrive during agreed pickup times. This ensures both parties are prepared and safe.',
       priority: 'medium'
     },
     {
-      icon: '🚫',
+      icon: '',
       title: 'Never Share Personal Info',
       description: 'Don\'t share your home address, email, or social media until after successful exchanges.',
       priority: 'medium'
     },
     {
-      icon: '🧊',
+      icon: '',
       title: 'Food Safety Standards',
       description: 'Check food temperature, packaging, and expiration. When in doubt, don\'t consume.',
       priority: 'high'
     },
     {
-      icon: '👥',
+      icon: '',
       title: 'Bring a Friend',
       description: 'Consider bringing someone with you for pickups, especially for first-time exchanges.',
       priority: 'medium'
     },
     {
-      icon: '📱',
+      icon: '',
       title: 'Keep Communication on Platform',
       description: 'Use in-app messaging for safety. This provides a record and protection.',
       priority: 'medium'
     },
     {
-      icon: '🚨',
+      icon: '',
       title: 'Report Suspicious Activity',
       description: 'If something feels wrong, report it immediately. Trust your instincts.',
       priority: 'high'
@@ -255,13 +255,13 @@ function SafetyCenter({ user, onClose }) {
   ];
 
   const trustScoreTips = [
-    { icon: '✅', text: 'Complete your profile with photo and verification', points: '+10' },
-    { icon: '📸', text: 'Upload verification photos for pickups', points: '+5 each' },
+    { icon: '', text: 'Complete your profile with photo and verification', points: '+10' },
+    { icon: '', text: 'Upload verification photos for pickups', points: '+5 each' },
     { icon: '⭐', text: 'Receive positive feedback from community', points: '+3 each' },
-    { icon: '📅', text: 'Consistently show up on time', points: '+2 each' },
-    { icon: '💬', text: 'Respond quickly to messages', points: '+1 each' },
-    { icon: '🎯', text: 'Complete dietary preferences (recipients)', points: '+5' },
-    { icon: '📊', text: 'Donate regularly (donors)', points: '+5 each' }
+    { icon: '', text: 'Consistently show up on time', points: '+2 each' },
+    { icon: '', text: 'Respond quickly to messages', points: '+1 each' },
+    { icon: '', text: 'Complete dietary preferences (recipients)', points: '+5' },
+    { icon: '', text: 'Donate regularly (donors)', points: '+5 each' }
   ];
 
   return (
@@ -271,7 +271,7 @@ function SafetyCenter({ user, onClose }) {
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-xl sticky top-0 z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="text-4xl">🛡️</div>
+              <div className="text-4xl"></div>
               <div>
                 <h2 className="text-2xl font-bold">Safety & Trust Center</h2>
                 <p className="text-blue-100 text-sm">Building a safe community together</p>
@@ -296,7 +296,7 @@ function SafetyCenter({ user, onClose }) {
                 : 'bg-blue-700 text-white hover:bg-blue-800'
                 }`}
             >
-              📋 Guidelines
+               Guidelines
             </button>
             <button
               onClick={() => setActiveTab('trust')}
@@ -314,7 +314,7 @@ function SafetyCenter({ user, onClose }) {
                 : 'bg-blue-700 text-white hover:bg-blue-800'
                 }`}
             >
-              ✓ Verification
+               Verification
             </button>
             <button
               onClick={() => setActiveTab('report')}
@@ -323,7 +323,7 @@ function SafetyCenter({ user, onClose }) {
                 : 'bg-blue-700 text-white hover:bg-blue-800'
                 }`}
             >
-              🚨 Report
+               Report
             </button>
           </div>
         </div>
@@ -368,7 +368,7 @@ function SafetyCenter({ user, onClose }) {
               {/* Emergency Contact */}
               <div className="bg-gradient-to-r from-red-50 to-orange-50 border-2 border-red-300 rounded-lg p-6 mt-6">
                 <div className="flex items-start gap-4">
-                  <div className="text-4xl">🚨</div>
+                  <div className="text-4xl"></div>
                   <div className="flex-1">
                     <h4 className="font-bold text-red-900 text-lg mb-2">Emergency Situations</h4>
                     <p className="text-red-800 mb-3">
@@ -435,7 +435,7 @@ function SafetyCenter({ user, onClose }) {
               {/* How to Improve */}
               <div className="bg-white border-2 border-gray-200 rounded-xl p-6">
                 <h4 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                  <span>📈</span>
+                  <span></span>
                   How to Improve Your Trust Score
                 </h4>
                 <div className="space-y-3">
@@ -452,7 +452,7 @@ function SafetyCenter({ user, onClose }) {
               {/* Trust Score Breakdown */}
               <div className="grid md:grid-cols-3 gap-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                  <div className="text-3xl mb-2">✅</div>
+                  <div className="text-3xl mb-2"></div>
                   <div className="text-2xl font-bold text-green-700">
                     {user?.completed_exchanges || 0}
                   </div>
@@ -466,7 +466,7 @@ function SafetyCenter({ user, onClose }) {
                   <div className="text-sm text-blue-600">Positive Feedback</div>
                 </div>
                 <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 text-center">
-                  <div className="text-3xl mb-2">📸</div>
+                  <div className="text-3xl mb-2"></div>
                   <div className="text-2xl font-bold text-purple-700">
                     {user?.verified_pickups || 0}
                   </div>
@@ -504,28 +504,28 @@ function SafetyCenter({ user, onClose }) {
 
                 <div className="space-y-3">
                   <VerificationItem
-                    icon="📧"
+                    icon=""
                     title="Email Verification"
                     status={verificationStatus?.email_verified || user?.email_verified || false}
                     description="Verify your email address"
                     onVerify={() => handleVerification('email')}
                   />
                   <VerificationItem
-                    icon="📱"
+                    icon=""
                     title="Phone Verification"
                     status={verificationStatus?.phone_verified || user?.phone_verified || false}
                     description="Verify your phone number via SMS"
                     onVerify={() => handleVerification('phone')}
                   />
                   <VerificationItem
-                    icon="📸"
+                    icon=""
                     title="Photo ID"
                     status={verificationStatus?.id_verified || false}
                     description="Upload a government-issued ID (optional but recommended)"
                     onVerify={() => handleVerification('id')}
                   />
                   <VerificationItem
-                    icon="📍"
+                    icon=""
                     title="Address Verification"
                     status={verificationStatus?.address_verified || false}
                     description="Verify your pickup address"
@@ -536,10 +536,10 @@ function SafetyCenter({ user, onClose }) {
 
               {/* Benefits of Verification */}
               <div className="bg-white border-2 border-gray-200 rounded-xl p-6">
-                <h4 className="text-xl font-bold text-gray-900 mb-4">✨ Benefits of Verification</h4>
+                <h4 className="text-xl font-bold text-gray-900 mb-4"> Benefits of Verification</h4>
                 <div className="grid md:grid-cols-2 gap-3">
                   <div className="flex items-start gap-3 p-3 bg-green-50 rounded-lg">
-                    <span className="text-2xl">🛡️</span>
+                    <span className="text-2xl"></span>
                     <div className="text-sm text-gray-700">
                       <strong>Increased Trust:</strong> Verified users are prioritized in the community
                     </div>
@@ -551,13 +551,13 @@ function SafetyCenter({ user, onClose }) {
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-purple-50 rounded-lg">
-                    <span className="text-2xl">🎯</span>
+                    <span className="text-2xl"></span>
                     <div className="text-sm text-gray-700">
                       <strong>Better Matches:</strong> Get paired with verified users first
                     </div>
                   </div>
                   <div className="flex items-start gap-3 p-3 bg-yellow-50 rounded-lg">
-                    <span className="text-2xl">🔒</span>
+                    <span className="text-2xl"></span>
                     <div className="text-sm text-gray-700">
                       <strong>Account Security:</strong> Protect your account from misuse
                     </div>

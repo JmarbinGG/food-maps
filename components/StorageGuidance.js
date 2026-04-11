@@ -3,7 +3,7 @@ const STORAGE_GUIDANCE = {
   // Produce
   produce: {
     storage_type: 'refrigerate',
-    icon: '🌡️',
+    icon: '',
     temp_range: '35-38°F',
     temp_range_c: '2-3°C',
     use_within_days: 5,
@@ -14,7 +14,7 @@ const STORAGE_GUIDANCE = {
   // Prepared Foods
   prepared: {
     storage_type: 'refrigerate',
-    icon: '❄️',
+    icon: '',
     temp_range: '35-38°F',
     temp_range_c: '2-3°C',
     use_within_days: 2,
@@ -25,7 +25,7 @@ const STORAGE_GUIDANCE = {
   // Packaged Foods
   packaged: {
     storage_type: 'shelf-stable',
-    icon: '📦',
+    icon: '',
     temp_range: 'Room temp',
     temp_range_c: '20-25°C',
     use_within_days: 365,
@@ -36,7 +36,7 @@ const STORAGE_GUIDANCE = {
   // Bakery
   bakery: {
     storage_type: 'shelf-stable',
-    icon: '🍞',
+    icon: '',
     temp_range: 'Room temp',
     temp_range_c: '20-25°C',
     use_within_days: 3,
@@ -47,7 +47,7 @@ const STORAGE_GUIDANCE = {
   // Water/Beverages
   water: {
     storage_type: 'shelf-stable',
-    icon: '💧',
+    icon: '',
     temp_range: 'Room temp',
     temp_range_c: '20-25°C',
     use_within_days: 365,
@@ -58,7 +58,7 @@ const STORAGE_GUIDANCE = {
   // Fruit
   fruit: {
     storage_type: 'refrigerate',
-    icon: '🍎',
+    icon: '',
     temp_range: '35-38°F',
     temp_range_c: '2-3°C',
     use_within_days: 7,
@@ -69,7 +69,7 @@ const STORAGE_GUIDANCE = {
   // Leftovers
   leftovers: {
     storage_type: 'refrigerate',
-    icon: '🥡',
+    icon: '',
     temp_range: '35-38°F',
     temp_range_c: '2-3°C',
     use_within_days: 3,
@@ -80,7 +80,7 @@ const STORAGE_GUIDANCE = {
   // Default for unknown categories
   default: {
     storage_type: 'refrigerate',
-    icon: '🌡️',
+    icon: '',
     temp_range: '35-38°F',
     temp_range_c: '2-3°C',
     use_within_days: 3,
@@ -92,7 +92,7 @@ const STORAGE_GUIDANCE = {
 // Special handling for frozen items
 const FREEZER_GUIDANCE = {
   storage_type: 'freeze',
-  icon: '❄️',
+  icon: '',
   temp_range: '0°F or below',
   temp_range_c: '-18°C or below',
   use_within_days: 180,
@@ -172,7 +172,7 @@ function StorageGuidance({ category, isFrozen, isRefrigerated, size = 'default',
           <div className="space-y-2 text-sm">
             {/* Temperature Range */}
             <div className="flex items-center gap-2">
-              <span className="text-lg">🌡️</span>
+              <span className="text-lg"></span>
               <div>
                 <span className="font-semibold">Temperature:</span>
                 <span className="ml-2 text-gray-700">
@@ -183,7 +183,7 @@ function StorageGuidance({ category, isFrozen, isRefrigerated, size = 'default',
 
             {/* Use Within */}
             <div className="flex items-center gap-2">
-              <span className="text-lg">📅</span>
+              <span className="text-lg"></span>
               <div>
                 <span className="font-semibold">Use within:</span>
                 <span className="ml-2 text-gray-700">
@@ -194,7 +194,7 @@ function StorageGuidance({ category, isFrozen, isRefrigerated, size = 'default',
 
             {/* Once Opened */}
             <div className="flex items-center gap-2">
-              <span className="text-lg">📖</span>
+              <span className="text-lg"></span>
               <div>
                 <span className="font-semibold">Once opened:</span>
                 <span className="ml-2 text-gray-700">
@@ -207,7 +207,7 @@ function StorageGuidance({ category, isFrozen, isRefrigerated, size = 'default',
             {guidance.notes && (
               <div className="mt-3 p-2 bg-white rounded border border-blue-200">
                 <div className="flex items-start gap-2">
-                  <span className="text-base">💡</span>
+                  <span className="text-base"></span>
                   <p className="text-xs text-gray-700 leading-relaxed">
                     {guidance.notes}
                   </p>
@@ -232,9 +232,9 @@ function StorageGuidanceCompact({ category, isFrozen, isRefrigerated }) {
   const guidance = getGuidance();
 
   const getStorageIcon = () => {
-    if (guidance.storage_type === 'freeze') return '❄️';
-    if (guidance.storage_type === 'refrigerate') return '🌡️';
-    return '📦';
+    if (guidance.storage_type === 'freeze') return '';
+    if (guidance.storage_type === 'refrigerate') return '';
+    return '';
   };
 
   const getStorageColor = () => {
@@ -318,7 +318,7 @@ function StorageInfoButton({ category, isFrozen, isRefrigerated, listing }) {
 
             <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-start gap-2">
-                <span className="text-lg">⚠️</span>
+                <span className="text-lg"></span>
                 <div className="text-xs text-yellow-900">
                   <p className="font-semibold mb-1">Food Safety Reminder:</p>
                   <ul className="space-y-1 list-disc list-inside">

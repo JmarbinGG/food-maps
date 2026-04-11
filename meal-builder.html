@@ -64,7 +64,7 @@
       if (loading) {
         return React.createElement('div', { className: 'min-h-screen flex items-center justify-center' },
           React.createElement('div', { className: 'text-center' },
-            React.createElement('div', { className: 'text-4xl mb-4' }, '🍳'),
+            React.createElement('div', { className: 'text-xs mb-4 uppercase tracking-[0.2em] text-gray-500' }, 'Meals'),
             React.createElement('div', { className: 'text-gray-600' }, 'Loading meal builder...')
           )
         );
@@ -73,7 +73,7 @@
       if (!user) {
         return React.createElement('div', { className: 'min-h-screen flex items-center justify-center bg-gradient-to-b from-green-50 to-blue-50' },
           React.createElement('div', { className: 'text-center max-w-md p-8 bg-white rounded-lg shadow-lg' },
-            React.createElement('div', { className: 'text-6xl mb-4' }, '🍳'),
+            React.createElement('div', { className: 'text-xs mb-4 uppercase tracking-[0.2em] text-gray-500' }, 'Meals'),
             React.createElement('h1', { className: 'text-2xl font-bold mb-4' }, 'Sign In Required'),
             React.createElement('p', { className: 'text-gray-600 mb-6' },
               'Please sign in to use the meal builder and see your claimed food items.'
@@ -97,7 +97,7 @@
                 className: 'text-gray-600 hover:text-gray-900',
                 type: 'button'
               }, '← Back'),
-              React.createElement('h1', { className: 'text-xl font-bold' }, '🍳 Meal Builder')
+              React.createElement('h1', { className: 'text-xl font-bold' }, 'Meal Builder')
             ),
             React.createElement('div', { className: 'text-sm text-gray-600' },
               `Hello, ${user.name}`
@@ -117,21 +117,21 @@
           // Info Section
           React.createElement('div', { className: 'mt-8 grid grid-cols-1 md:grid-cols-3 gap-6' },
             React.createElement('div', { className: 'p-6 bg-blue-50 rounded-lg' },
-              React.createElement('div', { className: 'text-3xl mb-3' }, '🎯'),
+              React.createElement('div', { className: 'text-xs mb-3 uppercase tracking-[0.2em] text-blue-700 font-semibold' }, 'Simple'),
               React.createElement('h3', { className: 'font-bold mb-2' }, 'Simple & Easy'),
               React.createElement('p', { className: 'text-sm text-gray-700' },
                 'Get meal ideas that are quick to prepare with minimal cooking skills required.'
               )
             ),
             React.createElement('div', { className: 'p-6 bg-green-50 rounded-lg' },
-              React.createElement('div', { className: 'text-3xl mb-3' }, '👶'),
+              React.createElement('div', { className: 'text-xs mb-3 uppercase tracking-[0.2em] text-green-700 font-semibold' }, 'Family'),
               React.createElement('h3', { className: 'font-bold mb-2' }, 'Kid-Friendly'),
               React.createElement('p', { className: 'text-sm text-gray-700' },
                 'Discover meals that children will actually enjoy eating.'
               )
             ),
             React.createElement('div', { className: 'p-6 bg-purple-50 rounded-lg' },
-              React.createElement('div', { className: 'text-3xl mb-3' }, '🌍'),
+              React.createElement('div', { className: 'text-xs mb-3 uppercase tracking-[0.2em] text-purple-700 font-semibold' }, 'Global'),
               React.createElement('h3', { className: 'font-bold mb-2' }, 'Culturally Relevant'),
               React.createElement('p', { className: 'text-sm text-gray-700' },
                 'Find recipes that match your cultural food preferences and traditions.'
@@ -142,7 +142,7 @@
           // Quick Challenge Info
           React.createElement('div', { className: 'mt-6 p-6 bg-gradient-to-r from-orange-100 to-red-100 rounded-lg border-2 border-orange-300' },
             React.createElement('div', { className: 'flex items-start gap-4' },
-              React.createElement('div', { className: 'text-4xl' }, '🔥'),
+              React.createElement('div', { className: 'text-xs uppercase tracking-[0.2em] text-red-700 font-semibold mt-1' }, 'Challenge'),
               React.createElement('div', {},
                 React.createElement('h3', { className: 'font-bold text-lg mb-2' },
                   'Try the Quick Challenge!'
@@ -152,13 +152,13 @@
                 ),
                 React.createElement('div', { className: 'flex gap-2 text-sm' },
                   React.createElement('span', { className: 'bg-white px-3 py-1 rounded-full font-semibold' },
-                    '⚡ Fast'
+                    'Fast'
                   ),
                   React.createElement('span', { className: 'bg-white px-3 py-1 rounded-full font-semibold' },
-                    '🚫 No Oven'
+                    'No Oven'
                   ),
                   React.createElement('span', { className: 'bg-white px-3 py-1 rounded-full font-semibold' },
-                    '💪 Challenge Mode'
+                    'Challenge Mode'
                   )
                 )
               )

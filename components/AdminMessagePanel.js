@@ -203,7 +203,7 @@ function AdminMessagePanel({ user }) {
                       } rounded-lg p-3 shadow-sm`}>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-xs font-semibold">
-                          {msg.is_from_admin ? '🛡️ You (Admin)' : selectedConversation.user_name}
+                          {msg.is_from_admin ? ' You (Admin)' : selectedConversation.user_name}
                         </span>
                         <span className={`text-xs ${msg.is_from_admin ? 'text-indigo-200' : 'text-gray-400'}`}>
                           {(() => {

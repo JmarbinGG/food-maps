@@ -162,7 +162,7 @@ function StoreOwnerDashboard({ user, onClose }) {
     return (
       <div className="fixed inset-0 bg-white flex items-center justify-center">
         <div className="text-center">
-          <div className="text-4xl mb-4">🏪</div>
+          <div className="text-4xl mb-4"></div>
           <p className="text-gray-600">Loading your store...</p>
         </div>
       </div>
@@ -173,7 +173,7 @@ function StoreOwnerDashboard({ user, onClose }) {
     return (
       <div className="fixed inset-0 bg-white flex items-center justify-center p-4">
         <div className="max-w-md text-center">
-          <div className="text-6xl mb-4">🏪</div>
+          <div className="text-6xl mb-4"></div>
           <h2 className="text-2xl font-bold mb-4">No Distribution Center Found</h2>
           <p className="text-gray-600 mb-6">
             You need to set up a distribution center first. Please contact an administrator.
@@ -198,7 +198,7 @@ function StoreOwnerDashboard({ user, onClose }) {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{myCenter.name}</h1>
               <p className="text-gray-600">{myCenter.address}</p>
-              {myCenter.phone && <p className="text-gray-600">📞 {myCenter.phone}</p>}
+              {myCenter.phone && <p className="text-gray-600"> {myCenter.phone}</p>}
             </div>
             <button
               onClick={onClose}
@@ -378,7 +378,7 @@ function StoreOwnerDashboard({ user, onClose }) {
             <div className="grid gap-4">
               {inventory.length === 0 ? (
                 <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-                  <div className="text-4xl mb-4">📦</div>
+                  <div className="text-4xl mb-4"></div>
                   <p className="text-gray-600">No inventory items yet</p>
                   <p className="text-sm text-gray-500 mt-2">Click "Add Food Item" to get started</p>
                 </div>

@@ -140,7 +140,7 @@ function PickupVerification({ listing, onClose, verificationType, onSuccess }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-2xl font-bold flex items-center gap-2">
-                {isBefore ? '📸 Before Pickup' : '✅ After Pickup'}
+                {isBefore ? ' Before Pickup' : ' After Pickup'}
               </h2>
               <p className="text-blue-100 text-sm mt-1">
                 {isBefore
@@ -164,7 +164,7 @@ function PickupVerification({ listing, onClose, verificationType, onSuccess }) {
           {/* Instructions */}
           <div className={`${isBefore ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'} border rounded-lg p-4`}>
             <h3 className={`font-semibold ${isBefore ? 'text-blue-900' : 'text-green-900'} mb-2`}>
-              {isBefore ? '📋 Before Pickup Instructions' : '📋 After Pickup Instructions'}
+              {isBefore ? ' Before Pickup Instructions' : ' After Pickup Instructions'}
             </h3>
             <ul className={`text-sm ${isBefore ? 'text-blue-800' : 'text-green-800'} space-y-1`}>
               {isBefore ? (
@@ -247,7 +247,7 @@ function PickupVerification({ listing, onClose, verificationType, onSuccess }) {
                   onClick={capturePhoto}
                   className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium"
                 >
-                  📸 Capture Photo
+                   Capture Photo
                 </button>
                 <button
                   onClick={() => {
@@ -321,7 +321,7 @@ function PickupVerification({ listing, onClose, verificationType, onSuccess }) {
               </>
             ) : (
               <>
-                {isBefore ? '✓ Confirm Before Pickup' : '✓ Complete Pickup'}
+                {isBefore ? ' Confirm Before Pickup' : ' Complete Pickup'}
               </>
             )}
           </button>

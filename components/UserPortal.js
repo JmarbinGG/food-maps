@@ -111,7 +111,7 @@ function UserPortal({ user, onClose, onViewChange, onUserUpdate }) {
                 <option value="restaurant">Restaurant</option>
                 <option value="grocery_store">Grocery Store</option>
                 <option value="bakery">Bakery</option>
-                <option value="cafe">Café</option>
+                <option value="cafe">Cafe</option>
                 <option value="catering">Catering Company</option>
                 <option value="food_bank">Food Bank</option>
                 <option value="nonprofit">Nonprofit Organization</option>

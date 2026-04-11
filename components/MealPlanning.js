@@ -141,7 +141,7 @@ function MealPlanning({ user, onClose }) {
                   disabled={showPlanner}
                   className="w-full bg-purple-600 text-white py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50"
                 >
-                  {showPlanner ? 'Generating...' : '🤖 Generate AI Meal Plan'}
+                  {showPlanner ? 'Generating...' : ' Generate AI Meal Plan'}
                 </button>
               </div>
             </div>

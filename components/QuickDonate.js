@@ -195,9 +195,9 @@ function QuickDonate({ onClose, onSuccess }) {
       </div>
       
       <div className="space-y-2 text-sm text-gray-600">
-        <p>✓ Pickup link sent to your email</p>
-        <p>✓ Volunteer will be assigned automatically</p>
-        <p>✓ Tax receipt generated after pickup</p>
+        <p> Pickup link sent to your email</p>
+        <p> Volunteer will be assigned automatically</p>
+        <p> Tax receipt generated after pickup</p>
       </div>
       
       <button onClick={onSuccess} className="btn-primary w-full">

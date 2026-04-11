@@ -178,7 +178,7 @@ function Dashboard({ user, onViewChange }) {
             type="button"
           >
             <div className="flex items-center gap-3">
-              <span className="text-3xl">🍳</span>
+              <span className="text-3xl"></span>
               <div className="text-left">
                 <div className="font-bold text-lg">AI Meal Builder</div>
                 <div className="text-sm opacity-90">Turn your food into meals</div>
@@ -230,7 +230,7 @@ function Dashboard({ user, onViewChange }) {
       {/* Recommended Listings */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-[var(--text-primary)]">🥗 Recommended for You</h3>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)]"> Recommended for You</h3>
           <button
             onClick={() => window.openDietaryPreferences?.()}
             className="text-sm text-[var(--primary-color)] hover:underline"

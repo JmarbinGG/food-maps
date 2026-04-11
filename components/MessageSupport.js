@@ -111,7 +111,7 @@ function MessageSupport({ user, onClose }) {
                 <div className={`max-w-[70%] ${msg.is_from_admin ? 'bg-gray-100' : 'bg-green-500 text-white'} rounded-lg p-3`}>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="text-xs font-semibold">
-                      {msg.is_from_admin ? '🛡️ Admin' : 'You'}
+                      {msg.is_from_admin ? ' Admin' : 'You'}
                     </span>
                     <span className="text-xs opacity-70">
                       {(() => {

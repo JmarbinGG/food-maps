@@ -155,7 +155,7 @@ function VolunteerRoutes({ user, onClose }) {
                         )}
                         
                         {stop.status === 'completed' && (
-                          <div className="text-green-600 text-sm font-medium">✓ Done</div>
+                          <div className="text-green-600 text-sm font-medium"> Done</div>
                         )}
                       </div>
                     </div>

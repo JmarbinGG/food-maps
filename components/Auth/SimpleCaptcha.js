@@ -50,7 +50,7 @@ function SimpleCaptcha({ onVerify }) {
           className="p-2 text-[var(--primary-color)] hover:bg-gray-100 rounded"
           title="Generate new captcha"
         >
-          🔄
+          
         </button>
       </div>
       
@@ -72,12 +72,12 @@ function SimpleCaptcha({ onVerify }) {
               : 'bg-[var(--primary-color)] text-white hover:opacity-90'
           }`}
         >
-          {isVerified ? '✓' : 'Verify'}
+          {isVerified ? '' : 'Verify'}
         </button>
       </div>
       
       {isVerified && (
-        <div className="text-green-600 text-sm mt-1">✓ Verified successfully</div>
+        <div className="text-green-600 text-sm mt-1"> Verified successfully</div>
       )}
     </div>
   );

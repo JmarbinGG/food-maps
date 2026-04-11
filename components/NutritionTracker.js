@@ -55,19 +55,19 @@ function NutritionTracker({ user, onClose }) {
     const advice = [];
     
     if (nutritionData.daily_calories < nutritionGoals.calories * 0.8) {
-      advice.push("💡 You're under your calorie goal. Try adding healthy snacks.");
+      advice.push(" You're under your calorie goal. Try adding healthy snacks.");
     }
     
     if (nutritionData.protein < nutritionGoals.protein * 0.8) {
-      advice.push("🥩 Consider adding more protein sources like beans, eggs, or fish.");
+      advice.push(" Consider adding more protein sources like beans, eggs, or fish.");
     }
     
     if (nutritionData.fiber < nutritionGoals.fiber * 0.8) {
-      advice.push("🌾 Include more fruits, vegetables, and whole grains for fiber.");
+      advice.push(" Include more fruits, vegetables, and whole grains for fiber.");
     }
     
     if (nutritionData.water_intake < nutritionGoals.water * 0.8) {
-      advice.push("💧 Don't forget to drink more water throughout the day.");
+      advice.push(" Don't forget to drink more water throughout the day.");
     }
 
     return advice;

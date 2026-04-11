@@ -6,7 +6,7 @@ const { useState } = React;
 const DATE_LABEL_INFO = {
   'sell-by': {
     title: 'Sell By',
-    icon: '🏪',
+    icon: '',
     description: 'For stores, not you',
     meaning: 'This tells the store when to rotate stock. The food is still good for days or weeks after this date if stored properly.',
     safety: 'safe-after',
@@ -37,7 +37,7 @@ const DATE_LABEL_INFO = {
   },
   'expires-on': {
     title: 'Expires On',
-    icon: '🚫',
+    icon: '',
     description: 'Safety deadline',
     meaning: 'This date is used for foods where safety is a concern. Do not consume these items after the expiration date.',
     safety: 'do-not-consume',
@@ -100,7 +100,7 @@ function getCountdownDisplay(daysUntil, labelType) {
   const info = DATE_LABEL_INFO[labelType] || DATE_LABEL_INFO['best-by'];
 
   if (daysUntil === null) {
-    return { emoji: '📅', text: 'No date provided', color: 'gray', status: 'unknown' };
+    return { emoji: '', text: 'No date provided', color: 'gray', status: 'unknown' };
   }
 
   // Already expired
@@ -110,7 +110,7 @@ function getCountdownDisplay(daysUntil, labelType) {
     // For "expires-on" type, show warning
     if (info.safety === 'do-not-consume') {
       return {
-        emoji: '🚫',
+        emoji: '',
         text: `Expired ${daysPast}d ago`,
         color: 'red',
         status: 'expired-unsafe',
@@ -120,7 +120,7 @@ function getCountdownDisplay(daysUntil, labelType) {
 
     // For other types, show it's likely still safe
     return {
-      emoji: '✓',
+      emoji: '',
       text: `${daysPast}d past label`,
       color: 'blue',
       status: 'past-date-safe',
@@ -131,7 +131,7 @@ function getCountdownDisplay(daysUntil, labelType) {
   // Expires today
   if (daysUntil === 0) {
     return {
-      emoji: '⚡',
+      emoji: '',
       text: 'Use today',
       color: info.safety === 'do-not-consume' ? 'orange' : 'yellow',
       status: 'expires-today'
@@ -151,7 +151,7 @@ function getCountdownDisplay(daysUntil, labelType) {
   // Expires in 4-7 days (soon)
   if (daysUntil <= 7) {
     return {
-      emoji: '📅',
+      emoji: '',
       text: `${daysUntil}d left`,
       color: 'yellow',
       status: 'soon'
@@ -160,7 +160,7 @@ function getCountdownDisplay(daysUntil, labelType) {
 
   // More than 7 days (good)
   return {
-    emoji: '✨',
+    emoji: '',
     text: `${daysUntil}d left`,
     color: 'green',
     status: 'good'
@@ -295,7 +295,7 @@ function ExpirationEducation({ expirationDate, labelType, category, perishabilit
 
       // General food safety tips
       React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-200' },
-        React.createElement('h4', { className: 'font-bold text-gray-800 mb-2' }, '🧠 Food Safety Tips'),
+        React.createElement('h4', { className: 'font-bold text-gray-800 mb-2' }, ' Food Safety Tips'),
         React.createElement('ul', { className: 'text-sm text-gray-700 space-y-1 list-disc list-inside' },
           React.createElement('li', {}, 'Trust your senses: if it looks, smells, or tastes off, don\'t eat it'),
           React.createElement('li', {}, 'Proper storage extends shelf life significantly'),

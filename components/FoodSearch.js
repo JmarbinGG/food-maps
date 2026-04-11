@@ -16,12 +16,12 @@ function FoodSearch({ onClose, onSelectFood, user }) {
   });
 
   const quickSearchOptions = [
-    { query: 'Fresh vegetables', icon: '🥬', category: 'produce' },
-    { query: 'Ready meals', icon: '🍽️', category: 'prepared' },
-    { query: 'Water bottles', icon: '💧', category: 'water' },
-    { query: 'Bread and bakery', icon: '🍞', category: 'bakery' },
-    { query: 'Fruit for family', icon: '🍎', category: 'produce' },
-    { query: 'Canned goods', icon: '🥫', category: 'packaged' }
+    { query: 'Fresh vegetables', icon: '', category: 'produce' },
+    { query: 'Ready meals', icon: '', category: 'prepared' },
+    { query: 'Water bottles', icon: '', category: 'water' },
+    { query: 'Bread and bakery', icon: '', category: 'bakery' },
+    { query: 'Fruit for family', icon: '', category: 'produce' },
+    { query: 'Canned goods', icon: '', category: 'packaged' }
   ];
 
   const dietaryOptions = [
@@ -371,7 +371,7 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                     )}
                     
                     <p className="text-xs text-gray-500 mb-3">
-                      📍 {result.donation.address}
+                       {result.donation.address}
                     </p>
                     
                     <button
@@ -398,8 +398,8 @@ function FoodSearch({ onClose, onSelectFood, user }) {
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Find Food Near You</h3>
                 <p className="text-gray-600 mb-4">Search for available food donations in your area</p>
                 <div className="text-sm text-gray-500 space-y-1">
-                  <p>🔍 Use quick search for common items</p>
-                  <p>⚙️ Try advanced filters for specific needs</p>
+                  <p> Use quick search for common items</p>
+                  <p> Try advanced filters for specific needs</p>
                 </div>
               </div>
             ) : null}

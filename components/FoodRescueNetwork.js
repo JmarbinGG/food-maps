@@ -148,7 +148,7 @@ function FoodRescueNetwork({ user, onClose }) {
                     </div>
                     
                     <p className="text-sm text-gray-600">{request.quantity}</p>
-                    <p className="text-sm text-gray-600">📍 {request.location}</p>
+                    <p className="text-sm text-gray-600"> {request.location}</p>
                     <p className="text-xs text-red-600 font-medium">⏰ Expires in {request.expires_in}</p>
                     
                     {request.status === 'available' && (

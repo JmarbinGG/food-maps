@@ -1734,7 +1734,7 @@ function App() {
           <div className="fixed inset-0 z-50 bg-white">
             <div className="h-full flex flex-col">
               <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
-                <h1 className="text-xl font-bold text-gray-900">🏪 Distribution Centers</h1>
+                <h1 className="text-xl font-bold text-gray-900">Distribution Centers</h1>
                 <button
                   onClick={() => setShowDistributionMap(false)}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"

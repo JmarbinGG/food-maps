@@ -106,7 +106,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
           'Season with salt and pepper'
         ],
         nutritionFocus: 'High protein, vitamins from greens, filling and nutritious',
-        safetyNote: protein.hoursUntilExpiry < 24 ? '⚠️ Use TODAY - protein expires soon' : null,
+        safetyNote: protein.hoursUntilExpiry < 24 ? ' Use TODAY - protein expires soon' : null,
         dignityNote: 'This is a complete, restaurant-quality meal',
         alternatives: [
           'Wrap in a tortilla if you have one',
@@ -116,7 +116,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
       });
     }
 
-    // Meal Pattern 2: Protein + Vegetables = Stir Fry/Sauté
+    // Meal Pattern 2: Protein + Vegetables = Stir Fry/Saute
     if (ingredients.proteins.length > 0 && ingredients.vegetables.length > 0) {
       const protein = ingredients.proteins[0];
       const veggies = ingredients.vegetables.slice(0, 3);
@@ -137,7 +137,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
           'Season with salt, pepper, garlic powder, or soy sauce if you have it'
         ],
         nutritionFocus: 'Complete meal with protein and 3+ vegetables',
-        safetyNote: protein.hoursUntilExpiry < 24 ? '🔥 COOK TONIGHT - expires within 24 hours' : null,
+        safetyNote: protein.hoursUntilExpiry < 24 ? ' COOK TONIGHT - expires within 24 hours' : null,
         dignityNote: 'Simple cooking that creates a proper hot meal',
         alternatives: [
           'Serve over rice if you have it',
@@ -163,7 +163,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
         instructions: [
           `Prepare ${grain.title} according to package (or reheat if already cooked)`,
           `Chop ${veggies.map(v => v.title).join(', ')}`,
-          'Sauté vegetables in a pan with oil for 5-8 minutes',
+          'Saute vegetables in a pan with oil for 5-8 minutes',
           'Serve vegetables over prepared grain',
           'Top with any sauce, cheese, or seasoning you have'
         ],
@@ -199,7 +199,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
           'Dress with oil + vinegar, or lemon juice, or any dressing'
         ],
         nutritionFocus: 'Vitamins, minerals, fiber - very healthy',
-        safetyNote: greens.hoursUntilExpiry < 24 ? '🥬 Use greens today before they spoil' : null,
+        safetyNote: greens.hoursUntilExpiry < 24 ? ' Use greens today before they spoil' : null,
         dignityNote: 'Fresh, crisp, restaurant-style salad',
         alternatives: [
           'Turn into a wrap with a tortilla',
@@ -232,7 +232,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
           ],
           nutritionFocus: 'Quick energy, customizable nutrition',
           safetyNote: fillings.some(f => f.hoursUntilExpiry < 24 && ingredients.proteins.includes(f))
-            ? '⚠️ Use protein fillings today' : null,
+            ? ' Use protein fillings today' : null,
           dignityNote: 'Quick meal that feels normal and satisfying',
           alternatives: [
             'Make it open-face with one slice',
@@ -297,8 +297,8 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
         ],
         nutritionFocus: 'Complete meal, already prepared',
         safetyNote: prepared.hoursUntilExpiry < 24
-          ? '🔥 HEAT THOROUGHLY - prepared food must reach 165°F'
-          : '⚠️ Reheat until steaming hot throughout',
+          ? ' HEAT THOROUGHLY - prepared food must reach 165°F'
+          : ' Reheat until steaming hot throughout',
         dignityNote: 'Full meal with minimal effort',
         alternatives: [
           'Eat cold if it\'s meant to be (like pasta salad)',
@@ -341,7 +341,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-8 max-w-md">
           <div className="text-center">
-            <div className="text-6xl mb-4 animate-pulse">👨‍🍳</div>
+            <div className="text-6xl mb-4 animate-pulse"></div>
             <p className="text-gray-600">Finding meals to prevent waste...</p>
           </div>
         </div>
@@ -362,8 +362,8 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
               <div>
                 <h2 className="text-2xl font-bold mb-2">{selectedMeal.title}</h2>
                 <div className="flex items-center gap-4 text-sm opacity-90">
-                  <span>⏱️ {selectedMeal.cookTime}</span>
-                  <span>👨‍🍳 {selectedMeal.difficulty}</span>
+                  <span>⏱ {selectedMeal.cookTime}</span>
+                  <span> {selectedMeal.difficulty}</span>
                 </div>
               </div>
               <button
@@ -378,21 +378,21 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
           <div className="p-6 space-y-6">
             {/* Why This Meal */}
             <div className="bg-blue-50 border-l-4 border-blue-500 p-4">
-              <div className="font-bold mb-1">💡 Why This Meal:</div>
+              <div className="font-bold mb-1"> Why This Meal:</div>
               <div className="text-sm">{selectedMeal.description}</div>
             </div>
 
             {/* Safety Note */}
             {selectedMeal.safetyNote && (
               <div className="bg-red-50 border-l-4 border-red-500 p-4">
-                <div className="font-bold text-red-900 mb-1">⚠️ Food Safety:</div>
+                <div className="font-bold text-red-900 mb-1"> Food Safety:</div>
                 <div className="text-sm text-red-800">{selectedMeal.safetyNote}</div>
               </div>
             )}
 
             {/* Using These Items */}
             <div>
-              <h3 className="font-bold mb-3">🥘 Using These Items:</h3>
+              <h3 className="font-bold mb-3"> Using These Items:</h3>
               <div className="space-y-2">
                 {selectedMeal.items.map(item => {
                   const hoursLeft = item.hoursUntilExpiry;
@@ -418,7 +418,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
 
             {/* Instructions */}
             <div>
-              <h3 className="font-bold mb-3">📝 Simple Steps:</h3>
+              <h3 className="font-bold mb-3"> Simple Steps:</h3>
               <ol className="space-y-2">
                 {selectedMeal.instructions.map((step, index) => (
                   <li key={index} className="flex gap-3">
@@ -433,21 +433,21 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
 
             {/* Nutrition Focus */}
             <div className="bg-green-50 border-l-4 border-green-500 p-4">
-              <div className="font-bold text-green-900 mb-1">🥗 Nutrition:</div>
+              <div className="font-bold text-green-900 mb-1"> Nutrition:</div>
               <div className="text-sm text-green-800">{selectedMeal.nutritionFocus}</div>
             </div>
 
             {/* Dignity Note */}
             {selectedMeal.dignityNote && (
               <div className="bg-purple-50 border-l-4 border-purple-500 p-4">
-                <div className="font-bold text-purple-900 mb-1">✨ Note:</div>
+                <div className="font-bold text-purple-900 mb-1"> Note:</div>
                 <div className="text-sm text-purple-800">{selectedMeal.dignityNote}</div>
               </div>
             )}
 
             {/* Alternatives */}
             <div>
-              <h3 className="font-bold mb-2">🔄 Other Ways to Make This:</h3>
+              <h3 className="font-bold mb-2"> Other Ways to Make This:</h3>
               <ul className="space-y-1 text-sm text-gray-700">
                 {selectedMeal.alternatives.map((alt, index) => (
                   <li key={index} className="flex items-start gap-2">
@@ -473,7 +473,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
                 }}
                 className="flex-1 bg-green-600 text-white px-4 py-3 rounded-lg font-semibold hover:bg-green-700"
               >
-                ✓ I'll Make This
+                 I'll Make This
               </button>
               <button
                 onClick={() => setSelectedMeal(null)}
@@ -495,7 +495,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
         <div className="bg-gradient-to-r from-green-600 to-blue-600 text-white p-6 rounded-t-lg">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold mb-2">👨‍🍳 Smart Meal Suggestions</h2>
+              <h2 className="text-2xl font-bold mb-2"> Smart Meal Suggestions</h2>
               <p className="text-sm opacity-90">
                 Prevent waste with quick meals using your expiring items
               </p>
@@ -512,7 +512,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
         <div className="p-6">
           {suggestions.length === 0 ? (
             <div className="text-center py-12">
-              <div className="text-6xl mb-4">✅</div>
+              <div className="text-6xl mb-4"></div>
               <h3 className="text-xl font-bold mb-2">Nothing Expiring Soon!</h3>
               <p className="text-gray-600">
                 Your claimed items are still fresh. We'll suggest meals when items need to be used.
@@ -523,7 +523,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
               {/* Info Banner */}
               <div className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200 rounded-lg p-4 mb-6">
                 <div className="flex items-start gap-3">
-                  <span className="text-3xl">🎯</span>
+                  <span className="text-3xl"></span>
                   <div>
                     <div className="font-bold text-blue-900 mb-1">
                       These meals prevent waste AND provide nutrition
@@ -565,9 +565,9 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
                         <h3 className="text-xl font-bold mb-1">{meal.title}</h3>
                         <p className="text-sm text-gray-700 mb-3">{meal.description}</p>
                         <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>⏱️ {meal.cookTime}</span>
-                          <span>👨‍🍳 {meal.difficulty}</span>
-                          <span>🥘 Uses {meal.items.length} items</span>
+                          <span>⏱ {meal.cookTime}</span>
+                          <span> {meal.difficulty}</span>
+                          <span> Uses {meal.items.length} items</span>
                         </div>
                       </div>
                       <button className="ml-4 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 whitespace-nowrap">
@@ -597,7 +597,7 @@ const SmartMealSuggestions = ({ user, claimedListings, onClose }) => {
 
               {/* Bottom Info */}
               <div className="mt-6 bg-gray-50 rounded-lg p-4 text-sm text-gray-600">
-                <div className="font-semibold mb-2">💚 Why These Suggestions:</div>
+                <div className="font-semibold mb-2"> Why These Suggestions:</div>
                 <ul className="space-y-1">
                   <li>• <strong>Safety First:</strong> Items are safe to eat now, but need to be used soon</li>
                   <li>• <strong>Dignity:</strong> Real meals, not survival food - these are normal, satisfying dishes</li>

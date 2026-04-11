@@ -233,7 +233,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
                 <h2 className="text-2xl font-bold text-gray-900">{selectedCenter.name}</h2>
                 <p className="text-sm text-gray-600 mt-1">{selectedCenter.address}</p>
                 {selectedCenter.phone && (
-                  <p className="text-sm text-gray-600">📞 {selectedCenter.phone}</p>
+                  <p className="text-sm text-gray-600">Phone: {selectedCenter.phone}</p>
                 )}
               </div>
               <button
@@ -249,7 +249,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
 
               {centerInventory.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
-                  <div className="text-4xl mb-2">📦</div>
+                  <div className="text-xs mb-2 uppercase tracking-[0.2em] text-gray-400">Inventory</div>
                   <p>No items currently available</p>
                 </div>
               ) : (

@@ -164,7 +164,7 @@ window.getMockListings = function() {
       status: 'available',
       created_at: '2025-01-08T08:00:00Z',
       updated_at: '2025-01-08T08:00:00Z',
-      donor_name: 'Alameda Deli & Café',
+      donor_name: 'Alameda Deli & Cafe',
       pickup_instructions: 'Please come to the back entrance. Sandwiches are individually wrapped and labeled. Refrigeration recommended.',
       contact_info: '(510) 555-0456',
       dietary_info: ['Contains Meat'],

@@ -91,9 +91,9 @@ function FavoritesPanel({ onClose }) {
 
   const getLocationIcon = (type) => {
     switch (type) {
-      case 'donor': return '🏪';
-      case 'distribution_center': return '🏢';
-      default: return '📍';
+      case 'donor': return '';
+      case 'distribution_center': return '';
+      default: return '';
     }
   };
 
@@ -132,7 +132,7 @@ function FavoritesPanel({ onClose }) {
             <div className="flex-1 min-w-[200px]">
               <input
                 type="text"
-                placeholder="🔍 Search favorites..."
+                placeholder=" Search favorites..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
@@ -204,7 +204,7 @@ function FavoritesPanel({ onClose }) {
 
                   {fav.notes && (
                     <p className="text-gray-700 text-sm mb-3 italic bg-yellow-50 p-2 rounded border-l-4 border-yellow-300">
-                      💭 {fav.notes}
+                       {fav.notes}
                     </p>
                   )}
 
@@ -245,13 +245,13 @@ function FavoritesPanel({ onClose }) {
                       onClick={() => recordVisit(fav.id)}
                       className="flex-1 bg-green-500 text-white px-3 py-2 rounded hover:bg-green-600 transition text-sm font-medium"
                     >
-                      ✓ Mark Visit
+                       Mark Visit
                     </button>
                     <button
                       onClick={() => openEditModal(fav)}
                       className="flex-1 bg-indigo-500 text-white px-3 py-2 rounded hover:bg-indigo-600 transition text-sm font-medium"
                     >
-                      ✏️ Edit
+                       Edit
                     </button>
                     <button
                       onClick={() => {
@@ -262,7 +262,7 @@ function FavoritesPanel({ onClose }) {
                       className="bg-blue-500 text-white px-3 py-2 rounded hover:bg-blue-600 transition text-sm font-medium"
                       title="Get directions"
                     >
-                      🗺️
+                      
                     </button>
                   </div>
                 </div>
@@ -524,7 +524,7 @@ return (
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold text-gray-900">⭐ My Favorites</h2>
         <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-          ✕
+          
         </button>
       </div>
 
@@ -537,7 +537,7 @@ return (
               : 'text-gray-600 hover:text-gray-900'
             }`}
         >
-          📍 Locations ({favorites.length})
+           Locations ({favorites.length})
         </button>
         <button
           onClick={() => setActiveTab('listings')}
@@ -546,19 +546,19 @@ return (
               : 'text-gray-600 hover:text-gray-900'
             }`}
         >
-          🍎 Food Listings ({favoritedListings.length})
+           Food Listings ({favoritedListings.length})
         </button>
       </div>
 
       {success && (
         <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-lg">
-          ✓ {success}
+           {success}
         </div>
       )}
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg">
-          ⚠️ {error}
+           {error}
         </div>
       )}
 
@@ -569,7 +569,7 @@ return (
             className="w-full mb-4 px-4 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
             onClick={() => setShowAdd((v) => !v)}
           >
-            {showAdd ? '✕ Cancel' : '+ Add New Favorite Location'}
+            {showAdd ? ' Cancel' : '+ Add New Favorite Location'}
           </button>
 
           {showAdd && (
@@ -625,7 +625,7 @@ return (
                   />
                 </div>
                 <button className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors" type="submit">
-                  💾 Save Favorite
+                   Save Favorite
                 </button>
               </div>
             </form>
@@ -653,19 +653,19 @@ return (
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl">📍</span>
+                        <span className="text-2xl"></span>
                         <h3 className="font-semibold text-lg text-gray-900">{fav.name || fav.address}</h3>
                       </div>
                       {fav.name && fav.address && (
-                        <p className="text-gray-600 text-sm mb-1 ml-8">📍 {fav.address}</p>
+                        <p className="text-gray-600 text-sm mb-1 ml-8"> {fav.address}</p>
                       )}
                       {fav.notes && (
-                        <p className="text-gray-500 text-sm italic mt-2 ml-8 bg-gray-50 p-2 rounded">💡 {fav.notes}</p>
+                        <p className="text-gray-500 text-sm italic mt-2 ml-8 bg-gray-50 p-2 rounded"> {fav.notes}</p>
                       )}
                       <div className="flex items-center gap-4 mt-3 ml-8 text-xs text-gray-400">
                         <span>Added {new Date(fav.created_at).toLocaleDateString()}</span>
                         {fav.coords_lat && fav.coords_lng && (
-                          <span className="text-green-600">📌 GPS Saved</span>
+                          <span className="text-green-600"> GPS Saved</span>
                         )}
                       </div>
                     </div>
@@ -678,7 +678,7 @@ return (
                       className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4"
                       title="Remove from favorites"
                     >
-                      🗑️
+                      
                     </button>
                   </div>
                 </div>
@@ -698,9 +698,9 @@ return (
             </div>
           ) : favoritedListings.length === 0 ? (
             <div className="text-center py-12 text-gray-500">
-              <div className="text-6xl mb-4">🍎</div>
+              <div className="text-6xl mb-4"></div>
               <h3 className="text-xl font-semibold mb-2">No favorited food listings yet</h3>
-              <p className="text-sm">Click the ☆ star on any listing to save it here</p>
+              <p className="text-sm">Click the  star on any listing to save it here</p>
             </div>
           ) : (
             favoritedListings.map(listing => (
@@ -708,7 +708,7 @@ return (
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl">🍎</span>
+                      <span className="text-2xl"></span>
                       <h3 className="font-semibold text-lg text-gray-900">{listing.title}</h3>
                       <span className={`text-xs px-2 py-1 rounded-full ${listing.status === 'available' ? 'bg-green-100 text-green-800' :
                           listing.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
@@ -719,8 +719,8 @@ return (
                     </div>
                     <p className="text-gray-600 text-sm mb-2">{listing.description}</p>
                     <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span>📍 {listing.address}</span>
-                      <span>📦 {listing.qty} {listing.unit}</span>
+                      <span> {listing.address}</span>
+                      <span> {listing.qty} {listing.unit}</span>
                     </div>
                   </div>
                   <button
@@ -740,7 +740,7 @@ return (
                     className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4"
                     title="Remove from favorites"
                   >
-                    🗑️
+                    
                   </button>
                 </div>
               </div>
@@ -751,7 +751,7 @@ return (
 
       <div className="mt-6 pt-4 border-t border-gray-200">
         <p className="text-xs text-gray-500 text-center">
-          💡 Tip: Save locations you visit regularly for quick access. Perfect for families with routines!
+           Tip: Save locations you visit regularly for quick access. Perfect for families with routines!
         </p>
       </div>
     </div>

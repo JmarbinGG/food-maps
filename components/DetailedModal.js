@@ -251,11 +251,11 @@ function DetailedModal({ listing, onClose, onClaim }) {
     };
 
     const icons = {
-      critical: '🚨',
-      high: '⚠️',
+      critical: '',
+      high: '',
       medium: '⏰',
-      low: '✓',
-      expired: '❌'
+      low: '',
+      expired: ''
     };
 
     const messages = {

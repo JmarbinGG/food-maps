@@ -32,7 +32,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
         // Show debug code if available (development mode)
         if (data.debug_code) {
           setDebugCode(data.debug_code);
-          console.log('🔑 Verification Code:', data.debug_code);
+          console.log(' Verification Code:', data.debug_code);
         }
       } else {
         setError(data.detail || 'Failed to send verification code');
@@ -115,7 +115,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
             <>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">
-                  🔐 Forgot Password?
+                   Forgot Password?
                 </h2>
                 <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   <div className="icon-x text-xl"></div>
@@ -179,7 +179,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
             <>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">
-                  ✉️ Check Your Email
+                   Check Your Email
                 </h2>
                 <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   <div className="icon-x text-xl"></div>
@@ -193,7 +193,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
               {/* Debug code display (development mode) */}
               {debugCode && (
                 <div className="bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg p-4 mb-4 text-center">
-                  <p className="text-xs text-[var(--text-secondary)] mb-1">🔧 Development Mode</p>
+                  <p className="text-xs text-[var(--text-secondary)] mb-1"> Development Mode</p>
                   <p className="text-2xl font-bold text-blue-600 tracking-widest">{debugCode}</p>
                   <p className="text-xs text-[var(--text-secondary)] mt-1">Check server console for email output</p>
                 </div>
@@ -280,7 +280,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
             <>
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold text-[var(--text-primary)]">
-                  ✅ Success!
+                   Success!
                 </h2>
                 <button onClick={onClose} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)]">
                   <div className="icon-x text-xl"></div>

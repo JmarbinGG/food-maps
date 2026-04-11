@@ -59,7 +59,7 @@ function ConfirmationModal({ isOpen, listingId, onClose, onConfirmed }) {
 
         <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
           <p className="text-blue-800 text-sm">
-            📱 We sent a 4-digit confirmation code to your phone. Enter it below within 5 minutes to confirm your claim.
+             We sent a 4-digit confirmation code to your phone. Enter it below within 5 minutes to confirm your claim.
           </p>
         </div>
 

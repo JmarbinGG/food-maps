@@ -95,7 +95,7 @@ class ErrorBoundary extends React.Component {
                 onClick={this.handleReportError}
                 className="w-full bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 font-medium flex items-center justify-center space-x-2"
               >
-                <span>🐛</span>
+                <span></span>
                 <span>Report This Error</span>
               </button>
 

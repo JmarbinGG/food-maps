@@ -15,11 +15,11 @@ function FeedbackModal({ onClose, initialData = null }) {
   const [capturingScreenshot, setCapturingScreenshot] = React.useState(false);
 
   const feedbackTypes = [
-    { value: 'bug', label: '🐛 Bug Report', description: 'Report something that isn\'t working' },
-    { value: 'error_report', label: '⚠️ Error Report', description: 'Report a technical error' },
-    { value: 'feature_request', label: '💡 Feature Request', description: 'Suggest a new feature' },
-    { value: 'improvement', label: '✨ Improvement', description: 'Suggest an enhancement' },
-    { value: 'general', label: '💬 General Feedback', description: 'Share your thoughts' }
+    { value: 'bug', label: 'Bug Report', description: 'Report something that isn\'t working' },
+    { value: 'error_report', label: 'Error Report', description: 'Report a technical error' },
+    { value: 'feature_request', label: 'Feature Request', description: 'Suggest a new feature' },
+    { value: 'improvement', label: 'Improvement', description: 'Suggest an enhancement' },
+    { value: 'general', label: 'General Feedback', description: 'Share your thoughts' }
   ];
 
   const captureScreenshot = async () => {
@@ -264,7 +264,7 @@ function FeedbackModal({ onClose, initialData = null }) {
                 disabled={capturingScreenshot || isSubmitting}
                 className="text-sm text-green-600 hover:text-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {capturingScreenshot ? '⏳ Capturing...' : includeScreenshot ? '✓ Captured' : '📷 Capture Screen'}
+                {capturingScreenshot ? 'Capturing...' : includeScreenshot ? 'Captured' : 'Capture Screen'}
               </button>
             </div>
             <p className="text-xs text-gray-500">
@@ -273,7 +273,7 @@ function FeedbackModal({ onClose, initialData = null }) {
             {includeScreenshot && (
               <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-green-700 font-medium">✓ Screenshot attached</span>
+                  <span className="text-xs text-green-700 font-medium">Screenshot attached</span>
                   <button
                     type="button"
                     onClick={() => {

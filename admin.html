@@ -210,7 +210,7 @@
                   onClick={() => setShowAddForm(!showAddForm)}
                   className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-semibold"
                 >
-                  {showAddForm ? '✕ Cancel' : '+ Add New Center'}
+                  {showAddForm ? ' Cancel' : '+ Add New Center'}
                 </button>
               </div>
             </div>
@@ -301,7 +301,7 @@
                     <div ref={mapContainer} className="map-container border-2 border-gray-300 rounded-lg"></div>
                     {markerPosition && (
                       <p className="text-sm text-green-600 mt-2">
-                        ✓ Location selected: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
+                        Location selected: {markerPosition.lat.toFixed(6)}, {markerPosition.lng.toFixed(6)}
                       </p>
                     )}
                   </div>
@@ -350,9 +350,9 @@
                             <p className="text-sm text-gray-600 mb-2">{center.description}</p>
                           )}
                           <div className="space-y-1 text-sm text-gray-500">
-                            <p>📍 {center.address}</p>
-                            {center.phone && <p>📞 {center.phone}</p>}
-                            {center.hours && <p>🕐 {center.hours}</p>}
+                            <p>Address: {center.address}</p>
+                            {center.phone && <p>Phone: {center.phone}</p>}
+                            {center.hours && <p>Hours: {center.hours}</p>}
                             <p className="text-xs text-gray-400">
                               Coordinates: {center.coords_lat}, {center.coords_lng}
                             </p>

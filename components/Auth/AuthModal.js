@@ -98,13 +98,13 @@ function AuthModal({ onClose, onAuth }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('🔐 Login form submitted');
+    console.log('Login form submitted');
     console.log('Captcha verified:', captchaVerified);
     console.log('Form data:', { email: formData.email, hasPassword: !!formData.password });
 
     // Check captcha verification
     if (!captchaVerified) {
-      console.log('❌ Captcha not verified');
+      console.log('Captcha not verified');
       setAuthError('Please complete the captcha verification');
       return;
     }
@@ -116,12 +116,12 @@ function AuthModal({ onClose, onAuth }) {
       isNewUser: !isLogin
     };
     if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) === false) {
-      console.log('❌ Invalid email format');
+      console.log('Invalid email format');
       setAuthError('Please enter a valid email address');
       return;
     }
     if (isLogin) {
-      console.log('📧 Attempting login for:', formData.email);
+      console.log('Attempting login for:', formData.email);
       setAuthError('');
       try {
         const json = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
@@ -352,7 +352,7 @@ function AuthModal({ onClose, onAuth }) {
                 />
                 {referralValid === true && referrerName && (
                   <p className="text-sm text-green-600 mt-1">
-                    ✓ Referred by {referrerName}
+                     Referred by {referrerName}
                   </p>
                 )}
                 {referralValid === false && formData.referralCode && (

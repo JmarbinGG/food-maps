@@ -48,56 +48,48 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
       id: 'new_listings',
       title: 'New Listings Nearby',
       description: 'Get notified when fresh food is available near you',
-      icon: '🆕',
       example: '"Fresh produce just arrived 0.4 miles away - 5 lbs available"'
     },
     {
       id: 'claimed_ready',
       title: 'Pickup Ready',
       description: 'Confirmation when your claimed food is ready for pickup',
-      icon: '✅',
       example: '"Your chicken & vegetables are ready at Main Street Market"'
     },
     {
       id: 'expiring_soon',
       title: 'Expiration Reminders',
       description: 'Alerts when your claimed items are expiring soon',
-      icon: '⏰',
       example: '"Your milk expires in 2 hours - use it or freeze it now"'
     },
     {
       id: 'spoilage_alerts',
       title: 'Spoilage Warnings',
       description: 'Critical food safety alerts for items that may be unsafe',
-      icon: '⚠️',
       example: '"URGENT: Prepared food has been at room temp for 6 hours"'
     },
     {
       id: 'pickup_reminders',
       title: 'Pickup Time Reminders',
       description: 'Reminders 1 hour and 15 minutes before scheduled pickup',
-      icon: '🔔',
       example: '"Reminder: Pickup at Joe\'s Deli at 3:00 PM (15 minutes)"'
     },
     {
       id: 'location_restocked',
       title: 'Favorite Location Updates',
       description: 'When your saved locations get new inventory',
-      icon: '⭐',
       example: '"Your saved location Community Pantry just restocked produce"'
     },
     {
       id: 'meal_suggestions',
       title: 'Meal Ideas',
       description: 'Quick recipes to use your expiring items (max 1/day)',
-      icon: '👨‍🍳',
       example: '"You have chicken + greens expiring - here\'s a 15-min meal"'
     },
     {
       id: 'urgent_only',
       title: 'Urgent Alerts Only',
       description: 'Only critical safety alerts and time-sensitive pickups',
-      icon: '🚨',
       example: 'Only food safety warnings and same-day pickup confirmations'
     }
   ];
@@ -254,7 +246,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
         <div className="bg-white rounded-lg p-8 max-w-md">
           <div className="text-center">
-            <div className="text-6xl mb-4 animate-pulse">📱</div>
+            <div className="text-6xl mb-4 animate-pulse"></div>
             <p className="text-gray-600">Loading SMS preferences...</p>
           </div>
         </div>
@@ -269,7 +261,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-lg sticky top-0 z-10">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold mb-2">📱 SMS Text Notifications</h2>
+              <h2 className="text-2xl font-bold mb-2"> SMS Text Notifications</h2>
               <p className="text-sm opacity-90">
                 Choose which text messages you want to receive
               </p>
@@ -288,7 +280,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
           {showSuccess && (
             <div className="mb-6 bg-green-50 border-2 border-green-500 rounded-lg p-4 animate-pulse">
               <div className="flex items-center gap-3">
-                <span className="text-3xl">✅</span>
+                <span className="text-3xl"></span>
                 <div>
                   <div className="font-bold text-green-900">Preferences Saved!</div>
                   <div className="text-sm text-green-800">
@@ -307,7 +299,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
             : 'bg-yellow-50 border-yellow-300'
             }`}>
             <div className="flex items-start gap-3">
-              <span className="text-2xl">{currentPhone ? '✓' : '⚠️'}</span>
+              <span className="text-2xl">{currentPhone ? '' : ''}</span>
               <div className="flex-1">
                 <div className="font-semibold mb-1">
                   {currentPhone ? 'Phone Number on File' : 'Phone Number Required'}
@@ -316,7 +308,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
                   {currentPhone ? (
                     <span>
                       {currentPhone}
-                      {currentPhoneVerified && <span className="ml-2 text-green-600 font-semibold">✓ Verified</span>}
+                      {currentPhoneVerified && <span className="ml-2 text-green-600 font-semibold"> Verified</span>}
                     </span>
                   ) : (
                     <div className="space-y-2">
@@ -381,7 +373,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="text-2xl">{type.icon}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded bg-blue-100 text-blue-700">{type.icon}</span>
                         <span className="font-semibold">{type.title}</span>
                       </div>
                       <div className="text-sm text-gray-600 mb-2">
@@ -399,7 +391,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
           {/* Legal Compliance Notice */}
           <div className="mb-6 bg-purple-50 border-l-4 border-purple-500 p-4 text-sm">
-            <div className="font-semibold mb-2">📋 Important Information:</div>
+            <div className="font-semibold mb-2"> Important Information:</div>
             <ul className="space-y-1 text-gray-700">
               <li>• By enabling SMS, you agree to receive text messages at {currentPhone || 'your phone number'}</li>
               <li>• Message frequency varies based on selected notification types</li>

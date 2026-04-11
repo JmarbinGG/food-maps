@@ -113,9 +113,9 @@ function EmergencyResponse({ user, onClose }) {
                     onChange={(e) => setEmergencyForm(prev => ({...prev, urgency: e.target.value}))}
                     className="p-3 border border-red-200 rounded-lg focus:border-red-500"
                   >
-                    <option value="critical">🚨 Critical (0-1 hour)</option>
-                    <option value="high">⚠️ High (1-4 hours)</option>
-                    <option value="medium">🔔 Medium (4-12 hours)</option>
+                    <option value="critical"> Critical (0-1 hour)</option>
+                    <option value="high"> High (1-4 hours)</option>
+                    <option value="medium"> Medium (4-12 hours)</option>
                   </select>
                   
                   <input
@@ -171,7 +171,7 @@ function EmergencyResponse({ user, onClose }) {
                   disabled={isCreatingRequest}
                   className="w-full bg-red-600 text-white py-3 rounded-lg font-bold hover:bg-red-700 disabled:opacity-50"
                 >
-                  {isCreatingRequest ? 'Creating Emergency Request...' : '🚨 Submit Emergency Request'}
+                  {isCreatingRequest ? 'Creating Emergency Request...' : ' Submit Emergency Request'}
                 </button>
               </form>
             </div>

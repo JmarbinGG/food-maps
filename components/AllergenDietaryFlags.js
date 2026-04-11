@@ -6,56 +6,56 @@ const { useState } = React;
 const ALLERGENS = {
   nuts: {
     name: 'Nuts',
-    icon: '🥜',
+    icon: '',
     color: 'red',
     severity: 'high',
     description: 'Contains or may contain tree nuts or peanuts'
   },
   dairy: {
     name: 'Dairy',
-    icon: '🥛',
+    icon: '',
     color: 'orange',
     severity: 'medium',
     description: 'Contains milk, cheese, or other dairy products'
   },
   gluten: {
     name: 'Gluten',
-    icon: '🌾',
+    icon: '',
     color: 'yellow',
     severity: 'medium',
     description: 'Contains wheat, barley, rye, or other gluten-containing grains'
   },
   shellfish: {
     name: 'Shellfish',
-    icon: '🦐',
+    icon: '',
     color: 'red',
     severity: 'high',
     description: 'Contains or may contain shellfish (shrimp, crab, lobster, etc.)'
   },
   soy: {
     name: 'Soy',
-    icon: '🫘',
+    icon: '',
     color: 'yellow',
     severity: 'medium',
     description: 'Contains soy or soy-derived ingredients'
   },
   eggs: {
     name: 'Eggs',
-    icon: '🥚',
+    icon: '',
     color: 'yellow',
     severity: 'medium',
     description: 'Contains eggs or egg-derived ingredients'
   },
   fish: {
     name: 'Fish',
-    icon: '🐟',
+    icon: '',
     color: 'orange',
     severity: 'medium',
     description: 'Contains or may contain fish'
   },
   sesame: {
     name: 'Sesame',
-    icon: '🌰',
+    icon: '',
     color: 'orange',
     severity: 'medium',
     description: 'Contains sesame seeds or sesame oil'
@@ -66,28 +66,28 @@ const ALLERGENS = {
 const CONTAMINATION_WARNINGS = {
   'shared-kitchen': {
     label: 'Prepared in shared kitchen',
-    icon: '⚠️',
+    icon: '',
     color: 'yellow',
     description: 'Prepared in a facility that also processes common allergens',
     severity: 'medium'
   },
   'shared-equipment': {
     label: 'Shared equipment',
-    icon: '⚠️',
+    icon: '',
     color: 'orange',
     description: 'Prepared using equipment shared with allergen-containing foods',
     severity: 'medium'
   },
   'may-contain': {
     label: 'May contain traces',
-    icon: '⚠️',
+    icon: '',
     color: 'yellow',
     description: 'May contain traces of allergens due to production process',
     severity: 'low'
   },
   'home-kitchen': {
     label: 'Home kitchen',
-    icon: '🏠',
+    icon: '',
     color: 'blue',
     description: 'Prepared in a home kitchen (allergen exposure varies)',
     severity: 'low'
@@ -98,43 +98,43 @@ const CONTAMINATION_WARNINGS = {
 const DIETARY_TAGS = {
   vegetarian: {
     name: 'Vegetarian',
-    icon: '🥬',
+    icon: '',
     color: 'green',
     description: 'No meat, poultry, or fish'
   },
   vegan: {
     name: 'Vegan',
-    icon: '🌱',
+    icon: '',
     color: 'green',
     description: 'No animal products (meat, dairy, eggs, honey)'
   },
   halal: {
     name: 'Halal',
-    icon: '☪️',
+    icon: '',
     color: 'green',
     description: 'Prepared according to Islamic dietary guidelines'
   },
   kosher: {
     name: 'Kosher',
-    icon: '✡️',
+    icon: '',
     color: 'green',
     description: 'Prepared according to Jewish dietary laws'
   },
   'gluten-free': {
     name: 'Gluten-Free',
-    icon: '🚫🌾',
+    icon: '',
     color: 'blue',
     description: 'Does not contain gluten'
   },
   'dairy-free': {
     name: 'Dairy-Free',
-    icon: '🚫🥛',
+    icon: '',
     color: 'blue',
     description: 'Does not contain dairy products'
   },
   'nut-free': {
     name: 'Nut-Free',
-    icon: '🚫🥜',
+    icon: '',
     color: 'blue',
     description: 'Does not contain nuts'
   }
@@ -246,7 +246,7 @@ function AllergenDietaryPanel({
       React.createElement('div', { className: 'flex items-start justify-between' },
         React.createElement('div', { className: 'flex-1' },
           React.createElement('div', { className: 'flex items-center gap-2 mb-2' },
-            React.createElement('span', { className: 'text-2xl' }, '⚠️'),
+            React.createElement('span', { className: 'text-2xl' }, ''),
             React.createElement('div', {},
               React.createElement('div', { className: `font-bold ${textColorClasses[overallSeverity]}` },
                 'Allergen Warning'
@@ -288,8 +288,8 @@ function AllergenDietaryPanel({
               className: `text-sm font-bold ${textColorClasses[overallSeverity]}`
             },
               highSeverityAllergens.length > 0
-                ? '⚠️ SEVERE ALLERGY RISK - If you have allergies to these items, DO NOT consume'
-                : '⚠️ Check ingredients carefully if you have food allergies'
+                ? ' SEVERE ALLERGY RISK - If you have allergies to these items, DO NOT consume'
+                : ' Check ingredients carefully if you have food allergies'
             )
           )
         ),
@@ -335,7 +335,7 @@ function AllergenDietaryPanel({
     },
       React.createElement('div', { className: 'flex items-center gap-2' },
         React.createElement('span', { className: 'text-lg' },
-          CONTAMINATION_WARNINGS[contaminationWarning]?.icon || '⚠️'
+          CONTAMINATION_WARNINGS[contaminationWarning]?.icon || ''
         ),
         React.createElement('div', { className: 'flex-1' },
           React.createElement('div', { className: 'font-semibold text-yellow-900 text-sm' },
@@ -353,7 +353,7 @@ function AllergenDietaryPanel({
       className: 'mt-3 p-3 rounded-lg border bg-green-50 border-green-300'
     },
       React.createElement('div', { className: 'flex items-center gap-2 mb-2' },
-        React.createElement('span', { className: 'text-lg' }, '✓'),
+        React.createElement('span', { className: 'text-lg' }, ''),
         React.createElement('div', { className: 'font-semibold text-green-900 text-sm' },
           'Dietary Information'
         )
@@ -382,7 +382,7 @@ function AllergenDietaryPanel({
 
     // General safety notice
     React.createElement('div', { className: 'mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800' },
-      React.createElement('div', { className: 'font-semibold mb-1' }, '🛡️ Safety Notice'),
+      React.createElement('div', { className: 'font-semibold mb-1' }, ' Safety Notice'),
       React.createElement('div', {},
         'Always check food carefully before consuming. If you have severe allergies, ask the donor for detailed ingredient information. When in doubt, don\'t eat it.'
       )
