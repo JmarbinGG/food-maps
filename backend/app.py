@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 import jwt
 import json
@@ -110,6 +110,124 @@ if not PUBLIC_BASE_URL:
 def get_public_base_url() -> str:
     """Return the user-facing base URL configured in environment."""
     return PUBLIC_BASE_URL.rstrip("/")
+
+
+# Global request input constraints for API routes.
+MAX_API_BODY_BYTES = 64 * 1024
+MAX_QUERY_STRING_BYTES = 2048
+MAX_QUERY_PARAM_NAME_CHARS = 64
+MAX_QUERY_PARAM_VALUE_CHARS = 512
+MAX_JSON_STRING_CHARS = 5000
+MAX_JSON_KEY_CHARS = 128
+MAX_JSON_OBJECT_KEYS = 200
+MAX_JSON_ARRAY_ITEMS = 500
+MAX_JSON_NESTING_DEPTH = 20
+
+
+def _contains_disallowed_control_chars(value: str) -> bool:
+    for ch in value:
+        code = ord(ch)
+        if (code < 32 and ch not in {"\n", "\r", "\t"}) or code == 127:
+            return True
+    return False
+
+
+def _sanitize_text(value: str, *, max_chars: int, label: str) -> str:
+    if len(value) > max_chars:
+        raise HTTPException(status_code=413, detail=f"{label} is too large")
+    if _contains_disallowed_control_chars(value):
+        raise HTTPException(status_code=400, detail=f"{label} contains invalid characters")
+    return value.strip()
+
+
+def _sanitize_json_payload(value: Any, depth: int = 0) -> Any:
+    if depth > MAX_JSON_NESTING_DEPTH:
+        raise HTTPException(status_code=400, detail="JSON payload is too deeply nested")
+
+    if isinstance(value, dict):
+        if len(value) > MAX_JSON_OBJECT_KEYS:
+            raise HTTPException(status_code=413, detail="JSON object has too many fields")
+        sanitized: Dict[str, Any] = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise HTTPException(status_code=400, detail="JSON object keys must be strings")
+            clean_key = _sanitize_text(key, max_chars=MAX_JSON_KEY_CHARS, label="JSON field name")
+            sanitized[clean_key] = _sanitize_json_payload(item, depth + 1)
+        return sanitized
+
+    if isinstance(value, list):
+        if len(value) > MAX_JSON_ARRAY_ITEMS:
+            raise HTTPException(status_code=413, detail="JSON array is too large")
+        return [_sanitize_json_payload(item, depth + 1) for item in value]
+
+    if isinstance(value, str):
+        return _sanitize_text(value, max_chars=MAX_JSON_STRING_CHARS, label="JSON field value")
+
+    # JSON scalar values allowed as-is.
+    if isinstance(value, (int, float, bool)) or value is None:
+        return value
+
+    raise HTTPException(status_code=400, detail="Unsupported JSON value")
+
+
+def _validate_query_params(request: Request) -> None:
+    if len(request.url.query) > MAX_QUERY_STRING_BYTES:
+        raise HTTPException(status_code=413, detail="Query string is too large")
+
+    for key, value in request.query_params.multi_items():
+        _sanitize_text(key, max_chars=MAX_QUERY_PARAM_NAME_CHARS, label="Query parameter name")
+        _sanitize_text(value, max_chars=MAX_QUERY_PARAM_VALUE_CHARS, label="Query parameter value")
+
+
+async def _set_request_body(request: Request, body: bytes) -> None:
+    async def receive() -> dict:
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request._receive = receive
+
+
+@app.middleware("http")
+async def sanitize_api_input(request: Request, call_next):
+    """Validate and sanitize user-provided API input before endpoint handlers run."""
+    path = request.url.path.lower()
+
+    if path.startswith("/api"):
+        _validate_query_params(request)
+
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > MAX_API_BODY_BYTES:
+                    raise HTTPException(status_code=413, detail="Request body is too large")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid Content-Length header")
+
+        if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
+            body = await request.body()
+            if len(body) > MAX_API_BODY_BYTES:
+                raise HTTPException(status_code=413, detail="Request body is too large")
+
+            if body:
+                content_type = request.headers.get("content-type", "").lower()
+
+                if "application/json" in content_type:
+                    try:
+                        parsed = json.loads(body.decode("utf-8"))
+                    except UnicodeDecodeError:
+                        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8")
+                    except json.JSONDecodeError:
+                        raise HTTPException(status_code=400, detail="Malformed JSON request body")
+
+                    sanitized_payload = _sanitize_json_payload(parsed)
+                    sanitized_body = json.dumps(sanitized_payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+                    await _set_request_body(request, sanitized_body)
+                elif "application/x-www-form-urlencoded" in content_type:
+                    try:
+                        body.decode("utf-8")
+                    except UnicodeDecodeError:
+                        raise HTTPException(status_code=400, detail="Request body must be valid UTF-8")
+
+    return await call_next(request)
 
 
 # Login rate limiting: max 5 attempts per 10-minute window.
