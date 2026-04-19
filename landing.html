@@ -39,14 +39,12 @@
     }
 
     @layer utilities {
-        .gradient-bg {
-            background: linear-gradient(135deg, #10b981 0%, #34d399 50%, #059669 100%);
+        .hero-band {
+            background: #15803d;
         }
         
         .hero-pattern {
             background-image: 
-                radial-gradient(circle at 25% 25%, rgba(16, 185, 129, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 75% 75%, rgba(5, 150, 105, 0.1) 0%, transparent 50%),
                 url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2310b981' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
         }
         
@@ -140,7 +138,6 @@
         background-color: rgba(255, 255, 255, 0.5);
         cursor: pointer;
         transition: all 0.3s;
-        backdrop-filter: blur(4px);
     }
 
     .slide-indicator.active {
@@ -269,7 +266,7 @@
     <!-- AI Search Modal Container -->
     <div id="ai-search-modal"></div>
     <!-- Navigation -->
-    <nav class="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-200 sticky top-0 z-50">
+    <nav class="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-20">
                 <div class="flex items-center">
@@ -292,11 +289,11 @@
                         Story</a>
 
                     <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg">
+                        class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg">
                         Donate
                     </button>
                     <button onclick="window.location.href='index.html'"
-                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg">
+                        class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg">
                         Get Started
                     </button>
                 </div>
@@ -311,7 +308,7 @@
             </div>
 
             <!-- Mobile Menu -->
-            <div id="mobile-menu" class="md:hidden hidden bg-white/95 backdrop-blur-lg border-t border-gray-200 pb-4">
+            <div id="mobile-menu" class="md:hidden hidden bg-white border-t border-gray-200 pb-4">
                 <div class="flex flex-col space-y-4 pt-4">
                     <a href="#features" onclick="scrollToSection('features'); closeMobileMenu();"
                         class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Features</a>
@@ -325,11 +322,11 @@
                         Story</a>
 
                     <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
+                        class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Donate
                     </button>
                     <button onclick="window.location.href='index.html'"
-                        class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
+                        class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Get Started
                     </button>
                 </div>
@@ -339,7 +336,7 @@
 
     <!-- Admin Edit Button for Slideshow -->
     <button id="slideshow-admin-btn"
-        class="hidden fixed top-32 right-6 z-50 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 transition-all">
+        class="hidden fixed top-32 right-6 z-50 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-orange-600 transition-all">
         <div class="flex items-center gap-2">
             <div class="icon-edit text-xl"></div>
             <span>Edit Slideshow</span>
@@ -415,11 +412,11 @@
 
         <!-- Slideshow Controls -->
         <button id="prev-slide"
-            class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-10">
+            class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/25 hover:bg-white/40 text-white p-3 rounded-full transition-all z-10">
             <div class="icon-chevron-left text-2xl"></div>
         </button>
         <button id="next-slide"
-            class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white p-3 rounded-full transition-all z-10">
+            class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/25 hover:bg-white/40 text-white p-3 rounded-full transition-all z-10">
             <div class="icon-chevron-right text-2xl"></div>
         </button>
 
@@ -453,8 +450,7 @@
                 <div class="fade-in-delayed-1 mb-8">
                     <h1 class="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight">
                         Connecting Communities<br>
-                        <span
-                            class="bg-gradient-to-r from-emerald-300 via-green-200 to-teal-200 bg-clip-text text-transparent">
+                        <span class="text-orange-200">
                             Through Food
                         </span>
                     </h1>
@@ -468,8 +464,7 @@
                 <div class="fade-in-delayed-2 flex flex-col sm:flex-row gap-6 justify-center mb-16">
                     <button onclick="openAISearch()"
                         class="group relative bg-white text-emerald-600 px-12 py-6 rounded-2xl font-bold text-xl hover:bg-emerald-50 transition-all transform hover:scale-105 shadow-2xl overflow-hidden">
-                        <div
-                            class="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-green-500/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div class="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity">
                         </div>
                         <div class="relative flex items-center">
                             <div class="icon-search text-2xl mr-3 group-hover:scale-110 transition-transform"></div>
@@ -477,7 +472,7 @@
                         </div>
                     </button>
                     <button onclick="window.location.href='index.html#create'"
-                        class="group relative bg-gradient-to-r from-emerald-600 to-green-600 text-white px-12 py-6 rounded-2xl font-bold text-xl hover:from-emerald-700 hover:to-green-700 transition-all transform hover:scale-105 shadow-2xl overflow-hidden">
+                        class="group relative bg-green-600 text-white px-12 py-6 rounded-2xl font-bold text-xl hover:bg-green-700 transition-all transform hover:scale-105 shadow-2xl overflow-hidden">
                         <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
                         </div>
                         <div class="relative flex items-center">
@@ -490,25 +485,25 @@
                 <!-- Stats Cards -->
                 <div class="fade-in-delayed-3 grid grid-cols-1 md:grid-cols-4 gap-6 max-w-6xl mx-auto">
                     <div
-                        class="bg-white/15 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all">
+                        class="bg-white/20 rounded-2xl p-6 border border-white/20 hover:bg-white/30 transition-all">
                         <div class="text-sm mb-3 uppercase tracking-[0.2em] text-emerald-200 font-semibold">AI</div>
                         <div class="text-3xl font-bold text-white mb-2">24/7</div>
                         <div class="text-emerald-200 font-medium">AI Matching</div>
                     </div>
                     <div
-                        class="bg-white/15 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all">
+                        class="bg-white/20 rounded-2xl p-6 border border-white/20 hover:bg-white/30 transition-all">
                         <div class="text-sm mb-3 uppercase tracking-[0.2em] text-emerald-200 font-semibold">Speed</div>
                         <div class="text-3xl font-bold text-white mb-2">60s</div>
                         <div class="text-emerald-200 font-medium">Donation Flow</div>
                     </div>
                     <div
-                        class="bg-white/15 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all">
+                        class="bg-white/20 rounded-2xl p-6 border border-white/20 hover:bg-white/30 transition-all">
                         <div class="text-sm mb-3 uppercase tracking-[0.2em] text-emerald-200 font-semibold">Precision</div>
                         <div class="text-3xl font-bold text-white mb-2">95%</div>
                         <div class="text-emerald-200 font-medium">Match Rate</div>
                     </div>
                     <div
-                        class="bg-white/15 backdrop-blur-lg rounded-2xl p-6 border border-white/20 hover:bg-white/20 transition-all">
+                        class="bg-white/20 rounded-2xl p-6 border border-white/20 hover:bg-white/30 transition-all">
                         <div class="text-sm mb-3 uppercase tracking-[0.2em] text-emerald-200 font-semibold">Impact</div>
                         <div class="text-3xl font-bold text-white mb-2">50K+</div>
                         <div class="text-emerald-200 font-medium">Meals Saved</div>
@@ -519,8 +514,7 @@
     </section>
 
     <!-- Features Section -->
-    <section id="features"
-        class="py-24 bg-gradient-to-br from-emerald-50 via-white to-green-50 relative overflow-hidden">
+    <section id="features" class="py-24 bg-white relative overflow-hidden">
         <!-- Background Pattern -->
         <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 100" height="100" viewBox="0 0 100 100"
             xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill-rule="evenodd" %3E%3Cg fill="%2310b981" fill-opacity="0.03"
@@ -534,8 +528,7 @@
                     class="inline-flex items-center bg-emerald-100 text-emerald-800 px-6 py-2 rounded-full font-semibold mb-6">
                     Revolutionary Technology
                 </div>
-                <h2
-                    class="text-5xl md:text-6xl font-bold bg-gradient-to-r from-emerald-900 via-green-800 to-emerald-900 bg-clip-text text-transparent mb-8 pb-4 leading-tight">
+                <h2 class="text-5xl md:text-6xl font-bold text-green-900 mb-8 pb-4 leading-tight">
                     Powered by Intelligence
                 </h2>
                 <p class="text-xl md:text-2xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
@@ -546,7 +539,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">AI</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Smart AI Matching</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Advanced algorithms instantly connect food donors with
@@ -558,7 +551,7 @@
                 </div>
 
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Routes</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Optimized Routes</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Multi-agent system creates the most efficient delivery
@@ -570,7 +563,7 @@
                 </div>
 
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Live</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Real-Time Tracking</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Monitor every donation and delivery with live updates,
@@ -582,7 +575,7 @@
                 </div>
 
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Maps</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Interactive Maps</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Beautiful, intuitive maps show available food in your
@@ -594,7 +587,7 @@
                 </div>
 
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-red-600 font-semibold">Urgent</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Emergency Priority</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Critical needs like water and perishable items get
@@ -606,7 +599,7 @@
                 </div>
 
                 <div
-                    class="group bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
                     <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">People</div>
                     <h3 class="text-2xl font-bold mb-4 text-gray-900">Community Roles</h3>
                     <p class="text-gray-600 leading-relaxed mb-6">Everyone can participate - donors, recipients,
@@ -639,8 +632,8 @@
                 </div>
 
                 <div class="text-center">
-                    <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <div class="icon-cpu text-3xl text-blue-600"></div>
+                    <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div class="icon-cpu text-3xl text-orange-600"></div>
                     </div>
                     <h3 class="text-2xl font-semibold mb-4">2. AI Matching</h3>
                     <p class="text-gray-600">Multi-agent system analyzes proximity, dietary needs, household size, and
@@ -648,8 +641,8 @@
                 </div>
 
                 <div class="text-center">
-                    <div class="w-20 h-20 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                        <div class="icon-truck text-3xl text-purple-600"></div>
+                    <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div class="icon-truck text-3xl text-orange-600"></div>
                     </div>
                     <h3 class="text-2xl font-semibold mb-4">3. Smart Delivery</h3>
                     <p class="text-gray-600">Volunteers receive optimized routes while recipients get real-time updates
@@ -660,8 +653,7 @@
     </section>
 
     <!-- Impact Section -->
-    <section id="impact"
-        class="py-24 bg-gradient-to-br from-slate-900 via-gray-900 to-emerald-900 text-white relative overflow-hidden">
+    <section id="impact" class="py-24 bg-green-900 text-white relative overflow-hidden">
         <!-- Background Pattern -->
         <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 80" height="80" viewBox="0 0 80 80"
             xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
@@ -673,8 +665,7 @@
                     class="inline-flex items-center bg-emerald-500/20 text-emerald-300 px-6 py-2 rounded-full font-semibold mb-6 border border-emerald-500/30">
                     Real Impact Metrics
                 </div>
-                <h2
-                    class="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-white via-emerald-200 to-white bg-clip-text text-transparent">
+                <h2 class="text-5xl md:text-6xl font-bold mb-6 text-white">
                     Transforming Communities
                 </h2>
                 <p class="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
@@ -685,7 +676,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
                     <div class="text-xs mb-4 uppercase tracking-[0.2em] text-emerald-300 font-semibold">Schools</div>
                     <div class="text-5xl font-bold text-emerald-400 mb-3 group-hover:scale-110 transition-transform">
                         25+</div>
@@ -693,24 +684,24 @@
                     <div class="text-gray-400 text-sm">Supporting education</div>
                 </div>
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
-                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-blue-300 font-semibold">Partners</div>
-                    <div class="text-5xl font-bold text-blue-400 mb-3 group-hover:scale-110 transition-transform">50+
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
+                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-orange-300 font-semibold">Partners</div>
+                    <div class="text-5xl font-bold text-orange-300 mb-3 group-hover:scale-110 transition-transform">50+
                     </div>
-                    <div class="text-blue-200 text-lg font-medium mb-2">Non-Profits Helped</div>
+                    <div class="text-orange-100 text-lg font-medium mb-2">Non-Profits Helped</div>
                     <div class="text-gray-400 text-sm">Community partners</div>
                 </div>
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
-                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-purple-300 font-semibold">Sustainability</div>
-                    <div class="text-5xl font-bold text-purple-400 mb-3 group-hover:scale-110 transition-transform">
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
+                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-orange-300 font-semibold">Sustainability</div>
+                    <div class="text-5xl font-bold text-orange-300 mb-3 group-hover:scale-110 transition-transform">
                         100K+
                     </div>
-                    <div class="text-purple-200 text-lg font-medium mb-2">Pounds Saved</div>
+                    <div class="text-orange-100 text-lg font-medium mb-2">Pounds Saved</div>
                     <div class="text-gray-400 text-sm">From being wasted</div>
                 </div>
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
                     <div class="text-xs mb-4 uppercase tracking-[0.2em] text-orange-300 font-semibold">Nutrition</div>
                     <div class="text-5xl font-bold text-orange-400 mb-3 group-hover:scale-110 transition-transform">85K+
                     </div>
@@ -718,7 +709,7 @@
                     <div class="text-gray-400 text-sm">To those in need</div>
                 </div>
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
                     <div class="text-xs mb-4 uppercase tracking-[0.2em] text-pink-300 font-semibold">Families</div>
                     <div class="text-5xl font-bold text-pink-400 mb-3 group-hover:scale-110 transition-transform">2,500+
                     </div>
@@ -726,7 +717,7 @@
                     <div class="text-gray-400 text-sm">Access to nutrition</div>
                 </div>
                 <div
-                    class="group bg-white/5 backdrop-blur-lg rounded-3xl p-8 border border-white/10 hover:bg-white/10 transition-all duration-300">
+                    class="group bg-white/10 rounded-3xl p-8 border border-white/10 hover:bg-white/15 transition-all duration-300">
                     <div class="text-xs mb-4 uppercase tracking-[0.2em] text-yellow-300 font-semibold">Speed</div>
                     <div class="text-5xl font-bold text-yellow-400 mb-3 group-hover:scale-110 transition-transform">15
                     </div>
@@ -737,7 +728,7 @@
 
             <div class="mt-16">
                 <div
-                    class="bg-gradient-to-r from-emerald-500/10 to-green-500/10 rounded-3xl p-8 border border-emerald-500/20">
+                    class="bg-green-800/40 rounded-3xl p-8 border border-emerald-400/30">
                     <h3 class="text-2xl font-bold text-emerald-300 mb-4">Every Action Creates Ripples</h3>
                     <p class="text-gray-300 text-lg leading-relaxed max-w-3xl mx-auto">
                         When you share food through Food Maps, you're not just feeding someone—you're strengthening
@@ -750,8 +741,7 @@
     </section>
 
     <!-- CTA Section -->
-    <section
-        class="py-24 bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white text-center relative overflow-hidden">
+    <section class="py-24 bg-green-700 text-white text-center relative overflow-hidden">
         <!-- Animated Background Elements -->
         <div class="absolute inset-0 pointer-events-none">
             <div class="floating absolute top-10 left-10 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
@@ -763,7 +753,7 @@
             <div class="mb-12">
                 <h2 class="text-5xl md:text-6xl font-bold mb-6 leading-tight">
                     Ready to Transform<br>
-                    <span class="bg-gradient-to-r from-white to-emerald-100 bg-clip-text text-transparent">Your
+                    <span class="text-orange-100">Your
                         Community?</span>
                 </h2>
                 <p class="text-xl md:text-2xl text-emerald-100 mb-8 max-w-3xl mx-auto leading-relaxed">
@@ -816,8 +806,7 @@
     <script type="text/babel" src="landing-app.js"></script>
 
     <!-- Footer -->
-    <footer
-        class="bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 text-gray-300 py-16 relative overflow-hidden">
+    <footer class="bg-gray-900 text-gray-300 py-16 relative overflow-hidden">
         <!-- Background Pattern -->
         <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 60" height="60" viewBox="0 0 60 60"
             xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
@@ -830,7 +819,7 @@
                         <a href="https://allgoodlivingfoundation.org/" target="_blank" rel="noopener noreferrer"
                             class="transition-transform hover:scale-105">
                             <img src="/logos/AGLfoundationLOGO.png"
-                                onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%228%22 fill=%22url(%23g)%22/%3E%3Cdefs%3E%3ClinearGradient id=%22g%22 x1=%220%22 y1=%220%22 x2=%221%22 y2=%221%22%3E%3Cstop offset=%220%22 stop-color=%22%2310b981%22/%3E%3Cstop offset=%221%22 stop-color=%22%23059669%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Ctext x=%2232%22 y=%2244%22 font-size=%2220%22 font-family=%22Arial,sans-serif%22 fill=%22white%22 text-anchor=%22middle%22%3EFM%3C/text%3E%3C/svg%3E';"
+                                onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%228%22 fill=%22%2315803d%22/%3E%3Ctext x=%2232%22 y=%2244%22 font-size=%2220%22 font-family=%22Arial,sans-serif%22 fill=%22white%22 text-anchor=%22middle%22%3EFM%3C/text%3E%3C/svg%3E';"
                                 alt="All Good Living Foundation" class="w-16 h-16 rounded-xl shadow-lg cursor-pointer">
                         </a>
                     </div>
