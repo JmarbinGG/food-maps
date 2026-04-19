@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 import jwt
 import json
 import os
-import random
+import secrets
 import string
 from urllib.parse import quote
 from passlib.context import CryptContext
@@ -49,7 +49,8 @@ pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 # Helper function to generate unique referral codes
 def generate_referral_code():
     """Generate a unique 8-character referral code"""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    alphabet = string.ascii_uppercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(8))
 
 app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -73,10 +74,18 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")  # Default Twilio number
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(HTTPException)
+async def secure_http_exception_handler(request: Request, exc: HTTPException):
+    """Avoid leaking internal server details through HTTP 500 responses."""
+    if exc.status_code >= 500:
+        return JSONResponse(status_code=exc.status_code, content={"detail": "Internal server error"})
+    return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
 @app.middleware("http")
@@ -242,6 +251,14 @@ SIGNUP_RATE_LIMIT_WINDOW = timedelta(minutes=30)
 signup_attempts_by_ip: Dict[str, List[datetime]] = {}
 signup_attempts_lock = Lock()
 
+# Password reset flow rate limiting.
+FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS = 5
+RESET_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS = 5
+PASSWORD_RESET_RATE_LIMIT_WINDOW = timedelta(minutes=30)
+forgot_password_attempts_by_key: Dict[str, List[datetime]] = {}
+reset_password_attempts_by_key: Dict[str, List[datetime]] = {}
+password_reset_attempts_lock = Lock()
+
 
 def _client_ip(request: Request) -> str:
     """Best-effort client IP extraction with proxy header fallback."""
@@ -309,6 +326,59 @@ def enforce_signup_rate_limit(request: Request) -> None:
 
         attempts.append(now)
         signup_attempts_by_ip[ip] = attempts
+
+
+def _ip_email_key(request: Request, email: Optional[str]) -> str:
+    ip = _client_ip(request)
+    email_part = (email or "").strip().lower()
+    return f"ip:{ip}|email:{email_part or '-'}"
+
+
+def _enforce_attempt_rate_limit(
+    attempts_store: Dict[str, List[datetime]],
+    max_attempts: int,
+    request: Request,
+    email: Optional[str],
+    action_label: str,
+) -> None:
+    now = datetime.utcnow()
+    cutoff = now - PASSWORD_RESET_RATE_LIMIT_WINDOW
+    key = _ip_email_key(request, email)
+
+    with password_reset_attempts_lock:
+        attempts = [ts for ts in attempts_store.get(key, []) if ts > cutoff]
+        if len(attempts) >= max_attempts:
+            retry_after_seconds = int((attempts[0] + PASSWORD_RESET_RATE_LIMIT_WINDOW - now).total_seconds())
+            if retry_after_seconds < 1:
+                retry_after_seconds = 1
+            retry_minutes = retry_after_seconds // 60 + (1 if retry_after_seconds % 60 else 0)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Too many {action_label} attempts. Please try again in about {retry_minutes} minute(s).",
+            )
+
+        attempts.append(now)
+        attempts_store[key] = attempts
+
+
+def enforce_forgot_password_rate_limit(request: Request, email: Optional[str]) -> None:
+    _enforce_attempt_rate_limit(
+        forgot_password_attempts_by_key,
+        FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS,
+        request,
+        email,
+        "password reset request",
+    )
+
+
+def enforce_reset_password_rate_limit(request: Request, email: Optional[str]) -> None:
+    _enforce_attempt_rate_limit(
+        reset_password_attempts_by_key,
+        RESET_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS,
+        request,
+        email,
+        "password reset",
+    )
 
 # -----------------------------
 # Serialization helpers
@@ -1235,7 +1305,7 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
 
         enforce_login_rate_limit(request, email)
 
-        print(f"Login attempt for email: {email}")
+        print("Login attempt received")
         
         if not email or not password:
             print("Missing email or password")
@@ -1274,10 +1344,12 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
 password_reset_codes = {}
 
 @app.post("/api/user/forgot-password")
-async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """Send password reset code to user's email"""
     try:
         email = payload.email
+
+        enforce_forgot_password_rate_limit(request, email)
         
         if not email:
             raise HTTPException(status_code=400, detail="Email is required")
@@ -1306,12 +1378,14 @@ async def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/reset-password")
-async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+async def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """Reset user password with verification code"""
     try:
         email = payload.email
         code = payload.code
         new_password = payload.new_password
+
+        enforce_reset_password_rate_limit(request, email)
         
         if not email or not code or not new_password:
             raise HTTPException(status_code=400, detail="Missing required fields")
@@ -1472,11 +1546,12 @@ pending_confirmations = {}
 
 def generate_reset_code(length: int = 6) -> str:
     """Generate a random numeric code for SMS confirmation"""
-    return ''.join(random.choices(string.digits, k=length))
+    return ''.join(secrets.choice(string.digits) for _ in range(length))
 
 def generate_referral_code() -> str:
     """Generate a unique referral code"""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    alphabet = string.ascii_uppercase + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(8))
 
 def send_sms(phone: str, message: str) -> bool:
     """Send SMS using Twilio API with fallback to console logging"""
