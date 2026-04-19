@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy import text
 from pydantic import BaseModel
 from datetime import datetime, timedelta
-from typing import Optional, List
+from typing import Optional, List, Dict
 from dotenv import load_dotenv
 import jwt
 import json
@@ -39,7 +39,7 @@ from backend.models import (
     FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
     PickupReminder, PickupReminderStatus, FavoriteLocation
 )
-from threading import Timer
+from threading import Timer, Lock
 from twilio.rest import Client
 from backend.db import engine, SessionLocal, get_db
 
@@ -110,6 +110,87 @@ if not PUBLIC_BASE_URL:
 def get_public_base_url() -> str:
     """Return the user-facing base URL configured in environment."""
     return PUBLIC_BASE_URL.rstrip("/")
+
+
+# Login rate limiting: max 5 attempts per 10-minute window.
+LOGIN_RATE_LIMIT_MAX_ATTEMPTS = 5
+LOGIN_RATE_LIMIT_WINDOW = timedelta(minutes=10)
+login_attempts_by_key: Dict[str, List[datetime]] = {}
+login_attempts_lock = Lock()
+
+# Signup rate limiting: max 3 attempts per 30-minute window.
+SIGNUP_RATE_LIMIT_MAX_ATTEMPTS = 3
+SIGNUP_RATE_LIMIT_WINDOW = timedelta(minutes=30)
+signup_attempts_by_ip: Dict[str, List[datetime]] = {}
+signup_attempts_lock = Lock()
+
+
+def _client_ip(request: Request) -> str:
+    """Best-effort client IP extraction with proxy header fallback."""
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    if request.client and request.client.host:
+        return request.client.host
+    return "unknown"
+
+
+def _login_rate_limit_key(request: Request, email: Optional[str]) -> str:
+    normalized_email = (email or "").strip().lower()
+    ip = _client_ip(request)
+    if normalized_email:
+        return f"email:{normalized_email}|ip:{ip}"
+    return f"ip:{ip}"
+
+
+def enforce_login_rate_limit(request: Request, email: Optional[str]) -> None:
+    """Allow up to LOGIN_RATE_LIMIT_MAX_ATTEMPTS login attempts in LOGIN_RATE_LIMIT_WINDOW."""
+    now = datetime.utcnow()
+    cutoff = now - LOGIN_RATE_LIMIT_WINDOW
+    key = _login_rate_limit_key(request, email)
+
+    with login_attempts_lock:
+        attempts = [ts for ts in login_attempts_by_key.get(key, []) if ts > cutoff]
+
+        if len(attempts) >= LOGIN_RATE_LIMIT_MAX_ATTEMPTS:
+            retry_after_seconds = int((attempts[0] + LOGIN_RATE_LIMIT_WINDOW - now).total_seconds())
+            if retry_after_seconds < 1:
+                retry_after_seconds = 1
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many login attempts. "
+                    f"Please try again in about {retry_after_seconds // 60 + (1 if retry_after_seconds % 60 else 0)} minute(s)."
+                )
+            )
+
+        attempts.append(now)
+        login_attempts_by_key[key] = attempts
+
+
+def enforce_signup_rate_limit(request: Request) -> None:
+    """Allow up to SIGNUP_RATE_LIMIT_MAX_ATTEMPTS signup attempts in SIGNUP_RATE_LIMIT_WINDOW."""
+    now = datetime.utcnow()
+    cutoff = now - SIGNUP_RATE_LIMIT_WINDOW
+    ip = _client_ip(request)
+
+    with signup_attempts_lock:
+        attempts = [ts for ts in signup_attempts_by_ip.get(ip, []) if ts > cutoff]
+
+        if len(attempts) >= SIGNUP_RATE_LIMIT_MAX_ATTEMPTS:
+            retry_after_seconds = int((attempts[0] + SIGNUP_RATE_LIMIT_WINDOW - now).total_seconds())
+            if retry_after_seconds < 1:
+                retry_after_seconds = 1
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many signup attempts. "
+                    f"Please try again in about {retry_after_seconds // 60 + (1 if retry_after_seconds % 60 else 0)} minute(s)."
+                )
+            )
+
+        attempts.append(now)
+        signup_attempts_by_ip[ip] = attempts
 
 # -----------------------------
 # Serialization helpers
@@ -977,8 +1058,10 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/create")
-async def create_user(payload: UserRegisterRequest, db: Session = Depends(get_db)):
+async def create_user(payload: UserRegisterRequest, request: Request, db: Session = Depends(get_db)):
     try:    
+        enforce_signup_rate_limit(request)
+
         email = payload.email
         password = payload.password
         referral_code = payload.referral_code
@@ -1027,10 +1110,13 @@ async def create_user(payload: UserRegisterRequest, db: Session = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/login")
-async def login_user(payload: UserLoginRequest, db: Session = Depends(get_db)):
+async def login_user(payload: UserLoginRequest, request: Request, db: Session = Depends(get_db)):
     try:
         email = payload.email
         password = payload.password
+
+        enforce_login_rate_limit(request, email)
+
         print(f"Login attempt for email: {email}")
         
         if not email or not password:
