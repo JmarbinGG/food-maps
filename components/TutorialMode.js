@@ -69,8 +69,8 @@ function TutorialMode({ user, onClose, onComplete }) {
           action: null
         },
         {
-          title: "Verification Photos ",
-          description: "After claiming, you'll take a BEFORE photo at pickup. Then take an AFTER photo when done. This builds trust in our community!",
+          title: "Pickup Status ",
+          description: "After claiming, keep your pickup status current so donors and recipients know the handoff timing.",
           target: ".card, .listing-card",
           position: "right",
           action: null
@@ -98,7 +98,7 @@ function TutorialMode({ user, onClose, onComplete }) {
         },
         {
           title: "You're All Set! ",
-          description: "You're ready to start finding food! Remember: claim items quickly if they're urgent, take verification photos, and enjoy your meals. Happy food hunting!",
+          description: "You're ready to start finding food. Claim urgent items quickly and keep your pickup status up to date.",
           target: null,
           position: "center",
           action: null
@@ -136,8 +136,8 @@ function TutorialMode({ user, onClose, onComplete }) {
           action: null
         },
         {
-          title: "Verification System ",
-          description: "Recipients take before/after photos when picking up. You can review these to confirm successful pickups!",
+          title: "Claim Tracking ",
+          description: "Track claim updates so you can confirm successful pickups and coordinate handoffs.",
           target: ".card",
           position: "right",
           action: null

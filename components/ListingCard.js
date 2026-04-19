@@ -440,38 +440,8 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
 
   // Get verification status badge
   const getVerificationBadge = () => {
-    if (!isClaimedByMe || listingStatus !== 'claimed') return null;
-
-    const verificationStatus = listing.verification_status || 'pending';
-
-    const badgeConfig = {
-      pending: { label: 'Photo Needed', bg: 'bg-yellow-500', action: 'before' },
-      before_verified: { label: 'Ready for Pickup', bg: 'bg-blue-500', action: 'after' },
-      completed: { label: 'Verified', bg: 'bg-green-600', action: null },
-      not_required: { icon: '', label: '', bg: '', action: null }
-    };
-
-    const config = badgeConfig[verificationStatus] || badgeConfig.pending;
-
-    if (verificationStatus === 'not_required') return null;
-
-    return (
-      <div
-        className={`px-2 py-1 rounded-full text-xs font-bold text-white flex items-center gap-1 ${config.bg} ${config.action ? 'cursor-pointer hover:opacity-80' : ''}`}
-        onClick={(e) => {
-          if (config.action) {
-            e.stopPropagation();
-            if (config.action === 'before' && typeof window.openBeforePhotoVerification === 'function') {
-              window.openBeforePhotoVerification(listing);
-            } else if (config.action === 'after' && typeof window.openAfterPhotoVerification === 'function') {
-              window.openAfterPhotoVerification(listing);
-            }
-          }
-        }}
-      >
-        <span>{config.label}</span>
-      </div>
-    );
+    // Verification photo feature disabled non-destructively.
+    return null;
   };
 
   // Get food safety badge

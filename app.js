@@ -109,7 +109,7 @@ function App() {
   const [showDonorImpact, setShowDonorImpact] = React.useState(false);
   const [showDietaryPreferences, setShowDietaryPreferences] = React.useState(false);
   const [showFavoritesPanel, setShowFavoritesPanel] = React.useState(false);
-  const [verificationModal, setVerificationModal] = React.useState({ show: false, listing: null, type: null });
+  // Pickup photo-check flow is disabled.
   const [showTutorial, setShowTutorial] = React.useState(false);
   const [showSafetyCenter, setShowSafetyCenter] = React.useState(false);
   const [showPickupReminders, setShowPickupReminders] = React.useState(false);
@@ -1135,26 +1135,7 @@ function App() {
       setShowFavoritesPanel(true);
     };
 
-    // Setup verification photo callbacks
-    window.openBeforePhotoVerification = (listing) => {
-      if (!user) {
-        if (typeof window.showAlert === 'function') {
-          window.showAlert('Please sign in to verify pickup.', { title: 'Access Denied', variant: 'error' });
-        }
-        return;
-      }
-      setVerificationModal({ show: true, listing, type: 'before' });
-    };
-
-    window.openAfterPhotoVerification = (listing) => {
-      if (!user) {
-        if (typeof window.showAlert === 'function') {
-          window.showAlert('Please sign in to verify pickup.', { title: 'Access Denied', variant: 'error' });
-        }
-        return;
-      }
-      setVerificationModal({ show: true, listing, type: 'after' });
-    };
+    // Pickup photo-check callbacks intentionally disabled.
 
     // Setup tutorial mode callback
     window.openTutorial = () => {
@@ -1228,8 +1209,7 @@ function App() {
       delete window.openDonorImpact;
       delete window.openDietaryPreferences;
       delete window.openFavoritesPanel;
-      delete window.openBeforePhotoVerification;
-      delete window.openAfterPhotoVerification;
+      // Pickup photo-check callbacks intentionally not registered.
       delete window.openTutorial;
       delete window.openSafetyCenter;
       delete window.openPickupReminders;
@@ -1817,22 +1797,7 @@ function App() {
           <FavoritesPanel onClose={() => setShowFavoritesPanel(false)} />
         )}
 
-        {/* Pickup Verification Modal */}
-        {user && verificationModal.show && verificationModal.listing && (
-          <PickupVerification
-            listing={verificationModal.listing}
-            verificationType={verificationModal.type}
-            onClose={() => setVerificationModal({ show: false, listing: null, type: null })}
-            onSuccess={async () => {
-              // Refresh listings in-app to avoid full-page reload.
-              try {
-                await initializeApp();
-              } catch (e) {
-                console.warn('Failed to refresh listings after pickup verification:', e);
-              }
-            }}
-          />
-        )}
+        {/* Pickup photo-check modal intentionally disabled. */}
 
         {/* Tutorial Mode */}
         {showTutorial && typeof TutorialMode !== 'undefined' && (

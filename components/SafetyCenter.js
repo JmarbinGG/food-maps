@@ -212,8 +212,8 @@ function SafetyCenter({ user, onClose }) {
     },
     {
       icon: '',
-      title: 'Use Photo Verification',
-      description: 'Take before and after photos for all pickups. This builds trust and provides accountability.',
+      title: 'Keep Pickup Status Updated',
+      description: 'Update pickup status promptly so both sides have clear handoff and completion visibility.',
       priority: 'high'
     },
     {
@@ -256,7 +256,7 @@ function SafetyCenter({ user, onClose }) {
 
   const trustScoreTips = [
     { icon: '', text: 'Complete your profile with photo and verification', points: '+10' },
-    { icon: '', text: 'Upload verification photos for pickups', points: '+5 each' },
+    { icon: '', text: 'Keep pickup status accurate and timely', points: '+5 each' },
     { icon: '⭐', text: 'Receive positive feedback from community', points: '+3 each' },
     { icon: '', text: 'Consistently show up on time', points: '+2 each' },
     { icon: '', text: 'Respond quickly to messages', points: '+1 each' },

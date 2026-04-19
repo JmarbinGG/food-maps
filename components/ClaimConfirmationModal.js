@@ -50,7 +50,7 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
       if (result.success) {
         // Show success alert
         if (typeof window.showAlert === 'function') {
-          window.showAlert('Claim confirmed! Now take a before-pickup photo.', {
+          window.showAlert('Claim confirmed successfully.', {
             title: 'Success',
             variant: 'success'
           });
@@ -58,13 +58,7 @@ function ClaimConfirmationModal({ listing, onClose, onConfirm, isOpen }) {
 
         // Close this modal
         onClose();
-
-        // Open before-photo verification modal after a short delay
-        setTimeout(() => {
-          if (typeof window.openBeforePhotoVerification === 'function') {
-            window.openBeforePhotoVerification(listing);
-          }
-        }, 500);
+        // Follow-up photo-check flow intentionally disabled.
 
         if (onConfirm) onConfirm(result);
       } else {
