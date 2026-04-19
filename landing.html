@@ -292,7 +292,7 @@
                         class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg">
                         Donate
                     </button>
-                    <button onclick="window.location.href='index.html'"
+                    <button onclick="window.location.href='index.html?tutorial=1'"
                         class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg">
                         Get Started
                     </button>
@@ -325,7 +325,7 @@
                         class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Donate
                     </button>
-                    <button onclick="window.location.href='index.html'"
+                    <button onclick="window.location.href='index.html?tutorial=1'"
                         class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Get Started
                     </button>
@@ -526,85 +526,82 @@
             <div class="text-center mb-20">
                 <div
                     class="inline-flex items-center bg-emerald-100 text-emerald-800 px-6 py-2 rounded-full font-semibold mb-6">
-                    How It Works
+                    Proof
                 </div>
                 <h2 class="text-5xl md:text-6xl font-bold text-green-900 mb-8 pb-4 leading-tight">
-                    Tools That Keep It Simple
+                    Real Demos And Numbers
                 </h2>
                 <p class="text-xl md:text-2xl text-gray-600 max-w-4xl mx-auto leading-relaxed">
-                    Food Maps helps neighbors share food, cut waste, and get meals to people faster.
+                    Open live pages and check real program totals below.
                 </p>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">AI</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Fast Matching</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">Match donors and recipients by location, dietary needs,
-                        and what is available right now.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>Learn more</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 border border-emerald-100 hover:border-emerald-200">
+                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Live Demos</div>
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Open The Product</h3>
+                    <p class="text-gray-600 leading-relaxed mb-6">These links open working parts of Food Maps so people can
+                        test the real app.</p>
+                    <div class="space-y-3">
+                        <a href="index.html" class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3 hover:bg-emerald-100 transition-colors">
+                            <span class="font-medium text-emerald-900">Main map and listings</span>
+                            <span class="text-emerald-700">Open</span>
+                        </a>
+                        <a href="index.html?tutorial=1" class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3 hover:bg-emerald-100 transition-colors">
+                            <span class="font-medium text-emerald-900">How to use Food Maps</span>
+                            <span class="text-emerald-700">Open</span>
+                        </a>
+                        <a href="impactStory.html" class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3 hover:bg-emerald-100 transition-colors">
+                            <span class="font-medium text-emerald-900">Program stories page</span>
+                            <span class="text-emerald-700">Open</span>
+                        </a>
                     </div>
                 </div>
 
                 <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Routes</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Route Planning</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">Build practical delivery routes to save time and reduce
-                        extra trips.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>Explore routing</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 border border-emerald-100 hover:border-emerald-200">
+                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Program Numbers</div>
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Community Reach</h3>
+                    <p class="text-gray-600 leading-relaxed mb-6">Current totals from the program tracking data.</p>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-orange-50 rounded-xl p-4">
+                            <div class="text-2xl font-bold text-orange-700">25+</div>
+                            <div class="text-sm text-orange-800">Schools served</div>
+                        </div>
+                        <div class="bg-orange-50 rounded-xl p-4">
+                            <div class="text-2xl font-bold text-orange-700">50+</div>
+                            <div class="text-sm text-orange-800">Partner orgs</div>
+                        </div>
+                        <div class="bg-orange-50 rounded-xl p-4">
+                            <div class="text-2xl font-bold text-orange-700">2,500+</div>
+                            <div class="text-sm text-orange-800">Families helped</div>
+                        </div>
+                        <div class="bg-orange-50 rounded-xl p-4">
+                            <div class="text-2xl font-bold text-orange-700">15 min</div>
+                            <div class="text-sm text-orange-800">Average response</div>
+                        </div>
                     </div>
                 </div>
 
                 <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Live</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Real-Time Tracking</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">Monitor every donation and delivery with live updates,
-                        ensuring transparency and accountability.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>Track donations</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
-                    </div>
-                </div>
-
-                <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Maps</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Map View</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">See available food on the map and search by area.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>View map</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
-                    </div>
-                </div>
-
-                <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-red-600 font-semibold">Urgent</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Emergency Priority</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">Critical needs like water and perishable items get
-                        automatic priority routing and immediate attention.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>Emergency system</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
-                    </div>
-                </div>
-
-                <div
-                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-3 border border-emerald-100 hover:border-emerald-200">
-                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">People</div>
-                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Community Roles</h3>
-                    <p class="text-gray-600 leading-relaxed mb-6">Donors, recipients, volunteers, and coordinators can all
-                        use the same system.</p>
-                    <div class="flex items-center text-emerald-600 font-medium">
-                        <span>Join community</span>
-                        <div class="icon-arrow-right ml-2 group-hover:translate-x-1 transition-transform"></div>
+                    class="group bg-white rounded-3xl p-8 shadow-xl hover:shadow-2xl transition-all duration-500 border border-emerald-100 hover:border-emerald-200">
+                    <div class="text-xs mb-6 uppercase tracking-[0.2em] text-emerald-600 font-semibold">Food Totals</div>
+                    <h3 class="text-2xl font-bold mb-4 text-gray-900">Distribution Snapshot</h3>
+                    <p class="text-gray-600 leading-relaxed mb-6">Current high-level totals from the same dashboard data.</p>
+                    <div class="space-y-3">
+                        <div class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3">
+                            <span class="text-emerald-900 font-medium">Meals saved</span>
+                            <span class="text-emerald-700 font-bold">50K+</span>
+                        </div>
+                        <div class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3">
+                            <span class="text-emerald-900 font-medium">Pounds saved</span>
+                            <span class="text-emerald-700 font-bold">100K+</span>
+                        </div>
+                        <div class="flex items-center justify-between bg-emerald-50 rounded-xl px-4 py-3">
+                            <span class="text-emerald-900 font-medium">Pounds provided</span>
+                            <span class="text-emerald-700 font-bold">85K+</span>
+                        </div>
                     </div>
                 </div>
             </div>

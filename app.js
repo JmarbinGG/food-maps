@@ -203,6 +203,21 @@ function App() {
         window.history.replaceState(null, null, window.location.pathname);
       }
 
+      // Allow direct launch into the same tutorial opened from the header.
+      const params = new URLSearchParams(window.location.search || '');
+      if (params.get('tutorial') === '1') {
+        setTimeout(() => {
+          if (typeof TutorialMode !== 'undefined') {
+            setShowTutorial(true);
+          }
+        }, 400);
+
+        params.delete('tutorial');
+        const nextQuery = params.toString();
+        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+        window.history.replaceState(null, null, nextUrl);
+      }
+
       // Ensure DOM is ready before manipulating elements
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initializeApp);
