@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, status, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -509,7 +509,7 @@ def get_html_content(filename):
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_landing():
-    return RedirectResponse(url="/index.html?tutorial=1", status_code=302)
+    return get_html_content("landing.html")
 
 @app.get("/index.html", response_class=HTMLResponse)
 async def serve_index():

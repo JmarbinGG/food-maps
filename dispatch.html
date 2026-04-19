@@ -6,6 +6,9 @@
     <title>Dispatch Center - Food Maps Logistics</title>
     <meta name="description" content="Dispatch tools for food distribution routes, pickups, deliveries, and live updates.">
     <meta name="keywords" content="dispatch, logistics, food distribution, route planning">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
     <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -40,12 +43,24 @@
         html, body {
             height: 100%;
             overflow: hidden;
+            font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.65;
+            letter-spacing: 0.01em;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+        }
+
+        p {
+            line-height: 1.72;
         }
         
         .mapboxgl-map {
             width: 100% !important;
             height: 100% !important;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         }
         
         .mapboxgl-canvas-container {

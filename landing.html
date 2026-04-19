@@ -15,6 +15,9 @@
     <meta name="twitter:title" content="Food Maps - Share and Find Food">
     <meta name="twitter:description"
         content="A simple way to connect food donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <script crossorigin
         src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
@@ -35,6 +38,23 @@
             --background: #ffffff;
             --surface: #f9fafb;
             --border-color: #e5e7eb;
+        }
+    }
+
+    @layer base {
+        body {
+            font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.65;
+            letter-spacing: 0.01em;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+        }
+
+        p {
+            line-height: 1.72;
         }
     }
 
