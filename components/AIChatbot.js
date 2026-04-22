@@ -74,9 +74,11 @@ function AIChatbot() {
   const [mode, setMode] = React.useState('idle');
   const open = mode === 'chat';
   const [messages, setMessages] = React.useState([
-    { role: 'assistant', text: anonymous
+    {
+      role: 'assistant', text: anonymous
         ? "Hi! I'm the FoodMaps assistant. Ask me anything about how food sharing works, food safety, or how to sign up."
-        : "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes." }
+        : "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes."
+    }
   ]);
   const [input, setInput] = React.useState('');
   const [sending, setSending] = React.useState(false);
@@ -164,7 +166,40 @@ function AIChatbot() {
     }
   }
 
+  function micUnavailableReason() {
+    if (typeof window === 'undefined') return null;
+    if (!window.isSecureContext) {
+      return 'Microphone requires a secure (HTTPS) connection. Please open this site on https:// to use voice.';
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return 'Your browser does not support microphone capture. Try Chrome, Edge, Safari, or Firefox.';
+    }
+    if (typeof window.MediaRecorder === 'undefined') {
+      return 'Your browser does not support audio recording. Try a different browser.';
+    }
+    return null;
+  }
+
+  function explainMicError(e) {
+    const name = e && e.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return 'Microphone access blocked. Click the lock icon in your address bar and allow microphone for this site.';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      return 'No microphone detected. Plug one in or check your device settings.';
+    }
+    if (name === 'NotReadableError') {
+      return 'Microphone is in use by another app. Close it and try again.';
+    }
+    return 'Microphone unavailable. Please check your browser permissions.';
+  }
+
   async function startRecording() {
+    const blocker = micUnavailableReason();
+    if (blocker) {
+      setMessages(m => [...m, { role: 'assistant', text: blocker }]);
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const rec = new MediaRecorder(stream);
@@ -180,7 +215,7 @@ function AIChatbot() {
       setRecording(true);
     } catch (e) {
       console.error('mic error:', e);
-      setMessages(m => [...m, { role: 'assistant', text: 'Microphone access denied.' }]);
+      setMessages(m => [...m, { role: 'assistant', text: explainMicError(e) }]);
     }
   }
 
@@ -377,6 +412,22 @@ function VoiceAssistant({ onClose, getAuth }) {
 
   async function startListening() {
     setErrorMsg('');
+    // Upfront context check — avoids cryptic DOMException on HTTP pages
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setStatus('error');
+      setErrorMsg('Voice needs a secure (HTTPS) connection. Please open this site on https:// to use the voice assistant.');
+      return;
+    }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus('error');
+      setErrorMsg('Your browser does not support microphone capture.');
+      return;
+    }
+    if (typeof window.MediaRecorder === 'undefined') {
+      setStatus('error');
+      setErrorMsg('Your browser does not support audio recording.');
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -397,7 +448,16 @@ function VoiceAssistant({ onClose, getAuth }) {
     } catch (e) {
       console.error('mic error:', e);
       setStatus('error');
-      setErrorMsg('Microphone access denied.');
+      const name = e && e.name;
+      if (name === 'NotAllowedError' || name === 'SecurityError') {
+        setErrorMsg('Microphone access blocked. Click the lock icon in your address bar and allow microphone for this site.');
+      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+        setErrorMsg('No microphone detected. Plug one in or check your device settings.');
+      } else if (name === 'NotReadableError') {
+        setErrorMsg('Microphone is in use by another app. Close it and try again.');
+      } else {
+        setErrorMsg('Microphone unavailable. Please check your browser permissions.');
+      }
     }
   }
 
