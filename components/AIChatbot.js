@@ -308,42 +308,207 @@ function AIChatbot() {
           />
           <div style={{ position: 'fixed', right: '36px', bottom: '110px', display: 'flex', flexDirection: 'column', gap: '14px', zIndex: 9999, animation: 'foodmapsChooserIn 0.25s ease-out' }}>
             <ChooserBubble
-              icon="🤖"
-              label="Assistant"
+              icon="💬"
+              label="Chat"
               onClick={() => setMode('chat')}
             />
             <ChooserBubble
               icon="🎤"
-              label="Voice Search"
+              label="Voice Assistant"
               onClick={() => setMode('voice')}
             />
           </div>
         </React.Fragment>
       )}
 
-      {/* Voice Search modal */}
+      {/* Voice Assistant — modern full-screen orb UI */}
       {mode === 'voice' && (
-        <div
-          onClick={(e) => { if (e.target === e.currentTarget) setMode('idle'); }}
-          style={{
-            position: 'fixed', inset: 0,
-            background: 'rgba(0,0,0,0.5)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 10000, padding: '20px',
-          }}
-        >
-          <div style={{ background: 'white', borderRadius: '16px', padding: '24px', maxWidth: '600px', width: '100%', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ fontSize: '20px', fontWeight: 700, color: '#1f2937', margin: 0 }}>🎤 Voice Search</h2>
-              <button onClick={() => setMode('idle')} style={{ background: 'transparent', border: 'none', color: '#6b7280', fontSize: '24px', cursor: 'pointer', lineHeight: 1 }}>✕</button>
-            </div>
-            {window.VoiceSearch
-              ? React.createElement(window.VoiceSearch)
-              : <p style={{ color: '#6b7280' }}>Voice search unavailable.</p>}
-          </div>
-        </div>
+        <VoiceAssistant onClose={() => setMode('idle')} getAuth={getAuth} />
       )}
     </React.Fragment>
+  );
+}
+
+// Modern voice assistant modal: gradient background, pulsing orb, live status.
+function VoiceAssistant({ onClose, getAuth }) {
+  // status: 'idle' | 'listening' | 'thinking' | 'speaking' | 'error'
+  const [status, setStatus] = React.useState('idle');
+  const [userText, setUserText] = React.useState('');
+  const [aiText, setAiText] = React.useState('Tap the orb and start talking.');
+  const [errorMsg, setErrorMsg] = React.useState('');
+  const recorderRef = React.useRef(null);
+  const chunksRef = React.useRef([]);
+  const streamRef = React.useRef(null);
+  const audioRef = React.useRef(null);
+
+  async function startListening() {
+    setErrorMsg('');
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const rec = new MediaRecorder(stream);
+      chunksRef.current = [];
+      rec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      rec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        await sendVoiceBlob(blob);
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setStatus('listening');
+      setUserText('');
+      setAiText('Listening…');
+    } catch (e) {
+      console.error('mic error:', e);
+      setStatus('error');
+      setErrorMsg('Microphone access denied.');
+    }
+  }
+
+  function stopListening() {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
+    setStatus('thinking');
+    setAiText('Thinking…');
+  }
+
+  async function sendVoiceBlob(blob) {
+    const { token, userId } = getAuth();
+    if (!token || !userId) {
+      setStatus('error');
+      setErrorMsg('Please sign in to use the voice assistant.');
+      return;
+    }
+    const fd = new FormData();
+    fd.append('audio', blob, 'voice.webm');
+    fd.append('user_id', userId);
+    fd.append('include_audio', 'true');
+    try {
+      const res = await fetch('/api/ai/voice', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: fd,
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      if (data.transcript) setUserText(data.transcript);
+      setAiText(data.text || '(no response)');
+      if (data.audio_url) {
+        setStatus('speaking');
+        const audio = new Audio(data.audio_url);
+        audioRef.current = audio;
+        audio.onended = () => setStatus('idle');
+        audio.onerror = () => setStatus('idle');
+        audio.play().catch(() => setStatus('idle'));
+      } else {
+        setStatus('idle');
+      }
+    } catch (e) {
+      console.error('voice error:', e);
+      setStatus('error');
+      setErrorMsg('Could not reach the assistant. Try again.');
+    }
+  }
+
+  function handleOrbClick() {
+    if (status === 'listening') return stopListening();
+    if (status === 'thinking') return;
+    if (status === 'speaking') {
+      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) {} }
+      setStatus('idle');
+      return;
+    }
+    startListening();
+  }
+
+  React.useEffect(() => {
+    return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) {} }
+    };
+  }, []);
+
+  const statusLabel = {
+    idle: 'Tap to talk',
+    listening: 'Listening… tap to stop',
+    thinking: 'Thinking…',
+    speaking: 'Speaking… tap to stop',
+    error: 'Something went wrong',
+  }[status];
+
+  const orbClass = status === 'listening' ? 'foodmaps-orb foodmaps-orb-listening'
+    : status === 'thinking' ? 'foodmaps-orb foodmaps-orb-thinking'
+    : status === 'speaking' ? 'foodmaps-orb foodmaps-orb-speaking'
+    : 'foodmaps-orb';
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'radial-gradient(circle at 30% 20%, #1e3a8a 0%, #0f172a 55%, #020617 100%)',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: '24px',
+        animation: 'foodmapsFadeIn 0.25s ease-out',
+      }}
+    >
+      <button
+        onClick={onClose}
+        aria-label="Close"
+        style={{
+          position: 'absolute', top: 20, right: 20,
+          width: 44, height: 44, borderRadius: '50%',
+          background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)',
+          color: 'white', fontSize: 22, cursor: 'pointer',
+          backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
+        }}
+      >×</button>
+
+      <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, letterSpacing: 2, textTransform: 'uppercase', marginBottom: 8 }}>
+        FoodMaps Voice Assistant
+      </div>
+
+      {/* User transcript */}
+      <div style={{
+        minHeight: 28, maxWidth: 560, textAlign: 'center',
+        color: 'rgba(255,255,255,0.85)', fontSize: 16, fontStyle: 'italic',
+        marginBottom: 24, padding: '0 20px',
+      }}>
+        {userText ? `"${userText}"` : ''}
+      </div>
+
+      {/* Orb */}
+      <button
+        onClick={handleOrbClick}
+        className={orbClass}
+        disabled={status === 'thinking'}
+        aria-label={statusLabel}
+      >
+        <span style={{ fontSize: 56, filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.4))' }}>
+          {status === 'thinking' ? '…' : '🎤'}
+        </span>
+      </button>
+
+      {/* Status */}
+      <div style={{ color: 'white', fontSize: 18, fontWeight: 500, marginTop: 32, letterSpacing: 0.3 }}>
+        {statusLabel}
+      </div>
+
+      {/* AI reply */}
+      <div style={{
+        maxWidth: 640, textAlign: 'center',
+        color: 'rgba(255,255,255,0.92)', fontSize: 18, lineHeight: 1.55,
+        marginTop: 18, padding: '0 24px', minHeight: 56,
+      }}>
+        {aiText}
+      </div>
+
+      {errorMsg && (
+        <div style={{ color: '#fca5a5', fontSize: 14, marginTop: 12 }}>{errorMsg}</div>
+      )}
+    </div>
   );
 }
 
@@ -395,6 +560,49 @@ function ChooserBubble({ icon, label, onClick }) {
     @keyframes foodmapsChooserIn {
       0%   { opacity: 0; transform: translateY(8px) scale(0.92); }
       100% { opacity: 1; transform: translateY(0)   scale(1);   }
+    }
+    @keyframes foodmapsFadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes foodmapsOrbPulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.6), 0 20px 60px rgba(16,185,129,0.35); }
+      50%      { box-shadow: 0 0 0 28px rgba(16,185,129,0),  0 20px 60px rgba(16,185,129,0.55); }
+    }
+    @keyframes foodmapsOrbSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes foodmapsOrbBreathe {
+      0%, 100% { transform: scale(1); }
+      50%      { transform: scale(1.06); }
+    }
+    .foodmaps-orb {
+      width: 180px; height: 180px; border-radius: 50%;
+      border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 30% 25%, #34d399 0%, #10b981 45%, #047857 100%);
+      box-shadow: 0 20px 60px rgba(16,185,129,0.35), inset 0 -10px 30px rgba(0,0,0,0.25), inset 0 10px 30px rgba(255,255,255,0.25);
+      transition: transform 0.2s ease;
+      position: relative;
+    }
+    .foodmaps-orb:hover { transform: scale(1.04); }
+    .foodmaps-orb:active { transform: scale(0.97); }
+    .foodmaps-orb:disabled { cursor: default; }
+    .foodmaps-orb-listening {
+      background: radial-gradient(circle at 30% 25%, #f87171 0%, #ef4444 45%, #991b1b 100%);
+      animation: foodmapsOrbPulse 1.4s ease-out infinite;
+    }
+    .foodmaps-orb-listening { box-shadow: 0 0 0 0 rgba(239,68,68,0.6), 0 20px 60px rgba(239,68,68,0.4); }
+    .foodmaps-orb-thinking::after {
+      content: ''; position: absolute; inset: -6px; border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.25); border-top-color: #fff;
+      animation: foodmapsOrbSpin 0.9s linear infinite;
+    }
+    .foodmaps-orb-speaking {
+      background: radial-gradient(circle at 30% 25%, #60a5fa 0%, #3b82f6 45%, #1e40af 100%);
+      animation: foodmapsOrbBreathe 1.1s ease-in-out infinite;
+      box-shadow: 0 20px 60px rgba(59,130,246,0.45);
     }
   `;
   document.head.appendChild(style);
