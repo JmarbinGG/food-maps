@@ -119,6 +119,16 @@ class TTSRequest(BaseModel):
     lang: str = "en"
 
 
+class AIPublicChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=1500)
+
+
+class AIPublicChatResponse(BaseModel):
+    text: str
+    lang: str = "en"
+    timestamp: str
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -156,6 +166,57 @@ async def ai_chat(
     except Exception as exc:
         logger.exception("AI chat error")
         raise HTTPException(500, "Internal AI error") from exc
+
+
+@router.post("/public_chat", response_model=AIPublicChatResponse)
+async def ai_public_chat(
+    body: AIPublicChatRequest,
+    request: Request,
+) -> dict:
+    """Anonymous chat for landing page visitors.
+
+    - No authentication required
+    - No conversation history stored
+    - No tools / user-specific data access
+    - IP-based rate limited
+    """
+    _enforce_rate_limit(request)
+
+    from backend.ai.ai_engine import detect_spanish
+
+    lang = "es" if detect_spanish(body.message) else "en"
+    messages = [
+        {"role": "system", "content": conversation_engine.system_prompt},
+        {
+            "role": "system",
+            "content": (
+                "You are talking to an anonymous visitor on the FoodMaps landing page. "
+                "They are not signed in. Do NOT call any tools. Do NOT ask for or reference "
+                "their account, pickups, listings, or reminders. Answer general questions about "
+                "how FoodMaps works, food sharing, food safety, and community impact. "
+                "Keep replies concise (2-4 sentences) and friendly. If they need account-specific "
+                "help, politely suggest they sign up or sign in."
+            ),
+        },
+        {"role": "user", "content": body.message},
+    ]
+    if lang == "es":
+        messages.insert(1, {
+            "role": "system",
+            "content": "The user wrote in Spanish. Respond entirely in Spanish.",
+        })
+
+    try:
+        text = await conversation_engine.public_chat_reply(messages, lang=lang)
+    except Exception as exc:
+        logger.exception("Public chat error")
+        raise HTTPException(500, "AI service error") from exc
+
+    return {
+        "text": text,
+        "lang": lang,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/history/{user_id}")

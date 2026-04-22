@@ -528,6 +528,40 @@ class ConversationEngine:
             logger.error("GPT unexpected error: %s", exc)
             return get_canned_response("general_error", lang)
 
+    async def public_chat_reply(self, messages: list[dict], lang: str = "en") -> str:
+        """Stateless OpenAI call with NO tools and NO persistence.
+
+        Used by the anonymous landing-page chat. Safe to expose without auth.
+        """
+        if not OPENAI_API_KEY:
+            return get_canned_response("api_down", lang)
+        payload = {
+            "model": CHAT_MODEL,
+            "messages": messages,
+            "temperature": 0.7,
+            "max_tokens": 600,
+        }
+        headers = {
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        }
+        try:
+            resp = await _openai_with_retry(
+                "POST",
+                f"{OPENAI_BASE_URL}/chat/completions",
+                headers=headers,
+                json_payload=payload,
+            )
+            data = resp.json()
+            return data["choices"][0]["message"].get("content", "").strip() or get_canned_response("general_error", lang)
+        except httpx.TimeoutException:
+            return get_canned_response("timeout", lang)
+        except httpx.HTTPStatusError:
+            return get_canned_response("api_down", lang)
+        except Exception as exc:
+            logger.error("public_chat_reply error: %s", exc)
+            return get_canned_response("general_error", lang)
+
     @staticmethod
     def _needs_tools(message: str) -> bool:
         lower = message.lower()

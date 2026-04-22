@@ -66,11 +66,17 @@ function BotAvatar({ size = 32 }) {
 }
 
 function AIChatbot() {
+  // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
+  // no voice assistant, no mic in chat.
+  const anonymous = typeof window !== 'undefined' && window.FOODMAPS_AI_ANONYMOUS === true;
+
   // mode: 'idle' (just bot) | 'chooser' (two round options) | 'chat' | 'voice'
   const [mode, setMode] = React.useState('idle');
   const open = mode === 'chat';
   const [messages, setMessages] = React.useState([
-    { role: 'assistant', text: "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes." }
+    { role: 'assistant', text: anonymous
+        ? "Hi! I'm the FoodMaps assistant. Ask me anything about how food sharing works, food safety, or how to sign up."
+        : "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes." }
   ]);
   const [input, setInput] = React.useState('');
   const [sending, setSending] = React.useState(false);
@@ -104,6 +110,29 @@ function AIChatbot() {
   async function sendMessage(text) {
     const trimmed = (text || '').trim();
     if (!trimmed || sending) return;
+
+    if (anonymous) {
+      setMessages(m => [...m, { role: 'user', text: trimmed }]);
+      setInput('');
+      setSending(true);
+      try {
+        const res = await fetch('/api/ai/public_chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message: trimmed }),
+        });
+        if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
+        const data = await res.json();
+        setMessages(m => [...m, { role: 'assistant', text: data.text || '(no response)' }]);
+      } catch (e) {
+        console.error('AI public_chat error:', e);
+        setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I could not reach the assistant right now.' }]);
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
     const { token, userId } = getAuth();
     if (!token || !userId) {
       setMessages(m => [...m, { role: 'assistant', text: 'Please sign in to chat with the assistant.' }]);
@@ -272,15 +301,17 @@ function AIChatbot() {
             disabled={sending}
             style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
           />
-          <button
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            title="Hold to record"
-            disabled={sending}
-            style={{ padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#111', cursor: 'pointer', fontSize: '16px' }}
-          >🎤</button>
+          {!anonymous && (
+            <button
+              onMouseDown={startRecording}
+              onMouseUp={stopRecording}
+              onTouchStart={startRecording}
+              onTouchEnd={stopRecording}
+              title="Hold to record"
+              disabled={sending}
+              style={{ padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#111', cursor: 'pointer', fontSize: '16px' }}
+            >🎤</button>
+          )}
           <button
             onClick={() => sendMessage(input)}
             disabled={sending || !input.trim()}
@@ -289,9 +320,12 @@ function AIChatbot() {
         </div>
       </div>
       <button
-        onClick={() => setMode(m => (m === 'idle' ? 'chooser' : 'idle'))}
+        onClick={() => setMode(m => {
+          if (m === 'idle') return anonymous ? 'chat' : 'chooser';
+          return 'idle';
+        })}
         style={buttonStyle}
-        title="FoodMaps Assistant — tap to choose"
+        title={anonymous ? 'Chat with FoodMaps Assistant' : 'FoodMaps Assistant — tap to choose'}
         aria-label="FoodMaps Assistant"
       >
         {mode !== 'idle'
@@ -417,7 +451,7 @@ function VoiceAssistant({ onClose, getAuth }) {
     if (status === 'listening') return stopListening();
     if (status === 'thinking') return;
     if (status === 'speaking') {
-      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) {} }
+      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) { } }
       setStatus('idle');
       return;
     }
@@ -427,7 +461,7 @@ function VoiceAssistant({ onClose, getAuth }) {
   React.useEffect(() => {
     return () => {
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) {} }
+      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) { } }
     };
   }, []);
 
@@ -441,8 +475,8 @@ function VoiceAssistant({ onClose, getAuth }) {
 
   const orbClass = status === 'listening' ? 'foodmaps-orb foodmaps-orb-listening'
     : status === 'thinking' ? 'foodmaps-orb foodmaps-orb-thinking'
-    : status === 'speaking' ? 'foodmaps-orb foodmaps-orb-speaking'
-    : 'foodmaps-orb';
+      : status === 'speaking' ? 'foodmaps-orb foodmaps-orb-speaking'
+        : 'foodmaps-orb';
 
   return (
     <div
