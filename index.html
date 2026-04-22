@@ -692,23 +692,7 @@
     <script type="text/babel" src="components/ConfirmationModal.js"></script>
     <script type="text/babel" src="components/ClaimConfirmationModal.js"></script>
     <script type="text/babel" src="app.js"></script>
-
-    <!-- Voice Search Floating Button -->
-    <script type="text/babel">
-        const VoiceButtonContainer = () => {
-            return <VoiceSearchButton />;
-        };
-
-        // Add floating voice button to page
-        const voiceButtonRoot = document.createElement('div');
-        voiceButtonRoot.id = 'voice-button-root';
-        document.body.appendChild(voiceButtonRoot);
-
-        setTimeout(() => {
-            const root = ReactDOM.createRoot(voiceButtonRoot);
-            root.render(<VoiceButtonContainer />);
-        }, 1000);
-    </script>
+    <script type="text/babel" src="components/AIChatbot.js"></script>
 
     <!-- Smart Notifications Toggle -->
     <script type="text/babel">

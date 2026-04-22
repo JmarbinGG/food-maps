@@ -23,6 +23,16 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
           />
         </a>
         <div className="flex items-center gap-2 flex-wrap justify-end">
+          {user && (
+            <button
+              onClick={() => window.openMessageSupport?.()}
+              className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
+              title="Message Support"
+            >
+              <span>💬</span>
+              <span className="hidden sm:inline">Support</span>
+            </button>
+          )}
           <button
             onClick={() => window.openFeedbackModal?.()}
             className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"

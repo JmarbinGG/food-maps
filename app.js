@@ -1542,18 +1542,6 @@ function App() {
           onViewChange={setCurrentView}
         />
 
-        {/* Floating Chat Button - Always visible when logged in */}
-        {user && (
-          <button
-            onClick={() => setShowMessageSupport(true)}
-            className="fixed bottom-6 right-6 z-50 bg-green-600 hover:bg-green-700 text-white rounded-full p-4 shadow-2xl transition-all hover:scale-110 flex items-center gap-2"
-            title="Message Support"
-          >
-            <div className="icon-message-circle text-2xl"></div>
-            <span className="hidden sm:inline font-medium">Support</span>
-          </button>
-        )}
-
         {renderView()}
 
         {showAuthModal && (

@@ -39,6 +39,8 @@ from backend.models import (
     FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
     PickupReminder, PickupReminderStatus, FavoriteLocation
 )
+# Register AI models on the shared Base so create_all() picks them up
+from backend.ai import models as ai_models  # noqa: F401
 from threading import Timer, Lock
 from twilio.rest import Client
 from backend.db import engine, SessionLocal, get_db
@@ -728,11 +730,20 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# Mount AI router (DoGoods AI assistant)
+from backend.ai.routes import router as ai_router, start_background_jobs as ai_start_jobs, stop_background_jobs as ai_stop_jobs
+app.include_router(ai_router)
+
 # Create tables
 @app.on_event("startup")
 async def startup_event():
     # Ensure tables exist
     Base.metadata.create_all(bind=engine)
+    # Start AI background reminder loop
+    try:
+        await ai_start_jobs()
+    except Exception as _ai_exc:
+        print(f"AI background jobs failed to start: {_ai_exc}")
     # MySQL column additions (best-effort, ignore if already exists)
     try:
         with engine.connect() as conn:
@@ -4721,6 +4732,14 @@ async def update_sms_consent(
         print(f"Error updating SMS consent: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# Stop AI background jobs on shutdown
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        await ai_stop_jobs()
+    except Exception as _ai_exc:
+        print(f"AI shutdown error: {_ai_exc}")
 
 # Mount static files at the end to allow API routes to take precedence
 app.mount("/", StaticFiles(directory=PROJECT_ROOT, html=True), name="root")
