@@ -2,6 +2,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 
 
 SMTP_SERVER = "smtp.gmail.com"
@@ -18,7 +19,7 @@ def _get_email_settings() -> tuple[str, str]:
     return sender_email, sender_password
 
 
-def _send_email(to_email: str, subject: str, text_content: str, html_content: str | None = None) -> None:
+def _send_email(to_email: str, subject: str, text_content: str, html_content: Optional[str] = None) -> None:
     sender_email, sender_password = _get_email_settings()
 
     message = MIMEMultipart("alternative")
