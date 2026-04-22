@@ -80,14 +80,25 @@ _SPANISH_MARKERS = {
     "cuándo", "cuando", "tengo", "puedo", "buenos", "buenas",
     "qué", "que", "disponible", "recoger", "compartir",
     "alimentos", "comunidad", "recordatorio", "horario",
+    "muéstrame", "muestrame", "muestra", "mostrar", "dame",
+    "panel", "mi", "tu", "para", "con", "sin", "una", "uno",
+    "soy", "eres", "estoy", "está", "ser", "hacer", "tiene",
 }
 
 
 def detect_spanish(text: str) -> bool:
-    words = set(re.split(r"\W+", text.lower()))
+    lower = text.lower()
+    words = set(re.split(r"\W+", lower))
     marker_hits = len(words & _SPANISH_MARKERS)
-    has_spanish_chars = bool(re.search(r"[¿¡ñáéíóúü]", text.lower()))
-    return marker_hits >= 2 or (marker_hits >= 1 and has_spanish_chars)
+    # Spanish-specific punctuation is a strong standalone signal
+    if re.search(r"[¿¡ñ]", lower):
+        return True
+    # Two or more accented Latin chars → very likely Spanish
+    accent_hits = len(re.findall(r"[áéíóúü]", lower))
+    if accent_hits >= 2:
+        return True
+    has_accent = accent_hits >= 1
+    return marker_hits >= 2 or (marker_hits >= 1 and has_accent)
 
 
 # ---------------------------------------------------------------------------

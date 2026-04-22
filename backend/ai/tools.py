@@ -76,7 +76,7 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "create_reminder",
+            "name": "create_ai_reminder",
             "description": "Schedule a reminder (pickup, expiry, event, or general) for a user.",
             "parameters": {
                 "type": "object",
@@ -199,7 +199,8 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "search_food_near_user": _search_food_near_user,
         "get_user_profile": _get_user_profile,
         "get_pickup_schedule": _get_pickup_schedule,
-        "create_reminder": _create_reminder,
+        "create_ai_reminder": _create_reminder,
+        "create_reminder": _create_reminder,  # legacy alias
         "get_mapbox_route": _get_mapbox_route,
         "query_distribution_centers": _query_distribution_centers,
         "get_user_dashboard": _get_user_dashboard,
