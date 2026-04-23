@@ -1,11 +1,11 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum
 from sqlalchemy.orm import Session, relationship
-from sqlalchemy import text
+from sqlalchemy import text, func, case
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
@@ -1551,6 +1551,48 @@ async def get_admin_stats(admin_user: User = Depends(verify_admin), db: Session 
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/public/stats")
+async def get_public_stats(response: Response, db: Session = Depends(get_db)):
+    """Lightweight, cache-friendly impact totals for the public landing page."""
+    fallback = {
+        "pounds_donated_lbs": 85000,
+        "families_helped": 2500,
+        "claimed_listings": 0,
+        "updated_at": None,
+    }
+
+    try:
+        normalized_unit = func.lower(func.coalesce(FoodResource.unit, ""))
+        pounds_expr = case(
+            (FoodResource.est_weight_kg.isnot(None), FoodResource.est_weight_kg * 2.20462),
+            (normalized_unit.in_(["lb", "lbs", "pound", "pounds"]), FoodResource.qty),
+            else_=FoodResource.qty * 0.5,
+        )
+
+        totals = db.query(
+            func.count(FoodResource.id).label("claimed_listings"),
+            func.coalesce(func.sum(pounds_expr), 0.0).label("pounds_donated_lbs"),
+            func.count(func.distinct(FoodResource.recipient_id)).label("families_helped"),
+            func.max(FoodResource.claimed_at).label("updated_at"),
+        ).filter(
+            FoodResource.status == "claimed"
+        ).first()
+
+        pounds_donated = int(round(float(totals.pounds_donated_lbs or 0)))
+        families_helped = int(totals.families_helped or 0)
+
+        response.headers["Cache-Control"] = "public, max-age=1800"
+        return {
+            "pounds_donated_lbs": max(0, pounds_donated),
+            "families_helped": max(0, families_helped),
+            "claimed_listings": int(totals.claimed_listings or 0),
+            "updated_at": totals.updated_at.isoformat() if totals.updated_at else None,
+        }
+    except Exception:
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return fallback
 
 # Store for pending confirmations
 pending_confirmations = {}
