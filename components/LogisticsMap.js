@@ -344,7 +344,7 @@ function LogisticsMapComponent({ currentView, routes = [], drivers = [], stores 
                 <span>High Priority</span>
               </div>
               <div className="flex items-center space-x-3">
-                <div className="w-5 h-5 bg-blue-600 rounded-full border-2 border-white shadow animate-pulse"></div>
+                <div className="w-5 h-5 bg-blue-600 rounded-full border-2 border-white shadow"></div>
                 <span>Active Drivers</span>
               </div>
               <div className="flex items-center space-x-3">

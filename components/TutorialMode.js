@@ -3,7 +3,19 @@ function TutorialMode({ user, onClose, onComplete }) {
   const [currentStep, setCurrentStep] = React.useState(0);
   const [isActive, setIsActive] = React.useState(true);
   const [highlightElement, setHighlightElement] = React.useState(null);
+  const [targetLookupDone, setTargetLookupDone] = React.useState(true);
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+
+  const isElementActuallyVisible = React.useCallback((element) => {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+      return false;
+    }
+
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }, []);
 
   // Force re-render on window resize to update positions
   React.useEffect(() => {
@@ -229,36 +241,83 @@ function TutorialMode({ user, onClose, onComplete }) {
     }
 
     if (currentStepData?.target) {
+      setTargetLookupDone(false);
       const targets = currentStepData.target.split(',').map(s => s.trim());
-      let element = null;
 
-      for (const selector of targets) {
-        try {
-          element = document.querySelector(selector);
-          if (element) break;
-        } catch (e) {
-          console.warn(`Invalid selector: ${selector}`, e);
-        }
-      }
+      let cancelled = false;
+      let attempts = 0;
+      const maxAttempts = 10;
+      const retryDelayMs = 120;
 
-      if (element) {
-        element.classList.add('tutorial-highlight');
-        setHighlightElement(element);
+      const findBestTarget = () => {
+        let firstFound = null;
 
-        // Scroll element into view
-        setTimeout(() => {
+        for (const selector of targets) {
           try {
-            element.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+            const candidates = Array.from(document.querySelectorAll(selector));
+            if (!firstFound && candidates.length > 0) {
+              firstFound = candidates[0];
+            }
+
+            const visible = candidates.find(isElementActuallyVisible);
+            if (visible) {
+              return visible;
+            }
+          } catch (e) {
+            console.warn(`Invalid selector: ${selector}`, e);
+          }
+        }
+
+        return firstFound;
+      };
+
+      const highlightIfReady = () => {
+        if (cancelled) return;
+
+        const element = findBestTarget();
+        const isVisible = isElementActuallyVisible(element);
+
+        if (element && isVisible) {
+          try {
+            // Use immediate scroll to avoid tooltip jumping during smooth scrolling transitions.
+            element.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'center' });
           } catch (e) {
             console.warn('Failed to scroll element into view', e);
           }
-        }, 100);
-      } else {
+
+          requestAnimationFrame(() => {
+            if (cancelled) return;
+            element.classList.add('tutorial-highlight');
+            setHighlightElement(element);
+            setTargetLookupDone(true);
+          });
+          return;
+        }
+
+        attempts += 1;
+        if (attempts < maxAttempts) {
+          setTimeout(highlightIfReady, retryDelayMs);
+          return;
+        }
+
         setHighlightElement(null);
-        console.warn(`No element found for selectors: ${currentStepData.target}`);
-      }
+        setTargetLookupDone(true);
+        console.warn(`No visible element found for selectors: ${currentStepData.target}`);
+      };
+
+      // Allow time for step actions (menu open, rerender, lazy blocks) before first lookup.
+      setTimeout(highlightIfReady, 80);
+
+      return () => {
+        cancelled = true;
+        document.querySelectorAll('.tutorial-highlight').forEach(el => {
+          el.classList.remove('tutorial-highlight');
+          el.style.animation = '';
+        });
+      };
     } else {
       setHighlightElement(null);
+      setTargetLookupDone(true);
     }
 
     return () => {
@@ -268,7 +327,7 @@ function TutorialMode({ user, onClose, onComplete }) {
         el.style.animation = '';
       });
     };
-  }, [currentStep, isActive, currentStepData]);
+  }, [currentStep, isActive, currentStepData, isElementActuallyVisible]);
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -332,6 +391,9 @@ function TutorialMode({ user, onClose, onComplete }) {
     const offset = 20;
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
+    const tooltipWidthEstimate = 448;
+    const tooltipHeightEstimate = 360;
+    const edgePadding = 16;
 
     let style = { position: 'fixed', maxWidth: 'min(90vw, 28rem)' };
 
@@ -344,30 +406,30 @@ function TutorialMode({ user, onClose, onComplete }) {
     let finalPosition = position;
 
     // Auto-adjust position if not enough space
-    if (position === 'top' && spaceTop < 300) finalPosition = 'bottom';
-    if (position === 'bottom' && spaceBottom < 300) finalPosition = 'top';
-    if (position === 'left' && spaceLeft < 300) finalPosition = 'right';
-    if (position === 'right' && spaceRight < 300) finalPosition = 'left';
+    if (position === 'top' && spaceTop < (tooltipHeightEstimate + edgePadding)) finalPosition = 'bottom';
+    if (position === 'bottom' && spaceBottom < (tooltipHeightEstimate + edgePadding)) finalPosition = 'top';
+    if (position === 'left' && spaceLeft < (tooltipWidthEstimate + edgePadding)) finalPosition = 'right';
+    if (position === 'right' && spaceRight < (tooltipWidthEstimate + edgePadding)) finalPosition = 'left';
 
     switch (finalPosition) {
       case 'top':
         style.left = `${Math.max(200, Math.min(viewportWidth - 200, rect.left + rect.width / 2))}px`;
-        style.top = `${Math.max(offset, rect.top - offset)}px`;
+        style.top = `${Math.max(tooltipHeightEstimate + edgePadding, rect.top - offset)}px`;
         style.transform = 'translate(-50%, -100%)';
         break;
       case 'bottom':
         style.left = `${Math.max(200, Math.min(viewportWidth - 200, rect.left + rect.width / 2))}px`;
-        style.top = `${Math.min(viewportHeight - 200, rect.bottom + offset)}px`;
+        style.top = `${Math.min(viewportHeight - tooltipHeightEstimate - edgePadding, rect.bottom + offset)}px`;
         style.transform = 'translate(-50%, 0)';
         break;
       case 'left':
-        style.left = `${Math.max(offset, rect.left - offset)}px`;
-        style.top = `${Math.max(100, Math.min(viewportHeight - 100, rect.top + rect.height / 2))}px`;
+        style.left = `${Math.max(offset + tooltipWidthEstimate, rect.left - offset)}px`;
+        style.top = `${Math.max(tooltipHeightEstimate / 2 + edgePadding, Math.min(viewportHeight - (tooltipHeightEstimate / 2) - edgePadding, rect.top + rect.height / 2))}px`;
         style.transform = 'translate(-100%, -50%)';
         break;
       case 'right':
-        style.left = `${Math.min(viewportWidth - 200, rect.right + offset)}px`;
-        style.top = `${Math.max(100, Math.min(viewportHeight - 100, rect.top + rect.height / 2))}px`;
+        style.left = `${Math.min(viewportWidth - tooltipWidthEstimate - edgePadding, rect.right + offset)}px`;
+        style.top = `${Math.max(tooltipHeightEstimate / 2 + edgePadding, Math.min(viewportHeight - (tooltipHeightEstimate / 2) - edgePadding, rect.top + rect.height / 2))}px`;
         style.transform = 'translate(0, -50%)';
         break;
       default:
@@ -407,7 +469,7 @@ function TutorialMode({ user, onClose, onComplete }) {
 
       {/* Tutorial tooltip */}
       <div
-        className="fixed z-[102] bg-white rounded-xl shadow-2xl max-w-md w-full mx-4 transition-all duration-300"
+        className="fixed z-[102] bg-white rounded-xl shadow-2xl max-w-md w-full mx-4"
         style={getTooltipPosition()}
       >
         {/* Progress bar */}
@@ -447,7 +509,7 @@ function TutorialMode({ user, onClose, onComplete }) {
           </p>
 
           {/* Element not found warning */}
-          {currentStepData.target && !highlightElement && (
+          {currentStepData.target && targetLookupDone && !highlightElement && (
             <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
               <p> <strong>Note:</strong> The element for this step is not currently visible. You can continue to the next step.</p>
             </div>
