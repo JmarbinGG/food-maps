@@ -418,6 +418,78 @@ async def _profile_gap_prompt(user_id: int, lang: str = "en") -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# Privacy guard for run_safe_query
+# ---------------------------------------------------------------------------
+
+# Each entity that the run_safe_query whitelist exposes is mapped to the
+# column that identifies the owning/participating user, plus an optional
+# role-based "is this the caller?" test. The AI is forced to filter on
+# the authenticated user for any of these entities so one user can never
+# enumerate another user's listings, requests, or profile data.
+_SAFE_QUERY_USER_SCOPE = {
+    # donor_id OR recipient_id must equal auth user
+    "listings": ("donor_id", "recipient_id"),
+    # recipient_id must equal auth user
+    "requests": ("recipient_id",),
+    # id must equal auth user (no enumerating the users table)
+    "users": ("id",),
+}
+
+
+def _scope_safe_query(fn_args: dict, auth_user_id: int) -> dict:
+    """Ensure run_safe_query is always scoped to the authenticated user.
+
+    If the caller (an LLM) does not already include a filter binding the
+    query to its own user_id via one of the accepted columns, we inject
+    an ``eq`` filter so the result cannot span other accounts. Centers are
+    public directory data and are left unchanged.
+    """
+    if not isinstance(fn_args, dict):
+        return {"entity": "centers"}
+    entity = str(fn_args.get("entity") or "").lower()
+    accepted_cols = _SAFE_QUERY_USER_SCOPE.get(entity)
+    if not accepted_cols:
+        # Centers (or unknown entity — handler will reject) — no scoping.
+        return fn_args
+
+    filters = fn_args.get("filters") or []
+    if not isinstance(filters, list):
+        filters = []
+
+    def _binds_to_auth(f: dict) -> bool:
+        if not isinstance(f, dict):
+            return False
+        field = str(f.get("field", ""))
+        op = str(f.get("op", "eq")).lower()
+        val = f.get("value")
+        if field not in accepted_cols or op != "eq":
+            return False
+        try:
+            return int(str(val)) == int(auth_user_id)
+        except (TypeError, ValueError):
+            return False
+
+    # Drop any filter on one of the scope columns that targets a *different*
+    # user, then append our own eq-filter if none already binds us.
+    cleaned = [
+        f for f in filters
+        if not (isinstance(f, dict)
+                and str(f.get("field", "")) in accepted_cols
+                and not _binds_to_auth(f))
+    ]
+    if not any(_binds_to_auth(f) for f in cleaned):
+        cleaned.append({
+            "field": accepted_cols[0],
+            "op": "eq",
+            "value": int(auth_user_id),
+        })
+
+    new_args = dict(fn_args)
+    new_args["filters"] = cleaned
+    return new_args
+
+
+# ---------------------------------------------------------------------------
 # Conversation Engine
 # ---------------------------------------------------------------------------
 
@@ -825,12 +897,21 @@ class ConversationEngine:
                         "content": json.dumps({"error": f"Invalid arguments: {parse_err}"}),
                     })
                     continue
-                # Security: overwrite user_id for any tool that acts on behalf
-                # of the user, so prompt injections can't target another account.
-                if fn_name in self._ACTION_TOOLS and auth_user_id is not None:
-                    if not isinstance(fn_args, dict):
-                        fn_args = {}
+                # Security: the AI must never operate on another user's
+                # behalf. Whenever a tool call carries a `user_id` argument,
+                # force it to the authenticated user so prompt-injection
+                # (or a hallucinated id) cannot pivot to another account.
+                # This covers BOTH read tools (profile, dashboard, history,
+                # pickups) and write tools (claim, cancel, update, post).
+                if not isinstance(fn_args, dict):
+                    fn_args = {}
+                if auth_user_id is not None and "user_id" in fn_args:
                     fn_args["user_id"] = str(auth_user_id)
+                # run_safe_query: force a caller-scoped filter on any entity
+                # that has a user column, so the model can't enumerate other
+                # users' listings/requests or read the users table freely.
+                if fn_name == "run_safe_query" and auth_user_id is not None:
+                    fn_args = _scope_safe_query(fn_args, auth_user_id)
                 try:
                     result = await self._execute_tool(fn_name, fn_args)
                 except Exception as tool_exc:
