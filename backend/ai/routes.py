@@ -28,11 +28,20 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from backend.ai.ai_engine import (
     conversation_engine,
     check_rate_limit,
     close_http_client,
+)
+from backend.ai.errors import (
+    AIDatabaseError,
+    AIError,
+    AIServiceUnavailable,
+    AITimeout,
+    AIUpstreamError,
+    resolve_lang,
 )
 
 logger = logging.getLogger("ai_routes")
@@ -152,6 +161,7 @@ async def ai_chat(
     _enforce_rate_limit(request)
     uid = _parse_user_id(body.user_id)
     _check_ownership(_auth_user_id(credentials), uid)
+    lang = resolve_lang(request, body.message)
 
     try:
         return await conversation_engine.chat(
@@ -159,12 +169,18 @@ async def ai_chat(
             message=body.message,
             include_audio=body.include_audio,
         )
+    except HTTPException:
+        raise
+    except httpx.TimeoutException as exc:
+        raise AITimeout(lang) from exc
+    except httpx.HTTPError as exc:
+        raise AIUpstreamError(lang) from exc
     except RuntimeError as exc:
         logger.error("AI chat RuntimeError: %s", exc)
-        raise HTTPException(503, "AI service temporarily unavailable") from exc
+        raise AIServiceUnavailable(lang) from exc
     except Exception as exc:
         logger.exception("AI chat error")
-        raise HTTPException(500, "Internal AI error") from exc
+        raise AIError(lang) from exc
 
 
 @router.post("/public_chat", response_model=AIPublicChatResponse)
@@ -207,9 +223,13 @@ async def ai_public_chat(
 
     try:
         text = await conversation_engine.public_chat_reply(messages, lang=lang)
+    except httpx.TimeoutException as exc:
+        raise AITimeout(lang) from exc
+    except httpx.HTTPError as exc:
+        raise AIUpstreamError(lang) from exc
     except Exception as exc:
         logger.exception("Public chat error")
-        raise HTTPException(500, "AI service error") from exc
+        raise AIError(lang) from exc
 
     return {
         "text": text,
@@ -231,13 +251,17 @@ async def ai_history(
 
     if limit < 1 or limit > 200:
         raise HTTPException(400, "limit must be between 1 and 200")
+    lang = resolve_lang(request)
 
     try:
         history = await conversation_engine.get_conversation_history(uid, limit=limit)
         return {"user_id": user_id, "messages": history, "count": len(history)}
+    except SQLAlchemyError as exc:
+        logger.exception("History DB error")
+        raise AIDatabaseError(lang) from exc
     except Exception as exc:
         logger.exception("History fetch error")
-        raise HTTPException(500, "Failed to retrieve conversation history") from exc
+        raise AIError(lang) from exc
 
 
 @router.delete("/history/{user_id}")
@@ -249,13 +273,17 @@ async def ai_clear_history(
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
     _check_ownership(_auth_user_id(credentials), uid)
+    lang = resolve_lang(request)
 
     try:
         count = await conversation_engine.clear_history(uid)
         return {"user_id": user_id, "cleared": True, "removed": count}
+    except SQLAlchemyError as exc:
+        logger.exception("Clear history DB error")
+        raise AIDatabaseError(lang) from exc
     except Exception as exc:
         logger.exception("Clear history error")
-        raise HTTPException(500, "Failed to clear conversation history") from exc
+        raise AIError(lang) from exc
 
 
 # ---- Whisper noise filter -------------------------------------------------
@@ -302,6 +330,7 @@ async def ai_voice(
     if len(audio_bytes) == 0:
         raise HTTPException(400, "Empty audio file")
 
+    lang = resolve_lang(request)
     try:
         transcript = await conversation_engine.transcribe_audio(
             audio_bytes=audio_bytes,
@@ -319,13 +348,15 @@ async def ai_voice(
         return result
     except HTTPException:
         raise
-    except httpx.TimeoutException:
-        raise HTTPException(504, "Voice processing timed out. Try text input instead.")
+    except httpx.TimeoutException as exc:
+        raise AITimeout(lang) from exc
+    except httpx.HTTPError as exc:
+        raise AIUpstreamError(lang) from exc
     except RuntimeError as exc:
-        raise HTTPException(503, str(exc)) from exc
+        raise AIServiceUnavailable(lang) from exc
     except Exception as exc:
         logger.exception("Voice processing error")
-        raise HTTPException(500, "Voice processing failed.") from exc
+        raise AIError(lang) from exc
 
 
 @router.post("/tts")
@@ -334,17 +365,22 @@ async def ai_tts(
     request: Request,
 ) -> dict:
     """Generate TTS audio as a base64 data URL."""
+    import base64
     _enforce_rate_limit(request)
+    lang = resolve_lang(request, body.text)
     try:
-        import base64
         audio_bytes = await conversation_engine.generate_speech(body.text, lang=body.lang)
         b64 = base64.b64encode(audio_bytes).decode("ascii")
         return {"audio_url": f"data:audio/mpeg;base64,{b64}", "lang": body.lang}
+    except httpx.TimeoutException as exc:
+        raise AITimeout(lang) from exc
+    except httpx.HTTPError as exc:
+        raise AIUpstreamError(lang) from exc
     except RuntimeError as exc:
-        raise HTTPException(503, str(exc)) from exc
+        raise AIServiceUnavailable(lang) from exc
     except Exception as exc:
         logger.exception("TTS error")
-        raise HTTPException(500, "TTS failed") from exc
+        raise AIError(lang) from exc
 
 
 @router.post("/feedback")
