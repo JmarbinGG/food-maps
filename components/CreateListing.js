@@ -217,6 +217,18 @@ function CreateListing({ user, onCancel, onSuccess }) {
       }
     } catch (_) { }
 
+    // Convert <input type="datetime-local"> values (interpreted as local time
+    // by the browser) to ISO-8601 UTC so the backend stores a correct
+    // absolute instant. Otherwise the naive string gets treated as UTC on the
+    // server and the listing can appear expired immediately.
+    const toUtcIso = (localStr) => {
+      if (!localStr) return localStr;
+      const d = new Date(localStr);
+      return Number.isFinite(d.getTime()) ? d.toISOString() : localStr;
+    };
+    const pickupStartUtc = toUtcIso(formData.pickup_window_start);
+    const pickupEndUtc = toUtcIso(formData.pickup_window_end);
+
     const urlParams = new URLSearchParams({
       donor_id: JSON.parse(localStorage.getItem("current_user"))['id'],
       title: formData.title,
@@ -226,8 +238,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
       unit: formData.unit,
       perishability: formData.perishability,
       address: finalAddress,
-      pickup_start: formData.pickup_window_start,
-      pickup_end: formData.pickup_window_end
+      pickup_start: pickupStartUtc,
+      pickup_end: pickupEndUtc
     });
 
     try {
@@ -252,8 +264,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
         unit: formData.unit,
         perishability: formData.perishability,
         address: finalAddress,
-        pickup_start: formData.pickup_window_start,
-        pickup_end: formData.pickup_window_end
+        pickup_start: pickupStartUtc,
+        pickup_end: pickupEndUtc
       };
 
       let res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
