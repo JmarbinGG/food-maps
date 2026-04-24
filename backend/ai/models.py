@@ -9,7 +9,7 @@ These replace the Supabase tables used by the original DoGoods AI backend:
 from __future__ import annotations
 
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Boolean, ForeignKey, JSON
+    Column, Integer, String, Text, DateTime, Boolean, ForeignKey
 )
 from sqlalchemy.orm import relationship
 from datetime import datetime

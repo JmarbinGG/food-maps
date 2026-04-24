@@ -1,8 +1,6 @@
 """Schema sanity tests for the OpenAI function-calling tool definitions."""
 from __future__ import annotations
 
-import pytest
-
 from backend.ai.tools import TOOL_DEFINITIONS
 
 

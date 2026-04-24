@@ -1535,7 +1535,7 @@ async def _get_profile_gaps(user_id: str) -> dict:
             gaps_en: list[str] = []
             gaps_es: list[str] = []
             fields: list[str] = []
-            for fname, label, roles, prompt_en, prompt_es in _PROFILE_GAP_SPEC:
+            for fname, _label, roles, prompt_en, prompt_es in _PROFILE_GAP_SPEC:
                 if role not in roles:
                     continue
                 if _is_empty(fname):
