@@ -1,0 +1,34 @@
+"""
+Shared pytest configuration for DoGoods AI tests.
+
+Sets hermetic environment variables BEFORE any backend module is imported
+so tests never touch the real MySQL database, Twilio, OpenAI, or Mapbox.
+"""
+from __future__ import annotations
+
+import os
+import sys
+import pathlib
+
+# Locate the project root (…/project) and make it importable
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# Neutralise outbound integrations — these must be set BEFORE backend imports
+os.environ.setdefault("OPENAI_API_KEY", "")
+os.environ.setdefault("MAPBOX_TOKEN", "")
+os.environ.setdefault("TWILIO_ACCOUNT_SID", "")
+os.environ.setdefault("TWILIO_AUTH_TOKEN", "")
+os.environ.setdefault("AI_BROADCAST_AUTO_APPROVE", "0")
+
+import pytest  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """Make sure per-IP rate-limiter state does not leak between tests."""
+    from backend.ai import ai_engine
+    ai_engine._rate_store.clear()
+    yield
+    ai_engine._rate_store.clear()
