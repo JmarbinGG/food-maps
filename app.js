@@ -338,7 +338,10 @@ function App() {
           };
           const normalized = dbListings.map(normalizeListing).filter(l => l && l.id);
           setListings(normalized);
-          setFilteredListings(normalized);
+          // Do NOT set filteredListings here; the filter effect (keyed on
+          // [listings, filters, user]) is the single source of truth and will
+          // apply the correct status/role filters. Setting the unfiltered list
+          // here causes a brief flash of all listings before they get filtered.
         }
       } catch (e) {
         console.warn('Refresh listings after user hydration failed', e);
@@ -556,7 +559,9 @@ function App() {
 
         const normalized = Array.isArray(dbListings) ? dbListings.map(item => normalizeListing(item)).filter(l => l && l.id) : [];
         setListings(normalized);
-        setFilteredListings(normalized);
+        // filteredListings is derived by the filter effect; don't set the
+        // unfiltered list here or the UI will flash all listings before the
+        // status/role filter narrows them down.
         console.log(`Loaded ${normalized.length} listings from database`);
       } catch (dbError) {
         console.error('Database error:', dbError);
@@ -569,7 +574,7 @@ function App() {
         }
         const fallback = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (window.databaseService && Array.isArray(window.databaseService.listings) ? window.databaseService.listings : []));
         setListings(fallback);
-        setFilteredListings(fallback);
+        // filter effect will derive filteredListings.
         console.log(`Database failed, using snapshot fallback: ${fallback.length} listings`);
       }
 
@@ -851,7 +856,8 @@ function App() {
       // Update client state from authoritative server response
       const updatedListings = listings.map(l => String(l.id) === String(listingId) ? ({ ...l, ...updatedListing, status: (updatedListing.status || 'pending_confirmation'), recipient_id: (updatedListing.recipient_id ?? user.id) }) : l);
       setListings(updatedListings);
-      setFilteredListings(updatedListings);
+      // filteredListings is updated by the filter effect (keyed on listings).
+      // Don't bypass the filter here — it would briefly show non-matching items.
       // Sync snapshot so map and other globals see latest state
       try {
         if (window.databaseService && Array.isArray(window.databaseService.listings)) {
@@ -1253,7 +1259,7 @@ function App() {
                   const latestListings = await window.listingAPI.getAll();
                   if (Array.isArray(latestListings)) {
                     setListings(latestListings);
-                    setFilteredListings(latestListings);
+                    // filter effect will derive filteredListings from listings.
                   }
                 }
               } catch (err) {
