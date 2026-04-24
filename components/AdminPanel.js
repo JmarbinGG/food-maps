@@ -320,6 +320,7 @@ function AdminPanel({ onClose }) {
                 { id: 'referrals', label: 'Referrals', icon: 'users' },
                 { id: 'feedback', label: 'Feedback', icon: 'message-square' },
                 { id: 'messages', label: 'Messages', icon: 'message-circle' },
+                { id: 'ai_broadcasts', label: 'AI Broadcasts', icon: 'megaphone' },
                 { id: 'database', label: 'Database', icon: 'database' },
                 { id: 'export', label: 'Export', icon: 'download' }
               ].map(tab => (
@@ -897,6 +898,10 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'messages' && (
             <AdminMessagePanel />
+          )}
+
+          {activeTab === 'ai_broadcasts' && (
+            <AIBroadcastsPanel />
           )}
           </div>
         </div>

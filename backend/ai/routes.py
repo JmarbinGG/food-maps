@@ -500,22 +500,227 @@ async def reminder_loop() -> None:
 # ---------------------------------------------------------------------------
 
 _background_task: asyncio.Task | None = None
+_broadcast_task: asyncio.Task | None = None
 
 
 async def start_background_jobs() -> None:
-    global _background_task
+    global _background_task, _broadcast_task
     if _background_task is None or _background_task.done():
         _background_task = asyncio.create_task(reminder_loop())
-        logger.info("AI background jobs scheduled")
+        logger.info("AI reminder loop scheduled")
+    if _broadcast_task is None or _broadcast_task.done():
+        try:
+            from backend.ai.notifications import broadcast_loop
+            _broadcast_task = asyncio.create_task(broadcast_loop())
+            logger.info("AI broadcast loop scheduled")
+        except Exception as exc:
+            logger.error("Failed to start broadcast loop: %s", exc)
 
 
 async def stop_background_jobs() -> None:
-    global _background_task
-    if _background_task is not None and not _background_task.done():
-        _background_task.cancel()
-        try:
-            await _background_task
-        except asyncio.CancelledError:
-            pass
-        logger.info("AI background jobs stopped")
+    global _background_task, _broadcast_task
+    for name, task in (("reminder", _background_task), ("broadcast", _broadcast_task)):
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            logger.info("AI %s loop stopped", name)
+    _background_task = None
+    _broadcast_task = None
     await close_http_client()
+
+
+# ---------------------------------------------------------------------------
+# Admin-facing broadcast endpoints
+# ---------------------------------------------------------------------------
+
+def _require_admin(credentials: HTTPAuthorizationCredentials | None) -> int:
+    """Return the admin user_id or raise 401/403."""
+    if credentials is None:
+        raise HTTPException(401, "Authentication required")
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.PyJWTError as exc:
+        raise HTTPException(401, "Invalid token") from exc
+    sub = payload.get("sub")
+    try:
+        uid = int(sub)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(401, "Invalid token") from exc
+
+    def _check():
+        from backend.app import SessionLocal
+        from backend.models import User, UserRole
+        db = SessionLocal()
+        try:
+            u = db.query(User).filter(User.id == uid).first()
+            return bool(u and u.role == UserRole.ADMIN)
+        finally:
+            db.close()
+
+    if not _check():
+        raise HTTPException(403, "Admin role required")
+    return uid
+
+
+def _broadcast_to_dict(b) -> dict:
+    return {
+        "id": b.id,
+        "food_resource_id": b.food_resource_id,
+        "user_id": b.user_id,
+        "channel": b.channel,
+        "language": b.language,
+        "message": b.message,
+        "status": b.status,
+        "batch_id": b.batch_id,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+        "approved_by": b.approved_by,
+        "approved_at": b.approved_at.isoformat() if b.approved_at else None,
+        "sent_at": b.sent_at.isoformat() if b.sent_at else None,
+        "error": b.error,
+    }
+
+
+@router.get("/broadcasts")
+async def list_broadcasts(
+    request: Request,
+    status: str = "pending",
+    limit: int = 100,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Admin: list broadcasts by status."""
+    _enforce_rate_limit(request)
+    _require_admin(credentials)
+    if limit < 1 or limit > 500:
+        raise HTTPException(400, "limit must be 1..500")
+
+    def _fetch():
+        from backend.app import SessionLocal
+        from backend.ai.models import AIBroadcast
+        db = SessionLocal()
+        try:
+            q = db.query(AIBroadcast)
+            if status and status != "all":
+                q = q.filter(AIBroadcast.status == status)
+            rows = q.order_by(AIBroadcast.created_at.desc()).limit(limit).all()
+            return [_broadcast_to_dict(r) for r in rows]
+        finally:
+            db.close()
+
+    data = await asyncio.get_event_loop().run_in_executor(None, _fetch)
+    return {"status": status, "count": len(data), "broadcasts": data}
+
+
+class BroadcastEditRequest(BaseModel):
+    message: Optional[str] = Field(default=None, max_length=1000)
+    channel: Optional[str] = None  # 'sms' | 'chat' | 'both'
+
+
+@router.post("/broadcasts/{broadcast_id}/approve")
+async def approve_broadcast(
+    broadcast_id: int,
+    body: BroadcastEditRequest,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Admin: approve (optionally edit) and send a pending broadcast."""
+    _enforce_rate_limit(request)
+    admin_uid = _require_admin(credentials)
+
+    def _approve():
+        from backend.app import SessionLocal
+        from backend.ai.models import AIBroadcast
+        db = SessionLocal()
+        try:
+            b = db.query(AIBroadcast).filter(AIBroadcast.id == broadcast_id).first()
+            if not b:
+                return "not_found"
+            if b.status not in ("pending", "failed"):
+                return f"bad_status:{b.status}"
+            if body.message:
+                b.message = body.message.strip()
+            if body.channel in ("sms", "chat", "both"):
+                b.channel = body.channel
+            b.status = "approved"
+            b.approved_by = admin_uid
+            b.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
+            return "ok"
+        finally:
+            db.close()
+
+    outcome = await asyncio.get_event_loop().run_in_executor(None, _approve)
+    if outcome == "not_found":
+        raise HTTPException(404, "broadcast not found")
+    if outcome.startswith("bad_status"):
+        raise HTTPException(409, f"cannot approve: {outcome}")
+
+    # Send now
+    from backend.ai.notifications import send_broadcast
+    result = await send_broadcast(broadcast_id)
+    return {"id": broadcast_id, "approved": True, "delivery": result}
+
+
+@router.post("/broadcasts/{broadcast_id}/reject")
+async def reject_broadcast(
+    broadcast_id: int,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Admin: reject a pending broadcast (will not be sent)."""
+    _enforce_rate_limit(request)
+    admin_uid = _require_admin(credentials)
+
+    def _reject():
+        from backend.app import SessionLocal
+        from backend.ai.models import AIBroadcast
+        db = SessionLocal()
+        try:
+            b = db.query(AIBroadcast).filter(AIBroadcast.id == broadcast_id).first()
+            if not b:
+                return "not_found"
+            if b.status != "pending":
+                return f"bad_status:{b.status}"
+            b.status = "rejected"
+            b.approved_by = admin_uid
+            b.approved_at = datetime.now(timezone.utc).replace(tzinfo=None)
+            db.commit()
+            return "ok"
+        finally:
+            db.close()
+
+    outcome = await asyncio.get_event_loop().run_in_executor(None, _reject)
+    if outcome == "not_found":
+        raise HTTPException(404, "broadcast not found")
+    if outcome.startswith("bad_status"):
+        raise HTTPException(409, f"cannot reject: {outcome}")
+    return {"id": broadcast_id, "rejected": True}
+
+
+@router.post("/broadcasts/approve_batch")
+async def approve_batch(
+    request: Request,
+    batch_id: Optional[str] = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Admin: approve + send every pending broadcast (optionally by batch)."""
+    _enforce_rate_limit(request)
+    _require_admin(credentials)
+    from backend.ai.notifications import auto_send_pending
+    sent = await auto_send_pending(batch_id=batch_id)
+    return {"sent": sent, "batch_id": batch_id}
+
+
+@router.post("/broadcasts/run_now")
+async def run_broadcast_job(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Admin: trigger the hourly scan-and-draft job on-demand."""
+    _enforce_rate_limit(request)
+    _require_admin(credentials)
+    from backend.ai.notifications import scan_and_draft_new_listings
+    stats = await scan_and_draft_new_listings()
+    return {"ok": True, "stats": stats}

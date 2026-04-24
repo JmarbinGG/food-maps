@@ -314,6 +314,110 @@ def _build_system_prompt(training_data: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Role-specific behaviour
+# ---------------------------------------------------------------------------
+
+_ROLE_BEHAVIOR_EN: dict[str, str] = {
+    "recipient": (
+        "The user is a RECIPIENT. Proactively suggest food items they can claim — "
+        "use search_food_near_user and get_user_dashboard. Respect their allergies "
+        "and dietary_restrictions. Nudge them to set reminders for pickup windows."
+    ),
+    "donor": (
+        "The user is a DONOR. Focus on their posted listings. If any are close to "
+        "expiring, warn them (call get_donor_expiring_listings) and suggest lowering "
+        "price, highlighting, or re-sharing. Celebrate completed donations."
+    ),
+    "volunteer": (
+        "The user is a VOLUNTEER. Help with pickup logistics — call "
+        "get_driver_route_plan for an optimised stop order and get_mapbox_route for "
+        "directions. Encourage safe driving and on-time arrivals."
+    ),
+    "driver": (
+        "The user is a DRIVER. Prioritise route optimisation (get_driver_route_plan) "
+        "and next-stop ETA. Surface pickup deadlines. Keep directions concise."
+    ),
+    "dispatcher": (
+        "The user is a DISPATCHER. Help them triage by calling get_dispatch_queue; "
+        "match open requests to unclaimed listings, flag urgency, and recommend "
+        "volunteer assignments. Be operational and concise."
+    ),
+    "admin": (
+        "The user is an ADMIN. Use get_platform_stats when they ask about health, "
+        "activity, or outcomes. Offer encouraging, positive framing ('great growth "
+        "this week!') and flag real anomalies. Never expose raw user PII unasked."
+    ),
+}
+
+_ROLE_BEHAVIOR_ES: dict[str, str] = {
+    "recipient": (
+        "El usuario es RECIPIENTE. Sugiere alimentos que pueda reclamar (usa "
+        "search_food_near_user y get_user_dashboard). Respeta alergias y "
+        "restricciones dietéticas. Recuérdale configurar alertas de recogida."
+    ),
+    "donor": (
+        "El usuario es DONANTE. Enfócate en sus publicaciones activas. Si alguna está "
+        "por vencer, avísale (get_donor_expiring_listings) y sugiere acciones. "
+        "Felicítalo por donaciones completadas."
+    ),
+    "volunteer": (
+        "El usuario es VOLUNTARIO. Ayúdalo con la logística de recogidas: "
+        "get_driver_route_plan y get_mapbox_route. Recomienda manejar con seguridad."
+    ),
+    "driver": (
+        "El usuario es CONDUCTOR. Prioriza rutas optimizadas (get_driver_route_plan) "
+        "y tiempos estimados a la siguiente parada."
+    ),
+    "dispatcher": (
+        "El usuario es DESPACHADOR. Apóyalo con get_dispatch_queue, empareja "
+        "solicitudes con listados disponibles y señala urgencias."
+    ),
+    "admin": (
+        "El usuario es ADMIN. Usa get_platform_stats al preguntar por la salud de la "
+        "plataforma. Usa tono alentador y positivo. No expongas datos personales sin pedirlo."
+    ),
+}
+
+
+def _role_behavior_prompt(role: Optional[str], lang: str = "en") -> Optional[str]:
+    if not role:
+        return None
+    key = str(role).lower().strip()
+    mapping = _ROLE_BEHAVIOR_ES if lang == "es" else _ROLE_BEHAVIOR_EN
+    return mapping.get(key)
+
+
+async def _profile_gap_prompt(user_id: int, lang: str = "en") -> Optional[str]:
+    """Inject a nudge telling the model about missing profile fields."""
+    try:
+        from backend.ai.tools import _get_profile_gaps  # type: ignore
+    except Exception:
+        return None
+    try:
+        result = await _get_profile_gaps(str(user_id))
+    except Exception:
+        return None
+    if not isinstance(result, dict) or result.get("error"):
+        return None
+    prompts = result.get("prompts_es" if lang == "es" else "prompts_en") or []
+    if not prompts:
+        return None
+    header_en = (
+        "Profile gaps detected for this user. When it feels natural in the "
+        "conversation, politely invite them (max 1 short sentence) to share ONE of "
+        "the following so you can help better. Do NOT list all gaps at once."
+    )
+    header_es = (
+        "Perfil incompleto. Cuando sea natural en la conversación, invítale "
+        "amablemente (máx. 1 oración) a compartir UNA de las siguientes cosas. "
+        "No enumeres todas a la vez."
+    )
+    header = header_es if lang == "es" else header_en
+    bullets = "\n".join(f"- {p}" for p in prompts)
+    return f"{header}\n{bullets}"
+
+
+# ---------------------------------------------------------------------------
 # Conversation Engine
 # ---------------------------------------------------------------------------
 
@@ -481,6 +585,55 @@ class ConversationEngine:
             )
         messages.append({"role": "system", "content": context})
 
+        # Action policy: let the AI actually DO things on the user's behalf.
+        # Only injected when the user's message looks actionable — saves tokens
+        # and avoids encouraging tool narration when tools are disabled.
+        if self._needs_tools(message):
+            action_policy_en = (
+                "You can take actions for the user through tool calls. Use the ACTION "
+                "tools (claim_listing, cancel_claim, update_user_profile, post_food_request, "
+                "post_food_listing, send_user_message) whenever the user asks — you do not "
+                "need to ask them to click buttons. "
+                "Rules: "
+                "(1) The server enforces the authenticated user_id; still pass the id shown above. "
+                "(2) For destructive / irreversible actions (cancel_claim, post_food_listing, "
+                "post_food_request), confirm briefly once before calling. "
+                "(3) For small updates (e.g. adding an allergy, opting into SMS), act immediately and report what changed. "
+                "(4) When the user says things like 'I'll take it', 'reserve that', 'grab #42', "
+                "call claim_listing. Then tell them to watch for the SMS code. "
+                "(5) If a tool returns an error, explain it plainly and suggest the next step."
+            )
+            action_policy_es = (
+                "Puedes realizar acciones por el usuario mediante tool calls. Usa las herramientas "
+                "de ACCIÓN (claim_listing, cancel_claim, update_user_profile, post_food_request, "
+                "post_food_listing, send_user_message) cuando el usuario lo pida — no le digas que "
+                "haga clic en botones. Reglas: (1) El servidor impone el user_id autenticado. "
+                "(2) Confirma brevemente antes de acciones destructivas. (3) Para cambios pequeños, "
+                "actúa de inmediato y reporta el resultado. (4) Frases como 'lo tomo', 'resérvalo' "
+                "deben disparar claim_listing. (5) Si una herramienta falla, explícalo y sugiere el siguiente paso."
+            )
+            messages.append({
+                "role": "system",
+                "content": action_policy_es if lang == "es" else action_policy_en,
+            })
+
+        # Role-specific behaviour + profile-gap nudges (best-effort; non-fatal)
+        try:
+            role_prompt = _role_behavior_prompt(
+                (profile or {}).get("role"), lang=lang
+            )
+            if role_prompt:
+                messages.append({"role": "system", "content": role_prompt})
+        except Exception as exc:  # pragma: no cover
+            logger.debug("role prompt build failed: %s", exc)
+
+        try:
+            gap_prompt = await _profile_gap_prompt(user_id, lang=lang)
+            if gap_prompt:
+                messages.append({"role": "system", "content": gap_prompt})
+        except Exception as exc:  # pragma: no cover
+            logger.debug("profile gap prompt failed: %s", exc)
+
         for msg in history:
             content = msg["message"]
             if len(content) > 400:
@@ -489,7 +642,7 @@ class ConversationEngine:
 
         messages.append({"role": "user", "content": message})
 
-        response_text = await self._call_with_fallbacks(messages, lang)
+        response_text = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
 
         conversation_id = await self._persist_conversation(
             user_id, message, response_text, lang
@@ -525,9 +678,9 @@ class ConversationEngine:
 
     # ---- GPT call with fallback ------------------------------------------
 
-    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en") -> str:
+    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
         try:
-            return await self._call_openai_chat(messages, lang=lang)
+            return await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id)
         except httpx.TimeoutException:
             return get_canned_response("timeout", lang)
         except httpx.HTTPStatusError:
@@ -582,13 +735,47 @@ class ConversationEngine:
             "remind", "reminder", "set a reminder",
             "near me", "nearby", "find food", "available food",
             "search food", "food near", "listings near",
-            "direction", "directions", "route",
+            "direction", "directions", "route", "routes",
             "distribution", "community", "communities", "center",
             "my listings", "my food",
+            # role-specific
+            "expiring", "expire", "expiry", "about to expire",
+            "queue", "dispatch", "assignment", "assign", "unassigned",
+            "stats", "metrics", "platform", "how are we doing",
+            "complete my profile", "fill my profile", "profile gap",
+            "dietary", "allergies", "preferences",
+            # voice / GPS / routing / query
+            "current location", "here", "my location", "gps",
+            "urgent", "urgency", "most urgent",
+            "optimize", "optimise", "best route", "plan route",
+            "recipe", "recipes", "cook", "meal",
+            "how many", "how much", "query", "list all", "show me",
+            # actions (write)
+            "reserve", "take it", "grab it", "i'll take",
+            "cancel", "release", "unclaim", "drop",
+            "update my", "change my", "set my", "save my",
+            "add allergy", "add allergies", "add dietary",
+            "opt in", "opt out", "sms", "text me",
+            "post a request", "request food", "ask for",
+            "post a listing", "list my", "donate", "share food", "give away",
+            "send message", "tell admin", "tell donor", "message them",
         }
         return any(kw in lower for kw in tool_keywords)
 
-    async def _call_openai_chat(self, messages: list[dict], lang: str = "en") -> str:
+    # Tools that write on behalf of the user — user_id MUST come from the
+    # authenticated session, never from the model's arguments.
+    _ACTION_TOOLS = {
+        "claim_listing",
+        "cancel_claim",
+        "update_user_profile",
+        "post_food_request",
+        "post_food_listing",
+        "send_user_message",
+        "create_ai_reminder",
+        "create_reminder",
+    }
+
+    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
         if not OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY not configured")
 
@@ -638,6 +825,12 @@ class ConversationEngine:
                         "content": json.dumps({"error": f"Invalid arguments: {parse_err}"}),
                     })
                     continue
+                # Security: overwrite user_id for any tool that acts on behalf
+                # of the user, so prompt injections can't target another account.
+                if fn_name in self._ACTION_TOOLS and auth_user_id is not None:
+                    if not isinstance(fn_args, dict):
+                        fn_args = {}
+                    fn_args["user_id"] = str(auth_user_id)
                 try:
                     result = await self._execute_tool(fn_name, fn_args)
                 except Exception as tool_exc:

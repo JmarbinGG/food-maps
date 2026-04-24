@@ -2,6 +2,17 @@
 """
 Wrapper script to run the FastAPI server with auto-restart on crashes.
 This ensures the server keeps running even if it encounters errors.
+
+Background jobs that live inside the FastAPI process (and therefore are
+kept alive by this wrapper):
+
+  * backend.ai.routes.reminder_loop       - SMS reminder delivery
+  * backend.ai.notifications.broadcast_loop - hourly scan of new food
+      listings; drafts personalised SMS / in-app messages that an
+      admin reviews and approves at /api/ai/broadcasts
+
+Both loops are scheduled in ``backend.ai.routes.start_background_jobs``
+which is invoked from the FastAPI startup event in ``backend.app``.
 """
 
 import subprocess

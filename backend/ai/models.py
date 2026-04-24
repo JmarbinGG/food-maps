@@ -61,3 +61,32 @@ class AIFeedback(Base):
 
     user = relationship("User", foreign_keys=[user_id])
     conversation = relationship("AIConversation", foreign_keys=[conversation_id])
+
+
+class AIBroadcast(Base):
+    """A personalized notification drafted by the AI for a specific user.
+
+    Lifecycle:  pending -> approved -> sent (or rejected / failed).
+    Admin approval is required before SMS / in-app chat delivery.
+    """
+    __tablename__ = "ai_broadcasts"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Source of the broadcast (a new food listing, in the typical case)
+    food_resource_id = Column(Integer, ForeignKey("food_resources.id"), nullable=True, index=True)
+    # Target recipient
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Delivery channel: 'sms', 'chat', or 'both'
+    channel = Column(String(16), default="sms")
+    language = Column(String(8), default="en")  # 'en' | 'es'
+    message = Column(Text, nullable=False)
+    # pending | approved | rejected | sent | failed
+    status = Column(String(16), default="pending", index=True)
+    batch_id = Column(String(64), nullable=True, index=True)  # groups one job run
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    sent_at = Column(DateTime, nullable=True)
+    error = Column(Text, nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
