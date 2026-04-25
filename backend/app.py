@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy import text, func, case
 from pydantic import BaseModel
 from datetime import datetime, timedelta
+from functools import lru_cache
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 import jwt
@@ -15,6 +16,7 @@ import json
 import os
 import secrets
 import string
+import subprocess
 from urllib.parse import quote
 from passlib.context import CryptContext
 from backend.email_service import (
@@ -93,10 +95,18 @@ async def secure_http_exception_handler(request: Request, exc: HTTPException):
 @app.middleware("http")
 async def add_cache_control_headers(request: Request, call_next):
     """Avoid stale frontend assets requiring hard refreshes in development and production."""
+    path = request.url.path
+    relative_path = path.lstrip("/")
+    if relative_path and (
+        any(part.startswith(".") for part in relative_path.split("/") if part)
+        or _is_gitignored_path(relative_path)
+    ):
+        return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
     response = await call_next(request)
 
     # Keep API responses unchanged; only control cache behavior for frontend routes/assets.
-    path = request.url.path.lower()
+    path = path.lower()
     if not path.startswith("/api"):
         if path in {"/", ""} or path.endswith(".html"):
             response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
@@ -121,6 +131,19 @@ if not PUBLIC_BASE_URL:
 def get_public_base_url() -> str:
     """Return the user-facing base URL configured in environment."""
     return PUBLIC_BASE_URL.rstrip("/")
+
+
+@lru_cache(maxsize=4096)
+def _is_gitignored_path(relative_path: str) -> bool:
+    try:
+        completed = subprocess.run(
+            ["git", "-C", PROJECT_ROOT, "check-ignore", "-q", "--", relative_path],
+            capture_output=True,
+            check=False,
+        )
+        return completed.returncode == 0
+    except OSError:
+        return False
 
 
 # Global request input constraints for API routes.
@@ -574,6 +597,45 @@ async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), 
             "household_size": user.household_size,
             "preferred_categories": user.preferred_categories,
             "special_needs": user.special_needs
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/profile")
+@app.get("/user/profile")
+async def get_user_profile(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """Backward-compatible profile read endpoint used by frontend and some deployments.
+
+    Includes both /api/user/profile and /user/profile to tolerate proxies that strip /api.
+    """
+    try:
+        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        if user_id is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        return {
+            "id": user.id,
+            "name": user.name,
+            "email": user.email,
+            "role": user.role.value if user.role else None,
+            "phone": user.phone,
+            "address": user.address,
+            "coords_lat": user.coords_lat,
+            "coords_lng": user.coords_lng,
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "dietary_restrictions": user.dietary_restrictions,
+            "allergies": user.allergies,
+            "household_size": user.household_size,
+            "preferred_categories": user.preferred_categories,
+            "special_needs": user.special_needs,
         }
     except HTTPException:
         raise
@@ -1554,6 +1616,7 @@ async def get_admin_stats(admin_user: User = Depends(verify_admin), db: Session 
 
 
 @app.get("/api/public/stats")
+@app.get("/public/stats")
 async def get_public_stats(response: Response, db: Session = Depends(get_db)):
     """Lightweight, cache-friendly impact totals for the public landing page."""
     fallback = {
