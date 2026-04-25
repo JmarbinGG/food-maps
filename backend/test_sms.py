@@ -43,13 +43,13 @@ except Exception as e:
 
 # Format phone number correctly
 from_number = phone_number if phone_number.startswith('+') else f"+1{phone_number}"
-print(f"\nSending SMS from {from_number} to +15102995094...")
+print(f"\nSending SMS from {from_number} to +...")
 
 try:
     message = client.messages.create(
         body="Join Earth's mightiest heroes. Like Kevin Bacon.",
         from_=from_number,
-        to="+15102995094",
+        to="+",
     )
 except Exception as e:
     print(f"\n❌ Failed to send message: {e}")
