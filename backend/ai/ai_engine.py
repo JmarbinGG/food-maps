@@ -312,7 +312,34 @@ def _build_system_prompt(training_data: dict) -> str:
         "You are DoGoods AI Assistant, a warm and helpful community food sharing assistant.",
     )
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return f"{base}\n\nCurrent date and time: {now_str}\n\n" + "\n\n".join(sections)
+
+    # Hard rule: when the user asks the assistant to *do* something, the
+    # assistant must call the matching tool instead of describing how the
+    # user could do it themselves. Several user reports traced back to the
+    # model replying with instructions ("go to the listing and tap Claim")
+    # instead of calling claim_listing / post_food_listing / cancel_claim.
+    action_policy = (
+        "## Action-Taking Policy (CRITICAL)\n"
+        "You are an AGENT, not a help article. When the user asks you to do "
+        "something the platform supports, you MUST call the corresponding tool "
+        "and report the result. Do NOT respond with step-by-step instructions "
+        "telling the user to do it themselves.\n"
+        "- 'claim X for me' / 'I want that one' / 'reserve it' -> call claim_listing\n"
+        "- 'I got the code 1234' / 'confirm 1234' -> call confirm_claim\n"
+        "- 'cancel my claim' / 'release it' -> call cancel_claim\n"
+        "- 'post a listing for X' / 'donate Y' -> call post_food_listing\n"
+        "- 'I need food' / 'request X' -> call post_food_request\n"
+        "- 'update my address/phone/diet' -> call update_user_profile\n"
+        "Only ask a clarifying question if a REQUIRED parameter is genuinely "
+        "missing (e.g. you don't know which listing they mean). Otherwise, "
+        "call the tool first, then summarize what happened."
+    )
+    return (
+        f"{base}\n\nCurrent date and time: {now_str}\n\n"
+        + action_policy
+        + "\n\n"
+        + "\n\n".join(sections)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -716,7 +743,7 @@ class ConversationEngine:
 
         messages.append({"role": "user", "content": message})
 
-        response_text = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
+        response_text, actions = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
 
         conversation_id = await self._persist_conversation(
             user_id, message, response_text, lang
@@ -733,6 +760,7 @@ class ConversationEngine:
             "lang": lang,
             "conversation_id": str(conversation_id) if conversation_id else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "actions": actions,
         }
 
     async def _persist_conversation(
@@ -752,19 +780,21 @@ class ConversationEngine:
 
     # ---- GPT call with fallback ------------------------------------------
 
-    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
+    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> tuple[str, list[dict]]:
+        actions: list[dict] = []
         try:
-            return await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id)
+            text = await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id, actions_out=actions)
+            return text, actions
         except httpx.TimeoutException:
-            return get_canned_response("timeout", lang)
+            return get_canned_response("timeout", lang), actions
         except httpx.HTTPStatusError:
-            return get_canned_response("api_down", lang)
+            return get_canned_response("api_down", lang), actions
         except RuntimeError as exc:
             logger.error("GPT runtime error: %s", exc)
-            return get_canned_response("api_down", lang)
+            return get_canned_response("api_down", lang), actions
         except Exception as exc:
             logger.error("GPT unexpected error: %s", exc)
-            return get_canned_response("general_error", lang)
+            return get_canned_response("general_error", lang), actions
 
     async def public_chat_reply(self, messages: list[dict], lang: str = "en") -> str:
         """Stateless OpenAI call with NO tools and NO persistence.
@@ -849,7 +879,7 @@ class ConversationEngine:
         "create_reminder",
     }
 
-    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
+    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, actions_out: Optional[list] = None) -> str:
         if not OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY not configured")
 
@@ -919,6 +949,21 @@ class ConversationEngine:
                 except Exception as tool_exc:
                     logger.error("Tool %s failed: %s", fn_name, tool_exc)
                     result = {"error": True, "message": f"{fn_name} failed: {tool_exc}"}
+
+                # Record this tool call so the UI can surface progress /
+                # done indicators (claiming, listing posted, etc.).
+                if actions_out is not None and isinstance(result, dict):
+                    err_val = result.get("error")
+                    ok = not err_val
+                    summary_val = result.get("summary")
+                    if not summary_val and err_val:
+                        summary_val = err_val if isinstance(err_val, str) else None
+                    actions_out.append({
+                        "tool": fn_name,
+                        "ok": bool(ok),
+                        "summary": summary_val,
+                        "listing_id": result.get("listing_id"),
+                    })
 
                 result_str = json.dumps(result, default=str)
                 if len(result_str) > 4000:

@@ -356,6 +356,55 @@ function App() {
     } catch (_) {
       if (user) refreshForUser();
     }
+
+    // Also re-fetch whenever something else in the app (e.g. the AI
+    // chatbot performing a claim/cancel/post) signals listings changed,
+    // so cards stop showing 'Claim' on freshly-claimed items.
+    const handler = (ev) => {
+      // Apply an optimistic local patch FIRST so the UI updates instantly,
+      // then re-fetch from the server to reconcile authoritative state.
+      try {
+        const detail = ev && ev.detail;
+        const acts = (detail && Array.isArray(detail.actions)) ? detail.actions : [];
+        if (acts.length && user && user.id != null) {
+          const patches = new Map(); // listing_id -> {status, recipient_id?}
+          for (const a of acts) {
+            if (!a || !a.listing_id) continue;
+            const lid = String(a.listing_id);
+            if (a.tool === 'claim_listing') {
+              patches.set(lid, { status: 'pending_confirmation', recipient_id: user.id });
+            } else if (a.tool === 'confirm_claim') {
+              patches.set(lid, { status: 'claimed', recipient_id: user.id });
+            } else if (a.tool === 'cancel_claim') {
+              patches.set(lid, { status: 'available', recipient_id: null });
+            }
+          }
+          if (patches.size) {
+            setListings(prev => prev.map(l => {
+              const patch = patches.get(String(l.id));
+              return patch ? { ...l, ...patch } : l;
+            }));
+            // Mirror into databaseService snapshot too so any consumer
+            // reading window.databaseService.listings sees the patch.
+            try {
+              if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+                window.databaseService.listings = window.databaseService.listings.map(l => {
+                  const patch = patches.get(String(l.id));
+                  return patch ? { ...l, ...patch } : l;
+                });
+              }
+            } catch (_) { /* ignore */ }
+          }
+        }
+      } catch (_) { /* ignore */ }
+
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (user || token) refreshForUser();
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:listings_changed', handler);
+    return () => window.removeEventListener('foodmaps:listings_changed', handler);
   }, [user]);
 
   // Expose phone request helper globally
