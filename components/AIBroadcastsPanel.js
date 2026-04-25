@@ -13,9 +13,16 @@ function AIBroadcastsPanel() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/ai/broadcasts?status=${encodeURIComponent(status)}&limit=200`, {
-        headers: { Authorization: `Bearer ${token()}` },
-      });
+      // Cache-bust: a stale CDN/proxy/browser cache was leaving approved
+      // rows visible in the Pending tab. ?_t= forces a fresh fetch and
+      // cache:'no-store' opts out of the HTTP cache entirely.
+      const res = await fetch(
+        `/api/ai/broadcasts?status=${encodeURIComponent(status)}&limit=200&_t=${Date.now()}`,
+        {
+          headers: { Authorization: `Bearer ${token()}` },
+          cache: 'no-store',
+        },
+      );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setBroadcasts(Array.isArray(data.broadcasts) ? data.broadcasts : []);
@@ -43,12 +50,20 @@ function AIBroadcastsPanel() {
       if (d.channel && d.channel !== b.channel) body.channel = d.channel;
       const res = await fetch(`/api/ai/broadcasts/${b.id}/approve`, {
         method: 'POST',
+        cache: 'no-store',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` },
         body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
-      setInfo(`Broadcast #${b.id} approved and sent.`);
+      // Optimistic local removal so the row disappears even if a stale CDN
+      // cache briefly serves the old list on the follow-up GET.
+      setBroadcasts(prev => prev.filter(x => x.id !== b.id));
+      setEditDrafts(prev => { const n = { ...prev }; delete n[b.id]; return n; });
+      const ok = data?.delivery?.ok;
+      setInfo(ok
+        ? `Broadcast #${b.id} approved and sent.`
+        : `Broadcast #${b.id} approved, but delivery reported: ${data?.delivery?.error || 'unknown'}.`);
       await load();
     } catch (e) {
       setError(`Approve failed: ${e.message}`);
@@ -63,10 +78,12 @@ function AIBroadcastsPanel() {
     try {
       const res = await fetch(`/api/ai/broadcasts/${b.id}/reject`, {
         method: 'POST',
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token()}` },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setBroadcasts(prev => prev.filter(x => x.id !== b.id));
       setInfo(`Broadcast #${b.id} rejected.`);
       await load();
     } catch (e) {
@@ -82,10 +99,12 @@ function AIBroadcastsPanel() {
     try {
       const res = await fetch('/api/ai/broadcasts/approve_batch', {
         method: 'POST',
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token()}` },
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      setBroadcasts([]);
       setInfo(`Sent ${data.sent ?? 0} broadcast(s).`);
       await load();
     } catch (e) {
@@ -100,6 +119,7 @@ function AIBroadcastsPanel() {
     try {
       const res = await fetch('/api/ai/broadcasts/run_now', {
         method: 'POST',
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token()}` },
       });
       const data = await res.json().catch(() => ({}));
