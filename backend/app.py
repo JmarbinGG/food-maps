@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Optional, List, Dict, Any
+from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
 import jwt
 import json
@@ -57,6 +58,7 @@ def generate_referral_code():
     return ''.join(secrets.choice(alphabet) for _ in range(8))
 
 app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
+load_aws_secrets()
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 # Serve static files at root paths for legacy HTML compatibility

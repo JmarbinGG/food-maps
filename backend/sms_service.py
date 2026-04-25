@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 from backend.models import User
 import json
 
+from backend.aws_secrets import load_aws_secrets
+
 def check_sms_consent(db: Session, user_id: int, notification_type: str = None) -> bool:
     """
     Check if user has consented to receive SMS and if notification type is enabled
@@ -66,6 +68,7 @@ def send_sms_real(phone: str, message: str) -> bool:
     Send SMS using Twilio API
     """
     try:
+        load_aws_secrets()
         # Twilio credentials from environment variables
         account_sid = os.getenv("TWILIO_ACCOUNT_SID")
         auth_token = os.getenv("TWILIO_AUTH_TOKEN")

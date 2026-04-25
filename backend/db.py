@@ -1,9 +1,11 @@
+from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import os
 
 
+load_aws_secrets()
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 DATABASE_URL = os.getenv("DATABASE_URL")

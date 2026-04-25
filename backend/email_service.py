@@ -4,6 +4,8 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Optional
 
+from backend.aws_secrets import load_aws_secrets
+
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
@@ -12,6 +14,7 @@ DEFAULT_SENDER = "noreply.foodmaps@gmail.com"
 
 def _get_email_settings() -> tuple[str, str]:
     """Resolve credentials from the existing EMAIL_* configuration."""
+    load_aws_secrets()
     sender_email = os.getenv("EMAIL_USERNAME", DEFAULT_SENDER)
     sender_password = os.getenv("EMAIL_PASSWORD")
     if not sender_password:

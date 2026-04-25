@@ -23,10 +23,12 @@ from enum import Enum
 from typing import Optional
 
 import httpx
+from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
 
 # Load .env from project root
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+load_aws_secrets()
 load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
 logging.basicConfig(level=logging.INFO)

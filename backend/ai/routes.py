@@ -30,6 +30,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
+from backend.aws_secrets import load_aws_secrets
+
 from backend.ai.ai_engine import (
     conversation_engine,
     check_rate_limit,
@@ -45,6 +47,8 @@ from backend.ai.errors import (
 )
 
 logger = logging.getLogger("ai_routes")
+
+load_aws_secrets()
 
 JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
 JWT_ALGORITHM = "HS256"

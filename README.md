@@ -157,6 +157,13 @@ Optional / feature-specific
 - EMAIL_PASSWORD: SMTP app password used for password reset and verification emails
 - PUBLIC_BASE_URL: public app/api URL used to build email verification links (for production use your deployed domain)
 
+Runtime secrets from AWS Secrets Manager:
+
+- AWS_SECRET_NAME: secret to load at startup, for example `prod/env`
+- AWS_REGION: AWS region that hosts the secret, for example `us-west-1`
+
+The backend loads that secret on startup, accepts either JSON or dotenv-formatted text, and copies the keys into process environment variables before config is read.
+
 ## API Highlights
 
 Authentication and user
