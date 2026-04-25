@@ -124,10 +124,12 @@ const LISTINGS_MUTATING_TOOLS = new Set([
 ]);
 function maybeBroadcastListingsChanged(actions) {
   if (!Array.isArray(actions) || typeof window === 'undefined') return;
-  const fired = actions.some(a => a && a.ok && LISTINGS_MUTATING_TOOLS.has(a.tool));
-  if (fired) {
+  const successful = actions.filter(a => a && a.ok && LISTINGS_MUTATING_TOOLS.has(a.tool));
+  if (successful.length) {
     try {
-      window.dispatchEvent(new CustomEvent('foodmaps:listings_changed'));
+      window.dispatchEvent(new CustomEvent('foodmaps:listings_changed', {
+        detail: { actions: successful },
+      }));
     } catch (_) { /* ignore */ }
   }
 }
