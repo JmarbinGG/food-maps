@@ -310,7 +310,34 @@ def _build_system_prompt(training_data: dict) -> str:
         "You are DoGoods AI Assistant, a warm and helpful community food sharing assistant.",
     )
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return f"{base}\n\nCurrent date and time: {now_str}\n\n" + "\n\n".join(sections)
+
+    # Hard rule: when the user asks the assistant to *do* something, the
+    # assistant must call the matching tool instead of describing how the
+    # user could do it themselves. Several user reports traced back to the
+    # model replying with instructions ("go to the listing and tap Claim")
+    # instead of calling claim_listing / post_food_listing / cancel_claim.
+    action_policy = (
+        "## Action-Taking Policy (CRITICAL)\n"
+        "You are an AGENT, not a help article. When the user asks you to do "
+        "something the platform supports, you MUST call the corresponding tool "
+        "and report the result. Do NOT respond with step-by-step instructions "
+        "telling the user to do it themselves.\n"
+        "- 'claim X for me' / 'I want that one' / 'reserve it' -> call claim_listing\n"
+        "- 'I got the code 1234' / 'confirm 1234' -> call confirm_claim\n"
+        "- 'cancel my claim' / 'release it' -> call cancel_claim\n"
+        "- 'post a listing for X' / 'donate Y' -> call post_food_listing\n"
+        "- 'I need food' / 'request X' -> call post_food_request\n"
+        "- 'update my address/phone/diet' -> call update_user_profile\n"
+        "Only ask a clarifying question if a REQUIRED parameter is genuinely "
+        "missing (e.g. you don't know which listing they mean). Otherwise, "
+        "call the tool first, then summarize what happened."
+    )
+    return (
+        f"{base}\n\nCurrent date and time: {now_str}\n\n"
+        + action_policy
+        + "\n\n"
+        + "\n\n".join(sections)
+    )
 
 
 # ---------------------------------------------------------------------------
