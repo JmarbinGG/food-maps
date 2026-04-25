@@ -401,7 +401,15 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "post_food_listing",
-            "description": "ACTION: create a FoodResource listing for the current donor user. Category must be one of produce/prepared/packaged/bakery/water/fruit/leftovers. perishability should be low/medium/high.",
+            "description": (
+                "ACTION: create a FoodResource listing for the current donor user. "
+                "Category must be one of produce/prepared/packaged/bakery/water/fruit/leftovers. "
+                "perishability should be low/medium/high. "
+                "IMPORTANT: leave pickup_window_start, pickup_window_end and expiration_date "
+                "EMPTY unless the donor explicitly told you a specific time — the server picks "
+                "sensible defaults (next 48h pickup, 3-7 day expiration). Never guess dates; if "
+                "you supply a date in the past the call is rejected."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -412,10 +420,10 @@ TOOL_DEFINITIONS = [
                     "qty": {"type": "number"},
                     "unit": {"type": "string"},
                     "perishability": {"type": "string", "enum": ["low", "medium", "high"], "default": "medium"},
-                    "address": {"type": "string"},
-                    "pickup_window_start": {"type": "string", "description": "ISO 8601"},
-                    "pickup_window_end": {"type": "string", "description": "ISO 8601"},
-                    "expiration_date": {"type": "string", "description": "ISO 8601"},
+                    "address": {"type": "string", "description": "Full street address. Required if the donor's profile has none."},
+                    "pickup_window_start": {"type": "string", "description": "ISO 8601. OMIT unless the donor named a specific start time."},
+                    "pickup_window_end": {"type": "string", "description": "ISO 8601. OMIT unless the donor named a specific end time. Server defaults to +48h."},
+                    "expiration_date": {"type": "string", "description": "ISO 8601. OMIT unless printed on the package. Server defaults from perishability."},
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
                 },
@@ -2337,6 +2345,51 @@ async def _post_food_listing(
     except _ParseError as exc:
         return {"error": str(exc)}
 
+    # ------------------------------------------------------------------
+    # Sanity-check timestamps. The model frequently picks dates that are
+    # already in the past (its training data lags real time), which makes
+    # the listing show up as "expired" in the UI and hides it on the map.
+    # We:
+    #   1) reject any pickup window or expiration that is already past
+    #   2) supply sensible defaults when the model omits them
+    # ------------------------------------------------------------------
+    now = datetime.utcnow()
+    if win_end is None and win_start is None:
+        # Default pickup window: now -> +48h (good for most donations).
+        win_start = now
+        win_end = now + timedelta(hours=48)
+    elif win_end is None and win_start is not None:
+        win_end = win_start + timedelta(hours=24)
+    elif win_end is not None and win_start is None:
+        win_start = min(now, win_end - timedelta(hours=1))
+
+    if win_end <= now:
+        return {
+            "error": (
+                "pickup_window_end is in the past — the listing would be "
+                f"expired on creation. Today is {now.strftime('%Y-%m-%d %H:%M UTC')}; "
+                "please pick a future pickup window (e.g. the next 24-48 hours)."
+            )
+        }
+    if win_start and win_start > win_end:
+        return {"error": "pickup_window_start must be before pickup_window_end"}
+
+    if exp_dt is None:
+        # Default expiration: 7 days for non-perishable, 3 days for high
+        # perishability, otherwise 5 days. Always strictly after the pickup
+        # window so the UI never marks the new listing 'expired'.
+        peri_days = {"low": 7, "medium": 5, "high": 3}.get(
+            str(perishability).lower(), 5
+        )
+        exp_dt = max(win_end, now + timedelta(days=peri_days))
+    elif exp_dt <= now:
+        return {
+            "error": (
+                "expiration_date is in the past — listing would be expired. "
+                f"Today is {now.strftime('%Y-%m-%d %H:%M UTC')}."
+            )
+        }
+
     try:
         qty_val = float(qty)
     except (TypeError, ValueError):
@@ -2355,6 +2408,19 @@ async def _post_food_listing(
             allowed_roles = {UserRole.DONOR, UserRole.ADMIN, UserRole.VOLUNTEER}
             if user.role not in allowed_roles:
                 return {"error": "Only donors (or admins/volunteers) can post food listings."}
+
+            # A listing must be findable. If neither the call nor the user
+            # profile has an address AND the user has no coords, the listing
+            # would never appear on the map. Ask the AI to collect this.
+            resolved_address = (address or user.address or "").strip() or None
+            if not resolved_address and (user.coords_lat is None or user.coords_lng is None):
+                return {
+                    "error": (
+                        "Cannot post listing: no pickup address. Ask the user "
+                        "for the pickup address (street + city) and call again."
+                    )
+                }
+
             item = FoodResource(
                 donor_id=uid,
                 title=title.strip()[:255],
@@ -2366,7 +2432,7 @@ async def _post_food_listing(
                 expiration_date=exp_dt,
                 pickup_window_start=win_start,
                 pickup_window_end=win_end,
-                address=(address or user.address or "").strip() or None,
+                address=resolved_address,
                 coords_lat=user.coords_lat,
                 coords_lng=user.coords_lng,
                 status="available",
