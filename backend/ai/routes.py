@@ -25,7 +25,7 @@ from typing import Optional
 
 import httpx
 import jwt
-from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, Request, Response, UploadFile, File, Form, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
@@ -621,6 +621,7 @@ def _broadcast_to_dict(b) -> dict:
 @router.get("/broadcasts")
 async def list_broadcasts(
     request: Request,
+    response: Response,
     status: str = "pending",
     limit: int = 100,
     credentials: HTTPAuthorizationCredentials = Depends(security),
@@ -630,6 +631,12 @@ async def list_broadcasts(
     _require_admin(credentials)
     if limit < 1 or limit > 500:
         raise HTTPException(400, "limit must be 1..500")
+    # This is admin-only mutable state. Never let any intermediate cache
+    # serve a stale row order — the AI Broadcasts panel polls this endpoint
+    # immediately after approve/reject, and a cached response would make
+    # rows appear "stuck" in Pending.
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    response.headers["Pragma"] = "no-cache"
 
     def _fetch():
         from backend.app import SessionLocal

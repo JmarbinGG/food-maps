@@ -342,6 +342,27 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "confirm_claim",
+            "description": (
+                "ACTION: finalize a claim using the 4-digit code the user received "
+                "by SMS after claim_listing. Call this when the user says something "
+                "like 'my code is 1234' or 'confirm 1234'. Without this step the "
+                "claim auto-releases after 5 minutes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {"type": "integer"},
+                    "code": {"type": "string", "description": "4-digit code from SMS"},
+                },
+                "required": ["user_id", "listing_id", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "cancel_claim",
             "description": "ACTION: release a listing the user previously claimed (before pickup), returning it to 'available'. Confirm with the user first.",
             "parameters": {
@@ -401,7 +422,15 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "post_food_listing",
-            "description": "ACTION: create a FoodResource listing for the current donor user. Category must be one of produce/prepared/packaged/bakery/water/fruit/leftovers. perishability should be low/medium/high.",
+            "description": (
+                "ACTION: create a FoodResource listing for the current donor user. "
+                "Category must be one of produce/prepared/packaged/bakery/water/fruit/leftovers. "
+                "perishability should be low/medium/high. "
+                "IMPORTANT: leave pickup_window_start, pickup_window_end and expiration_date "
+                "EMPTY unless the donor explicitly told you a specific time — the server picks "
+                "sensible defaults (next 48h pickup, 3-7 day expiration). Never guess dates; if "
+                "you supply a date in the past the call is rejected."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -412,10 +441,10 @@ TOOL_DEFINITIONS = [
                     "qty": {"type": "number"},
                     "unit": {"type": "string"},
                     "perishability": {"type": "string", "enum": ["low", "medium", "high"], "default": "medium"},
-                    "address": {"type": "string"},
-                    "pickup_window_start": {"type": "string", "description": "ISO 8601"},
-                    "pickup_window_end": {"type": "string", "description": "ISO 8601"},
-                    "expiration_date": {"type": "string", "description": "ISO 8601"},
+                    "address": {"type": "string", "description": "Full street address. Required if the donor's profile has none."},
+                    "pickup_window_start": {"type": "string", "description": "ISO 8601. OMIT unless the donor named a specific start time."},
+                    "pickup_window_end": {"type": "string", "description": "ISO 8601. OMIT unless the donor named a specific end time. Server defaults to +48h."},
+                    "expiration_date": {"type": "string", "description": "ISO 8601. OMIT unless printed on the package. Server defaults from perishability."},
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
                 },
@@ -470,6 +499,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "run_safe_query": _run_safe_query,
         "claim_listing": _claim_listing,
         "cancel_claim": _cancel_claim,
+        "confirm_claim": _confirm_claim,
         "update_user_profile": _update_user_profile,
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
@@ -2094,12 +2124,98 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
-                "summary": f"Claim initiated for '{item.title}'. Check your phone for the 4-digit confirmation code.",
+                "needs_confirmation": True,
+                "summary": (
+                    f"Claim initiated for '{item.title}'. A 4-digit code was "
+                    f"texted to your phone. Reply here with 'confirm <code>' "
+                    f"within 5 minutes or it auto-releases."
+                ),
             }
         except Exception as exc:
             logger.error("claim_listing failed: %s", exc)
             db.rollback()
             return {"error": f"claim failed: {exc}"}
+        finally:
+            db.close()
+
+    return await _run(_sync)
+
+
+async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
+    """Finalize a pending claim by checking the SMS code, mirroring the
+    /api/listings/confirm/{id} endpoint but callable from chat.
+    """
+    from backend.app import SessionLocal, pending_confirmations, send_sms
+    from backend.models import FoodResource, User
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    code_clean = str(code or "").strip()
+    if not code_clean:
+        return {"error": "Confirmation code required"}
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            lid = int(listing_id)
+            confirmation = pending_confirmations.get(lid)
+            if not confirmation:
+                # Maybe already confirmed or auto-released.
+                item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+                if item and item.status == "claimed" and item.recipient_id == uid:
+                    return {
+                        "success": True,
+                        "already_confirmed": True,
+                        "listing_id": lid,
+                        "summary": f"'{item.title}' is already confirmed as claimed.",
+                    }
+                return {"error": "No pending confirmation for this listing (it may have expired or been released)."}
+
+            if confirmation.get("recipient_id") != uid:
+                return {"error": "This confirmation belongs to a different user."}
+            if confirmation.get("code") != code_clean:
+                return {"error": "Invalid confirmation code"}
+            if datetime.utcnow() > confirmation.get("expires_at", datetime.utcnow()):
+                pending_confirmations.pop(lid, None)
+                return {"error": "Confirmation code expired. Please claim again."}
+
+            item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not item:
+                return {"error": "Listing not found"}
+
+            item.status = "claimed"
+            db.commit()
+            pending_confirmations.pop(lid, None)
+
+            try:
+                donor = db.query(User).filter(User.id == item.donor_id).first()
+                claimant = db.query(User).filter(User.id == uid).first()
+                if claimant and claimant.phone:
+                    send_sms(
+                        claimant.phone,
+                        f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
+                        f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
+                    )
+                if donor and donor.phone:
+                    send_sms(
+                        donor.phone,
+                        f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
+                        f"will pick up '{item.title}'.",
+                    )
+            except Exception as exc:  # pragma: no cover
+                logger.warning("confirm SMS delivery failed: %s", exc)
+
+            return {
+                "success": True,
+                "listing_id": item.id,
+                "status": item.status,
+                "summary": f"Claim confirmed for '{item.title}'. You're cleared to pick it up.",
+            }
+        except Exception as exc:
+            logger.error("confirm_claim failed: %s", exc)
+            db.rollback()
+            return {"error": f"confirm failed: {exc}"}
         finally:
             db.close()
 
@@ -2337,6 +2453,51 @@ async def _post_food_listing(
     except _ParseError as exc:
         return {"error": str(exc)}
 
+    # ------------------------------------------------------------------
+    # Sanity-check timestamps. The model frequently picks dates that are
+    # already in the past (its training data lags real time), which makes
+    # the listing show up as "expired" in the UI and hides it on the map.
+    # We:
+    #   1) reject any pickup window or expiration that is already past
+    #   2) supply sensible defaults when the model omits them
+    # ------------------------------------------------------------------
+    now = datetime.utcnow()
+    if win_end is None and win_start is None:
+        # Default pickup window: now -> +48h (good for most donations).
+        win_start = now
+        win_end = now + timedelta(hours=48)
+    elif win_end is None and win_start is not None:
+        win_end = win_start + timedelta(hours=24)
+    elif win_end is not None and win_start is None:
+        win_start = min(now, win_end - timedelta(hours=1))
+
+    if win_end <= now:
+        return {
+            "error": (
+                "pickup_window_end is in the past — the listing would be "
+                f"expired on creation. Today is {now.strftime('%Y-%m-%d %H:%M UTC')}; "
+                "please pick a future pickup window (e.g. the next 24-48 hours)."
+            )
+        }
+    if win_start and win_start > win_end:
+        return {"error": "pickup_window_start must be before pickup_window_end"}
+
+    if exp_dt is None:
+        # Default expiration: 7 days for non-perishable, 3 days for high
+        # perishability, otherwise 5 days. Always strictly after the pickup
+        # window so the UI never marks the new listing 'expired'.
+        peri_days = {"low": 7, "medium": 5, "high": 3}.get(
+            str(perishability).lower(), 5
+        )
+        exp_dt = max(win_end, now + timedelta(days=peri_days))
+    elif exp_dt <= now:
+        return {
+            "error": (
+                "expiration_date is in the past — listing would be expired. "
+                f"Today is {now.strftime('%Y-%m-%d %H:%M UTC')}."
+            )
+        }
+
     try:
         qty_val = float(qty)
     except (TypeError, ValueError):
@@ -2355,6 +2516,19 @@ async def _post_food_listing(
             allowed_roles = {UserRole.DONOR, UserRole.ADMIN, UserRole.VOLUNTEER}
             if user.role not in allowed_roles:
                 return {"error": "Only donors (or admins/volunteers) can post food listings."}
+
+            # A listing must be findable. If neither the call nor the user
+            # profile has an address AND the user has no coords, the listing
+            # would never appear on the map. Ask the AI to collect this.
+            resolved_address = (address or user.address or "").strip() or None
+            if not resolved_address and (user.coords_lat is None or user.coords_lng is None):
+                return {
+                    "error": (
+                        "Cannot post listing: no pickup address. Ask the user "
+                        "for the pickup address (street + city) and call again."
+                    )
+                }
+
             item = FoodResource(
                 donor_id=uid,
                 title=title.strip()[:255],
@@ -2366,7 +2540,7 @@ async def _post_food_listing(
                 expiration_date=exp_dt,
                 pickup_window_start=win_start,
                 pickup_window_end=win_end,
-                address=(address or user.address or "").strip() or None,
+                address=resolved_address,
                 coords_lat=user.coords_lat,
                 coords_lng=user.coords_lng,
                 status="available",
