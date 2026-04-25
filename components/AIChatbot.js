@@ -65,6 +65,53 @@ function BotAvatar({ size = 32 }) {
   );
 }
 
+// Pretty labels for the typing-dots indicator. We pick one based on the
+// last user message so the user gets visual feedback like "Claiming…",
+// "Posting listing…" instead of just "Thinking…".
+const PENDING_LABELS = [
+  { rx: /\b(claim|reserve|take|grab|i'll take)\b/i, label: 'Claiming…' },
+  { rx: /\b(confirm|my code|here's the code)\b/i,    label: 'Confirming claim…' },
+  { rx: /\b(cancel|release|unclaim|drop)\b/i,        label: 'Releasing claim…' },
+  { rx: /\b(post|list|donate|share food|give away)\b/i, label: 'Posting listing…' },
+  { rx: /\b(request|need food|i need)\b/i,           label: 'Posting request…' },
+  { rx: /\b(near|nearby|around me|find food|search)\b/i, label: 'Finding food near you…' },
+  { rx: /\b(route|directions|navigate)\b/i,          label: 'Planning route…' },
+  { rx: /\b(recipe|cook|meal)\b/i,                   label: 'Looking up recipes…' },
+  { rx: /\b(update|change|set)\s+(my|profile)/i,     label: 'Updating profile…' },
+];
+function guessPendingLabel(text) {
+  const t = String(text || '');
+  for (const { rx, label } of PENDING_LABELS) {
+    if (rx.test(t)) return label;
+  }
+  return 'Thinking…';
+}
+
+// Map server-side tool names to user-facing chip text + state. The chip
+// is rendered "done" when the tool succeeded and "error" if it returned
+// an error payload. We deliberately only surface the action-y tools;
+// pure read tools (search, dashboard, profile) don't get a chip.
+const ACTION_CHIP_LABELS = {
+  claim_listing:       { ok: '✓ Claim initiated', err: '✗ Claim failed', verb: 'Claiming…' },
+  confirm_claim:       { ok: '✓ Claim confirmed', err: '✗ Confirmation failed', verb: 'Confirming…' },
+  cancel_claim:        { ok: '✓ Claim released',  err: '✗ Release failed',  verb: 'Releasing…' },
+  post_food_listing:   { ok: '✓ Listing posted',  err: '✗ Listing failed',  verb: 'Posting listing…' },
+  post_food_request:   { ok: '✓ Request posted',  err: '✗ Request failed',  verb: 'Posting request…' },
+  update_user_profile: { ok: '✓ Profile updated', err: '✗ Update failed',   verb: 'Updating profile…' },
+  send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
+};
+function ActionChip({ action }) {
+  const cfg = ACTION_CHIP_LABELS[action.tool];
+  if (!cfg) return null; // skip non-action tools
+  const cls = action.ok ? 'foodmaps-action-chip done' : 'foodmaps-action-chip error';
+  const label = action.ok ? cfg.ok : cfg.err;
+  return (
+    <span className={cls} title={action.summary || ''}>
+      <span>{label}</span>
+    </span>
+  );
+}
+
 function AIChatbot() {
   // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
   // no voice assistant, no mic in chat.
@@ -82,6 +129,9 @@ function AIChatbot() {
   ]);
   const [input, setInput] = React.useState('');
   const [sending, setSending] = React.useState(false);
+  // Hint text shown next to the animated typing dots while a reply is
+  // pending, so the user knows what kind of work is happening.
+  const [pendingLabel, setPendingLabel] = React.useState('Thinking…');
   const [recording, setRecording] = React.useState(false);
   const scrollRef = React.useRef(null);
   const recorderRef = React.useRef(null);
@@ -116,6 +166,7 @@ function AIChatbot() {
     if (anonymous) {
       setMessages(m => [...m, { role: 'user', text: trimmed }]);
       setInput('');
+      setPendingLabel(guessPendingLabel(trimmed));
       setSending(true);
       try {
         const res = await fetch('/api/ai/public_chat', {
@@ -142,6 +193,7 @@ function AIChatbot() {
     }
     setMessages(m => [...m, { role: 'user', text: trimmed }]);
     setInput('');
+    setPendingLabel(guessPendingLabel(trimmed));
     setSending(true);
     try {
       const res = await fetch('/api/ai/chat', {
@@ -157,7 +209,11 @@ function AIChatbot() {
         throw new Error(`${res.status}: ${err}`);
       }
       const data = await res.json();
-      setMessages(m => [...m, { role: 'assistant', text: data.text || '(no response)' }]);
+      setMessages(m => [...m, {
+        role: 'assistant',
+        text: data.text || '(no response)',
+        actions: Array.isArray(data.actions) ? data.actions : [],
+      }]);
     } catch (e) {
       console.error('AI chat error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I could not reach the assistant right now.' }]);
@@ -232,6 +288,7 @@ function AIChatbot() {
       setMessages(m => [...m, { role: 'assistant', text: 'Please sign in first.' }]);
       return;
     }
+    setPendingLabel('Transcribing…');
     setSending(true);
     const fd = new FormData();
     fd.append('audio', blob, 'voice.webm');
@@ -246,7 +303,11 @@ function AIChatbot() {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data.transcript) setMessages(m => [...m, { role: 'user', text: data.transcript }]);
-      setMessages(m => [...m, { role: 'assistant', text: data.text || '(no response)' }]);
+      setMessages(m => [...m, {
+        role: 'assistant',
+        text: data.text || '(no response)',
+        actions: Array.isArray(data.actions) ? data.actions : [],
+      }]);
     } catch (e) {
       console.error('voice error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Voice request failed. Try text instead.' }]);
@@ -309,7 +370,7 @@ function AIChatbot() {
         </div>
         <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '12px', background: '#f9fafb' }}>
           {messages.map((m, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '8px' }}>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '8px' }}>
               <div style={{
                 maxWidth: '80%',
                 padding: '8px 12px',
@@ -321,10 +382,20 @@ function AIChatbot() {
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
               }}>{m.text}</div>
+              {m.role === 'assistant' && Array.isArray(m.actions) && m.actions.length > 0 && (
+                <div style={{ maxWidth: '80%', marginTop: '2px' }}>
+                  {m.actions.map((a, j) => <ActionChip key={j} action={a} />)}
+                </div>
+              )}
             </div>
           ))}
           {sending && (
-            <div style={{ color: '#6b7280', fontSize: '13px', fontStyle: 'italic' }}>Thinking…</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px', padding: '4px 4px 8px' }}>
+              <span className="foodmaps-typing-dots" aria-label="Assistant is typing">
+                <span /><span /><span />
+              </span>
+              <span>{pendingLabel}</span>
+            </div>
           )}
         </div>
         <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white' }}>
@@ -670,6 +741,49 @@ function ChooserBubble({ icon, label, onClick }) {
     @keyframes foodmapsOrbBreathe {
       0%, 100% { transform: scale(1); }
       50%      { transform: scale(1.06); }
+    }
+    @keyframes foodmapsTypingBlink {
+      0%, 80%, 100% { opacity: 0.25; transform: translateY(0); }
+      40%           { opacity: 1;    transform: translateY(-3px); }
+    }
+    @keyframes foodmapsChipSpin {
+      from { transform: rotate(0deg); }
+      to   { transform: rotate(360deg); }
+    }
+    @keyframes foodmapsChipPop {
+      0%   { transform: scale(0.85); opacity: 0; }
+      60%  { transform: scale(1.05); opacity: 1; }
+      100% { transform: scale(1); }
+    }
+    .foodmaps-typing-dots { display: inline-flex; gap: 4px; align-items: center; }
+    .foodmaps-typing-dots span {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: #10b981;
+      animation: foodmapsTypingBlink 1.2s infinite ease-in-out;
+    }
+    .foodmaps-typing-dots span:nth-child(2) { animation-delay: 0.15s; }
+    .foodmaps-typing-dots span:nth-child(3) { animation-delay: 0.3s; }
+    .foodmaps-action-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 500;
+      animation: foodmapsChipPop 0.35s ease-out;
+      margin: 4px 4px 0 0;
+    }
+    .foodmaps-action-chip.in-progress {
+      background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;
+    }
+    .foodmaps-action-chip.done {
+      background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;
+    }
+    .foodmaps-action-chip.error {
+      background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
+    }
+    .foodmaps-action-chip .spin {
+      width: 10px; height: 10px;
+      border: 2px solid #10b981; border-top-color: transparent;
+      border-radius: 50%;
+      animation: foodmapsChipSpin 0.8s linear infinite;
     }
     .foodmaps-orb {
       width: 180px; height: 180px; border-radius: 50%;

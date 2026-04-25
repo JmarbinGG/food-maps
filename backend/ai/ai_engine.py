@@ -741,7 +741,7 @@ class ConversationEngine:
 
         messages.append({"role": "user", "content": message})
 
-        response_text = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
+        response_text, actions = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
 
         conversation_id = await self._persist_conversation(
             user_id, message, response_text, lang
@@ -758,6 +758,7 @@ class ConversationEngine:
             "lang": lang,
             "conversation_id": str(conversation_id) if conversation_id else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "actions": actions,
         }
 
     async def _persist_conversation(
@@ -777,19 +778,21 @@ class ConversationEngine:
 
     # ---- GPT call with fallback ------------------------------------------
 
-    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
+    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> tuple[str, list[dict]]:
+        actions: list[dict] = []
         try:
-            return await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id)
+            text = await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id, actions_out=actions)
+            return text, actions
         except httpx.TimeoutException:
-            return get_canned_response("timeout", lang)
+            return get_canned_response("timeout", lang), actions
         except httpx.HTTPStatusError:
-            return get_canned_response("api_down", lang)
+            return get_canned_response("api_down", lang), actions
         except RuntimeError as exc:
             logger.error("GPT runtime error: %s", exc)
-            return get_canned_response("api_down", lang)
+            return get_canned_response("api_down", lang), actions
         except Exception as exc:
             logger.error("GPT unexpected error: %s", exc)
-            return get_canned_response("general_error", lang)
+            return get_canned_response("general_error", lang), actions
 
     async def public_chat_reply(self, messages: list[dict], lang: str = "en") -> str:
         """Stateless OpenAI call with NO tools and NO persistence.
@@ -874,7 +877,7 @@ class ConversationEngine:
         "create_reminder",
     }
 
-    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> str:
+    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, actions_out: Optional[list] = None) -> str:
         if not OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY not configured")
 
@@ -944,6 +947,21 @@ class ConversationEngine:
                 except Exception as tool_exc:
                     logger.error("Tool %s failed: %s", fn_name, tool_exc)
                     result = {"error": True, "message": f"{fn_name} failed: {tool_exc}"}
+
+                # Record this tool call so the UI can surface progress /
+                # done indicators (claiming, listing posted, etc.).
+                if actions_out is not None and isinstance(result, dict):
+                    err_val = result.get("error")
+                    ok = not err_val
+                    summary_val = result.get("summary")
+                    if not summary_val and err_val:
+                        summary_val = err_val if isinstance(err_val, str) else None
+                    actions_out.append({
+                        "tool": fn_name,
+                        "ok": bool(ok),
+                        "summary": summary_val,
+                        "listing_id": result.get("listing_id"),
+                    })
 
                 result_str = json.dumps(result, default=str)
                 if len(result_str) > 4000:

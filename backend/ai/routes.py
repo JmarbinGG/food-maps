@@ -21,7 +21,7 @@ import os
 import re
 from datetime import datetime, timezone
 
-from typing import Optional
+from typing import Optional, List
 
 import httpx
 import jwt
@@ -113,6 +113,10 @@ class AIChatResponse(BaseModel):
     conversation_id: Optional[str] = None
     transcript: Optional[str] = None
     timestamp: str
+    # List of tool calls executed during this turn so the UI can show
+    # action indicators (claiming, listing, posted, etc). Each entry is
+    # {tool: str, ok: bool, summary: Optional[str]}.
+    actions: List[dict] = []
 
 
 class AIFeedbackRequest(BaseModel):
