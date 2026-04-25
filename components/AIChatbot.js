@@ -112,6 +112,26 @@ function ActionChip({ action }) {
   );
 }
 
+// Tool names whose successful execution should trigger a listings
+// refresh in the rest of the app (so claimed items stop showing the
+// Claim button etc.).
+const LISTINGS_MUTATING_TOOLS = new Set([
+  'claim_listing',
+  'confirm_claim',
+  'cancel_claim',
+  'post_food_listing',
+  'post_food_request',
+]);
+function maybeBroadcastListingsChanged(actions) {
+  if (!Array.isArray(actions) || typeof window === 'undefined') return;
+  const fired = actions.some(a => a && a.ok && LISTINGS_MUTATING_TOOLS.has(a.tool));
+  if (fired) {
+    try {
+      window.dispatchEvent(new CustomEvent('foodmaps:listings_changed'));
+    } catch (_) { /* ignore */ }
+  }
+}
+
 function AIChatbot() {
   // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
   // no voice assistant, no mic in chat.
@@ -214,6 +234,7 @@ function AIChatbot() {
         text: data.text || '(no response)',
         actions: Array.isArray(data.actions) ? data.actions : [],
       }]);
+      maybeBroadcastListingsChanged(data.actions);
     } catch (e) {
       console.error('AI chat error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I could not reach the assistant right now.' }]);
@@ -308,6 +329,7 @@ function AIChatbot() {
         text: data.text || '(no response)',
         actions: Array.isArray(data.actions) ? data.actions : [],
       }]);
+      maybeBroadcastListingsChanged(data.actions);
     } catch (e) {
       console.error('voice error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Voice request failed. Try text instead.' }]);

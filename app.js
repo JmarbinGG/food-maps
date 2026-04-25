@@ -356,6 +356,18 @@ function App() {
     } catch (_) {
       if (user) refreshForUser();
     }
+
+    // Also re-fetch whenever something else in the app (e.g. the AI
+    // chatbot performing a claim/cancel/post) signals listings changed,
+    // so cards stop showing 'Claim' on freshly-claimed items.
+    const handler = () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (user || token) refreshForUser();
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:listings_changed', handler);
+    return () => window.removeEventListener('foodmaps:listings_changed', handler);
   }, [user]);
 
   // Expose phone request helper globally
