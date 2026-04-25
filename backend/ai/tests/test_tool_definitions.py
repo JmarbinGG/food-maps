@@ -57,6 +57,7 @@ REQUIRED_TOOLS = {
     "run_safe_query",
     "claim_listing",
     "cancel_claim",
+    "confirm_claim",
     "update_user_profile",
     "post_food_request",
     "post_food_listing",

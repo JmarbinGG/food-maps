@@ -342,6 +342,27 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "confirm_claim",
+            "description": (
+                "ACTION: finalize a claim using the 4-digit code the user received "
+                "by SMS after claim_listing. Call this when the user says something "
+                "like 'my code is 1234' or 'confirm 1234'. Without this step the "
+                "claim auto-releases after 5 minutes."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {"type": "integer"},
+                    "code": {"type": "string", "description": "4-digit code from SMS"},
+                },
+                "required": ["user_id", "listing_id", "code"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "cancel_claim",
             "description": "ACTION: release a listing the user previously claimed (before pickup), returning it to 'available'. Confirm with the user first.",
             "parameters": {
@@ -478,6 +499,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "run_safe_query": _run_safe_query,
         "claim_listing": _claim_listing,
         "cancel_claim": _cancel_claim,
+        "confirm_claim": _confirm_claim,
         "update_user_profile": _update_user_profile,
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
@@ -2102,12 +2124,98 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
-                "summary": f"Claim initiated for '{item.title}'. Check your phone for the 4-digit confirmation code.",
+                "needs_confirmation": True,
+                "summary": (
+                    f"Claim initiated for '{item.title}'. A 4-digit code was "
+                    f"texted to your phone. Reply here with 'confirm <code>' "
+                    f"within 5 minutes or it auto-releases."
+                ),
             }
         except Exception as exc:
             logger.error("claim_listing failed: %s", exc)
             db.rollback()
             return {"error": f"claim failed: {exc}"}
+        finally:
+            db.close()
+
+    return await _run(_sync)
+
+
+async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
+    """Finalize a pending claim by checking the SMS code, mirroring the
+    /api/listings/confirm/{id} endpoint but callable from chat.
+    """
+    from backend.app import SessionLocal, pending_confirmations, send_sms
+    from backend.models import FoodResource, User
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    code_clean = str(code or "").strip()
+    if not code_clean:
+        return {"error": "Confirmation code required"}
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            lid = int(listing_id)
+            confirmation = pending_confirmations.get(lid)
+            if not confirmation:
+                # Maybe already confirmed or auto-released.
+                item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+                if item and item.status == "claimed" and item.recipient_id == uid:
+                    return {
+                        "success": True,
+                        "already_confirmed": True,
+                        "listing_id": lid,
+                        "summary": f"'{item.title}' is already confirmed as claimed.",
+                    }
+                return {"error": "No pending confirmation for this listing (it may have expired or been released)."}
+
+            if confirmation.get("recipient_id") != uid:
+                return {"error": "This confirmation belongs to a different user."}
+            if confirmation.get("code") != code_clean:
+                return {"error": "Invalid confirmation code"}
+            if datetime.utcnow() > confirmation.get("expires_at", datetime.utcnow()):
+                pending_confirmations.pop(lid, None)
+                return {"error": "Confirmation code expired. Please claim again."}
+
+            item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not item:
+                return {"error": "Listing not found"}
+
+            item.status = "claimed"
+            db.commit()
+            pending_confirmations.pop(lid, None)
+
+            try:
+                donor = db.query(User).filter(User.id == item.donor_id).first()
+                claimant = db.query(User).filter(User.id == uid).first()
+                if claimant and claimant.phone:
+                    send_sms(
+                        claimant.phone,
+                        f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
+                        f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
+                    )
+                if donor and donor.phone:
+                    send_sms(
+                        donor.phone,
+                        f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
+                        f"will pick up '{item.title}'.",
+                    )
+            except Exception as exc:  # pragma: no cover
+                logger.warning("confirm SMS delivery failed: %s", exc)
+
+            return {
+                "success": True,
+                "listing_id": item.id,
+                "status": item.status,
+                "summary": f"Claim confirmed for '{item.title}'. You're cleared to pick it up.",
+            }
+        except Exception as exc:
+            logger.error("confirm_claim failed: %s", exc)
+            db.rollback()
+            return {"error": f"confirm failed: {exc}"}
         finally:
             db.close()
 

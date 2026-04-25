@@ -1911,7 +1911,7 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
         # Send confirmation SMS to both parties
         if claimant and claimant.phone:
             msg = f"Claim confirmed! You can now pick up '{item.title}' at {item.address}. Contact donor: {donor.phone if donor and donor.phone else 'N/A'}"
-            (claimant.phone, msg)
+            send_sms(claimant.phone, msg)
         
         if donor and donor.phone:
             msg = f"Claim confirmed! {claimant.name if claimant else 'Recipient'} will pick up '{item.title}'. Contact: {claimant.phone if claimant and claimant.phone else 'N/A'}"
