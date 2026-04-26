@@ -507,6 +507,65 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "navigate_ui",
+            "description": (
+                "ACTION: drive the FoodMaps web UI on the user's behalf — open or close "
+                "views, panels and modals. Call this whenever the user asks to 'open', "
+                "'show', 'go to', 'close', 'hide', 'exit', 'leave', 'back to map', etc. "
+                "DO NOT EXPLAIN, JUST CALL — the UI will navigate immediately and the "
+                "assistant should keep its reply short. Use 'close' (no target) to return "
+                "to the map. Targets are page-level views; 'list' and 'map' also flip the "
+                "main map/list toggle."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["open", "close", "toggle"],
+                        "description": "What to do. 'close' returns the UI to the map.",
+                    },
+                    "target": {
+                        "type": "string",
+                        "enum": [
+                            "map",
+                            "list",
+                            "create",
+                            "bulk-create",
+                            "dashboard",
+                            "dispatch",
+                            "admin",
+                            "driver",
+                            "schedule",
+                            "partners",
+                            "food-rescue",
+                            "meal-planning",
+                            "ai-matching",
+                            "routes",
+                            "emergency",
+                            "nutrition",
+                            "consumption",
+                            "filters",
+                            "favorites",
+                            "chat",
+                            "voice",
+                        ],
+                        "description": (
+                            "Which UI surface to act on. 'map' / 'list' toggle the main "
+                            "view; the rest open a dedicated page. 'filters' / 'favorites' "
+                            "control the side panels. 'chat' / 'voice' control the AI "
+                            "chatbot itself."
+                        ),
+                    },
+                },
+                "required": ["user_id", "action"],
+            },
+        },
+    },
 ]
 
 
@@ -543,6 +602,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "post_food_listing": _post_food_listing,
         "send_user_message": _send_user_message,
         "show_map": _show_map,
+        "navigate_ui": _navigate_ui,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -2693,4 +2753,71 @@ async def _show_map(user_id: str, focus: Optional[str] = None) -> dict:
         "summary": summary,
         "view": "map",
         "focus": focus_norm,
+    }
+
+
+# Display labels for navigate_ui targets, used to build a friendly summary.
+_NAV_TARGET_LABELS = {
+    "map": "the map",
+    "list": "the list view",
+    "create": "the new-listing form",
+    "bulk-create": "the bulk listing form",
+    "dashboard": "your dashboard",
+    "dispatch": "the dispatch console",
+    "admin": "the admin panel",
+    "driver": "the driver interface",
+    "schedule": "the schedule manager",
+    "partners": "community partners",
+    "food-rescue": "the food-rescue network",
+    "meal-planning": "meal planning",
+    "ai-matching": "AI matching",
+    "routes": "volunteer routes",
+    "emergency": "emergency response",
+    "nutrition": "nutrition tracker",
+    "consumption": "the consumption tracker",
+    "filters": "the filters panel",
+    "favorites": "your favorites",
+    "chat": "the chat assistant",
+    "voice": "the voice assistant",
+}
+
+_NAV_VALID_ACTIONS = {"open", "close", "toggle"}
+
+
+async def _navigate_ui(
+    user_id: str,
+    action: str,
+    target: Optional[str] = None,
+) -> dict:
+    """UI-control tool: instructs the frontend to open/close a UI surface.
+
+    Server-side this is a no-op — the frontend listens for the
+    `foodmaps:navigate_ui` event broadcast from the chatbot and handles
+    the actual navigation. We only validate inputs and shape a friendly
+    summary string for the action chip.
+    """
+    act = (action or "").strip().lower()
+    if act not in _NAV_VALID_ACTIONS:
+        return {"error": f"Invalid action '{action}'. Use open, close, or toggle."}
+
+    tgt = (target or "").strip().lower() or None
+    # 'close' may omit a target — defaults to returning to the map.
+    if tgt is not None and tgt not in _NAV_TARGET_LABELS:
+        return {"error": f"Unknown target '{target}'."}
+    if act in {"open", "toggle"} and tgt is None:
+        return {"error": f"target is required for action '{act}'."}
+
+    if act == "close":
+        label = _NAV_TARGET_LABELS.get(tgt, "the map") if tgt else "the current view"
+        summary = f"Closed {label}."
+    elif act == "toggle":
+        summary = f"Toggled {_NAV_TARGET_LABELS[tgt]}."
+    else:  # open
+        summary = f"Opened {_NAV_TARGET_LABELS[tgt]}."
+
+    return {
+        "success": True,
+        "summary": summary,
+        "action": act,
+        "target": tgt,
     }

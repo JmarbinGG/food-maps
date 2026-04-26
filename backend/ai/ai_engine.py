@@ -958,12 +958,18 @@ class ConversationEngine:
                     summary_val = result.get("summary")
                     if not summary_val and err_val:
                         summary_val = err_val if isinstance(err_val, str) else None
-                    actions_out.append({
+                    entry = {
                         "tool": fn_name,
                         "ok": bool(ok),
                         "summary": summary_val,
                         "listing_id": result.get("listing_id"),
-                    })
+                    }
+                    # Forward extra UI-control fields (navigate_ui / show_map)
+                    # so the frontend can act on them without another roundtrip.
+                    for extra_key in ("action", "target", "view", "focus"):
+                        if extra_key in result and result[extra_key] is not None:
+                            entry[extra_key] = result[extra_key]
+                    actions_out.append(entry)
 
                 result_str = json.dumps(result, default=str)
                 if len(result_str) > 4000:

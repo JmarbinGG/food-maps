@@ -421,6 +421,61 @@ function App() {
     return () => window.removeEventListener('foodmaps:show_map', handler);
   }, []);
 
+  // Generic UI navigation driven by the AI's navigate_ui tool. Lets the
+  // assistant open and close pages, panels and modals on the user's
+  // behalf (dashboard, dispatch, admin, favorites, …).
+  React.useEffect(() => {
+    const VIEW_TARGETS = new Set([
+      'create', 'bulk-create', 'dashboard', 'dispatch', 'admin', 'driver',
+      'schedule', 'partners', 'food-rescue', 'meal-planning', 'ai-matching',
+      'routes', 'emergency', 'nutrition', 'consumption',
+    ]);
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail || {};
+        const action = (detail.action || '').toLowerCase();
+        const target = (detail.target || '').toLowerCase();
+
+        if (action === 'close') {
+          // Close anything → back to map.
+          if (target === 'favorites') {
+            setShowFavoritesPanel(false);
+          } else {
+            setCurrentView('map');
+            setShowFavoritesPanel(false);
+          }
+          return;
+        }
+
+        if (target === 'map') {
+          setCurrentView('map');
+          setViewMode('map');
+          return;
+        }
+        if (target === 'list') {
+          setCurrentView('map');
+          setViewMode('list');
+          return;
+        }
+        if (target === 'favorites') {
+          if (action === 'toggle') {
+            setShowFavoritesPanel(prev => !prev);
+          } else {
+            setShowFavoritesPanel(true);
+          }
+          return;
+        }
+        if (VIEW_TARGETS.has(target)) {
+          setCurrentView(target);
+          return;
+        }
+        // chat / voice / filters are handled by the chatbot itself.
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:navigate_ui', handler);
+    return () => window.removeEventListener('foodmaps:navigate_ui', handler);
+  }, []);
+
   // Expose phone request helper globally
   React.useEffect(() => {
     window.requestPhone = requestPhone;

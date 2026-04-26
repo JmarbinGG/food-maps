@@ -100,6 +100,7 @@ const ACTION_CHIP_LABELS = {
   update_user_profile: { ok: '✓ Profile updated', err: '✗ Update failed',   verb: 'Updating profile…' },
   send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
   show_map:            { ok: '✓ Map opened',      err: '✗ Could not open map', verb: 'Opening map…' },
+  navigate_ui:         { ok: '✓ UI updated',      err: '✗ Could not update UI', verb: 'Updating UI…' },
 };
 function ActionChip({ action }) {
   const cfg = ACTION_CHIP_LABELS[action.tool];
@@ -138,7 +139,7 @@ function maybeBroadcastListingsChanged(actions) {
 // UI-control tools tell the rest of the app to navigate / change view.
 // We broadcast a separate event so app.js can flip viewMode/currentView
 // without having to refresh listings.
-const UI_CONTROL_TOOLS = new Set(['show_map']);
+const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui']);
 function maybeBroadcastUIControl(actions) {
   if (!Array.isArray(actions) || typeof window === 'undefined') return;
   const ui = actions.filter(a => a && a.ok && UI_CONTROL_TOOLS.has(a.tool));
@@ -147,6 +148,14 @@ function maybeBroadcastUIControl(actions) {
       if (a.tool === 'show_map') {
         window.dispatchEvent(new CustomEvent('foodmaps:show_map', {
           detail: { summary: a.summary || null },
+        }));
+      } else if (a.tool === 'navigate_ui') {
+        window.dispatchEvent(new CustomEvent('foodmaps:navigate_ui', {
+          detail: {
+            action: a.action || null,
+            target: a.target || null,
+            summary: a.summary || null,
+          },
         }));
       }
     } catch (_) { /* ignore */ }
@@ -192,6 +201,34 @@ function AIChatbot() {
     window.addEventListener('foodmaps:show_map', handler);
     return () => window.removeEventListener('foodmaps:show_map', handler);
   }, []);
+
+  // navigate_ui can also target the chatbot itself (chat/voice/filters)
+  // and any 'close' should minimize the assistant when the user is
+  // jumping to another part of the app.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = (event) => {
+      const detail = (event && event.detail) || {};
+      const action = (detail.action || '').toLowerCase();
+      const target = (detail.target || '').toLowerCase();
+      if (action === 'close') {
+        if (target === 'chat' || target === 'voice' || target === '' || target === 'map') {
+          setMode('idle');
+        }
+        return;
+      }
+      if (action === 'open' || action === 'toggle') {
+        if (target === 'chat') setMode(action === 'toggle' && mode === 'chat' ? 'idle' : 'chat');
+        else if (target === 'voice') setMode(action === 'toggle' && mode === 'voice' ? 'idle' : 'voice');
+        else if (target && target !== 'filters') {
+          // Navigating elsewhere — get out of the way.
+          setMode('idle');
+        }
+      }
+    };
+    window.addEventListener('foodmaps:navigate_ui', handler);
+    return () => window.removeEventListener('foodmaps:navigate_ui', handler);
+  }, [mode]);
 
   function getAuth() {
     const token = localStorage.getItem('auth_token');

@@ -63,6 +63,7 @@ REQUIRED_TOOLS = {
     "post_food_listing",
     "send_user_message",
     "show_map",
+    "navigate_ui",
 }
 
 
