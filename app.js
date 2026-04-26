@@ -400,7 +400,16 @@ function App() {
 
       try {
         const token = localStorage.getItem('auth_token');
-        if (user || token) refreshForUser();
+        if (user || token) {
+          refreshForUser();
+          // Second refetch ~800ms later: gives the backend time to flush
+          // any post-commit work (e.g. SMS Timer, audit row) and protects
+          // against the case where the first refetch races the commit and
+          // returns stale data, leaving the listing showing as available.
+          setTimeout(() => {
+            try { refreshForUser(); } catch (_) { /* ignore */ }
+          }, 800);
+        }
       } catch (_) { /* ignore */ }
     };
     window.addEventListener('foodmaps:listings_changed', handler);

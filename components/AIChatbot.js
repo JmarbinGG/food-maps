@@ -716,6 +716,10 @@ function VoiceAssistant({ onClose, getAuth }) {
       const data = await res.json();
       if (data.transcript) setUserText(data.transcript);
       setAiText(data.text || '(no response)');
+      // Voice path can also trigger listing-mutating tools; broadcast so
+      // the rest of the app patches/refetches just like in text chat.
+      maybeBroadcastListingsChanged(data.actions);
+      maybeBroadcastUIControl(data.actions);
       if (data.audio_url) {
         setStatus('speaking');
         const audio = new Audio(data.audio_url);
