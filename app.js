@@ -407,6 +407,20 @@ function App() {
     return () => window.removeEventListener('foodmaps:listings_changed', handler);
   }, [user]);
 
+  // The AI chatbot dispatches `foodmaps:show_map` when its show_map tool
+  // succeeds. Flip the active view back to the interactive map so the user
+  // sees what they asked for.
+  React.useEffect(() => {
+    const handler = () => {
+      try {
+        setCurrentView('map');
+        setViewMode('map');
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:show_map', handler);
+    return () => window.removeEventListener('foodmaps:show_map', handler);
+  }, []);
+
   // Expose phone request helper globally
   React.useEffect(() => {
     window.requestPhone = requestPhone;

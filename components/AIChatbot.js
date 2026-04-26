@@ -99,6 +99,7 @@ const ACTION_CHIP_LABELS = {
   post_food_request:   { ok: '✓ Request posted',  err: '✗ Request failed',  verb: 'Posting request…' },
   update_user_profile: { ok: '✓ Profile updated', err: '✗ Update failed',   verb: 'Updating profile…' },
   send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
+  show_map:            { ok: '✓ Map opened',      err: '✗ Could not open map', verb: 'Opening map…' },
 };
 function ActionChip({ action }) {
   const cfg = ACTION_CHIP_LABELS[action.tool];
@@ -134,6 +135,24 @@ function maybeBroadcastListingsChanged(actions) {
   }
 }
 
+// UI-control tools tell the rest of the app to navigate / change view.
+// We broadcast a separate event so app.js can flip viewMode/currentView
+// without having to refresh listings.
+const UI_CONTROL_TOOLS = new Set(['show_map']);
+function maybeBroadcastUIControl(actions) {
+  if (!Array.isArray(actions) || typeof window === 'undefined') return;
+  const ui = actions.filter(a => a && a.ok && UI_CONTROL_TOOLS.has(a.tool));
+  for (const a of ui) {
+    try {
+      if (a.tool === 'show_map') {
+        window.dispatchEvent(new CustomEvent('foodmaps:show_map', {
+          detail: { summary: a.summary || null },
+        }));
+      }
+    } catch (_) { /* ignore */ }
+  }
+}
+
 function AIChatbot() {
   // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
   // no voice assistant, no mic in chat.
@@ -164,6 +183,15 @@ function AIChatbot() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, open]);
+
+  // When the AI calls show_map, minimize the chatbot so the user can
+  // actually see the map underneath.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => setMode('idle');
+    window.addEventListener('foodmaps:show_map', handler);
+    return () => window.removeEventListener('foodmaps:show_map', handler);
+  }, []);
 
   function getAuth() {
     const token = localStorage.getItem('auth_token');
@@ -237,6 +265,7 @@ function AIChatbot() {
         actions: Array.isArray(data.actions) ? data.actions : [],
       }]);
       maybeBroadcastListingsChanged(data.actions);
+      maybeBroadcastUIControl(data.actions);
     } catch (e) {
       console.error('AI chat error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Sorry, I could not reach the assistant right now.' }]);
@@ -332,6 +361,7 @@ function AIChatbot() {
         actions: Array.isArray(data.actions) ? data.actions : [],
       }]);
       maybeBroadcastListingsChanged(data.actions);
+      maybeBroadcastUIControl(data.actions);
     } catch (e) {
       console.error('voice error:', e);
       setMessages(m => [...m, { role: 'assistant', text: 'Voice request failed. Try text instead.' }]);

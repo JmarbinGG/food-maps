@@ -480,6 +480,33 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "show_map",
+            "description": (
+                "ACTION: switch the FoodMaps UI to the interactive map view so the user "
+                "can see available food listings on the map. Call this whenever the user "
+                "asks to 'show the map', 'open the map', 'see food on the map', 'view "
+                "listings on the map', or anything similar. DO NOT EXPLAIN, JUST CALL — "
+                "the UI will navigate immediately."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "focus": {
+                        "type": "string",
+                        "description": (
+                            "Optional. What to focus the map on. One of 'me' (center on the "
+                            "user), 'all' (fit all listings), or a free-text place/category."
+                        ),
+                    },
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
 ]
 
 
@@ -515,6 +542,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
         "send_user_message": _send_user_message,
+        "show_map": _show_map,
     }
     handler = handlers.get(name)
     if handler is None:
@@ -2642,3 +2670,27 @@ async def _send_user_message(
             db.close()
 
     return await _run(_sync)
+
+
+async def _show_map(user_id: str, focus: Optional[str] = None) -> dict:
+    """UI-control tool: tells the frontend to switch to the map view.
+
+    Server-side this is a no-op — it just returns a success payload that
+    the chat UI broadcasts as a `foodmaps:show_map` event so app.js can
+    flip the active view to the map. We never fail this call.
+    """
+    focus_norm = (focus or "").strip().lower() or None
+    if focus_norm == "me":
+        summary = "Showing the map centered on you."
+    elif focus_norm == "all":
+        summary = "Showing the map with all available listings."
+    elif focus_norm:
+        summary = f"Showing the map focused on {focus}."
+    else:
+        summary = "Showing the map."
+    return {
+        "success": True,
+        "summary": summary,
+        "view": "map",
+        "focus": focus_norm,
+    }
