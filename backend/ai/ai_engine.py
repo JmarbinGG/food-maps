@@ -309,7 +309,7 @@ def _build_system_prompt(training_data: dict) -> str:
 
     base = training_data.get(
         "system_base",
-        "You are DoGoods AI Assistant, a warm and helpful community food sharing assistant.",
+        "You are the FoodMaps AI Assistant, a warm and helpful community food sharing assistant for the FoodMaps platform. Always refer to the product as FoodMaps; never call it 'DoGoods'.",
     )
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
