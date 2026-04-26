@@ -95,8 +95,8 @@ function guessPendingLabel(text) {
 // an error payload. We deliberately only surface the action-y tools;
 // pure read tools (search, dashboard, profile) don't get a chip.
 const ACTION_CHIP_LABELS = {
-  claim_listing:       { ok: '✓ Claim initiated', err: '✗ Claim failed', verb: 'Claiming…' },
-  confirm_claim:       { ok: '✓ Claim confirmed', err: '✗ Confirmation failed', verb: 'Confirming…' },
+  claim_listing:       { ok: '✓ Food claimed', err: '✗ Claim failed', verb: 'Claiming…' },
+  confirm_claim:       { ok: '✓ Pickup confirmed', err: '✗ Confirmation failed', verb: 'Confirming…' },
   cancel_claim:        { ok: '✓ Claim released',  err: '✗ Release failed',  verb: 'Releasing…' },
   post_food_listing:   { ok: '✓ Listing posted',  err: '✗ Listing failed',  verb: 'Posting listing…' },
   post_food_request:   { ok: '✓ Request posted',  err: '✗ Request failed',  verb: 'Posting request…' },
@@ -114,6 +114,39 @@ function ActionChip({ action }) {
     <span className={cls} title={action.summary || ''}>
       <span>{label}</span>
     </span>
+  );
+}
+
+// Tools whose successful execution deserves a prominent celebratory
+// banner inside the assistant bubble (in addition to the small chip),
+// so the user can't miss that the claim actually went through.
+const SUCCESS_BANNER_TOOLS = {
+  claim_listing: {
+    title: 'Food claimed!',
+    detail: 'Reply with the 4-digit code to confirm pickup.',
+  },
+  confirm_claim: {
+    title: 'Pickup confirmed!',
+    detail: 'You\u2019re all set \u2014 head to the pickup spot.',
+  },
+};
+function SuccessBanner({ action }) {
+  const cfg = SUCCESS_BANNER_TOOLS[action.tool];
+  if (!cfg || !action.ok) return null;
+  return (
+    <div className="foodmaps-success-banner" role="status" aria-live="polite">
+      <span className="foodmaps-success-check" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="18" height="18">
+          <circle cx="12" cy="12" r="11" fill="#10b981" />
+          <path d="M7 12.5l3.2 3.2L17 9" stroke="white" strokeWidth="2.4"
+            fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+      <div className="foodmaps-success-text">
+        <div className="foodmaps-success-title">{cfg.title}</div>
+        <div className="foodmaps-success-detail">{action.summary || cfg.detail}</div>
+      </div>
+    </div>
   );
 }
 
@@ -497,7 +530,12 @@ function AIChatbot() {
               }}>{m.text}</div>
               {m.role === 'assistant' && Array.isArray(m.actions) && m.actions.length > 0 && (
                 <div style={{ maxWidth: '80%', marginTop: '2px' }}>
-                  {m.actions.map((a, j) => <ActionChip key={j} action={a} />)}
+                  {m.actions.map((a, j) => (
+                    <React.Fragment key={j}>
+                      <SuccessBanner action={a} />
+                      <ActionChip action={a} />
+                    </React.Fragment>
+                  ))}
                 </div>
               )}
             </div>
@@ -945,6 +983,35 @@ function ChooserBubble({ icon, label, onClick }) {
       border: 2px solid #10b981; border-top-color: transparent;
       border-radius: 50%;
       animation: foodmapsChipSpin 0.8s linear infinite;
+    }
+    .foodmaps-success-banner {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px; margin: 6px 0 4px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+      border: 1px solid #6ee7b7;
+      box-shadow: 0 1px 3px rgba(16,185,129,0.18);
+      animation: foodmapsBannerPop 0.45s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .foodmaps-success-check {
+      flex: 0 0 auto; display: inline-flex;
+      animation: foodmapsCheckPop 0.6s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .foodmaps-success-text { line-height: 1.35; }
+    .foodmaps-success-title {
+      font-size: 14px; font-weight: 600; color: #065f46;
+    }
+    .foodmaps-success-detail {
+      font-size: 12.5px; color: #047857; margin-top: 2px;
+    }
+    @keyframes foodmapsBannerPop {
+      0%   { opacity: 0; transform: translateY(-4px) scale(0.96); }
+      100% { opacity: 1; transform: translateY(0)    scale(1);    }
+    }
+    @keyframes foodmapsCheckPop {
+      0%   { transform: scale(0.2); opacity: 0; }
+      60%  { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); }
     }
     .foodmaps-orb {
       width: 180px; height: 180px; border-radius: 50%;
