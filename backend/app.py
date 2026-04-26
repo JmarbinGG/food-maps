@@ -40,7 +40,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
-    PickupReminder, PickupReminderStatus, FavoriteLocation
+    PickupReminder, PickupReminderStatus, FavoriteLocation, FoodRequest
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -1006,6 +1006,28 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
         except Exception:
             raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
+        # Clear dependent rows that reference this listing to avoid FK
+        # constraint failures on MySQL. Nullable FKs are nulled out;
+        # non-nullable ones (pickup_reminders) are deleted.
+        try:
+            db.query(FoodRequest).filter(FoodRequest.food_resource_id == listing_id).update(
+                {FoodRequest.food_resource_id: None}, synchronize_session=False
+            )
+        except Exception as dep_err:
+            print(f"delete_listing: failed to null FoodRequest refs for {listing_id}: {dep_err}")
+        try:
+            db.query(SafetyReport).filter(SafetyReport.listing_id == listing_id).update(
+                {SafetyReport.listing_id: None}, synchronize_session=False
+            )
+        except Exception as dep_err:
+            print(f"delete_listing: failed to null SafetyReport refs for {listing_id}: {dep_err}")
+        try:
+            db.query(PickupReminder).filter(PickupReminder.listing_id == listing_id).delete(
+                synchronize_session=False
+            )
+        except Exception as dep_err:
+            print(f"delete_listing: failed to delete PickupReminder rows for {listing_id}: {dep_err}")
+
         db.delete(item)
         db.commit()
 
@@ -1013,6 +1035,13 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"DELETE /api/listings/get/{listing_id} error: {e}")
+        traceback.print_exc()
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
