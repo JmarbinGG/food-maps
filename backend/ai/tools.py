@@ -17,6 +17,14 @@ from typing import Optional
 
 import httpx
 
+from backend.aws_secrets import load_aws_secrets
+
+# Pull secrets (e.g. MAPBOX_TOKEN) from AWS Secrets Manager into the
+# process env BEFORE we read module-level config below. In production the
+# secret name comes from the AWS_SECRET_NAME env var (set in the systemd
+# unit, e.g. "prod/env"); in tests/dev it's a no-op when unset.
+load_aws_secrets()
+
 logger = logging.getLogger("ai_tools")
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN") or os.getenv("VITE_MAPBOX_TOKEN", "")
