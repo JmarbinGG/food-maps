@@ -473,7 +473,7 @@ function AIChatbot() {
           />
           <div style={{ position: 'fixed', right: '36px', bottom: '110px', display: 'flex', flexDirection: 'column', gap: '14px', zIndex: 9999, animation: 'foodmapsChooserIn 0.25s ease-out' }}>
             <ChooserBubble
-              icon="💬"
+              icon={<ChatIcon size={22} />}
               label="Chat"
               onClick={() => setMode('chat')}
             />
@@ -723,6 +723,26 @@ function MicIcon({ size = 18, color = 'currentColor' }) {
       <path d="M5 11a7 7 0 0 0 14 0" />
       <line x1="12" y1="18" x2="12" y2="22" />
       <line x1="8" y1="22" x2="16" y2="22" />
+    </svg>
+  );
+}
+
+// Simple stroked chat-bubble icon used for the Chat chooser.
+function ChatIcon({ size = 22, color = 'currentColor' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ display: 'block' }}
+    >
+      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 21l1.9-5.4A8 8 0 1 1 21 12z" />
     </svg>
   );
 }
