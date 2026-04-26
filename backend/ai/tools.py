@@ -21,6 +21,37 @@ logger = logging.getLogger("ai_tools")
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN") or os.getenv("VITE_MAPBOX_TOKEN", "")
 MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
+MAPBOX_GEOCODE_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json"
+
+
+def _geocode_address(address: str) -> Optional[tuple]:
+    """Best-effort forward-geocode of an address via Mapbox.
+
+    Returns ``(lat, lng)`` on success, ``None`` if no token, no match, or
+    on any error. Used to make sure AI-posted listings show up on the map
+    instead of only in the sidebar list.
+    """
+    addr = (address or "").strip()
+    if not addr or not MAPBOX_TOKEN:
+        return None
+    try:
+        from urllib.parse import quote as urlquote
+        url = MAPBOX_GEOCODE_URL.format(urlquote(addr))
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.get(url, params={"access_token": MAPBOX_TOKEN, "limit": 1})
+        if resp.status_code != 200:
+            return None
+        features = (resp.json() or {}).get("features") or []
+        if not features:
+            return None
+        center = features[0].get("center")
+        if not center or len(center) < 2:
+            return None
+        # Mapbox returns [lng, lat]
+        return float(center[1]), float(center[0])
+    except Exception as exc:
+        logger.warning("Geocode failed for %r: %s", addr, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -2479,13 +2510,20 @@ async def _post_food_request(
             allowed_roles = {UserRole.RECIPIENT, UserRole.ADMIN, UserRole.VOLUNTEER}
             if user.role not in allowed_roles:
                 return {"error": "Only recipients (or admins/volunteers) can post food requests."}
+            resolved_address = (address or user.address or "").strip() or None
+            lat = user.coords_lat
+            lng = user.coords_lng
+            if resolved_address:
+                geocoded = _geocode_address(resolved_address)
+                if geocoded is not None:
+                    lat, lng = geocoded
             req = FoodRequest(
                 recipient_id=uid,
                 category=cat_enum,
                 household_size=max(1, int(household_size or 1)),
-                address=(address or user.address or "").strip() or None,
-                coords_lat=user.coords_lat,
-                coords_lng=user.coords_lng,
+                address=resolved_address,
+                coords_lat=lat,
+                coords_lng=lng,
                 notes=(notes or None),
                 latest_by=latest_by_dt,
                 status="open",
@@ -2628,6 +2666,23 @@ async def _post_food_listing(
                     )
                 }
 
+            # Geocode the resolved address so the listing shows up on the
+            # map. Fall back to the donor's profile coords if geocoding
+            # fails or no token is configured.
+            lat = user.coords_lat
+            lng = user.coords_lng
+            if resolved_address:
+                geocoded = _geocode_address(resolved_address)
+                if geocoded is not None:
+                    lat, lng = geocoded
+            if lat is None or lng is None:
+                return {
+                    "error": (
+                        "Cannot post listing: address could not be located on the map. "
+                        "Please provide a more specific street + city + state."
+                    )
+                }
+
             item = FoodResource(
                 donor_id=uid,
                 title=title.strip()[:255],
@@ -2640,8 +2695,8 @@ async def _post_food_listing(
                 pickup_window_start=win_start,
                 pickup_window_end=win_end,
                 address=resolved_address,
-                coords_lat=user.coords_lat,
-                coords_lng=user.coords_lng,
+                coords_lat=lat,
+                coords_lng=lng,
                 status="available",
                 allergens=json.dumps(list(allergens)) if allergens else None,
                 dietary_tags=json.dumps(list(dietary_tags)) if dietary_tags else None,
