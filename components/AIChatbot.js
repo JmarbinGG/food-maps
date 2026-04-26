@@ -114,6 +114,20 @@ function ActionChip({ action }) {
   );
 }
 
+// In-progress chip shown while the assistant is working. We guess the
+// likely tool from the user's message so the user sees “⟳ Claiming…”
+// (chip styling) the moment they hit send, instead of just dots.
+function PendingActionChip({ tool, label }) {
+  const cfg = tool ? ACTION_CHIP_LABELS[tool] : null;
+  const text = (cfg && cfg.verb) || label || 'Working…';
+  return (
+    <span className="foodmaps-action-chip in-progress" title="AI is working on this…">
+      <span className="spin" aria-hidden="true" />
+      <span>{text}</span>
+    </span>
+  );
+}
+
 // Tool names whose successful execution should trigger a listings
 // refresh in the rest of the app (so claimed items stop showing the
 // Claim button etc.).
@@ -182,6 +196,7 @@ function AIChatbot() {
   // Hint text shown next to the animated typing dots while a reply is
   // pending, so the user knows what kind of work is happening.
   const [pendingLabel, setPendingLabel] = React.useState('Thinking…');
+  const [pendingTool, setPendingTool] = React.useState(null);
   const [recording, setRecording] = React.useState(false);
   const scrollRef = React.useRef(null);
   const recorderRef = React.useRef(null);
@@ -253,7 +268,9 @@ function AIChatbot() {
     if (anonymous) {
       setMessages(m => [...m, { role: 'user', text: trimmed }]);
       setInput('');
-      setPendingLabel(guessPendingLabel(trimmed));
+      const guess = guessPending(trimmed);
+      setPendingLabel(guess.label);
+      setPendingTool(guess.tool);
       setSending(true);
       try {
         const res = await fetch('/api/ai/public_chat', {
@@ -280,7 +297,9 @@ function AIChatbot() {
     }
     setMessages(m => [...m, { role: 'user', text: trimmed }]);
     setInput('');
-    setPendingLabel(guessPendingLabel(trimmed));
+    const guess = guessPending(trimmed);
+    setPendingLabel(guess.label);
+    setPendingTool(guess.tool);
     setSending(true);
     try {
       const res = await fetch('/api/ai/chat', {
@@ -481,11 +500,14 @@ function AIChatbot() {
             </div>
           ))}
           {sending && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px', padding: '4px 4px 8px' }}>
-              <span className="foodmaps-typing-dots" aria-label="Assistant is typing">
-                <span /><span /><span />
-              </span>
-              <span>{pendingLabel}</span>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', padding: '4px 4px 8px' }}>
+              <PendingActionChip tool={pendingTool} label={pendingLabel} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#6b7280', fontSize: '13px' }}>
+                <span className="foodmaps-typing-dots" aria-label="Assistant is typing">
+                  <span /><span /><span />
+                </span>
+                <span>{pendingLabel}</span>
+              </div>
             </div>
           )}
         </div>
