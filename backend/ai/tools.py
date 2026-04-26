@@ -394,19 +394,22 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "confirm_claim",
             "description": (
-                "ACTION: finalize a claim using the 4-digit code the user received "
-                "by SMS after claim_listing. Call this when the user says something "
-                "like 'my code is 1234' or 'confirm 1234'. Without this step the "
-                "claim auto-releases after 5 minutes."
+                "Finalize a pending claim using the 4-digit code the user "
+                "received (by SMS or shown inline by claim_listing). Call this "
+                "whenever the user sends a 4-digit code in chat (e.g. '1234', "
+                "'my code is 1234', 'confirm 1234'). The listing_id is "
+                "optional — if omitted, the backend looks up the user's most "
+                "recent pending claim. Without this step the claim auto-releases "
+                "after 5 minutes."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_id": {"type": "string"},
-                    "listing_id": {"type": "integer"},
-                    "code": {"type": "string", "description": "4-digit code from SMS"},
+                    "listing_id": {"type": "integer", "description": "Optional. The listing id from the claim_listing response. Omit if unknown — the backend will resolve it from the code."},
+                    "code": {"type": "string", "description": "4-digit confirmation code"},
                 },
-                "required": ["user_id", "listing_id", "code"],
+                "required": ["user_id", "code"],
             },
         },
     },
@@ -2238,12 +2241,13 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                 "expires_at": now + timedelta(minutes=5),
             }
 
+            sms_ok = False
             try:
-                send_sms(
+                sms_ok = bool(send_sms(
                     claimant.phone,
                     f"You claimed '{item.title}'. Reply with code {code} within 5 minutes to confirm. "
                     f"Address: {item.address}",
-                )
+                ))
                 donor = db.query(User).filter(User.id == item.donor_id).first()
                 if donor and donor.phone:
                     send_sms(donor.phone,
@@ -2258,15 +2262,38 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
             except Exception:
                 pass
 
+            # When SMS delivery is unavailable (e.g. Twilio not configured),
+            # surface the code in the tool result so the assistant can show
+            # it to the user inline. Safe because the chat session is
+            # already authenticated to this user via JWT.
+            if sms_ok:
+                summary = (
+                    f"Claim initiated for '{item.title}'. A 4-digit code was "
+                    f"texted to your phone. Reply here with 'confirm <code>' "
+                    f"within 5 minutes or it auto-releases."
+                )
+                return {
+                    "success": True,
+                    "listing_id": item.id,
+                    "status": item.status,
+                    "needs_confirmation": True,
+                    "summary": summary,
+                }
+            # SMS fallback: include the code in the result so the AI can
+            # relay it to the user in chat.
+            logger.warning("SMS unavailable; relaying claim code in chat for listing %s", item.id)
             return {
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
                 "needs_confirmation": True,
+                "sms_delivered": False,
+                "confirm_code": code,
                 "summary": (
-                    f"Claim initiated for '{item.title}'. A 4-digit code was "
-                    f"texted to your phone. Reply here with 'confirm <code>' "
-                    f"within 5 minutes or it auto-releases."
+                    f"Claim initiated for '{item.title}' (listing #{item.id}). "
+                    f"SMS delivery is currently unavailable, so your confirmation "
+                    f"code is {code}. Reply with 'confirm {code}' within 5 minutes "
+                    f"or the claim auto-releases. Pickup address: {item.address}."
                 ),
             }
         except Exception as exc:
@@ -2279,9 +2306,13 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
     return await _run(_sync)
 
 
-async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
+async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -> dict:
     """Finalize a pending claim by checking the SMS code, mirroring the
     /api/listings/confirm/{id} endpoint but callable from chat.
+
+    ``listing_id`` is optional: when omitted, we look up the user's most
+    recent pending confirmation by code. This lets the user simply reply
+    "1234" without remembering the listing id.
     """
     from backend.app import SessionLocal, pending_confirmations, send_sms
     from backend.models import FoodResource, User
@@ -2293,10 +2324,30 @@ async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
     if not code_clean:
         return {"error": "Confirmation code required"}
 
+    # Resolve listing_id from the in-memory pending map when not provided.
+    lid = _to_int(listing_id) if listing_id is not None else None
+    if lid is None:
+        candidates = [
+            (k, v) for k, v in pending_confirmations.items()
+            if v.get("recipient_id") == uid and v.get("code") == code_clean
+        ]
+        if not candidates:
+            return {
+                "error": (
+                    "No pending claim matches that code for your account. "
+                    "It may have expired (5 min) or already been confirmed."
+                )
+            }
+        # Pick the most recent (largest id wins as a proxy for newest).
+        lid = max(c[0] for c in candidates)
+
+    # Snapshot the resolved listing id for the inner sync closure.
+    resolved_lid = lid
+
     def _sync() -> dict:
         db = SessionLocal()
         try:
-            lid = int(listing_id)
+            lid = int(resolved_lid)
             confirmation = pending_confirmations.get(lid)
             if not confirmation:
                 # Maybe already confirmed or auto-released.
