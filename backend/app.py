@@ -40,7 +40,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
-    PickupReminder, PickupReminderStatus, FavoriteLocation, FoodRequest
+    PickupReminder, PickupReminderStatus, FavoriteLocation
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -1006,27 +1006,27 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
         except Exception:
             raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
-        # Clear dependent rows that reference this listing to avoid FK
-        # constraint failures on MySQL. Nullable FKs are nulled out;
-        # non-nullable ones (pickup_reminders) are deleted.
+        # Clear dependent rows that reference this listing to avoid MySQL
+        # FK integrity errors. Use raw SQL so this is independent of which
+        # ORM models happen to be imported. Nullable FKs are nulled out;
+        # non-nullable FKs (pickup_reminders.listing_id) require deleting.
+        from sqlalchemy import text as _sql_text
         try:
-            db.query(FoodRequest).filter(FoodRequest.food_resource_id == listing_id).update(
-                {FoodRequest.food_resource_id: None}, synchronize_session=False
-            )
+            db.execute(_sql_text("UPDATE consumption_logs SET food_resource_id = NULL WHERE food_resource_id = :lid"), {"lid": listing_id})
         except Exception as dep_err:
-            print(f"delete_listing: failed to null FoodRequest refs for {listing_id}: {dep_err}")
+            print(f"delete_listing: failed to null consumption_logs for {listing_id}: {dep_err}")
         try:
-            db.query(SafetyReport).filter(SafetyReport.listing_id == listing_id).update(
-                {SafetyReport.listing_id: None}, synchronize_session=False
-            )
+            db.execute(_sql_text("UPDATE safety_reports SET listing_id = NULL WHERE listing_id = :lid"), {"lid": listing_id})
         except Exception as dep_err:
-            print(f"delete_listing: failed to null SafetyReport refs for {listing_id}: {dep_err}")
+            print(f"delete_listing: failed to null safety_reports for {listing_id}: {dep_err}")
         try:
-            db.query(PickupReminder).filter(PickupReminder.listing_id == listing_id).delete(
-                synchronize_session=False
-            )
+            db.execute(_sql_text("UPDATE ai_broadcasts SET food_resource_id = NULL WHERE food_resource_id = :lid"), {"lid": listing_id})
         except Exception as dep_err:
-            print(f"delete_listing: failed to delete PickupReminder rows for {listing_id}: {dep_err}")
+            print(f"delete_listing: failed to null ai_broadcasts for {listing_id}: {dep_err}")
+        try:
+            db.execute(_sql_text("DELETE FROM pickup_reminders WHERE listing_id = :lid"), {"lid": listing_id})
+        except Exception as dep_err:
+            print(f"delete_listing: failed to delete pickup_reminders for {listing_id}: {dep_err}")
 
         db.delete(item)
         db.commit()
