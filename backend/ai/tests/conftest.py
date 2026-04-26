@@ -21,6 +21,10 @@ os.environ.setdefault("MAPBOX_TOKEN", "")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "")
 os.environ.setdefault("TWILIO_AUTH_TOKEN", "")
 os.environ.setdefault("AI_BROADCAST_AUTO_APPROVE", "0")
+# Provide an in-memory SQLite DB so backend.db / backend.app can import without
+# requiring a real MySQL instance. Tests mock or stub DB calls themselves.
+os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+os.environ.setdefault("PUBLIC_BASE_URL", "http://testserver")
 
 import pytest  # noqa: E402
 
