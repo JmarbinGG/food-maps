@@ -1,7 +1,7 @@
 """
 AI-specific SQLAlchemy models, added to the main MySQL database.
 
-These replace the Supabase tables used by the original DoGoods AI backend:
+These replace the Supabase tables used by the original AI backend:
   - ai_conversations   -> AIConversation
   - ai_reminders       -> AIReminder
   - ai_feedback        -> AIFeedback

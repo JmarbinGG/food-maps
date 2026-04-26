@@ -1,5 +1,5 @@
 """
-DoGoods AI tools — MySQL edition.
+FoodMaps AI tools — MySQL edition.
 
 OpenAI function-calling tool definitions and handlers.
 All data operations go through SQLAlchemy against the main MySQL database.

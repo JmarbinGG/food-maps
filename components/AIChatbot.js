@@ -1,4 +1,4 @@
-// DoGoods AI floating chatbot widget
+// FoodMaps AI floating chatbot widget
 // Calls backend /api/ai/chat — token read from localStorage.auth_token
 
 // Inline bot avatar — white levitating 3D-style head with glowing cyan face

@@ -48,7 +48,6 @@ from threading import Timer, Lock
 from twilio.rest import Client
 from backend.db import engine, SessionLocal, get_db
 
-
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
 # Helper function to generate unique referral codes
@@ -794,7 +793,7 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Mount AI router (DoGoods AI assistant)
+# Mount AI router (FoodMaps AI assistant)
 from backend.ai.routes import router as ai_router, start_background_jobs as ai_start_jobs, stop_background_jobs as ai_stop_jobs
 app.include_router(ai_router)
 

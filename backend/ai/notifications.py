@@ -1,5 +1,5 @@
 """
-Automated-messaging system for DoGoods AI.
+Automated-messaging system for FoodMaps AI.
 
 Responsibilities
 ----------------

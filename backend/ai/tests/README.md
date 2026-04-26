@@ -1,4 +1,4 @@
-# DoGoods AI — Test Suite
+# FoodMaps AI — Test Suite
 
 Hermetic pytest suite for the AI stack. Runs without MySQL, OpenAI, Twilio, or Mapbox access.
 

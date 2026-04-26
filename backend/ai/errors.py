@@ -1,5 +1,5 @@
 """
-Centralised error types for the DoGoods AI router.
+Centralised error types for the FoodMaps AI router.
 
 Provides a small hierarchy of :class:`AIError` HTTP exceptions with
 language-aware user-facing messages (sourced from

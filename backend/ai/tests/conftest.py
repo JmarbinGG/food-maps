@@ -1,5 +1,5 @@
 """
-Shared pytest configuration for DoGoods AI tests.
+Shared pytest configuration for FoodMaps AI tests.
 
 Sets hermetic environment variables BEFORE any backend module is imported
 so tests never touch the real MySQL database, Twilio, OpenAI, or Mapbox.

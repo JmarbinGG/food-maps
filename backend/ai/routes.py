@@ -1,5 +1,5 @@
 """
-DoGoods AI — FastAPI router (mounted onto the main app).
+FoodMaps AI — FastAPI router (mounted onto the main app).
 
 Endpoints:
   POST /api/ai/chat            - Text conversation
