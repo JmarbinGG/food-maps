@@ -67,17 +67,21 @@ function BotAvatar({ size = 32 }) {
 
 // Pretty labels for the typing-dots indicator. We pick one based on the
 // last user message so the user gets visual feedback like "Claiming…",
-// "Posting listing…" instead of just "Thinking…".
+// "Posting listing…" instead of just "Thinking…". Order matters: the
+// FIRST matching entry wins, so the more specific patterns (posting a
+// listing, requesting food) are checked before the broader claim rx
+// — otherwise a message like "I want to list / share / donate food"
+// would get tagged as a claim because of stray words.
 const PENDING_LABELS = [
-  { rx: /\b(claim|reserve|take|grab|i'?ll take|pick\s*up|i\s*want\s*(it|that))\b/i, label: 'Claiming…',          tool: 'claim_listing' },
-  { rx: /\b(confirm|my code|here'?s the code|\b\d{4}\b)\b/i,                        label: 'Confirming claim…',  tool: 'confirm_claim' },
+  { rx: /\b(post|list(?:ing)?|donate|share\s+food|give\s+away)\b/i,                 label: 'Posting listing…',   tool: 'post_food_listing' },
+  { rx: /\b(request|need\s+food|i\s+need)\b/i,                                      label: 'Posting request…',   tool: 'post_food_request' },
+  { rx: /\b(update|change|set)\s+(my|profile)/i,                                    label: 'Updating profile…',  tool: 'update_user_profile' },
   { rx: /\b(cancel|release|unclaim|drop)\b/i,                                       label: 'Releasing claim…',   tool: 'cancel_claim' },
-  { rx: /\b(post|list|donate|share food|give away)\b/i,                             label: 'Posting listing…',   tool: 'post_food_listing' },
-  { rx: /\b(request|need food|i need)\b/i,                                          label: 'Posting request…',   tool: 'post_food_request' },
-  { rx: /\b(near|nearby|around me|find food|search)\b/i,                            label: 'Finding food near you…', tool: null },
+  { rx: /\b(confirm|my\s+code|here'?s\s+the\s+code|^\s*\d{4}\s*$)\b/i,              label: 'Confirming claim…',  tool: 'confirm_claim' },
+  { rx: /\b(claim|reserve|i'?ll\s+take\s+(it|that|the)|i\s+want\s+(it|that|the))\b/i, label: 'Claiming…',         tool: 'claim_listing' },
+  { rx: /\b(near|nearby|around\s+me|find\s+food|search)\b/i,                        label: 'Finding food near you…', tool: null },
   { rx: /\b(route|directions|navigate)\b/i,                                         label: 'Planning route…',    tool: null },
   { rx: /\b(recipe|cook|meal)\b/i,                                                  label: 'Looking up recipes…', tool: null },
-  { rx: /\b(update|change|set)\s+(my|profile)/i,                                    label: 'Updating profile…',  tool: 'update_user_profile' },
 ];
 function guessPending(text) {
   const t = String(text || '');
