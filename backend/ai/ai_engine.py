@@ -950,26 +950,53 @@ class ConversationEngine:
                     logger.error("Tool %s failed: %s", fn_name, tool_exc)
                     result = {"error": True, "message": f"{fn_name} failed: {tool_exc}"}
 
+                # Trace tool calls so we can debug why the model picked a tool.
+                try:
+                    logger.info(
+                        "AI tool call: %s args=%s ok=%s",
+                        fn_name,
+                        {k: v for k, v in fn_args.items() if k != "user_id"},
+                        not (isinstance(result, dict) and result.get("error")),
+                    )
+                except Exception:
+                    pass
+
                 # Record this tool call so the UI can surface progress /
                 # done indicators (claiming, listing posted, etc.).
                 if actions_out is not None and isinstance(result, dict):
                     err_val = result.get("error")
                     ok = not err_val
-                    summary_val = result.get("summary")
-                    if not summary_val and err_val:
-                        summary_val = err_val if isinstance(err_val, str) else None
-                    entry = {
-                        "tool": fn_name,
-                        "ok": bool(ok),
-                        "summary": summary_val,
-                        "listing_id": result.get("listing_id"),
-                    }
-                    # Forward extra UI-control fields (navigate_ui / show_map)
-                    # so the frontend can act on them without another roundtrip.
-                    for extra_key in ("action", "target", "view", "focus"):
-                        if extra_key in result and result[extra_key] is not None:
-                            entry[extra_key] = result[extra_key]
-                    actions_out.append(entry)
+                    # Suppress noisy "✗ Claim failed" chips when the model
+                    # hallucinates a listing the user never asked for. The
+                    # backend returned an error and the chat reply itself
+                    # already explains it; an additional red chip just
+                    # confuses the user.
+                    suppress_chip = (
+                        not ok
+                        and fn_name in {"claim_listing", "confirm_claim", "cancel_claim"}
+                        and isinstance(err_val, str)
+                        and (
+                            "not found" in err_val.lower()
+                            or "invalid" in err_val.lower()
+                            or "no listing_id" in err_val.lower()
+                        )
+                    )
+                    if not suppress_chip:
+                        summary_val = result.get("summary")
+                        if not summary_val and err_val:
+                            summary_val = err_val if isinstance(err_val, str) else None
+                        entry = {
+                            "tool": fn_name,
+                            "ok": bool(ok),
+                            "summary": summary_val,
+                            "listing_id": result.get("listing_id"),
+                        }
+                        # Forward extra UI-control fields (navigate_ui / show_map)
+                        # so the frontend can act on them without another roundtrip.
+                        for extra_key in ("action", "target", "view", "focus"):
+                            if extra_key in result and result[extra_key] is not None:
+                                entry[extra_key] = result[extra_key]
+                        actions_out.append(entry)
 
                 result_str = json.dumps(result, default=str)
                 if len(result_str) > 4000:

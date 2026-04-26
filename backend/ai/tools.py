@@ -368,16 +368,16 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "claim_listing",
             "description": (
-                "ACTION (DO NOT EXPLAIN, JUST CALL): claim an available food "
-                "listing for the current user. Call this tool IMMEDIATELY whenever "
-                "the user asks to claim, take, reserve, get, grab, or pick up a "
-                "specific listing (e.g. 'claim that one', 'I want the bread', "
-                "'reserve listing 42 for me'). Do NOT respond with instructions "
-                "on how to claim — actually call this tool. The tool itself "
-                "initiates the SMS-confirmation flow and the user gets a 4-digit "
-                "code by text. If the user has not pointed at a specific listing, "
-                "first call search_food_near_user to find candidates and ask which "
-                "one; otherwise call claim_listing now."
+                "Claim a SPECIFIC available food listing for the current user. "
+                "Only call this tool when the user has unambiguously identified a "
+                "single listing — either by its numeric id (e.g. 'claim listing 42') "
+                "or by selecting one from a list you just showed them (e.g. "
+                "'I want the bread' AFTER you returned bread as a search result). "
+                "DO NOT call this tool if the user has not yet pointed at a specific "
+                "listing — instead, call search_food_near_user first, show the user "
+                "the candidates, and ask which one they want. Never guess a listing_id. "
+                "On success the tool sends a 4-digit SMS code to the user that they "
+                "must reply with via confirm_claim."
             ),
             "parameters": {
                 "type": "object",
