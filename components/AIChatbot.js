@@ -69,22 +69,25 @@ function BotAvatar({ size = 32 }) {
 // last user message so the user gets visual feedback like "Claiming…",
 // "Posting listing…" instead of just "Thinking…".
 const PENDING_LABELS = [
-  { rx: /\b(claim|reserve|take|grab|i'll take)\b/i, label: 'Claiming…' },
-  { rx: /\b(confirm|my code|here's the code)\b/i,    label: 'Confirming claim…' },
-  { rx: /\b(cancel|release|unclaim|drop)\b/i,        label: 'Releasing claim…' },
-  { rx: /\b(post|list|donate|share food|give away)\b/i, label: 'Posting listing…' },
-  { rx: /\b(request|need food|i need)\b/i,           label: 'Posting request…' },
-  { rx: /\b(near|nearby|around me|find food|search)\b/i, label: 'Finding food near you…' },
-  { rx: /\b(route|directions|navigate)\b/i,          label: 'Planning route…' },
-  { rx: /\b(recipe|cook|meal)\b/i,                   label: 'Looking up recipes…' },
-  { rx: /\b(update|change|set)\s+(my|profile)/i,     label: 'Updating profile…' },
+  { rx: /\b(claim|reserve|take|grab|i'?ll take|pick\s*up|i\s*want\s*(it|that))\b/i, label: 'Claiming…',          tool: 'claim_listing' },
+  { rx: /\b(confirm|my code|here'?s the code|\b\d{4}\b)\b/i,                        label: 'Confirming claim…',  tool: 'confirm_claim' },
+  { rx: /\b(cancel|release|unclaim|drop)\b/i,                                       label: 'Releasing claim…',   tool: 'cancel_claim' },
+  { rx: /\b(post|list|donate|share food|give away)\b/i,                             label: 'Posting listing…',   tool: 'post_food_listing' },
+  { rx: /\b(request|need food|i need)\b/i,                                          label: 'Posting request…',   tool: 'post_food_request' },
+  { rx: /\b(near|nearby|around me|find food|search)\b/i,                            label: 'Finding food near you…', tool: null },
+  { rx: /\b(route|directions|navigate)\b/i,                                         label: 'Planning route…',    tool: null },
+  { rx: /\b(recipe|cook|meal)\b/i,                                                  label: 'Looking up recipes…', tool: null },
+  { rx: /\b(update|change|set)\s+(my|profile)/i,                                    label: 'Updating profile…',  tool: 'update_user_profile' },
 ];
-function guessPendingLabel(text) {
+function guessPending(text) {
   const t = String(text || '');
-  for (const { rx, label } of PENDING_LABELS) {
-    if (rx.test(t)) return label;
+  for (const entry of PENDING_LABELS) {
+    if (entry.rx.test(t)) return { label: entry.label, tool: entry.tool };
   }
-  return 'Thinking…';
+  return { label: 'Thinking…', tool: null };
+}
+function guessPendingLabel(text) {
+  return guessPending(text).label;
 }
 
 // Map server-side tool names to user-facing chip text + state. The chip
