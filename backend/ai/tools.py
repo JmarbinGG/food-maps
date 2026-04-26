@@ -369,15 +369,17 @@ TOOL_DEFINITIONS = [
             "name": "claim_listing",
             "description": (
                 "Claim a SPECIFIC available food listing for the current user. "
-                "Only call this tool when the user has unambiguously identified a "
-                "single listing — either by its numeric id (e.g. 'claim listing 42') "
-                "or by selecting one from a list you just showed them (e.g. "
-                "'I want the bread' AFTER you returned bread as a search result). "
-                "DO NOT call this tool if the user has not yet pointed at a specific "
-                "listing — instead, call search_food_near_user first, show the user "
-                "the candidates, and ask which one they want. Never guess a listing_id. "
-                "On success the tool sends a 4-digit SMS code to the user that they "
-                "must reply with via confirm_claim."
+                "Call this whenever the user picks a listing — by id "
+                "('claim listing 42'), by name ('I want the kale', 'claim the "
+                "Fresh Organic Kale'), or by position ('the first one'). "
+                "Resolve the listing_id from your most recent search_food_near_user "
+                "result in this conversation. If you have no candidate list yet, "
+                "call search_food_near_user FIRST in the same turn — do not ask "
+                "the user for a numeric id. NEVER reply with stall text like "
+                "'one moment, I'll claim it' without emitting this tool_call. "
+                "On success the tool sends a 4-digit SMS code (or relays it "
+                "inline if SMS is unavailable) which the user must reply with "
+                "via confirm_claim."
             ),
             "parameters": {
                 "type": "object",
