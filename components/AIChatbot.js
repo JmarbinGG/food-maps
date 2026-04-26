@@ -438,9 +438,10 @@ function AIChatbot() {
               onTouchStart={startRecording}
               onTouchEnd={stopRecording}
               title="Hold to record"
+              aria-label="Hold to record voice message"
               disabled={sending}
-              style={{ padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#111', cursor: 'pointer', fontSize: '16px' }}
-            >🎤</button>
+              style={{ padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            ><MicIcon size={18} /></button>
           )}
           <button
             onClick={() => sendMessage(input)}
@@ -477,7 +478,7 @@ function AIChatbot() {
               onClick={() => setMode('chat')}
             />
             <ChooserBubble
-              icon="🎤"
+              icon={<MicIcon size={22} />}
               label="Voice Assistant"
               onClick={() => setMode('voice')}
             />
@@ -702,6 +703,30 @@ function VoiceAssistant({ onClose, getAuth }) {
 }
 
 // Round glassy bubble used by the chooser
+// Simple stroked microphone icon used in the chat input and chooser
+// instead of an emoji/image. Inherits color via currentColor.
+function MicIcon({ size = 18, color = 'currentColor' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ display: 'block' }}
+    >
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <line x1="12" y1="18" x2="12" y2="22" />
+      <line x1="8" y1="22" x2="16" y2="22" />
+    </svg>
+  );
+}
+
 function ChooserBubble({ icon, label, onClick }) {
   const [hover, setHover] = React.useState(false);
   return (
