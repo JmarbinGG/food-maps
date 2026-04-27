@@ -66,25 +66,70 @@ function BotAvatar({ size = 32 }) {
 }
 
 // Pretty labels for the typing-dots indicator. We pick one based on the
-// last user message so the user gets visual feedback like "Claiming…",
-// "Posting listing…" instead of just "Thinking…". Order matters: the
-// FIRST matching entry wins, so the more specific patterns (posting a
-// listing, requesting food) are checked before the broader claim rx
-// — otherwise a message like "I want to list / share / donate food"
-// would get tagged as a claim because of stray words.
+// last user message so the user sees a hint like "Claiming…" before the
+// backend replies. We deliberately keep these rules CONSERVATIVE: each
+// pattern must be unambiguous in isolation, otherwise we fall back to
+// the neutral "Thinking…" label. The post-response ActionChip and
+// SuccessBanner already show the *actual* tool the backend executed,
+// so a missed guess just means a generic spinner — much better than a
+// wrong "Claiming…" chip while the user is posting a listing, or
+// "Posting…" while the user is claiming.
+//
+// Rules of thumb encoded below:
+//   - 4-digit only message ("1234")              -> confirm_claim
+//   - explicit "confirm 1234" / "my code is …"   -> confirm_claim
+//   - "cancel/release/unclaim my claim"          -> cancel_claim
+//   - "claim listing 42" / "claim #42" / "claim listing <name>"
+//     / "I'll take listing 42" / "reserve listing 42"
+//     / explicit "claim it/that/the <name>"      -> claim_listing
+//   - "post a listing" / "create a listing"
+//     / "I want to donate/share food/give away food"
+//     / "list food to give away"                 -> post_food_listing
+//   - "request food" / "I need food"             -> post_food_request
+//   - "update/change my profile/address/phone"   -> update_user_profile
+//   - "find food near me" / "search for bread"   -> search (no tool chip)
+// Anything that doesn't clearly match -> "Thinking…" (tool: null).
+//
+// Order matters because some patterns share keywords; the first match
+// wins. We sort from most specific -> least specific.
 const PENDING_LABELS = [
-  { rx: /\b(post|list(?:ing)?|donate|share\s+food|give\s+away)\b/i,                 label: 'Posting listing…',   tool: 'post_food_listing' },
-  { rx: /\b(request|need\s+food|i\s+need)\b/i,                                      label: 'Posting request…',   tool: 'post_food_request' },
-  { rx: /\b(update|change|set)\s+(my|profile)/i,                                    label: 'Updating profile…',  tool: 'update_user_profile' },
-  { rx: /\b(cancel|release|unclaim|drop)\b/i,                                       label: 'Releasing claim…',   tool: 'cancel_claim' },
-  { rx: /\b(confirm|my\s+code|here'?s\s+the\s+code|^\s*\d{4}\s*$)\b/i,              label: 'Confirming claim…',  tool: 'confirm_claim' },
-  { rx: /\b(claim|reserve|i'?ll\s+take\s+(it|that|the)|i\s+want\s+(it|that|the))\b/i, label: 'Claiming…',         tool: 'claim_listing' },
-  { rx: /\b(near|nearby|around\s+me|find\s+food|search)\b/i,                        label: 'Finding food near you…', tool: null },
-  { rx: /\b(route|directions|navigate)\b/i,                                         label: 'Planning route…',    tool: null },
-  { rx: /\b(recipe|cook|meal)\b/i,                                                  label: 'Looking up recipes…', tool: null },
+  // 4-digit-only message is the strongest signal of confirm_claim.
+  { rx: /^\s*\d{4}\s*$/,                                                            label: 'Confirming claim…',   tool: 'confirm_claim' },
+  { rx: /\b(confirm|my\s+code\s+is|here'?s\s+(my|the)\s+code|use\s+code)\b.*\d{3,4}|\bconfirm\s+\d{3,4}\b/i,
+                                                                                    label: 'Confirming claim…',   tool: 'confirm_claim' },
+  // Cancel/release MUST mention claim/listing/reservation to avoid hitting
+  // generic "cancel" chatter.
+  { rx: /\b(cancel|release|unclaim|drop)\b.*\b(claim|listing|reservation|it|that)\b/i,
+                                                                                    label: 'Releasing claim…',    tool: 'cancel_claim' },
+  // Update profile must explicitly target profile fields.
+  { rx: /\b(update|change|set)\s+(my\s+)?(profile|address|phone|name|email|diet(ary)?|allergen|preferences?)\b/i,
+                                                                                    label: 'Updating profile…',   tool: 'update_user_profile' },
+  // Posting a listing: explicit verbs around posting/donating/sharing FOOD,
+  // OR "post/create a listing" with "listing" as the object.
+  { rx: /\b(post|create|put\s+up|add)\s+(a|an|new)?\s*listing\b/i,
+                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
+  { rx: /\b(donate|give\s+away|share)\s+(food|some|extra|leftover|leftovers|meal|meals|bread|produce|fruit|vegetables?)\b/i,
+                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
+  { rx: /\bi\s+(want|wanna|would\s+like)\s+to\s+(donate|give\s+away|share|post|list)\b/i,
+                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
+  // Posting a food request: "request food", "I need food", "looking for food".
+  { rx: /\b(request|post)\s+(a\s+)?(food\s+)?request\b/i,                           label: 'Posting request…',    tool: 'post_food_request' },
+  { rx: /\bi\s+need\s+(food|something\s+to\s+eat|a\s+meal)\b/i,                     label: 'Posting request…',    tool: 'post_food_request' },
+  // Claiming: must reference "claim/reserve/take" tied to a listing/number.
+  { rx: /\b(claim|reserve)\s+(listing\s+)?#?\d+\b/i,                                label: 'Claiming…',           tool: 'claim_listing' },
+  { rx: /\b(claim|reserve)\s+(the|that|listing|#)/i,                                label: 'Claiming…',           tool: 'claim_listing' },
+  { rx: /\bi'?ll\s+(take|claim|grab)\s+(it|that|the|listing|#?\d+|number\s+\d+)\b/i,
+                                                                                    label: 'Claiming…',           tool: 'claim_listing' },
+  { rx: /\bi\s+want\s+(it|that\s+one|the\s+\w+|listing\s+\d+|number\s+\d+)\b/i,     label: 'Claiming…',           tool: 'claim_listing' },
+  // Searching is read-only -> neutral chip without a tool name.
+  { rx: /\b(near\s+me|nearby|around\s+me|find\s+food|search\s+for|what'?s\s+available)\b/i,
+                                                                                    label: 'Finding food near you…', tool: null },
+  { rx: /\b(route|directions|navigate)\b/i,                                         label: 'Planning route…',     tool: null },
+  { rx: /\b(recipe|cook|meal\s+idea)\b/i,                                           label: 'Looking up recipes…', tool: null },
 ];
 function guessPending(text) {
-  const t = String(text || '');
+  const t = String(text || '').trim();
+  if (!t) return { label: 'Thinking…', tool: null };
   for (const entry of PENDING_LABELS) {
     if (entry.rx.test(t)) return { label: entry.label, tool: entry.tool };
   }
