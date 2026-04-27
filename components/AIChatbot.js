@@ -178,6 +178,14 @@ const SUCCESS_BANNER_TOOLS = {
     title: 'Pickup confirmed!',
     detail: 'You\u2019re all set \u2014 head to the pickup spot.',
   },
+  post_food_listing: {
+    title: 'Listing posted!',
+    detail: 'Recipients can now see and claim it on the map.',
+  },
+  post_food_request: {
+    title: 'Request posted!',
+    detail: 'Donors near you will be notified.',
+  },
 };
 function SuccessBanner({ action }) {
   const cfg = SUCCESS_BANNER_TOOLS[action.tool];

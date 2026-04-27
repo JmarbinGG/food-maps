@@ -20,8 +20,6 @@ def _iso(dt: datetime) -> str:
 @pytest.mark.asyncio
 class TestPostListingTimestampValidation:
     async def test_past_pickup_window_end_rejected(self):
-        # Past timestamps no longer hard-error; they're auto-corrected and
-        # surfaced in the draft response so the user can see the change.
         past = datetime.utcnow() - timedelta(days=1)
         r = await execute_tool("post_food_listing", {
             "user_id": "1",
@@ -30,18 +28,8 @@ class TestPostListingTimestampValidation:
             "qty": 5,
             "pickup_window_end": _iso(past),
         })
-        assert isinstance(r, dict)
-        # Either the address pre-flight rejected (no DB user) OR we got a
-        # draft with the past-pickup correction recorded.
-        if "error" in r:
-            # In tests user_id=1 doesn't exist; the address pre-flight
-            # returns an error before draft assembly. That's fine — the
-            # important behaviour is that we never bubbled a "past" error.
-            assert "past" not in r["error"].lower()
-        else:
-            assert r.get("draft") is True
-            corrections = " ".join(r.get("corrections", [])).lower()
-            assert "past" in corrections or "pickup window" in corrections
+        assert isinstance(r, dict) and "error" in r
+        assert "past" in r["error"].lower()
 
     async def test_past_expiration_date_rejected(self):
         past = datetime.utcnow() - timedelta(hours=2)
@@ -52,13 +40,8 @@ class TestPostListingTimestampValidation:
             "qty": 1,
             "expiration_date": _iso(past),
         })
-        assert isinstance(r, dict)
-        if "error" in r:
-            assert "past" not in r["error"].lower()
-        else:
-            assert r.get("draft") is True
-            corrections = " ".join(r.get("corrections", [])).lower()
-            assert "expiration" in corrections and "past" in corrections
+        assert isinstance(r, dict) and "error" in r
+        assert "past" in r["error"].lower()
 
     async def test_window_start_after_end_rejected(self):
         now = datetime.utcnow()
@@ -70,13 +53,8 @@ class TestPostListingTimestampValidation:
             "pickup_window_start": _iso(now + timedelta(hours=10)),
             "pickup_window_end": _iso(now + timedelta(hours=2)),
         })
-        assert isinstance(r, dict)
-        if "error" in r:
-            assert "before" not in r["error"].lower()
-        else:
-            assert r.get("draft") is True
-            corrections = " ".join(r.get("corrections", [])).lower()
-            assert "after" in corrections or "start" in corrections
+        assert isinstance(r, dict) and "error" in r
+        assert "before" in r["error"].lower()
 
     async def test_invalid_iso_rejected(self):
         r = await execute_tool("post_food_listing", {
