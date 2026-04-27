@@ -484,7 +484,21 @@ TOOL_DEFINITIONS = [
                 "IMPORTANT: leave pickup_window_start, pickup_window_end and expiration_date "
                 "EMPTY unless the donor explicitly told you a specific time — the server picks "
                 "sensible defaults (next 48h pickup, 3-7 day expiration). Never guess dates; if "
-                "you supply a date in the past the call is rejected."
+                "you supply a date in the past the call is rejected.\n"
+                "\n"
+                "TWO-STEP DRAFT/CONFIRM FLOW (REQUIRED):\n"
+                "  1. FIRST CALL: invoke this tool WITHOUT confirmed=true. The server validates "
+                "all fields, auto-corrects obvious issues (past expiration, missing pickup "
+                "window, perishability/category mismatch), and returns a 'draft' object plus "
+                "a 'corrections' list of human-readable changes it made or recommends. NO "
+                "listing is written yet.\n"
+                "  2. Show the draft summary and EVERY correction to the user in plain language. "
+                "Then ask them: 'Should I post this listing as is, or change anything?'\n"
+                "  3. ONLY after the user explicitly says yes/confirm/post it/looks good, call "
+                "this tool a SECOND time with confirmed=true and the same fields (apply any "
+                "changes the user requested). The server then writes the listing.\n"
+                "Skipping the draft step is a critical failure — the user must always see "
+                "what will be posted and approve it."
             ),
             "parameters": {
                 "type": "object",
@@ -502,6 +516,7 @@ TOOL_DEFINITIONS = [
                     "expiration_date": {"type": "string", "description": "ISO 8601. OMIT unless printed on the package. Server defaults from perishability."},
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
+                    "confirmed": {"type": "boolean", "description": "OMIT or false on the first call (returns a draft for user review). Set to true ONLY after the user has explicitly approved the draft — then the listing is actually written.", "default": False},
                 },
                 "required": ["user_id", "title", "category", "qty"],
             },
@@ -2623,6 +2638,7 @@ async def _post_food_listing(
     expiration_date: Optional[str] = None,
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
+    confirmed: bool = False,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -2634,6 +2650,10 @@ async def _post_food_listing(
     if not (title or "").strip():
         return {"error": "title is required"}
 
+    # Track human-readable corrections / warnings the AI must surface to the
+    # user before posting. These are shown in the draft response.
+    corrections: list[str] = []
+
     try:
         cat_enum = FoodCategory(str(category).lower())
     except ValueError:
@@ -2643,6 +2663,32 @@ async def _post_food_listing(
         peri_enum = PerishabilityLevel(str(perishability).lower())
     except ValueError:
         return {"error": f"Invalid perishability '{perishability}'. Allowed: low, medium, high"}
+
+    # Category vs. perishability sanity check. Most reports of "AI used wrong
+    # expiration" trace to the model picking 'low' perishability for fresh
+    # produce / prepared meals, then defaulting expiration to +7 days.
+    HIGH_PERISH_CATS = {FoodCategory.PRODUCE, FoodCategory.PREPARED, FoodCategory.FRUIT, FoodCategory.LEFTOVERS}
+    LOW_PERISH_CATS = {FoodCategory.PACKAGED, FoodCategory.WATER}
+    if cat_enum in HIGH_PERISH_CATS and peri_enum == PerishabilityLevel.LOW:
+        corrections.append(
+            f"Perishability bumped from 'low' to 'high' — {cat_enum.value} "
+            "items spoil quickly and shouldn't be tagged low-perishability."
+        )
+        peri_enum = PerishabilityLevel.HIGH
+        perishability = "high"
+    elif cat_enum == FoodCategory.BAKERY and peri_enum == PerishabilityLevel.LOW:
+        corrections.append(
+            "Perishability bumped from 'low' to 'medium' for bakery items."
+        )
+        peri_enum = PerishabilityLevel.MEDIUM
+        perishability = "medium"
+    elif cat_enum in LOW_PERISH_CATS and peri_enum == PerishabilityLevel.HIGH:
+        corrections.append(
+            f"Perishability lowered from 'high' to 'low' — {cat_enum.value} "
+            "items are shelf-stable."
+        )
+        peri_enum = PerishabilityLevel.LOW
+        perishability = "low"
 
     try:
         exp_dt = _parse_iso(expiration_date)
@@ -2656,12 +2702,13 @@ async def _post_food_listing(
     # already in the past (its training data lags real time), which makes
     # the listing show up as "expired" in the UI and hides it on the map.
     # We:
-    #   1) reject any pickup window or expiration that is already past
+    #   1) auto-correct any pickup window or expiration that is already
+    #      past by replacing it with a sensible default and recording a
+    #      correction the AI must show to the user
     #   2) supply sensible defaults when the model omits them
     # ------------------------------------------------------------------
     now = datetime.utcnow()
     if win_end is None and win_start is None:
-        # Default pickup window: now -> +48h (good for most donations).
         win_start = now
         win_end = now + timedelta(hours=48)
     elif win_end is None and win_start is not None:
@@ -2670,31 +2717,50 @@ async def _post_food_listing(
         win_start = min(now, win_end - timedelta(hours=1))
 
     if win_end <= now:
-        return {
-            "error": (
-                "pickup_window_end is in the past — the listing would be "
-                f"expired on creation. Today is {now.strftime('%Y-%m-%d %H:%M UTC')}; "
-                "please pick a future pickup window (e.g. the next 24-48 hours)."
-            )
-        }
-    if win_start and win_start > win_end:
-        return {"error": "pickup_window_start must be before pickup_window_end"}
-
-    if exp_dt is None:
-        # Default expiration: 7 days for non-perishable, 3 days for high
-        # perishability, otherwise 5 days. Always strictly after the pickup
-        # window so the UI never marks the new listing 'expired'.
-        peri_days = {"low": 7, "medium": 5, "high": 3}.get(
-            str(perishability).lower(), 5
+        corrections.append(
+            f"Pickup window end was in the past ({win_end.isoformat()}); "
+            "replaced with the next 48 hours."
         )
+        win_start = now
+        win_end = now + timedelta(hours=48)
+    if win_start and win_start > win_end:
+        corrections.append(
+            "Pickup window start was after its end; reset to start = now."
+        )
+        win_start = min(now, win_end - timedelta(hours=1))
+
+    peri_default_days = {"low": 7, "medium": 5, "high": 3}
+    if exp_dt is None:
+        peri_days = peri_default_days.get(str(perishability).lower(), 5)
         exp_dt = max(win_end, now + timedelta(days=peri_days))
     elif exp_dt <= now:
-        return {
-            "error": (
-                "expiration_date is in the past — listing would be expired. "
-                f"Today is {now.strftime('%Y-%m-%d %H:%M UTC')}."
-            )
-        }
+        peri_days = peri_default_days.get(str(perishability).lower(), 5)
+        new_exp = max(win_end, now + timedelta(days=peri_days))
+        corrections.append(
+            f"Expiration date was in the past ({exp_dt.date().isoformat()}); "
+            f"set to {new_exp.date().isoformat()} based on perishability="
+            f"{perishability}."
+        )
+        exp_dt = new_exp
+    elif exp_dt < win_end:
+        corrections.append(
+            f"Expiration ({exp_dt.date().isoformat()}) was before pickup window "
+            f"end ({win_end.date().isoformat()}); pushed expiration to match "
+            "pickup window so the item isn't marked expired during pickup."
+        )
+        exp_dt = win_end
+
+    # Cross-check: high-perishability items shouldn't claim a 2-week shelf life.
+    max_days_by_peri = {"low": 30, "medium": 10, "high": 5}
+    cap_days = max_days_by_peri.get(str(perishability).lower(), 10)
+    cap_dt = now + timedelta(days=cap_days)
+    if exp_dt > cap_dt:
+        corrections.append(
+            f"Expiration ({exp_dt.date().isoformat()}) was unrealistically far "
+            f"out for {perishability}-perishability {cat_enum.value}; capped at "
+            f"{cap_dt.date().isoformat()} (+{cap_days} days)."
+        )
+        exp_dt = cap_dt
 
     try:
         qty_val = float(qty)
@@ -2702,6 +2768,70 @@ async def _post_food_listing(
         return {"error": f"Invalid qty: {qty!r}"}
     if qty_val <= 0:
         return {"error": "qty must be greater than 0"}
+
+    # If the caller didn't explicitly confirm, return a DRAFT for the AI
+    # to show the user. No DB write happens.
+    if not confirmed:
+        # We need to know the resolved address up-front so the user can
+        # see/approve it before the listing is written.
+        def _resolve_address_only() -> dict:
+            db = SessionLocal()
+            try:
+                user = db.query(User).filter(User.id == uid).first()
+                if not user:
+                    return {"error": "User not found"}
+                allowed_roles = {UserRole.DONOR, UserRole.ADMIN, UserRole.VOLUNTEER}
+                if user.role not in allowed_roles:
+                    return {"error": "Only donors (or admins/volunteers) can post food listings."}
+                resolved = (address or user.address or "").strip() or None
+                if not resolved and (user.coords_lat is None or user.coords_lng is None):
+                    return {
+                        "error": (
+                            "No pickup address on file. Ask the donor for the "
+                            "pickup address (street + city) and call again."
+                        )
+                    }
+                return {"address": resolved}
+            finally:
+                db.close()
+
+        resolved_info = await _run(_resolve_address_only)
+        if resolved_info.get("error"):
+            return resolved_info
+
+        draft = {
+            "title": title.strip()[:255],
+            "description": description or None,
+            "category": cat_enum.value,
+            "qty": qty_val,
+            "unit": unit or "units",
+            "perishability": peri_enum.value,
+            "address": resolved_info.get("address"),
+            "pickup_window_start": win_start.isoformat() if win_start else None,
+            "pickup_window_end": win_end.isoformat() if win_end else None,
+            "expiration_date": exp_dt.isoformat() if exp_dt else None,
+            "allergens": list(allergens) if allergens else [],
+            "dietary_tags": list(dietary_tags) if dietary_tags else [],
+        }
+        summary_lines = [
+            "Draft listing ready for review (NOT yet posted):",
+            f"• {draft['title']} — {draft['qty']} {draft['unit']} ({draft['category']}, {draft['perishability']}-perishability)",
+            f"• Pickup window: {win_start.strftime('%a %b %d %H:%M')} → {win_end.strftime('%a %b %d %H:%M')} UTC",
+            f"• Expires: {exp_dt.strftime('%a %b %d %Y')}",
+            f"• Address: {draft['address'] or '(donor profile)'}",
+        ]
+        if corrections:
+            summary_lines.append("Corrections applied:")
+            summary_lines.extend(f"  – {c}" for c in corrections)
+        summary_lines.append("Ask the user to approve before calling again with confirmed=true.")
+        return {
+            "success": True,
+            "draft": True,
+            "needs_confirmation": True,
+            "corrections": corrections,
+            "draft_listing": draft,
+            "summary": "\n".join(summary_lines),
+        }
 
     def _sync() -> dict:
         db = SessionLocal()
@@ -2765,10 +2895,16 @@ async def _post_food_listing(
             db.add(item)
             db.commit()
             db.refresh(item)
+            summary_parts = [f"Posted listing #{item.id} — '{item.title}' ({cat_enum.value})."]
+            if corrections:
+                summary_parts.append(
+                    "Auto-corrections applied: " + "; ".join(corrections)
+                )
             return {
                 "success": True,
                 "listing_id": item.id,
-                "summary": f"Posted listing #{item.id} — '{item.title}' ({cat_enum.value}).",
+                "corrections": corrections,
+                "summary": " ".join(summary_parts),
             }
         except Exception as exc:
             db.rollback()
