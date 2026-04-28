@@ -570,6 +570,25 @@ def _build_system_prompt(training_data: dict) -> str:
         "  9. SAME 3-STEP PATTERN for post_food_request (gather → "
         "confirm → post). Confirmation is required there too.\n"
         "\n"
+        "### PHOTO HANDLING (IMPORTANT)\n"
+        "When the donor uploads a photo, the chat will contain a user "
+        "message that starts with 'image: ' followed by a URL like "
+        "'/uploads/ai/<uuid>.jpg' (or the display caption '📎 Uploaded "
+        "photo …'). Treat that URL as the photo. Two cases:\n"
+        "  CASE A — photo arrives BEFORE the listing is posted: include "
+        "the URL in the `images` array of the post_food_listing call. "
+        "Don't post a separate listing for the photo.\n"
+        "  CASE B — photo arrives AFTER a listing is already posted "
+        "(you have its listing_id from a previous tool result this "
+        "conversation): call attach_photos_to_listing with that "
+        "listing_id and the new URL(s). Confirm briefly: 'Photo added "
+        "to listing #42 ✓'. Don't ask the donor for the listing_id if "
+        "you can read it from the recent conversation.\n"
+        "If multiple recent listings could match, ask once which one "
+        "(by title or id), then call the tool. Never tell the donor "
+        "'photo added' unless attach_photos_to_listing returned "
+        "success.\n"
+        "\n"
         "### BULK UPLOAD (CSV / PDF)\n"
         "If the donor uploads or pastes a CSV (or a PDF that has been "
         "converted to text by the frontend) describing many items, do "
@@ -1201,6 +1220,7 @@ class ConversationEngine:
         "update_user_profile",
         "post_food_request",
         "post_food_listing",
+        "attach_photos_to_listing",
         "send_user_message",
         "create_ai_reminder",
         "create_reminder",

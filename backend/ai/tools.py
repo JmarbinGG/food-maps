@@ -539,6 +539,35 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "attach_photos_to_listing",
+            "description": (
+                "ACTION: append one or more photo URLs to an existing food "
+                "listing's gallery. Use this when the donor uploads a photo "
+                "AFTER the listing is already posted (the chat will contain "
+                "a message like 'image: /uploads/ai/<uuid>.jpg' or '📎 "
+                "Uploaded photo …'). Pick the listing_id from the most "
+                "recently posted listing in the conversation, or ask the "
+                "donor which listing if it's ambiguous. De-dups against "
+                "existing images so re-sending is safe."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {"type": "integer"},
+                    "images": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "URLs to attach (e.g. /uploads/ai/<uuid>.jpg).",
+                    },
+                },
+                "required": ["user_id", "listing_id", "images"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "bulk_import_listings",
             "description": (
                 "ACTION: create MANY food listings at once from a CSV blob (or a "
@@ -697,6 +726,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "update_user_profile": _update_user_profile,
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
+        "attach_photos_to_listing": _attach_photos_to_listing,
         "bulk_import_listings": _bulk_import_listings,
         "send_user_message": _send_user_message,
         "show_map": _show_map,
@@ -2929,6 +2959,75 @@ async def _post_food_listing(
             logger.exception("post_food_listing failed")
             db.rollback()
             return {"error": "Could not post the listing. Please try again."}
+        finally:
+            db.close()
+
+    return await _run(_sync)
+
+
+async def _attach_photos_to_listing(
+    user_id: str,
+    listing_id: int,
+    images: list,
+) -> dict:
+    """Append one or more image URLs to an existing listing's photo gallery.
+
+    Only the donor who owns the listing (or an admin) can attach photos.
+    De-duplicates against any URLs already on the listing so re-sends are
+    idempotent. Returns the full image list so the AI can confirm.
+    """
+    from backend.app import SessionLocal
+    from backend.models import User, UserRole, FoodResource
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    lid = _to_int(listing_id)
+    if lid is None:
+        return {"error": "Invalid listing_id"}
+    cleaned = [str(u).strip() for u in (images or []) if u and str(u).strip()]
+    if not cleaned:
+        return {"error": "No image URLs provided."}
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {"error": "User not found"}
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found."}
+            if listing.donor_id != uid and user.role != UserRole.ADMIN:
+                return {"error": "You can only add photos to your own listings."}
+
+            existing: list = []
+            if listing.images:
+                try:
+                    parsed = json.loads(listing.images)
+                    if isinstance(parsed, list):
+                        existing = [str(u) for u in parsed if u]
+                except (ValueError, TypeError):
+                    existing = []
+
+            seen = set(existing)
+            for url in cleaned:
+                if url not in seen:
+                    existing.append(url)
+                    seen.add(url)
+
+            listing.images = json.dumps(existing)
+            db.commit()
+            return {
+                "success": True,
+                "listing_id": lid,
+                "image_count": len(existing),
+                "summary": f"Added {len(cleaned)} photo(s) to listing #{lid}.",
+            }
+        except Exception:
+            logger.exception("attach_photos_to_listing failed")
+            db.rollback()
+            return {"error": "Could not attach photos. Please try again."}
         finally:
             db.close()
 

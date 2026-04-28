@@ -153,6 +153,7 @@ const ACTION_CHIP_LABELS = {
   confirm_claim:       { ok: '✓ Pickup confirmed', err: '✗ Confirmation failed', verb: 'Confirming…' },
   cancel_claim:        { ok: '✓ Claim released',  err: '✗ Release failed',  verb: 'Releasing…' },
   post_food_listing:   { ok: '✓ Listing posted',  err: '✗ Listing failed',  verb: 'Posting listing…' },
+  attach_photos_to_listing: { ok: '✓ Photo added', err: '✗ Could not add photo', verb: 'Adding photo…' },
   post_food_request:   { ok: '✓ Request posted',  err: '✗ Request failed',  verb: 'Posting request…' },
   update_user_profile: { ok: '✓ Profile updated', err: '✗ Update failed',   verb: 'Updating profile…' },
   send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
