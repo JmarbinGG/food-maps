@@ -12,6 +12,7 @@ from functools import lru_cache
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
+import hmac
 import jwt
 import json
 import os
@@ -122,7 +123,15 @@ async def add_cache_control_headers(request: Request, call_next):
 
 # NOTE: Use Base imported from models; do not re-declare another Base here
 # JWT settings
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET or len(JWT_SECRET) < 16:
+    # Fail closed: refuse to start with a weak/missing JWT secret rather
+    # than fall back to a known literal that anyone reading the source
+    # could use to forge tokens.
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required and must be at least "
+        "16 characters long."
+    )
 JWT_ALGORITHM = "HS256"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")
 if not PUBLIC_BASE_URL:
@@ -777,9 +786,18 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
         body = await request.json()
         email = body.get('email')
         secret = body.get('secret')
-        
-        # Simple secret check - in production use proper admin authentication
-        if secret != os.getenv('ADMIN_SECRET', 'change-me-in-production'):
+
+        # Fail-closed: if ADMIN_SECRET is not configured, the endpoint is
+        # disabled. Previously this fell back to a hardcoded literal which,
+        # in any environment that hadn't set the env var, allowed anyone
+        # who read the source to escalate to admin.
+        admin_secret = os.getenv('ADMIN_SECRET')
+        if not admin_secret or len(admin_secret) < 16:
+            raise HTTPException(
+                status_code=503,
+                detail="Admin bootstrap endpoint disabled (ADMIN_SECRET not configured).",
+            )
+        if not secret or not hmac.compare_digest(str(secret), admin_secret):
             raise HTTPException(status_code=403, detail="Invalid secret")
         
         if not email:
