@@ -105,7 +105,9 @@ def _check_ownership(auth_uid: int | None, requested_uid: int) -> None:
 
 class AIChatRequest(BaseModel):
     user_id: str = Field(min_length=1, max_length=32)
-    message: str = Field(min_length=1, max_length=5000)
+    # 200KB cap so users can paste/upload CSV inventories for bulk import.
+    # Photo uploads use /api/ai/upload_image and only send a short URL.
+    message: str = Field(min_length=1, max_length=200000)
     include_audio: bool = False
 
 
@@ -310,6 +312,55 @@ def _is_whisper_noise(text: str) -> bool:
     if len(stripped) < 3:
         return True
     return stripped in _WHISPER_NOISE_PHRASES
+
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "uploads", "ai")
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"}
+MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8MB upload cap
+
+
+@router.post("/upload_image")
+async def ai_upload_image(
+    request: Request,
+    image: UploadFile = File(...),
+    user_id: str = Form(..., min_length=1, max_length=32),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> dict:
+    """Store a chat-uploaded photo on disk and return a short public URL.
+
+    The AI chat endpoint caps message length at 5KB, so data URLs are
+    too big to inline. The frontend posts the raw file here, gets back
+    a tidy URL like /uploads/ai/<uuid>.jpg, then sends that URL to the
+    chat as 'image: <url>' for the AI to attach to the listing.
+    """
+    _enforce_rate_limit(request)
+    uid = _parse_user_id(user_id)
+    _check_ownership(_auth_user_id(credentials), uid)
+
+    base_type = (image.content_type or "").split(";")[0].strip().lower()
+    if base_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(400, f"Unsupported image type: {image.content_type or 'unknown'}")
+
+    data = await image.read()
+    if len(data) == 0:
+        raise HTTPException(400, "Empty image file")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(400, f"Image too large (max {MAX_IMAGE_BYTES // (1024 * 1024)}MB)")
+
+    import uuid as _uuid
+    ext = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}[base_type]
+    filename = f"{_uuid.uuid4().hex}{ext}"
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    full_path = os.path.join(UPLOAD_DIR, filename)
+    try:
+        with open(full_path, "wb") as fh:
+            fh.write(data)
+    except OSError as exc:
+        logger.exception("Failed to write upload")
+        raise HTTPException(500, f"Could not save image: {exc}") from exc
+
+    url = f"/uploads/ai/{filename}"
+    return {"url": url, "size": len(data), "content_type": base_type}
 
 
 @router.post("/voice", response_model=AIChatResponse)

@@ -298,31 +298,50 @@ function AIChatbot() {
   const csvInputRef = React.useRef(null);
 
   // ----- File attach helpers ---------------------------------------
-  // Photos are read as data URLs and sent as a chat message that includes
-  // the URL on a recognizable line. The system prompt teaches the AI to
-  // treat a line starting with 'image:' (or a markdown image) as the
-  // donor's uploaded photo and pass it as the listing's `images` array.
-  function handlePhotoFile(file) {
+  // Photos are uploaded to /api/ai/upload_image, which returns a short
+  // URL like '/uploads/ai/<uuid>.jpg'. We then send that URL to the AI
+  // as 'image: <url>' — way smaller than a base64 data URL and it fits
+  // in the message size limit + database TEXT column.
+  async function handlePhotoFile(file) {
     if (!file) return;
     if (!/^image\//.test(file.type)) {
       alert('Please choose an image file.');
       return;
     }
-    // Cap inline data URLs at ~4MB so we don't blow up the chat request.
-    if (file.size && file.size > 4 * 1024 * 1024) {
-      alert('That photo is over 4MB — please choose a smaller image (or take a new photo at a lower resolution).');
+    if (file.size && file.size > 8 * 1024 * 1024) {
+      alert('That photo is over 8MB — please choose a smaller image.');
       return;
     }
-    const reader = new FileReader();
-    reader.onerror = () => alert('Could not read that image.');
-    reader.onload = () => {
-      const url = String(reader.result || '');
-      if (!url) return;
-      const sizeKb = Math.round((file.size || 0) / 1024);
-      // Send full data URL to the AI but show a tidy summary in the chat.
+    const { token, userId } = getAuth();
+    if (!token || !userId) {
+      alert('Please sign in before uploading a photo.');
+      return;
+    }
+    const sizeKb = Math.round((file.size || 0) / 1024);
+    setMessages(m => [...m, { role: 'user', text: `📎 Uploading photo — ${file.name || 'image'} (${sizeKb} KB)…` }]);
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      form.append('user_id', userId);
+      const res = await fetch('/api/ai/upload_image', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`${res.status}: ${err}`);
+      }
+      const data = await res.json();
+      if (!data || !data.url) throw new Error('Upload returned no URL');
+      const url = data.url;
+      // Pop the "Uploading…" placeholder; sendMessage will add the final bubble.
+      setMessages(m => m.slice(0, -1));
       sendMessage(`image: ${url}`, { displayText: `📎 Uploaded photo — ${file.name || 'image'} (${sizeKb} KB)` });
-    };
-    reader.readAsDataURL(file);
+    } catch (e) {
+      console.error('Photo upload failed:', e);
+      setMessages(m => m.slice(0, -1).concat([{ role: 'assistant', text: `Sorry, I couldn't upload that photo (${e.message || 'error'}). Please try again.` }]));
+    }
   }
 
   // CSV / TXT / PDF (text) for bulk import. PDF is read as text — the

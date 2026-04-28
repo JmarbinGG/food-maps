@@ -261,6 +261,14 @@ async def sanitize_api_input(request: Request, call_next):
                         body.decode("utf-8")
                     except UnicodeDecodeError:
                         raise HTTPException(status_code=400, detail="Request body must be valid UTF-8")
+                    # We consumed the body via request.body(); put it back so
+                    # downstream form parsers can read it.
+                    await _set_request_body(request, body)
+                else:
+                    # multipart/form-data, application/octet-stream, etc.
+                    # We've already consumed the body; re-inject it so the
+                    # endpoint's UploadFile / Form parsers can read it.
+                    await _set_request_body(request, body)
 
     return await call_next(request)
 
@@ -4877,6 +4885,11 @@ async def shutdown_event():
         print(f"AI shutdown error: {_ai_exc}")
 
 # Mount static files at the end to allow API routes to take precedence
+# /uploads serves user-uploaded photos (chat attachments, listing images)
+# from a writable directory outside the source tree.
+_UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")
+os.makedirs(_UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOADS_DIR), name="uploads")
 app.mount("/", StaticFiles(directory=PROJECT_ROOT, html=True), name="root")
 
 
