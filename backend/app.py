@@ -828,6 +828,33 @@ app.include_router(ai_router)
 async def startup_event():
     # Ensure tables exist
     Base.metadata.create_all(bind=engine)
+    # Recover any listings stuck in 'pending_confirmation' from a previous
+    # process. The confirmation code lives only in the in-memory
+    # pending_confirmations dict, which is wiped on restart, so those
+    # listings would otherwise be unclaimable AND unreleasable until the
+    # donor manually deletes them. Reset them so other recipients can claim.
+    try:
+        recovery_db = SessionLocal()
+        try:
+            recovered = (
+                recovery_db.query(FoodResource)
+                .filter(FoodResource.status == "pending_confirmation")
+                .update(
+                    {
+                        FoodResource.status: "available",
+                        FoodResource.recipient_id: None,
+                        FoodResource.claimed_at: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            recovery_db.commit()
+            if recovered:
+                print(f"\u23f0 Released {recovered} stale 'pending_confirmation' listings on startup")
+        finally:
+            recovery_db.close()
+    except Exception as _recover_exc:
+        print(f"Stale-claim recovery skipped: {_recover_exc}")
     # Start AI background reminder loop
     try:
         await ai_start_jobs()
@@ -1760,6 +1787,7 @@ def send_sms(phone: str, message: str) -> bool:
 
 def auto_release_claim(listing_id: int):
     """Auto-release a claim if not confirmed within time limit"""
+    db = None
     try:
         db = SessionLocal()
         if listing_id in pending_confirmations:
@@ -1769,11 +1797,21 @@ def auto_release_claim(listing_id: int):
                 item.recipient_id = None
                 item.claimed_at = None
                 db.commit()
-                print(f"⏰ Auto-released listing {listing_id} due to timeout")
+                print(f"\u23f0 Auto-released listing {listing_id} due to timeout")
             del pending_confirmations[listing_id]
-        db.close()
     except Exception as e:
         print(f"Error in auto_release_claim: {e}")
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 # ============================================
 # DISTRIBUTION CENTER ENDPOINTS
@@ -1915,13 +1953,7 @@ async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
 async def claim_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Claim a listing with SMS confirmation requirement."""
     try:
-        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        if item.status != 'available':
-            raise HTTPException(status_code=400, detail="Listing is not available")
-
-        # Authorization
+        # Authorization first — no point hitting the DB without a valid user.
         try:
             payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             user_id = str(payload.get("sub")) if payload else None
@@ -1930,26 +1962,69 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        # Get user details
-        claimant = db.query(User).filter(User.id == int(user_id)).first()
+        uid_int = int(user_id)
+        now = datetime.utcnow()
+
+        # Atomic claim: only one concurrent caller can transition
+        # 'available' -> 'pending_confirmation'. Prevents the read-then-
+        # update race that previously let two users both win the same
+        # listing.
+        updated = (
+            db.query(FoodResource)
+            .filter(
+                FoodResource.id == listing_id,
+                FoodResource.status == "available",
+                FoodResource.donor_id != uid_int,
+            )
+            .update(
+                {
+                    FoodResource.status: "pending_confirmation",
+                    FoodResource.recipient_id: uid_int,
+                    FoodResource.claimed_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if not updated:
+            item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+            db.rollback()
+            if not item:
+                raise HTTPException(status_code=404, detail="Listing not found")
+            if item.donor_id == uid_int:
+                raise HTTPException(status_code=400, detail="You cannot claim your own listing")
+            raise HTTPException(status_code=400, detail="Listing is not available")
+
+        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+
+        # Get user details (claimant must have a phone for SMS confirmation).
+        claimant = db.query(User).filter(User.id == uid_int).first()
         if not claimant or not claimant.phone:
+            # Roll back the claim so the listing goes back to 'available'.
+            (
+                db.query(FoodResource)
+                .filter(FoodResource.id == listing_id, FoodResource.recipient_id == uid_int)
+                .update(
+                    {
+                        FoodResource.status: "available",
+                        FoodResource.recipient_id: None,
+                        FoodResource.claimed_at: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            db.commit()
             raise HTTPException(status_code=400, detail="Phone number required")
 
         donor = db.query(User).filter(User.id == item.donor_id).first()
         
         # Generate confirmation code
         confirmation_code = generate_reset_code(4)
-        
-        # Set status to pending confirmation
-        item.recipient_id = int(user_id)
-        item.status = "pending_confirmation"
-        item.claimed_at = datetime.utcnow()
-        db.commit()
-        
-        # Store confirmation code
+
+        # Store confirmation code (the listing was already moved to
+        # pending_confirmation by the atomic update above).
         pending_confirmations[listing_id] = {
             'code': confirmation_code,
-            'recipient_id': int(user_id),
+            'recipient_id': uid_int,
             'expires_at': datetime.utcnow() + timedelta(minutes=5)
         }
         
