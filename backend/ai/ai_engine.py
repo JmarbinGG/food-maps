@@ -407,8 +407,8 @@ def _build_system_prompt(training_data: dict) -> str:
         "  AI:        'Perfect. Want me to lock it in now? I'll send you "
         "a 4-digit code to show at pickup.'\n"
         "  Recipient: 'yes'\n"
-        "  AI:        <calls claim_listing(listing_id=..., qty=2), then>\n"
-        "             'Done! I claimed 2 Sourdough Loaves for you. Your "
+        "  AI:        <calls claim_listing(listing_id=...), then>\n"
+        "             'Done! I claimed the Sourdough Loaves for you. Your "
         "pickup code is 4729 — show it to the donor when you arrive at "
         "379 S Pole St. You have 5 minutes to confirm before it auto-"
         "releases. Want directions?'\n"
@@ -422,8 +422,11 @@ def _build_system_prompt(training_data: dict) -> str:
         "  2. ACKNOWLEDGE the recipient's pick warmly ('Nice choice', "
         "'Good pick', 'Perfect') before asking the next thing.\n"
         "  3. INFER QUANTITY DEFAULT — if the listing has only 1 unit "
-        "available, skip the qty question and assume qty=1. Only ask qty "
-        "when there are multiple available.\n"
+        "available, skip the qty question. Otherwise ask how many they "
+        "want, but understand that claim_listing claims the whole listing "
+        "(no partial-claim API today). If the recipient wants fewer than "
+        "are listed, just acknowledge that and proceed; the donor will "
+        "hand them the right amount at pickup.\n"
         "  4. CONFIRM BEFORE LOCKING — for non-trivial claims, ask 'Want "
         "me to lock it in?' before calling claim_listing, so the user "
         "isn't surprised by the 5-minute timer. Exception: if the user "
@@ -1240,7 +1243,17 @@ class ConversationEngine:
 
                 result_str = json.dumps(result, default=str)
                 if len(result_str) > 4000:
-                    result_str = result_str[:4000] + "...[truncated]"
+                    # For bulk operations, the per-row `results` array can be
+                    # huge. Drop it and keep the summary so the AI can still
+                    # report success/failure counts without blowing the
+                    # context window. For other tools, fall back to a hard
+                    # truncate.
+                    if isinstance(result, dict) and isinstance(result.get("results"), list):
+                        trimmed = {k: v for k, v in result.items() if k != "results"}
+                        trimmed["results_omitted"] = len(result["results"])
+                        result_str = json.dumps(trimmed, default=str)
+                    if len(result_str) > 4000:
+                        result_str = result_str[:4000] + "...[truncated]"
                 tool_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],

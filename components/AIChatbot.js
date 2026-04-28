@@ -153,6 +153,7 @@ const ACTION_CHIP_LABELS = {
   send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
   show_map:            { ok: '✓ Map opened',      err: '✗ Could not open map', verb: 'Opening map…' },
   navigate_ui:         { ok: '✓ UI updated',      err: '✗ Could not update UI', verb: 'Updating UI…' },
+  bulk_import_listings:{ ok: '✓ Listings imported', err: '✗ Bulk import failed', verb: 'Bulk-importing listings…' },
 };
 function ActionChip({ action }) {
   const cfg = ACTION_CHIP_LABELS[action.tool];
@@ -185,6 +186,10 @@ const SUCCESS_BANNER_TOOLS = {
   post_food_request: {
     title: 'Request posted!',
     detail: 'Donors near you will be notified.',
+  },
+  bulk_import_listings: {
+    title: 'Listings imported!',
+    detail: 'Your inventory is live on the map.',
   },
 };
 function SuccessBanner({ action }) {
@@ -230,6 +235,7 @@ const LISTINGS_MUTATING_TOOLS = new Set([
   'cancel_claim',
   'post_food_listing',
   'post_food_request',
+  'bulk_import_listings',
 ]);
 function maybeBroadcastListingsChanged(actions) {
   if (!Array.isArray(actions) || typeof window === 'undefined') return;
