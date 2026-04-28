@@ -2,7 +2,7 @@
 FoodMaps AI Conversation Engine — MySQL edition.
 
 Ported from the Supabase version. Talks to:
-  - OpenAI GPT-4o (reasoning + tool calls)
+  - OpenAI GPT-4.1 (reasoning + tool calls)
   - OpenAI Whisper (speech-to-text)
   - OpenAI TTS (text-to-speech)
 
@@ -40,10 +40,15 @@ logger = logging.getLogger("ai_engine")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_BASE_URL = "https://api.openai.com/v1"
-CHAT_MODEL = os.getenv("AI_CHAT_MODEL", "gpt-4o-mini")
-FOLLOWUP_MODEL = os.getenv("AI_FOLLOWUP_MODEL", "gpt-4o-mini")
-WHISPER_MODEL = "whisper-1"
-TTS_MODEL = "tts-1"
+# Chat / tool-calling: gpt-4.1 has stronger reasoning and more reliable
+# tool-calling than gpt-4o, with the same JSON-schema function-calling
+# API. Override via AI_CHAT_MODEL if you want a different model.
+CHAT_MODEL = os.getenv("AI_CHAT_MODEL", "gpt-4.1")
+# Follow-up summary after tool execution doesn't need full-size model;
+# gpt-4.1-mini is a good cost/quality balance.
+FOLLOWUP_MODEL = os.getenv("AI_FOLLOWUP_MODEL", "gpt-4.1-mini")
+WHISPER_MODEL = os.getenv("AI_WHISPER_MODEL", "whisper-1")
+TTS_MODEL = os.getenv("AI_TTS_MODEL", "tts-1")
 TTS_VOICE_EN = os.getenv("AI_TTS_VOICE", "nova")
 TTS_VOICE_ES = os.getenv("AI_TTS_VOICE_ES", "nova")
 
