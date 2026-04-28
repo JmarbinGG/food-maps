@@ -37,7 +37,9 @@ def _geocode_address(address: str) -> Optional[tuple]:
 
     Returns ``(lat, lng)`` on success, ``None`` if no token, no match, or
     on any error. Used to make sure AI-posted listings show up on the map
-    instead of only in the sidebar list.
+    instead of only in the sidebar list. Filters out low-relevance hits
+    (country / region centroids) so a vague string like 'Alameda' doesn't
+    drop a listing in the middle of the wrong area.
     """
     addr = (address or "").strip()
     if not addr or not MAPBOX_TOKEN:
@@ -45,18 +47,38 @@ def _geocode_address(address: str) -> Optional[tuple]:
     try:
         from urllib.parse import quote as urlquote
         url = MAPBOX_GEOCODE_URL.format(urlquote(addr))
-        with httpx.Client(timeout=10.0) as client:
-            resp = client.get(url, params={"access_token": MAPBOX_TOKEN, "limit": 1})
-        if resp.status_code != 200:
-            return None
-        features = (resp.json() or {}).get("features") or []
-        if not features:
-            return None
-        center = features[0].get("center")
-        if not center or len(center) < 2:
-            return None
-        # Mapbox returns [lng, lat]
-        return float(center[1]), float(center[0])
+        # Two attempts; transient mapbox errors shouldn't permanently fail
+        # a listing post.
+        last_exc = None
+        for attempt in range(2):
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(url, params={"access_token": MAPBOX_TOKEN, "limit": 1})
+                if resp.status_code != 200:
+                    continue
+                features = (resp.json() or {}).get("features") or []
+                if not features:
+                    return None
+                feat = features[0]
+                # Reject very low-relevance matches and country/region
+                # centroids — those are useless on a delivery map.
+                relevance = float(feat.get("relevance") or 0)
+                place_types = set(feat.get("place_type") or [])
+                if relevance < 0.5:
+                    return None
+                if place_types and place_types.issubset({"country", "region"}):
+                    return None
+                center = feat.get("center")
+                if not center or len(center) < 2:
+                    return None
+                # Mapbox returns [lng, lat]
+                return float(center[1]), float(center[0])
+            except Exception as exc:
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            logger.warning("Geocode failed for %r: %s", addr, last_exc)
+        return None
     except Exception as exc:
         logger.warning("Geocode failed for %r: %s", addr, exc)
         return None
@@ -2382,9 +2404,9 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                 ),
             }
         except Exception as exc:
-            logger.error("claim_listing failed: %s", exc)
+            logger.exception("claim_listing failed")
             db.rollback()
-            return {"error": f"claim failed: {exc}"}
+            return {"error": "Could not complete the claim. Please try again."}
         finally:
             db.close()
 
@@ -2459,8 +2481,27 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
             if not item:
                 return {"error": "Listing not found"}
 
-            item.status = "claimed"
+            # Atomic flip: only succeed if the listing is still
+            # pending_confirmation for THIS recipient. Prevents the race
+            # where auto_release_claim's Timer flips status back to
+            # 'available' between our pending_confirmations lookup above
+            # and the commit below — which previously could have produced
+            # a 'claimed' listing with a null recipient.
+            updated = (
+                db.query(FoodResource)
+                .filter(
+                    FoodResource.id == lid,
+                    FoodResource.status == "pending_confirmation",
+                    FoodResource.recipient_id == uid,
+                )
+                .update({FoodResource.status: "claimed"}, synchronize_session=False)
+            )
+            if not updated:
+                pending_confirmations.pop(lid, None)
+                db.rollback()
+                return {"error": "Claim is no longer pending — it may have been auto-released. Please claim again."}
             db.commit()
+            db.refresh(item)
             pending_confirmations.pop(lid, None)
 
             try:
@@ -2488,9 +2529,9 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
                 "summary": f"Claim confirmed for '{item.title}'. You're cleared to pick it up.",
             }
         except Exception as exc:
-            logger.error("confirm_claim failed: %s", exc)
+            logger.exception("confirm_claim failed")
             db.rollback()
-            return {"error": f"confirm failed: {exc}"}
+            return {"error": "Could not confirm the claim. Please try again."}
         finally:
             db.close()
 
@@ -2529,8 +2570,9 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
                 "summary": f"Released '{item.title}' back to the community.",
             }
         except Exception as exc:
+            logger.exception("cancel_claim failed")
             db.rollback()
-            return {"error": f"cancel failed: {exc}"}
+            return {"error": "Could not cancel the claim. Please try again."}
         finally:
             db.close()
 
@@ -2799,11 +2841,24 @@ async def _post_food_listing(
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
-            # Role gate: listings are donations; only donors (or admins acting
-            # on behalf) should create them via the AI.
-            allowed_roles = {UserRole.DONOR, UserRole.ADMIN, UserRole.VOLUNTEER}
-            if user.role not in allowed_roles:
-                return {"error": "Only donors (or admins/volunteers) can post food listings."}
+            # Role gate: anyone except a pure RECIPIENT may post listings
+            # via the AI. Recipients aren't blocked outright — we auto-
+            # promote them to DONOR the first time they share food, since
+            # the only thing that distinguishes a 'recipient' from a
+            # 'donor' is which side of the transaction they're on right
+            # now. Driver/dispatcher are still excluded to avoid role-
+            # blurring on the dispatch dashboard.
+            blocked_roles = {UserRole.DRIVER, UserRole.DISPATCHER}
+            if user.role in blocked_roles:
+                return {"error": "Drivers and dispatchers can't post donor listings from chat."}
+            if user.role == UserRole.RECIPIENT:
+                user.role = UserRole.DONOR
+                # commit the role change separately so a later listing
+                # failure doesn't roll it back — they've shown intent.
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
 
             # A listing must be findable. If neither the call nor the user
             # profile has an address AND the user has no coords, the listing
@@ -2818,19 +2873,28 @@ async def _post_food_listing(
                 }
 
             # Geocode the resolved address so the listing shows up on the
-            # map. Fall back to the donor's profile coords if geocoding
-            # fails or no token is configured.
-            lat = user.coords_lat
-            lng = user.coords_lng
-            if resolved_address:
-                geocoded = _geocode_address(resolved_address)
-                if geocoded is not None:
-                    lat, lng = geocoded
-            if lat is None or lng is None:
+            # map. Strategy:
+            #   1. Try to geocode the freshly-supplied address.
+            #   2. If that fails AND the user has good profile coords,
+            #      use those rather than rejecting the post outright.
+            #   3. Only reject when we have NEITHER a geocode hit NOR
+            #      profile coords — in that case the listing genuinely
+            #      can't appear on the map.
+            geocoded = _geocode_address(resolved_address) if resolved_address else None
+            if geocoded is not None:
+                lat, lng = geocoded
+            elif user.coords_lat is not None and user.coords_lng is not None:
+                lat, lng = user.coords_lat, user.coords_lng
+                logger.info(
+                    "post_food_listing: geocode miss for %r, using profile coords",
+                    resolved_address,
+                )
+            else:
                 return {
                     "error": (
                         "Cannot post listing: address could not be located on the map. "
-                        "Please provide a more specific street + city + state."
+                        "Please provide a more specific street + city + state "
+                        "(e.g. '123 Main St, Alameda, CA')."
                     )
                 }
 
@@ -2862,8 +2926,9 @@ async def _post_food_listing(
                 "summary": f"Posted listing #{item.id} — '{item.title}' ({cat_enum.value}).",
             }
         except Exception as exc:
+            logger.exception("post_food_listing failed")
             db.rollback()
-            return {"error": f"post_food_listing failed: {exc}"}
+            return {"error": "Could not post the listing. Please try again."}
         finally:
             db.close()
 
