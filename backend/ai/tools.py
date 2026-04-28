@@ -508,8 +508,33 @@ TOOL_DEFINITIONS = [
                     "expiration_date": {"type": "string", "description": "ISO 8601. OMIT unless printed on the package. Server defaults from perishability."},
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
+                    "images": {"type": "array", "items": {"type": "string"}, "description": "Optional list of image URLs (or data URLs) the donor uploaded for this listing."},
                 },
-                "required": ["user_id", "title", "category", "qty"],
+                "required": ["user_id", "title", "qty"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bulk_import_listings",
+            "description": (
+                "ACTION: create MANY food listings at once from a CSV blob (or a "
+                "PDF that the frontend has already converted to text). Use this "
+                "when the donor pastes/uploads a spreadsheet of inventory. The "
+                "server parses each row into a listing and reports how many "
+                "succeeded / failed with per-row errors. Header row required: "
+                "title,qty,unit,category,perishability,address,description "
+                "(extra columns ignored, missing optional columns get defaults)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "csv_text": {"type": "string", "description": "Raw CSV text. First row must be the header."},
+                    "default_address": {"type": "string", "description": "Optional fallback address used for rows that don't include one."},
+                },
+                "required": ["user_id", "csv_text"],
             },
         },
     },
@@ -650,6 +675,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "update_user_profile": _update_user_profile,
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
+        "bulk_import_listings": _bulk_import_listings,
         "send_user_message": _send_user_message,
         "show_map": _show_map,
         "navigate_ui": _navigate_ui,
@@ -702,6 +728,38 @@ def _to_int(value) -> Optional[int]:
         return int(str(value))
     except (ValueError, TypeError):
         return None
+
+
+# Keyword -> FoodCategory guessing so the AI doesn't have to ask the donor
+# what 'category' a loaf of bread is. Falls back to 'prepared'.
+_CATEGORY_KEYWORDS = {
+    "produce":   ["lettuce", "kale", "spinach", "carrot", "tomato", "onion", "potato",
+                  "pepper", "cucumber", "broccoli", "cabbage", "celery", "garlic",
+                  "vegetable", "veggie", "greens", "salad"],
+    "fruit":     ["apple", "banana", "orange", "berry", "berries", "grape", "pear",
+                  "peach", "plum", "melon", "watermelon", "mango", "pineapple",
+                  "fruit", "lemon", "lime"],
+    "bakery":    ["bread", "loaf", "loaves", "bagel", "croissant", "muffin", "pastry",
+                  "donut", "doughnut", "cake", "pie", "scone", "roll", "sourdough",
+                  "baguette", "tortilla"],
+    "prepared":  ["meal", "soup", "stew", "casserole", "pasta", "pizza", "rice",
+                  "curry", "sandwich", "burrito", "taco", "lasagna", "salad bowl",
+                  "leftover", "leftovers"],
+    "packaged":  ["can", "canned", "box", "boxed", "jar", "package", "snack",
+                  "cereal", "chips", "cookies", "crackers", "pasta dry", "rice dry",
+                  "beans", "lentils", "peanut butter", "sealed"],
+    "water":     ["water", "bottled water", "gallon"],
+    "leftovers": ["leftover", "leftovers"],
+}
+
+
+def _guess_category_from_title(title: str) -> str:
+    t = (title or "").lower()
+    for cat, kws in _CATEGORY_KEYWORDS.items():
+        for kw in kws:
+            if kw in t:
+                return cat
+    return "prepared"
 
 
 async def _run(sync_fn):
@@ -2634,8 +2692,8 @@ async def _post_food_request(
 async def _post_food_listing(
     user_id: str,
     title: str,
-    category: str,
-    qty: float,
+    category: Optional[str] = None,
+    qty: float = 1,
     description: Optional[str] = None,
     unit: Optional[str] = None,
     perishability: str = "medium",
@@ -2645,6 +2703,7 @@ async def _post_food_listing(
     expiration_date: Optional[str] = None,
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
+    images: Optional[list] = None,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -2655,6 +2714,11 @@ async def _post_food_listing(
 
     if not (title or "").strip():
         return {"error": "title is required"}
+
+    # Smart category default: guess from title keywords so the AI doesn't
+    # have to interrogate the donor about it. The donor can still override.
+    if not category:
+        category = _guess_category_from_title(title)
 
     try:
         cat_enum = FoodCategory(str(category).lower())
@@ -2783,6 +2847,7 @@ async def _post_food_listing(
                 status="available",
                 allergens=json.dumps(list(allergens)) if allergens else None,
                 dietary_tags=json.dumps(list(dietary_tags)) if dietary_tags else None,
+                images=json.dumps([str(u) for u in images if u]) if images else None,
             )
             db.add(item)
             db.commit()
@@ -2799,6 +2864,93 @@ async def _post_food_listing(
             db.close()
 
     return await _run(_sync)
+
+
+async def _bulk_import_listings(
+    user_id: str,
+    csv_text: str,
+    default_address: Optional[str] = None,
+) -> dict:
+    """Create many listings from a CSV blob in one shot.
+
+    Header row is required. Recognized columns (case-insensitive, extras
+    ignored): title, qty, unit, category, perishability, address,
+    description, expiration_date, pickup_window_start, pickup_window_end.
+    Returns per-row results so the AI can summarize what worked / what
+    didn't.
+    """
+    import csv
+    from io import StringIO
+
+    if not (csv_text or "").strip():
+        return {"error": "csv_text is empty"}
+
+    try:
+        reader = csv.DictReader(StringIO(csv_text))
+    except Exception as exc:
+        return {"error": f"Could not parse CSV: {exc}"}
+
+    if not reader.fieldnames:
+        return {"error": "CSV must have a header row (e.g. title,qty,unit,...)"}
+
+    # Lowercase the field map for tolerant lookups.
+    norm_headers = {h: h.strip().lower() for h in reader.fieldnames}
+    rows = list(reader)
+    if not rows:
+        return {"error": "CSV has no data rows"}
+
+    results: list[dict] = []
+    successes = 0
+    for idx, raw_row in enumerate(rows, start=2):  # start=2 (row 1 = header)
+        row = {norm_headers.get(k, k): (v or "").strip() for k, v in raw_row.items()}
+        title = row.get("title")
+        if not title:
+            results.append({"row": idx, "ok": False, "error": "missing title"})
+            continue
+        try:
+            qty = float(row.get("qty") or 1)
+        except ValueError:
+            results.append({"row": idx, "ok": False, "error": f"invalid qty {row.get('qty')!r}"})
+            continue
+        args = {
+            "user_id": str(user_id),
+            "title": title,
+            "qty": qty,
+            "unit": row.get("unit") or "units",
+            "category": row.get("category") or _guess_category_from_title(title),
+            "perishability": row.get("perishability") or "medium",
+            "description": row.get("description") or None,
+            "address": row.get("address") or default_address,
+            "expiration_date": row.get("expiration_date") or None,
+            "pickup_window_start": row.get("pickup_window_start") or None,
+            "pickup_window_end": row.get("pickup_window_end") or None,
+        }
+        # Drop None so post_food_listing's defaults kick in.
+        args = {k: v for k, v in args.items() if v not in (None, "")}
+        try:
+            res = await _post_food_listing(**args)
+        except Exception as exc:
+            results.append({"row": idx, "ok": False, "error": str(exc)})
+            continue
+        if isinstance(res, dict) and res.get("success"):
+            successes += 1
+            results.append({"row": idx, "ok": True, "listing_id": res.get("listing_id"), "title": title})
+        else:
+            err = (res or {}).get("error") if isinstance(res, dict) else "unknown error"
+            results.append({"row": idx, "ok": False, "error": err, "title": title})
+
+    summary = (
+        f"Bulk import complete: {successes}/{len(rows)} listings posted."
+        if successes
+        else f"Bulk import: 0/{len(rows)} succeeded — see per-row errors."
+    )
+    return {
+        "success": successes > 0,
+        "posted": successes,
+        "total": len(rows),
+        "results": results,
+        "summary": summary,
+    }
 
 
 async def _send_user_message(

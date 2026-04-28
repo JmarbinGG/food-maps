@@ -294,6 +294,48 @@ function AIChatbot() {
   const scrollRef = React.useRef(null);
   const recorderRef = React.useRef(null);
   const chunksRef = React.useRef([]);
+  const photoInputRef = React.useRef(null);
+  const csvInputRef = React.useRef(null);
+
+  // ----- File attach helpers ---------------------------------------
+  // Photos are read as data URLs and sent as a chat message that includes
+  // the URL on a recognizable line. The system prompt teaches the AI to
+  // treat a line starting with 'image:' (or a markdown image) as the
+  // donor's uploaded photo and pass it as the listing's `images` array.
+  function handlePhotoFile(file) {
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+      alert('Please choose an image file.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || '');
+      // Send as its own message so the AI sees it cleanly.
+      sendMessage(`image: ${url}`);
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // CSV / TXT / PDF (text) for bulk import. PDF is read as text — the
+  // browser doesn't parse PDFs natively, so for now we accept .csv/.txt
+  // (PDF support requires a server-side extractor; we surface a friendly
+  // message if the user picks a PDF).
+  function handleCsvFile(file) {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    if (isPdf) {
+      alert('PDF bulk import is coming soon. For now, please export to CSV (title,qty,unit,category,address,description).');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || '').trim();
+      if (!text) return;
+      sendMessage('```csv\n' + text + '\n```\nPlease bulk-import these listings.');
+    };
+    reader.readAsText(file);
+  }
 
   React.useEffect(() => {
     if (scrollRef.current) {
@@ -618,6 +660,39 @@ function AIChatbot() {
             disabled={sending}
             style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
           />
+          {!anonymous && (
+            <>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                style={{ display: 'none' }}
+                onChange={(e) => { handlePhotoFile(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv,.txt,text/csv,text/plain,application/pdf"
+                style={{ display: 'none' }}
+                onChange={(e) => { handleCsvFile(e.target.files && e.target.files[0]); e.target.value = ''; }}
+              />
+              <button
+                onClick={() => photoInputRef.current && photoInputRef.current.click()}
+                title="Attach a photo of the food"
+                aria-label="Attach a photo"
+                disabled={sending}
+                style={{ padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', fontSize: 16 }}
+              >📷</button>
+              <button
+                onClick={() => csvInputRef.current && csvInputRef.current.click()}
+                title="Bulk-import listings from a CSV file"
+                aria-label="Bulk import CSV"
+                disabled={sending}
+                style={{ padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', fontSize: 16 }}
+              >📄</button>
+            </>
+          )}
           {!anonymous && (
             <button
               onMouseDown={startRecording}
