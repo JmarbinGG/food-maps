@@ -104,22 +104,37 @@ const PENDING_LABELS = [
   // Update profile must explicitly target profile fields.
   { rx: /\b(update|change|set)\s+(my\s+)?(profile|address|phone|name|email|diet(ary)?|allergen|preferences?)\b/i,
                                                                                     label: 'Updating profile…',   tool: 'update_user_profile' },
-  // Posting a listing: explicit verbs around posting/donating/sharing FOOD,
-  // OR "post/create a listing" with "listing" as the object.
-  { rx: /\b(post|create|put\s+up|add)\s+(a|an|new)?\s*listing\b/i,
-                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
-  { rx: /\b(donate|give\s+away|share)\s+(food|some|extra|leftover|leftovers|meal|meals|bread|produce|fruit|vegetables?)\b/i,
-                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
-  { rx: /\bi\s+(want|wanna|would\s+like)\s+to\s+(donate|give\s+away|share|post|list)\b/i,
-                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
-  // Bulk CSV import — fenced ```csv block or "bulk import"/"import these" phrasing.
+  // Bulk CSV import — fenced ```csv block or "bulk import"/"import these"
+  // phrasing. Match early so it doesn't fall through to a generic donor
+  // intent chip.
   { rx: /```csv\b|\bbulk[-\s]?import\b|\bimport\s+(these|this)\s+listings?\b/i,
                                                                                     label: 'Bulk-importing listings…', tool: 'bulk_import_listings' },
   // Photo upload — short "image: <url>" payload from the camera button.
+  // We can't tell at chip-time whether the photo will be attached to a
+  // new listing or an existing one, so stay neutral.
   { rx: /^\s*image:\s*https?:\/\//i,                                                label: 'Looking at your photo…', tool: null },
+  // EXPLICIT confirmation to post — only these phrases are strong
+  // enough to assume the AI is about to call post_food_listing on this
+  // turn. Bare "yes" / "ok" can mean anything; we don't claim them.
+  { rx: /^\s*(yes,?\s*)?post\s+it\b/i,                                              label: 'Posting listing…',    tool: 'post_food_listing' },
+  { rx: /\b(go\s+ahead\s+(and\s+)?post|please\s+post|post\s+(the|that)\s+listing)\b/i,
+                                                                                    label: 'Posting listing…',    tool: 'post_food_listing' },
+  // Donor INTENT — kicks off a thorough intake; the AI will ask
+  // freshness, pickup window, allergens, and a photo BEFORE actually
+  // posting. So we show "Setting up listing…", not "Posting listing…",
+  // to set the right expectation.
+  { rx: /\b(post|create|put\s+up|add)\s+(a|an|new)?\s*listing\b/i,
+                                                                                    label: 'Setting up listing…', tool: 'post_food_listing' },
+  { rx: /\b(donate|give\s+away|share)\s+(food|some|extra|leftover|leftovers|meal|meals|bread|produce|fruit|vegetables?|pizza|soup|cans?|boxes?)\b/i,
+                                                                                    label: 'Setting up listing…', tool: 'post_food_listing' },
+  { rx: /\bi\s+(want|wanna|would\s+like|need)\s+to\s+(donate|give\s+away|share|post|list)\b/i,
+                                                                                    label: 'Setting up listing…', tool: 'post_food_listing' },
+  { rx: /\bi\s+have\s+(some\s+|extra\s+|leftover\s+|a\s+few\s+|\d+\s+)?(food|bread|meals?|leftovers|produce|fruit|vegetables?|pizza|soup|cans?|boxes?|loaves?)\b/i,
+                                                                                    label: 'Setting up listing…', tool: 'post_food_listing' },
   // Posting a food request: "request food", "I need food", "looking for food".
-  { rx: /\b(request|post)\s+(a\s+)?(food\s+)?request\b/i,                           label: 'Posting request…',    tool: 'post_food_request' },
-  { rx: /\bi\s+need\s+(food|something\s+to\s+eat|a\s+meal)\b/i,                     label: 'Posting request…',    tool: 'post_food_request' },
+  { rx: /\b(post|submit)\s+(a\s+)?(food\s+)?request\b/i,                            label: 'Setting up request…', tool: 'post_food_request' },
+  { rx: /\bi\s+need\s+(food|something\s+to\s+eat|a\s+meal|groceries)\b/i,           label: 'Setting up request…', tool: 'post_food_request' },
+  { rx: /\b(looking\s+for|searching\s+for)\s+(food|a\s+meal|groceries)\b/i,         label: 'Setting up request…', tool: 'post_food_request' },
   // Claiming: must reference "claim/reserve/take" tied to a listing/number.
   { rx: /\b(claim|reserve)\s+(listing\s+)?#?\d+\b/i,                                label: 'Claiming…',           tool: 'claim_listing' },
   { rx: /\b(claim|reserve)\s+(the|that|listing|#)/i,                                label: 'Claiming…',           tool: 'claim_listing' },
@@ -221,9 +236,13 @@ function SuccessBanner({ action }) {
 // In-progress chip shown while the assistant is working. We guess the
 // likely tool from the user's message so the user sees “⟳ Claiming…”
 // (chip styling) the moment they hit send, instead of just dots.
+// We prefer the explicit label passed by the caller — it carries
+// flow-specific phrasing (e.g. "Setting up listing…" during the
+// gather phase vs. "Posting listing…" only after a confirm). The
+// tool's generic verb is used only when no label is provided.
 function PendingActionChip({ tool, label }) {
   const cfg = tool ? ACTION_CHIP_LABELS[tool] : null;
-  const text = (cfg && cfg.verb) || label || 'Working…';
+  const text = label || (cfg && cfg.verb) || 'Working…';
   return (
     <span className="foodmaps-action-chip in-progress" title="AI is working on this…">
       <span className="spin" aria-hidden="true" />
