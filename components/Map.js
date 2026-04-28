@@ -264,6 +264,36 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     };
   }, []);
 
+  // Listen for AI-driven flyTo requests (e.g. after the user posts a new
+  // listing through the chatbot). This gives unmistakable visual proof
+  // that the post is on the map by centering on it and zooming in.
+  React.useEffect(() => {
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail;
+        if (!detail) return;
+        const lat = parseFloat(detail.lat);
+        const lng = parseFloat(detail.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        if (!map.current) return;
+        // Defer slightly so the marker effect (keyed on safeListings) has
+        // a chance to render the newly-fetched marker before we fly to it.
+        setTimeout(() => {
+          try {
+            map.current && map.current.flyTo({
+              center: [lng, lat],
+              zoom: 15,
+              duration: 1200,
+              essential: true,
+            });
+          } catch (_) { /* ignore */ }
+        }, 150);
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:fly_to', handler);
+    return () => window.removeEventListener('foodmaps:fly_to', handler);
+  }, []);
+
   // Update markers when listings or centers change
   React.useEffect(() => {
     if (!map.current || !mapLoaded) {

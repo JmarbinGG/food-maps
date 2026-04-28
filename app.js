@@ -398,16 +398,62 @@ function App() {
         }
       } catch (_) { /* ignore */ }
 
+      // If the AI just posted a new listing, switch to the map view and
+      // fly to that listing so the user gets unmistakable visual proof
+      // that their post is on the map. This addresses the very common
+      // complaint "I posted but I don't see it on the map" — the listing
+      // was always there, but the user wasn't centered on it.
+      let postedListingId = null;
+      try {
+        const detail = ev && ev.detail;
+        const acts = (detail && Array.isArray(detail.actions)) ? detail.actions : [];
+        for (const a of acts) {
+          if (a && a.ok && a.tool === 'post_food_listing' && a.listing_id != null) {
+            postedListingId = String(a.listing_id);
+            break;
+          }
+        }
+      } catch (_) { /* ignore */ }
+      if (postedListingId) {
+        try {
+          setCurrentView('map');
+          setViewMode('map');
+        } catch (_) { /* ignore */ }
+      }
+
       try {
         const token = localStorage.getItem('auth_token');
         if (user || token) {
-          refreshForUser();
+          const flyToPostedListing = () => {
+            if (!postedListingId) return;
+            try {
+              const arr = (window.databaseService && Array.isArray(window.databaseService.listings))
+                ? window.databaseService.listings : [];
+              const found = arr.find(l => l && String(l.id) === postedListingId);
+              if (found && found.coords_lat != null && found.coords_lng != null) {
+                window.dispatchEvent(new CustomEvent('foodmaps:fly_to', {
+                  detail: {
+                    lat: parseFloat(found.coords_lat),
+                    lng: parseFloat(found.coords_lng),
+                    listing_id: postedListingId,
+                  },
+                }));
+              }
+            } catch (_) { /* ignore */ }
+          };
+          (async () => {
+            try { await refreshForUser(); } catch (_) { /* ignore */ }
+            flyToPostedListing();
+          })();
           // Second refetch ~800ms later: gives the backend time to flush
           // any post-commit work (e.g. SMS Timer, audit row) and protects
           // against the case where the first refetch races the commit and
           // returns stale data, leaving the listing showing as available.
           setTimeout(() => {
-            try { refreshForUser(); } catch (_) { /* ignore */ }
+            (async () => {
+              try { await refreshForUser(); } catch (_) { /* ignore */ }
+              flyToPostedListing();
+            })();
           }, 800);
         }
       } catch (_) { /* ignore */ }
