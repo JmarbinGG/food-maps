@@ -2893,16 +2893,21 @@ async def _bulk_import_listings(
     if not reader.fieldnames:
         return {"error": "CSV must have a header row (e.g. title,qty,unit,...)"}
 
-    # Lowercase the field map for tolerant lookups.
-    norm_headers = {h: h.strip().lower() for h in reader.fieldnames}
+    # Lowercase + BOM-strip the field map for tolerant lookups.
+    norm_headers = {h: h.lstrip("\ufeff").strip().lower() for h in reader.fieldnames}
     rows = list(reader)
     if not rows:
         return {"error": "CSV has no data rows"}
 
     results: list[dict] = []
     successes = 0
+    attempted = 0
     for idx, raw_row in enumerate(rows, start=2):  # start=2 (row 1 = header)
         row = {norm_headers.get(k, k): (v or "").strip() for k, v in raw_row.items()}
+        # Skip blank rows (e.g. trailing newline) silently.
+        if not any(row.values()):
+            continue
+        attempted += 1
         title = row.get("title")
         if not title:
             results.append({"row": idx, "ok": False, "error": "missing title"})
@@ -2940,14 +2945,16 @@ async def _bulk_import_listings(
             results.append({"row": idx, "ok": False, "error": err, "title": title})
 
     summary = (
-        f"Bulk import complete: {successes}/{len(rows)} listings posted."
+        f"Bulk import complete: {successes}/{attempted} listings posted."
         if successes
-        else f"Bulk import: 0/{len(rows)} succeeded — see per-row errors."
+        else f"Bulk import: 0/{attempted} succeeded — see per-row errors."
     )
+    if attempted == 0:
+        return {"error": "CSV has no non-empty data rows"}
     return {
         "success": successes > 0,
         "posted": successes,
-        "total": len(rows),
+        "total": attempted,
         "results": results,
         "summary": summary,
     }

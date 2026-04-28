@@ -308,11 +308,19 @@ function AIChatbot() {
       alert('Please choose an image file.');
       return;
     }
+    // Cap inline data URLs at ~4MB so we don't blow up the chat request.
+    if (file.size && file.size > 4 * 1024 * 1024) {
+      alert('That photo is over 4MB — please choose a smaller image (or take a new photo at a lower resolution).');
+      return;
+    }
     const reader = new FileReader();
+    reader.onerror = () => alert('Could not read that image.');
     reader.onload = () => {
       const url = String(reader.result || '');
-      // Send as its own message so the AI sees it cleanly.
-      sendMessage(`image: ${url}`);
+      if (!url) return;
+      const sizeKb = Math.round((file.size || 0) / 1024);
+      // Send full data URL to the AI but show a tidy summary in the chat.
+      sendMessage(`image: ${url}`, { displayText: `📎 Uploaded photo — ${file.name || 'image'} (${sizeKb} KB)` });
     };
     reader.readAsDataURL(file);
   }
@@ -329,10 +337,13 @@ function AIChatbot() {
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => alert('Could not read that file.');
     reader.onload = () => {
       const text = String(reader.result || '').trim();
       if (!text) return;
-      sendMessage('```csv\n' + text + '\n```\nPlease bulk-import these listings.');
+      const rowCount = Math.max(0, text.split(/\r?\n/).filter(Boolean).length - 1);
+      const payload = '```csv\n' + text + '\n```\nPlease bulk-import these listings.';
+      sendMessage(payload, { displayText: `📎 Uploaded ${file.name || 'inventory.csv'} (${rowCount} row${rowCount === 1 ? '' : 's'})` });
     };
     reader.readAsText(file);
   }
@@ -396,12 +407,13 @@ function AIChatbot() {
     return { token, userId };
   }
 
-  async function sendMessage(text) {
+  async function sendMessage(text, opts = {}) {
     const trimmed = (text || '').trim();
     if (!trimmed || sending) return;
+    const displayText = opts.displayText || trimmed;
 
     if (anonymous) {
-      setMessages(m => [...m, { role: 'user', text: trimmed }]);
+      setMessages(m => [...m, { role: 'user', text: displayText }]);
       setInput('');
       const guess = guessPending(trimmed);
       setPendingLabel(guess.label);
@@ -430,7 +442,7 @@ function AIChatbot() {
       setMessages(m => [...m, { role: 'assistant', text: 'Please sign in to chat with the assistant.' }]);
       return;
     }
-    setMessages(m => [...m, { role: 'user', text: trimmed }]);
+    setMessages(m => [...m, { role: 'user', text: displayText }]);
     setInput('');
     const guess = guessPending(trimmed);
     setPendingLabel(guess.label);
