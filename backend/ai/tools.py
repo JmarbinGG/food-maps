@@ -702,8 +702,11 @@ async def execute_tool(name: str, arguments: dict) -> dict:
     try:
         return await handler(**arguments)
     except Exception as exc:
-        logger.error("Tool %s failed: %s", name, exc)
-        return {"error": f"Tool execution failed: {exc}"}
+        # Log full traceback server-side, but return a generic message to
+        # the model so internal errors (SQL exceptions, schema details,
+        # file paths) don't leak into chat replies.
+        logger.exception("Tool %s failed", name)
+        return {"error": f"{name} failed. Please try again or rephrase."}
 
 
 # ---------------------------------------------------------------------------
@@ -2447,7 +2450,8 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
                 return {"error": "This confirmation belongs to a different user."}
             if confirmation.get("code") != code_clean:
                 return {"error": "Invalid confirmation code"}
-            if datetime.utcnow() > confirmation.get("expires_at", datetime.utcnow()):
+            expires_at = confirmation.get("expires_at")
+            if expires_at is None or datetime.utcnow() > expires_at:
                 pending_confirmations.pop(lid, None)
                 return {"error": "Confirmation code expired. Please claim again."}
 

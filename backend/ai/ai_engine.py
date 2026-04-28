@@ -1190,8 +1190,11 @@ class ConversationEngine:
                 try:
                     result = await self._execute_tool(fn_name, fn_args)
                 except Exception as tool_exc:
-                    logger.error("Tool %s failed: %s", fn_name, tool_exc)
-                    result = {"error": True, "message": f"{fn_name} failed: {tool_exc}"}
+                    # Log full traceback server-side; surface a generic
+                    # message so internal exception text doesn't reach
+                    # the user via the AI's reply.
+                    logger.exception("Tool %s failed", fn_name)
+                    result = {"error": True, "message": f"{fn_name} failed. Please try again."}
 
                 # Trace tool calls so we can debug why the model picked a tool.
                 try:

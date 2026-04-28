@@ -347,6 +347,29 @@ async def ai_upload_image(
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(400, f"Image too large (max {MAX_IMAGE_BYTES // (1024 * 1024)}MB)")
 
+    # Defense-in-depth: don't trust the client-declared Content-Type. Sniff
+    # the first few bytes and confirm they match a known image format. This
+    # blocks an attacker from uploading a script/HTML file labelled
+    # 'image/jpeg' that could be served back and executed by a misbehaving
+    # browser or downstream consumer.
+    def _sniff_image_type(buf: bytes) -> str | None:
+        if len(buf) < 12:
+            return None
+        if buf[:3] == b"\xff\xd8\xff":
+            return "image/jpeg"
+        if buf[:8] == b"\x89PNG\r\n\x1a\n":
+            return "image/png"
+        if buf[:6] in (b"GIF87a", b"GIF89a"):
+            return "image/gif"
+        if buf[:4] == b"RIFF" and buf[8:12] == b"WEBP":
+            return "image/webp"
+        return None
+
+    sniffed = _sniff_image_type(data)
+    expected = "image/jpeg" if base_type == "image/jpg" else base_type
+    if sniffed is None or sniffed != expected:
+        raise HTTPException(400, "File contents do not match a supported image format.")
+
     import uuid as _uuid
     ext = {"image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}[base_type]
     filename = f"{_uuid.uuid4().hex}{ext}"
