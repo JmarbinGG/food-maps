@@ -1107,6 +1107,7 @@ class ConversationEngine:
             "opt in", "opt out", "sms", "text me",
             "post a request", "request food", "ask for",
             "post a listing", "list my", "donate", "share food", "give away",
+            "loaves", "loaf", "bread", "fruit", "produce", "vegetables",
             "send message", "tell admin", "tell donor", "message them",
         }
         return any(kw in lower for kw in tool_keywords)
@@ -1133,7 +1134,20 @@ class ConversationEngine:
             if m["role"] == "user":
                 user_text = m.get("content", "")
                 break
-        use_tools = self._needs_tools(user_text)
+        # Look at recent assistant turns too: if we just asked the user a
+        # data-gathering question (e.g. 'how many?'), their reply will be
+        # short ('3', 'yes') and won't match the keyword check on its own.
+        # Tools must stay attached or the model can only emit text and will
+        # hallucinate 'Posted!' without actually calling post_food_listing.
+        recent_assistant = ""
+        for m in reversed(messages[-6:]):
+            if m["role"] == "assistant" and m.get("content"):
+                recent_assistant = m["content"]
+                break
+        use_tools = (
+            self._needs_tools(user_text)
+            or self._needs_tools(recent_assistant)
+        )
 
         payload = {
             "model": CHAT_MODEL,
