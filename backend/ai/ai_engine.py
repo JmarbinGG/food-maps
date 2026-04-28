@@ -991,9 +991,12 @@ class ConversationEngine:
         })
 
         # Action policy: let the AI actually DO things on the user's behalf.
-        # Only injected when the user's message looks actionable — saves tokens
-        # and avoids encouraging tool narration when tools are disabled.
-        if self._needs_tools(message):
+        # Always inject for authenticated users — gating on keyword match
+        # caused the model to silently fall back to text-only replies
+        # whenever the user phrased a donation in an unfamiliar way (e.g.
+        # 'I have a few cans of soup spare'), making listings 'sometimes
+        # work, sometimes not'.
+        if True:
             action_policy_en = (
                 "You can take actions for the user through tool calls. Use the ACTION "
                 "tools (claim_listing, cancel_claim, update_user_profile, post_food_request, "
@@ -1203,10 +1206,7 @@ class ConversationEngine:
             if m["role"] == "assistant" and m.get("content"):
                 recent_assistant = m["content"]
                 break
-        use_tools = (
-            self._needs_tools(user_text)
-            or self._needs_tools(recent_assistant)
-        )
+        use_tools = True
 
         payload = {
             "model": CHAT_MODEL,
