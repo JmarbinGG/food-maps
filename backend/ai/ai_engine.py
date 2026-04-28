@@ -1232,8 +1232,17 @@ class ConversationEngine:
         choice = data["choices"][0]
         msg = choice["message"]
 
-        # Single-round tool calling
-        if msg.get("tool_calls"):
+        # Multi-round tool calling. The previous single-round design meant
+        # that if the FIRST tool call returned an error (bad address, past
+        # date, unknown category, etc.) the followup model had no tools
+        # attached and could only apologize in text — the listing would
+        # silently fail. With up to 3 rounds the model can self-correct
+        # once or twice (e.g. retry post_food_listing with a fuller
+        # address) before giving up.
+        MAX_TOOL_ROUNDS = 3
+        round_idx = 0
+        while msg.get("tool_calls") and round_idx < MAX_TOOL_ROUNDS:
+            round_idx += 1
             tool_messages = list(messages)
             tool_messages.append(msg)
             for tool_call in msg["tool_calls"]:
@@ -1343,6 +1352,10 @@ class ConversationEngine:
                 "messages": tool_messages,
                 "temperature": 0.7,
                 "max_tokens": 1024,
+                # Keep tools attached so the model can retry after a tool
+                # error (e.g. correct an address, switch category) instead
+                # of silently giving up in text.
+                "tools": self.tool_definitions,
             }
             try:
                 resp = await _openai_with_retry(
@@ -1351,12 +1364,18 @@ class ConversationEngine:
                     headers=headers,
                     json_payload=followup_payload,
                 )
-                return resp.json()["choices"][0]["message"]["content"]
+                followup_data = resp.json()
+                msg = followup_data["choices"][0]["message"]
+                # The followup response becomes the seed for the next loop
+                # iteration. Persist conversation context too so subsequent
+                # tool rounds reference both the original messages AND the
+                # tool results from this round.
+                messages = tool_messages
             except Exception as followup_exc:
                 logger.error("Follow-up failed: %s", followup_exc)
                 return get_canned_response("tool_error", lang)
 
-        return msg["content"]
+        return msg.get("content") or ""
 
     # ---- Whisper + TTS ---------------------------------------------------
 
