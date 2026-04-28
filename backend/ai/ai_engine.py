@@ -795,6 +795,11 @@ class ConversationEngine:
                 user = db.query(User).filter(User.id == user_id).first()
                 if not user:
                     return None
+                # Expanded snapshot so the AI is genuinely aware of the
+                # user's situation and stops asking for things it already
+                # knows (address, dietary needs, allergens). Anything that
+                # affects how the AI talks or which defaults it picks
+                # belongs here.
                 return {
                     "id": user.id,
                     "name": user.name,
@@ -806,6 +811,12 @@ class ConversationEngine:
                     "lat": user.coords_lat,
                     "lng": user.coords_lng,
                     "phone": user.phone,
+                    "address": getattr(user, "address", None),
+                    "dietary_restrictions": getattr(user, "dietary_restrictions", None),
+                    "allergens": getattr(user, "allergens", None),
+                    "household_size": getattr(user, "household_size", None),
+                    "sms_consent": getattr(user, "sms_consent", None),
+                    "language": getattr(user, "language", None),
                 }
             finally:
                 db.close()
@@ -904,7 +915,7 @@ class ConversationEngine:
         lang = self._detect_lang(message)
 
         profile_task = asyncio.create_task(self.get_user_profile(user_id))
-        history_task = asyncio.create_task(self.get_conversation_history(user_id, limit=4))
+        history_task = asyncio.create_task(self.get_conversation_history(user_id, limit=12))
         profile, history = await asyncio.gather(profile_task, history_task)
 
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
@@ -919,17 +930,65 @@ class ConversationEngine:
             })
 
         if profile:
-            context = (
-                f"Current user: {profile.get('name', 'Community Member')} "
-                f"(ID: {user_id}). Role: {profile.get('role') or 'member'}. "
-                f"When calling tools that require user_id, always use \"{user_id}\"."
+            # Build a rich, conversational context block so the model has
+            # the same situational awareness a human assistant would. Skip
+            # null/blank fields so we don't pollute the prompt.
+            facts = [f"Current user: {profile.get('name') or 'Community Member'} (ID: {user_id})"]
+            role = profile.get("role") or "member"
+            facts.append(f"role: {role}")
+            if profile.get("address"):
+                facts.append(f"profile address on file: {profile['address']}")
+            else:
+                facts.append("NO profile address on file (will need one to post listings/requests)")
+            if profile.get("phone"):
+                facts.append(f"phone on file: {profile['phone']} (required to claim listings; SMS codes go here)")
+            else:
+                facts.append("NO phone on file (claim_listing will fail until they add one)")
+            if profile.get("dietary_restrictions"):
+                facts.append(f"dietary restrictions: {profile['dietary_restrictions']}")
+            if profile.get("allergens"):
+                facts.append(f"allergens: {profile['allergens']} — NEVER suggest food matching these")
+            if profile.get("household_size"):
+                facts.append(f"household size: {profile['household_size']}")
+            if profile.get("language"):
+                facts.append(f"preferred language: {profile['language']}")
+            facts.append(
+                f"When calling tools that require user_id, always use \"{user_id}\" "
+                "— NEVER ask the user for their id or any other field listed above. "
+                "You already know it."
             )
+            context = "\n".join(facts)
         else:
             context = (
                 f"Current user ID: {user_id}. "
                 f"When calling tools that require user_id, always use \"{user_id}\"."
             )
         messages.append({"role": "system", "content": context})
+
+        # Conversation-awareness reminder. Without this the model treats
+        # every turn as fresh and re-asks for things the user already
+        # answered earlier in the same chat.
+        messages.append({
+            "role": "system",
+            "content": (
+                "CONVERSATION AWARENESS (critical):\n"
+                "• Read the prior turns BEFORE responding. If the user "
+                "already gave you a fact (qty, address, title, food type, "
+                "a chosen listing #), don't ask for it again — use it.\n"
+                "• Resolve pronouns ('it', 'that one', 'the bread', "
+                "'#42') from earlier messages and tool results in this "
+                "thread.\n"
+                "• If you just searched listings and the user replies "
+                "with a number or 'the bread', match it to that search "
+                "result — don't search again.\n"
+                "• If a tool just returned an error, acknowledge what went "
+                "wrong and ask only for the missing piece, not the whole "
+                "form again.\n"
+                "• NEVER ask for fields already shown in the user-profile "
+                "context above (address, phone, dietary_restrictions, "
+                "allergens). Use them silently."
+            ),
+        })
 
         # Action policy: let the AI actually DO things on the user's behalf.
         # Only injected when the user's message looks actionable — saves tokens
@@ -982,8 +1041,8 @@ class ConversationEngine:
 
         for msg in history:
             content = msg["message"]
-            if len(content) > 400:
-                content = content[:400] + "... [truncated]"
+            if len(content) > 800:
+                content = content[:800] + "... [truncated]"
             messages.append({"role": msg["role"], "content": content})
 
         messages.append({"role": "user", "content": message})
