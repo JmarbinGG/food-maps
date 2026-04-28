@@ -112,6 +112,11 @@ const PENDING_LABELS = [
                                                                                     label: 'Posting listing…',    tool: 'post_food_listing' },
   { rx: /\bi\s+(want|wanna|would\s+like)\s+to\s+(donate|give\s+away|share|post|list)\b/i,
                                                                                     label: 'Posting listing…',    tool: 'post_food_listing' },
+  // Bulk CSV import — fenced ```csv block or "bulk import"/"import these" phrasing.
+  { rx: /```csv\b|\bbulk[-\s]?import\b|\bimport\s+(these|this)\s+listings?\b/i,
+                                                                                    label: 'Bulk-importing listings…', tool: 'bulk_import_listings' },
+  // Photo upload — short "image: <url>" payload from the camera button.
+  { rx: /^\s*image:\s*https?:\/\//i,                                                label: 'Looking at your photo…', tool: null },
   // Posting a food request: "request food", "I need food", "looking for food".
   { rx: /\b(request|post)\s+(a\s+)?(food\s+)?request\b/i,                           label: 'Posting request…',    tool: 'post_food_request' },
   { rx: /\bi\s+need\s+(food|something\s+to\s+eat|a\s+meal)\b/i,                     label: 'Posting request…',    tool: 'post_food_request' },
