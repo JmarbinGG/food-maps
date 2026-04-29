@@ -582,9 +582,14 @@ TOOL_DEFINITIONS = [
                 "the import succeeded; ask the donor for the missing info "
                 "(usually a default_address) and call the tool again. Only "
                 "when the pre-flight passes does the server actually post "
-                "rows and return per-row results. Header row required: "
-                "title,qty,unit,category,perishability,address,description "
-                "(extra columns ignored, missing optional columns get defaults)."
+                "rows and return per-row results. The header row is required, "
+                "but column names are matched leniently — common synonyms work: "
+                "'food name'/'item'/'name'→title, 'quantity'/'amount'→qty, "
+                "'pickup location'/'location'→address, 'pickup time'→a single "
+                "range column like '9:00 AM - 12:00 PM' which the server splits, "
+                "'expiration date'/'best by'/'use by'→expiration_date. Quantity "
+                "cells may include the unit inline (e.g. '25 lbs', '100 cans') "
+                "and the server extracts both. Extra columns are ignored."
             ),
             "parameters": {
                 "type": "object",
@@ -3338,7 +3343,51 @@ async def _bulk_import_listings(
         return {"error": "CSV must have a header row (e.g. title,qty,unit,...)"}
 
     # Lowercase + BOM-strip the field map for tolerant lookups.
-    norm_headers = {h: h.lstrip("\ufeff").strip().lower() for h in reader.fieldnames}
+    # ------------------------------------------------------------------
+    # Header normalization with aliases.
+    # Real-world CSVs (especially ones the AI itself generates from a
+    # donor's verbal description) use natural-language headers like
+    # "Food Name", "Quantity", "Pickup Location", "Pickup Time" or
+    # "Best By". Without aliases, every such row would be flagged as
+    # missing title+address and the bulk import would refuse before
+    # posting anything — which is the failure mode reported by donors.
+    # We map known synonyms to the canonical column names. Unknown
+    # headers are kept as-is (lowercased) so explicit canonical names
+    # ("title", "qty", ...) still work unchanged.
+    # ------------------------------------------------------------------
+    HEADER_ALIASES = {
+        "title": ("title", "name", "item", "food", "food name", "food item",
+                  "product", "item name"),
+        "qty": ("qty", "quantity", "amount", "count", "number", "servings",
+                "portions", "weight"),
+        "unit": ("unit", "units", "uom", "measure"),
+        "category": ("category", "type", "food type", "kind"),
+        "perishability": ("perishability", "perishable", "shelf life"),
+        "address": ("address", "pickup address", "pickup location",
+                    "location", "pickup_address", "pickup_location",
+                    "pickup spot", "pickup point"),
+        "description": ("description", "desc", "notes", "details", "info"),
+        "expiration_date": ("expiration_date", "expiration date", "expiry",
+                            "expires", "expires on", "best before", "best by",
+                            "use by", "good until"),
+        "pickup_window_start": ("pickup_window_start", "pickup start",
+                                "pickup_start", "start time"),
+        "pickup_window_end": ("pickup_window_end", "pickup end", "pickup_end",
+                              "end time"),
+        # Soft alias: a single "pickup time" column with a range like
+        # "9:00 AM - 12:00 PM" is split into start/end downstream.
+        "pickup_time": ("pickup_time", "pickup time", "pickup window",
+                        "window", "time", "hours"),
+    }
+    # Build header -> canonical name map.
+    canonical_for: dict[str, str] = {}
+    for canonical, aliases in HEADER_ALIASES.items():
+        for a in aliases:
+            canonical_for[a] = canonical
+    norm_headers: dict[str, str] = {}
+    for h in reader.fieldnames:
+        clean = h.lstrip("\ufeff").strip().lower()
+        norm_headers[h] = canonical_for.get(clean, clean)
     rows = list(reader)
     if not rows:
         return {"error": "CSV has no data rows"}
@@ -3435,6 +3484,69 @@ async def _bulk_import_listings(
     results: list[dict] = []
     successes = 0
     attempted = 0
+
+    # Helpers used inside the row loop. Defined here (closures) so
+    # they're scoped to bulk import without polluting module globals.
+    import re as _re
+
+    def _extract_qty_and_unit(raw_qty: str, raw_unit: Optional[str]) -> tuple[float, Optional[str]]:
+        """Parse '25 lbs' / '100 cans' / '15 trays' / '3.5kg' into
+        (qty, unit). When the qty cell is just a number, fall back to
+        the explicit `unit` column (or None). Raises ValueError on
+        unparseable input."""
+        s = (raw_qty or "").strip()
+        if not s:
+            raise ValueError("empty qty")
+        # First try a clean float (covers "25", "3.5", "100").
+        try:
+            return float(s), (raw_unit or None)
+        except ValueError:
+            pass
+        # Otherwise extract a leading number and treat the rest as unit.
+        m = _re.match(r"\s*([0-9]+(?:\.[0-9]+)?)\s*(.*)$", s)
+        if not m:
+            raise ValueError(f"could not parse qty {raw_qty!r}")
+        n = float(m.group(1))
+        tail = (m.group(2) or "").strip() or None
+        # Prefer an explicitly-supplied unit column over the inline tail.
+        return n, (raw_unit or tail)
+
+    def _split_pickup_time_range(raw: str) -> tuple[Optional[str], Optional[str]]:
+        """Split 'pickup_time' ranges like '9:00 AM - 12:00 PM' or
+        '09:00-13:00' into ISO start/end strings anchored to today.
+        Returns (None, None) if the range can't be parsed; the caller
+        falls back to post_food_listing's defaults (now -> +48h)."""
+        s = (raw or "").strip()
+        if not s or "-" not in s:
+            return (None, None)
+        # Allow en-dash and em-dash too.
+        for sep in (" - ", " – ", " — ", "-", "–", "—"):
+            if sep in s:
+                left, _, right = s.partition(sep)
+                left = left.strip()
+                right = right.strip()
+                if left and right:
+                    base = datetime.utcnow().date()
+                    fmts = ("%I:%M %p", "%I %p", "%H:%M", "%H")
+                    def _parse_clock(piece: str) -> Optional[datetime]:
+                        p = piece.replace(".", "").upper().strip()
+                        for fmt in fmts:
+                            try:
+                                t = datetime.strptime(p, fmt).time()
+                                return datetime.combine(base, t)
+                            except ValueError:
+                                continue
+                        return None
+                    s_dt = _parse_clock(left)
+                    e_dt = _parse_clock(right)
+                    if s_dt and e_dt:
+                        # If end <= start (e.g. crosses midnight or PM/AM
+                        # ambiguity), bump end by a day.
+                        if e_dt <= s_dt:
+                            e_dt = e_dt + timedelta(days=1)
+                        return (s_dt.isoformat(), e_dt.isoformat())
+        return (None, None)
+
     for idx, row in rows_normalized:
         # Skip blank rows (e.g. trailing newline) silently.
         if not any(row.values()):
@@ -3444,23 +3556,36 @@ async def _bulk_import_listings(
         if not title:
             results.append({"row": idx, "ok": False, "error": "missing title"})
             continue
+        # Parse qty + (optional inline unit). Real CSVs commonly write
+        # things like "25 lbs" or "100 cans" in a single Quantity cell;
+        # fall through to unit extraction when a bare float() fails.
         try:
-            qty = float(row.get("qty") or 1)
+            qty, derived_unit = _extract_qty_and_unit(row.get("qty"), row.get("unit"))
         except ValueError:
             results.append({"row": idx, "ok": False, "error": f"invalid qty {row.get('qty')!r}"})
             continue
+        # Pickup-time range support: when the donor supplied a single
+        # "pickup_time" column instead of separate start/end columns,
+        # try to split it. If parsing fails we leave start/end unset
+        # and post_food_listing will apply its default window.
+        pw_start = row.get("pickup_window_start")
+        pw_end = row.get("pickup_window_end")
+        if (not pw_start or not pw_end) and row.get("pickup_time"):
+            split_start, split_end = _split_pickup_time_range(row.get("pickup_time"))
+            pw_start = pw_start or split_start
+            pw_end = pw_end or split_end
         args = {
             "user_id": str(user_id),
             "title": title,
             "qty": qty,
-            "unit": row.get("unit") or "units",
+            "unit": derived_unit or "units",
             "category": row.get("category") or _guess_category_from_title(title),
             "perishability": row.get("perishability") or "medium",
             "description": row.get("description") or None,
             "address": row.get("address") or fallback_address,
             "expiration_date": row.get("expiration_date") or None,
-            "pickup_window_start": row.get("pickup_window_start") or None,
-            "pickup_window_end": row.get("pickup_window_end") or None,
+            "pickup_window_start": pw_start or None,
+            "pickup_window_end": pw_end or None,
         }
         # Drop None so post_food_listing's defaults kick in.
         args = {k: v for k, v in args.items() if v not in (None, "")}
