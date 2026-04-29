@@ -679,6 +679,12 @@ TOOL_DEFINITIONS = [
                             "favorites",
                             "chat",
                             "voice",
+                            "meal-suggestions",
+                            "spoilage-alerts",
+                            "storage-coach",
+                            "smart-notifications",
+                            "pickup-reminders",
+                            "sms-consent",
                         ],
                         "description": (
                             "Which UI surface to act on. 'map' / 'list' toggle the main "
@@ -3257,6 +3263,14 @@ _NAV_TARGET_LABELS = {
     "favorites": "your favorites",
     "chat": "the chat assistant",
     "voice": "the voice assistant",
+    # Recipient-facing AI features (mounted modals invoked via
+    # window.openXXX() on the frontend).
+    "meal-suggestions": "AI meal suggestions",
+    "spoilage-alerts": "spoilage risk alerts",
+    "storage-coach": "the AI storage coach",
+    "smart-notifications": "smart notifications",
+    "pickup-reminders": "pickup reminders",
+    "sms-consent": "SMS text notifications",
 }
 
 _NAV_VALID_ACTIONS = {"open", "close", "toggle"}

@@ -145,7 +145,20 @@ const PENDING_LABELS = [
   { rx: /\b(near\s+me|nearby|around\s+me|find\s+food|search\s+for|what'?s\s+available)\b/i,
                                                                                     label: 'Finding food near you…', tool: null },
   { rx: /\b(route|directions|navigate)\b/i,                                         label: 'Planning route…',     tool: null },
-  { rx: /\b(recipe|cook|meal\s+idea)\b/i,                                           label: 'Looking up recipes…', tool: null },
+  // Recipient-facing AI helpers — the AI opens these as modals via
+  // navigate_ui. Match common phrasings for each so the chip describes
+  // exactly which helper is being opened.
+  { rx: /\b(recipe|cook|meal\s+idea|what\s+can\s+i\s+(make|cook)|leftovers?)\b/i,   label: 'Pulling up meal ideas…', tool: 'navigate_ui' },
+  { rx: /\b(spoil(age)?|going\s+bad|about\s+to\s+expire|expiring\s+soon|food\s+waste)\b/i,
+                                                                                    label: 'Checking spoilage risk…', tool: 'navigate_ui' },
+  { rx: /\b(how\s+do\s+i\s+store|storage|fridge\s+vs|how\s+long\s+(does|will)\s+\w+\s+(last|keep)|keep\s+(food\s+)?fresh)\b/i,
+                                                                                    label: 'Opening storage coach…', tool: 'navigate_ui' },
+  { rx: /\b(smart\s+notifications?|tune\s+(my\s+)?(alerts|notifications)|notification\s+preferences?|too\s+many\s+notifications)\b/i,
+                                                                                    label: 'Opening notification settings…', tool: 'navigate_ui' },
+  { rx: /\b(pickup\s+reminders?|remind\s+me\s+(about|of)\s+(my\s+)?pickup|don'?t\s+let\s+me\s+forget)\b/i,
+                                                                                    label: 'Opening pickup reminders…', tool: 'navigate_ui' },
+  { rx: /\b(enable\s+sms|text\s+me|sms\s+(opt[\s-]?in|consent|notifications?)|turn\s+on\s+text)\b/i,
+                                                                                    label: 'Opening SMS settings…', tool: 'navigate_ui' },
 ];
 function guessPending(text) {
   const t = String(text || '').trim();
@@ -180,7 +193,16 @@ function ActionChip({ action }) {
   const cfg = ACTION_CHIP_LABELS[action.tool];
   if (!cfg) return null; // skip non-action tools
   const cls = action.ok ? 'foodmaps-action-chip done' : 'foodmaps-action-chip error';
-  const label = action.ok ? cfg.ok : cfg.err;
+  // For navigate_ui the server already produced a user-friendly summary
+  // ('Opened AI meal suggestions.') — surface it directly so the chip
+  // tells the user exactly which surface was opened, not the generic
+  // 'UI updated' fallback.
+  let label;
+  if (action.ok && action.tool === 'navigate_ui' && action.summary) {
+    label = `✓ ${action.summary.replace(/\.$/, '')}`;
+  } else {
+    label = action.ok ? cfg.ok : cfg.err;
+  }
   return (
     <span className={cls} title={action.summary || ''}>
       <span>{label}</span>
@@ -327,6 +349,7 @@ function AIChatbot() {
   const chunksRef = React.useRef([]);
   const photoInputRef = React.useRef(null);
   const csvInputRef = React.useRef(null);
+  const inputRef = React.useRef(null);
 
   // ----- File attach helpers ---------------------------------------
   // Photos are uploaded to /api/ai/upload_image, which returns a short
@@ -403,6 +426,34 @@ function AIChatbot() {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, open]);
+
+  // Keep the chat input focused when the panel is open. Without this,
+  // the browser drops the text caret whenever the input is hidden via
+  // `display: none`, briefly disabled while a reply is pending, or the
+  // surrounding tree re-renders for streaming/typing indicators — so
+  // the cursor appears to "keep disappearing" while the user is mid-
+  // sentence. We only auto-focus when the chat panel is open and the
+  // user is not actively interacting with another field (e.g. a file
+  // picker), to avoid hijacking focus.
+  React.useEffect(() => {
+    if (!open) return;
+    const el = inputRef.current;
+    if (!el) return;
+    const ae = (typeof document !== 'undefined') ? document.activeElement : null;
+    const isOtherFormControl = ae && ae !== el && (
+      ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT'
+    );
+    if (isOtherFormControl) return;
+    // Defer to the next tick so any pending re-render settles first.
+    const id = window.setTimeout(() => {
+      try {
+        if (inputRef.current && !inputRef.current.disabled) {
+          inputRef.current.focus({ preventScroll: true });
+        }
+      } catch (_) { /* ignore */ }
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [open, sending, messages.length]);
 
   // When the AI calls show_map, minimize the chatbot so the user can
   // actually see the map underneath.
@@ -715,12 +766,30 @@ function AIChatbot() {
         </div>
         <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white' }}>
           <input
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(input); } }}
-            placeholder="Type a message…"
-            disabled={sending}
-            style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: '8px', fontSize: '14px', outline: 'none' }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (!sending) sendMessage(input);
+              }
+            }}
+            placeholder={sending ? 'Waiting for reply…' : 'Type a message…'}
+            readOnly={sending}
+            aria-busy={sending}
+            autoFocus
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '8px',
+              fontSize: '14px',
+              outline: 'none',
+              caretColor: '#10b981',
+              opacity: sending ? 0.7 : 1,
+              background: sending ? '#f9fafb' : 'white'
+            }}
           />
           {!anonymous && (
             <>

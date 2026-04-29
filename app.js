@@ -520,6 +520,25 @@ function App() {
           }
           return;
         }
+        // Recipient-facing AI feature modals. Each is mounted at the app
+        // root and triggered by a window.openXXX() callback registered
+        // earlier in this file. We honor open/toggle by invoking the
+        // callback; close is handled by the modal's own onClose handler
+        // (or the fallback above which sends the user back to the map).
+        const AI_FEATURE_OPENERS = {
+          'meal-suggestions':   () => window.openMealSuggestions && window.openMealSuggestions(),
+          'spoilage-alerts':    () => window.openSpoilageAlerts && window.openSpoilageAlerts(),
+          'storage-coach':      () => window.openStorageCoach && window.openStorageCoach(),
+          'smart-notifications':() => window.openSmartNotifications && window.openSmartNotifications(),
+          'pickup-reminders':   () => window.openPickupReminders && window.openPickupReminders(),
+          'sms-consent':        () => window.openSMSConsent && window.openSMSConsent(),
+        };
+        if (AI_FEATURE_OPENERS[target]) {
+          if (action === 'open' || action === 'toggle') {
+            try { AI_FEATURE_OPENERS[target](); } catch (_) { /* ignore */ }
+          }
+          return;
+        }
         if (VIEW_TARGETS.has(target)) {
           setCurrentView(target);
           return;
@@ -864,7 +883,12 @@ function App() {
         // Union in relevant claimed items based on role
         let extras = [];
         if (role === 'donor') {
-          extras = base.filter(l => isClaimedStatus(statusOf(l)) && isOwnedByDonor(l));
+          // A donor should always see every listing they posted, regardless
+          // of status — including expired ones — so they can manage them
+          // from the map. Otherwise a freshly-created listing whose pickup
+          // window slipped past `Date.now()` (timezone drift, slow render,
+          // etc.) silently disappears from the donor's own map.
+          extras = base.filter(l => isOwnedByDonor(l));
         } else if (role === 'recipient') {
           extras = base.filter(l => isClaimedStatus(statusOf(l)) && isClaimedByMe(l));
         }
@@ -877,6 +901,8 @@ function App() {
         // statusFilter === 'all' — hide irrelevant claimed based on role
         base = base.filter(l => {
           const s = statusOf(l);
+          // Donors keep full visibility into everything they posted.
+          if (role === 'donor' && isOwnedByDonor(l)) return true;
           if (!isClaimedStatus(s)) return true;
           if (role === 'donor') return isOwnedByDonor(l);
           if (role === 'recipient') return isClaimedByMe(l);
@@ -2023,11 +2049,27 @@ function App() {
         {showMealSuggestions && user && window.SmartMealSuggestions && (
           <window.SmartMealSuggestions
             user={user}
-            claimedListings={listings.filter(l =>
-              l.status === 'claimed' &&
-              l.claimed_by === user.id
-            )}
+            claimedListings={listings.filter(l => {
+              const status = String(l.status || '').toLowerCase();
+              if (!['claimed', 'pending_confirmation', 'confirmed'].includes(status)) return false;
+              const recipientId = l.recipient_id ?? l.recipientId ?? l.recipient?.id;
+              return recipientId != null && String(recipientId) === String(user.id);
+            })}
             onClose={() => setShowMealSuggestions(false)}
+          />
+        )}
+
+        {/* Spoilage Risk Alerts */}
+        {showSpoilageAlerts && user && window.SpoilageRiskAlerts && (
+          <window.SpoilageRiskAlerts
+            user={user}
+            claimedListings={listings.filter(l => {
+              const status = String(l.status || '').toLowerCase();
+              if (!['claimed', 'pending_confirmation', 'confirmed'].includes(status)) return false;
+              const recipientId = l.recipient_id ?? l.recipientId ?? l.recipient?.id;
+              return recipientId != null && String(recipientId) === String(user.id);
+            })}
+            onClose={() => setShowSpoilageAlerts(false)}
           />
         )}
 
