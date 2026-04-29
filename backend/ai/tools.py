@@ -1081,9 +1081,11 @@ async def _create_reminder(
             db.refresh(row)
             return {
                 "created": True,
+                "success": True,
                 "reminder_id": row.id,
                 "trigger_time": trigger_time,
                 "message": f"Reminder set for {trigger_time}.",
+                "summary": f"Done — reminder set for {trigger_time}. I'll ping you when it's time.",
             }
         except Exception as exc:
             db.rollback()
@@ -2774,7 +2776,7 @@ async def _update_user_profile(
             return {
                 "success": True,
                 "updated": changed,
-                "summary": f"Updated: {', '.join(changed)}.",
+                "summary": f"Done — updated your {', '.join(changed)}. All saved.",
             }
         except Exception as exc:
             db.rollback()
@@ -3303,7 +3305,7 @@ async def _attach_photos_to_listing(
                 "success": True,
                 "listing_id": lid,
                 "image_count": len(existing),
-                "summary": f"Added {len(cleaned)} photo(s) to listing #{lid}.",
+                "summary": f"Done — added {len(cleaned)} photo(s) to listing #{lid} (now {len(existing)} total).",
             }
         except Exception:
             logger.exception("attach_photos_to_listing failed")
@@ -3718,7 +3720,7 @@ async def _send_user_message(
                 "success": True,
                 "message_id": msg.id,
                 "conversation_id": conv,
-                "summary": "Message sent.",
+                "summary": "Sent! Your message is delivered — they'll see it in their inbox.",
             }
         except Exception as exc:
             db.rollback()
