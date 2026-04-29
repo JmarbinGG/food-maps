@@ -2548,6 +2548,36 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
             db.refresh(item)
             pending_confirmations.pop(lid, None)
 
+            # ----------------------------------------------------------
+            # Post-write verification: re-query the row and confirm the
+            # status flip actually persisted with this user as recipient.
+            # If a parallel auto-release Timer fired between our atomic
+            # update and the commit, or a different process raced us,
+            # we'd otherwise tell the user "claim confirmed" while the
+            # row sits at status='available'. The atomic UPDATE above
+            # already guards against this, but verifying gives us a
+            # clear `verified` flag the AI/UI can use to warn instead
+            # of celebrating a phantom confirmation.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "claimed":
+                    verify_issues.append(f"status={status_val!r} (expected 'claimed')")
+                if check.recipient_id != uid:
+                    verify_issues.append(
+                        f"recipient_id={check.recipient_id!r} (expected {uid})"
+                    )
+            verified = not verify_issues
+
             try:
                 donor = db.query(User).filter(User.id == item.donor_id).first()
                 claimant = db.query(User).filter(User.id == uid).first()
@@ -2566,11 +2596,20 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
             except Exception as exc:  # pragma: no cover
                 logger.warning("confirm SMS delivery failed: %s", exc)
 
+            if verified:
+                summary = f"Claim confirmed for '{item.title}'. You're cleared to pick it up."
+            else:
+                summary = (
+                    f"Claim status flipped for '{item.title}', but a post-write check "
+                    f"found issues: " + "; ".join(verify_issues) + ". Please reload and verify."
+                )
             return {
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
-                "summary": f"Claim confirmed for '{item.title}'. You're cleared to pick it up.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
             logger.exception("confirm_claim failed")
@@ -2608,10 +2647,44 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
             # Drop any pending SMS-confirmation code so an old code can't
             # re-confirm the listing after release.
             pending_confirmations.pop(lid, None)
+
+            # ----------------------------------------------------------
+            # Post-write verification: re-query and confirm the row is
+            # actually back to status='available' with no recipient. If
+            # something else races us (a parallel claim from another
+            # session), we want to surface it instead of silently
+            # claiming "released!".
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "available":
+                    verify_issues.append(f"status={status_val!r} (expected 'available')")
+                if check.recipient_id is not None:
+                    verify_issues.append(
+                        f"recipient_id={check.recipient_id!r} (expected None)"
+                    )
+            verified = not verify_issues
+            summary = (
+                f"Released '{item.title}' back to the community."
+                if verified else
+                f"Released '{item.title}', but post-check found issues: "
+                + "; ".join(verify_issues)
+            )
             return {
                 "success": True,
                 "listing_id": item.id,
-                "summary": f"Released '{item.title}' back to the community.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
             logger.exception("cancel_claim failed")
@@ -2764,11 +2837,50 @@ async def _post_food_request(
             db.add(req)
             db.commit()
             db.refresh(req)
+
+            # ----------------------------------------------------------
+            # Post-write verification (parity with post_food_listing):
+            # re-query the request and confirm it would actually appear
+            # in the recipient feed. The map needs status='open' and
+            # coords; without coords the request is invisible to nearby
+            # donors. We surface this so the AI can warn the user
+            # ("posted but won't be visible because address didn't
+            # geocode") instead of pretending it's live.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodRequest).filter(FoodRequest.id == req.id).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("request row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "open":
+                    verify_issues.append(f"status={status_val!r} (expected 'open')")
+                if check.coords_lat is None or check.coords_lng is None:
+                    verify_issues.append("missing map coordinates (donors won't see it nearby)")
+            verified = not verify_issues
+            base_summary = (
+                f"Posted food request #{req.id}"
+                f"{' for ' + cat_enum.value if cat_enum else ''}"
+            )
+            if verified:
+                summary = base_summary + ". Verified visible to nearby donors."
+            else:
+                summary = (
+                    base_summary
+                    + ". WARNING: post-check found issues — "
+                    + "; ".join(verify_issues)
+                )
             return {
                 "success": True,
                 "request_id": req.id,
-                "summary": f"Posted food request #{req.id}"
-                           f"{' for ' + cat_enum.value if cat_enum else ''}.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
             db.rollback()
@@ -2885,6 +2997,59 @@ async def _post_food_listing(
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
+
+            # ----------------------------------------------------------
+            # Idempotency / duplicate-post guard.
+            # The most common cause of duplicate listings is the model
+            # re-issuing the same tool call after a transient network
+            # blip — or a recipient hitting "share again" on a voice
+            # turn that timed out. If a listing with the same donor +
+            # title + address was created in the last 10 seconds, treat
+            # this call as a retry and return the EXISTING listing_id
+            # instead of creating a second row. We also surface
+            # `duplicate_of_recent: true` so the AI can phrase its reply
+            # honestly ("That listing is already up — id #N") rather
+            # than claiming a fresh post.
+            # ----------------------------------------------------------
+            try:
+                normalized_title = (title or "").strip()[:255].lower()
+                normalized_addr = ((address or user.address or "").strip() or None)
+                if normalized_title:
+                    from sqlalchemy import func as _sa_func
+                    recent_cutoff = datetime.utcnow() - timedelta(seconds=10)
+                    dup_q = (
+                        db.query(FoodResource)
+                        .filter(FoodResource.donor_id == uid)
+                        .filter(FoodResource.created_at >= recent_cutoff)
+                        .filter(_sa_func.lower(FoodResource.title) == normalized_title)
+                    )
+                    if normalized_addr:
+                        dup_q = dup_q.filter(FoodResource.address == normalized_addr)
+                    dup = dup_q.order_by(FoodResource.id.desc()).first()
+                    if dup is not None:
+                        logger.info(
+                            "post_food_listing: dedup hit for donor=%s title=%r addr=%r -> existing id=%s",
+                            uid, normalized_title, normalized_addr, dup.id,
+                        )
+                        return {
+                            "success": True,
+                            "listing_id": dup.id,
+                            "address": dup.address,
+                            "coords_lat": dup.coords_lat,
+                            "coords_lng": dup.coords_lng,
+                            "duplicate_of_recent": True,
+                            "verified": True,
+                            "verify_issues": [],
+                            "summary": (
+                                f"That listing is already up — id #{dup.id}, '{dup.title}'. "
+                                "Skipping the duplicate so you don't end up with two pins for the same food."
+                            ),
+                        }
+            except Exception:
+                # Dedup is best-effort; never block the post on a
+                # query-shape problem.
+                logger.exception("post_food_listing: dedup check failed (continuing)")
+
             # Role gate: anyone except a pure RECIPIENT may post listings
             # via the AI. Recipients aren't blocked outright — we auto-
             # promote them to DONOR the first time they share food, since

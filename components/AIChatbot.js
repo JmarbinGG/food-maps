@@ -195,7 +195,19 @@ const ACTION_CHIP_LABELS = {
 function ActionChip({ action }) {
   const cfg = ACTION_CHIP_LABELS[action.tool];
   if (!cfg) return null; // skip non-action tools
-  const cls = action.ok ? 'foodmaps-action-chip done' : 'foodmaps-action-chip error';
+  // A tool can succeed at the DB layer (action.ok === true) but still
+  // fail post-write verification — e.g. a listing posted without coords
+  // is in the database but won't show on the map. Surface this as a
+  // distinct "warn" state so the user doesn't get a green ✓ for a
+  // listing that's effectively invisible. The AI's text answer should
+  // also explain it; the chip just makes sure it's never missed.
+  const issues = Array.isArray(action.verify_issues) ? action.verify_issues : [];
+  const verifyFailed = action.ok && action.verified === false && issues.length > 0;
+  const isDuplicate = action.ok && action.duplicate_of_recent === true;
+  let cls;
+  if (!action.ok) cls = 'foodmaps-action-chip error';
+  else if (verifyFailed) cls = 'foodmaps-action-chip warn';
+  else cls = 'foodmaps-action-chip done';
   // For navigate_ui the server already produced a user-friendly summary
   // ('Opened AI meal suggestions.') — surface it directly so the chip
   // tells the user exactly which surface was opened, not the generic
@@ -203,11 +215,19 @@ function ActionChip({ action }) {
   let label;
   if (action.ok && action.tool === 'navigate_ui' && action.summary) {
     label = `✓ ${action.summary.replace(/\.$/, '')}`;
+  } else if (verifyFailed) {
+    label = `⚠ ${cfg.ok.replace(/^✓\s*/, '')} (verify failed)`;
+  } else if (isDuplicate) {
+    label = `↺ ${cfg.ok.replace(/^✓\s*/, '')} (duplicate)`;
   } else {
     label = action.ok ? cfg.ok : cfg.err;
   }
+  // Tooltip: prefer detailed verify_issues, then summary.
+  const titleText = verifyFailed
+    ? `Post-check found: ${issues.join('; ')}`
+    : (action.summary || '');
   return (
-    <span className={cls} title={action.summary || ''}>
+    <span className={cls} title={titleText}>
       <span>{label}</span>
     </span>
   );
@@ -1288,6 +1308,9 @@ function ChooserBubble({ icon, label, onClick }) {
     }
     .foodmaps-action-chip.done {
       background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7;
+    }
+    .foodmaps-action-chip.warn {
+      background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
     }
     .foodmaps-action-chip.error {
       background: #fef2f2; color: #991b1b; border: 1px solid #fecaca;
