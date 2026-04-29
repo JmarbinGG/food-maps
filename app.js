@@ -404,12 +404,23 @@ function App() {
       // complaint "I posted but I don't see it on the map" — the listing
       // was always there, but the user wasn't centered on it.
       let postedListingId = null;
+      let postedCoords = null;
       try {
         const detail = ev && ev.detail;
         const acts = (detail && Array.isArray(detail.actions)) ? detail.actions : [];
         for (const a of acts) {
           if (a && a.ok && a.tool === 'post_food_listing' && a.listing_id != null) {
             postedListingId = String(a.listing_id);
+            // Capture the coords directly from the tool result so we can
+            // fly the map even if the follow-up refreshForUser() call
+            // fails (network blip, expired token, etc.).
+            if (a.coords_lat != null && a.coords_lng != null) {
+              const lat = parseFloat(a.coords_lat);
+              const lng = parseFloat(a.coords_lng);
+              if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                postedCoords = { lat, lng };
+              }
+            }
             break;
           }
         }
@@ -427,16 +438,24 @@ function App() {
           const flyToPostedListing = () => {
             if (!postedListingId) return;
             try {
+              // Prefer coords from the cache (the listing has been refetched
+              // by now), but fall back to the coords the AI tool returned
+              // directly. This guarantees the fly-to works even when the
+              // refetch failed.
+              let lat = null, lng = null;
               const arr = (window.databaseService && Array.isArray(window.databaseService.listings))
                 ? window.databaseService.listings : [];
               const found = arr.find(l => l && String(l.id) === postedListingId);
               if (found && found.coords_lat != null && found.coords_lng != null) {
+                lat = parseFloat(found.coords_lat);
+                lng = parseFloat(found.coords_lng);
+              } else if (postedCoords) {
+                lat = postedCoords.lat;
+                lng = postedCoords.lng;
+              }
+              if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
                 window.dispatchEvent(new CustomEvent('foodmaps:fly_to', {
-                  detail: {
-                    lat: parseFloat(found.coords_lat),
-                    lng: parseFloat(found.coords_lng),
-                    listing_id: postedListingId,
-                  },
+                  detail: { lat, lng, listing_id: postedListingId },
                 }));
               }
             } catch (_) { /* ignore */ }

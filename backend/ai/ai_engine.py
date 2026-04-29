@@ -1625,6 +1625,16 @@ class ConversationEngine:
                         for extra_key in ("action", "target", "view", "focus"):
                             if extra_key in result and result[extra_key] is not None:
                                 entry[extra_key] = result[extra_key]
+                        # Forward coords + verification status from
+                        # post_food_listing so app.js can fly the map to the
+                        # new pin even if a follow-up refreshForUser() fetch
+                        # fails (network blip, slow DB, expired token). We
+                        # don't want a transient fetch failure to leave the
+                        # donor staring at an unmoved map after a successful
+                        # post.
+                        for extra_key in ("coords_lat", "coords_lng", "address", "verified", "verify_issues"):
+                            if extra_key in result and result[extra_key] is not None:
+                                entry[extra_key] = result[extra_key]
                         actions_out.append(entry)
 
                 result_str = json.dumps(result, default=str)

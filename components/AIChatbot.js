@@ -98,8 +98,11 @@ const PENDING_LABELS = [
   { rx: /\b(confirm|my\s+code\s+is|here'?s\s+(my|the)\s+code|use\s+code)\b.*\d{3,4}|\bconfirm\s+\d{3,4}\b/i,
                                                                                     label: 'Confirming claim…',   tool: 'confirm_claim' },
   // Cancel/release MUST mention claim/listing/reservation to avoid hitting
-  // generic "cancel" chatter.
-  { rx: /\b(cancel|release|unclaim|drop)\b.*\b(claim|listing|reservation|it|that)\b/i,
+  // generic "cancel" chatter. We deliberately do NOT match the bare
+  // pronouns "it" / "that" — "drop it" / "cancel that" can mean almost
+  // anything in casual chat, and false-firing this chip mislabels the
+  // user's intent before the AI has even responded.
+  { rx: /\b(cancel|release|unclaim|drop)\b.{0,40}\b(my\s+)?(claim|listing|reservation|pickup|food|order)\b/i,
                                                                                     label: 'Releasing claim…',    tool: 'cancel_claim' },
   // Update profile must explicitly target profile fields.
   { rx: /\b(update|change|set)\s+(my\s+)?(profile|address|phone|name|email|diet(ary)?|allergen|preferences?)\b/i,

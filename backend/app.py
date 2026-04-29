@@ -99,7 +99,11 @@ async def add_cache_control_headers(request: Request, call_next):
     """Avoid stale frontend assets requiring hard refreshes in development and production."""
     path = request.url.path
     relative_path = path.lstrip("/")
-    if relative_path and (
+    # /uploads serves user-generated content (chat photos, listing images).
+    # The directory is gitignored on purpose, but it MUST still be reachable
+    # over HTTP — otherwise listing photos and AI chat attachments 404.
+    is_uploads_asset = relative_path.startswith("uploads/") or relative_path == "uploads"
+    if relative_path and not is_uploads_asset and (
         any(part.startswith(".") for part in relative_path.split("/") if part)
         or _is_gitignored_path(relative_path)
     ):
@@ -480,6 +484,20 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
             # Already a string or unexpected type
             return v
 
+    # Parse images JSON column to a Python list (best effort)
+    images_list = []
+    raw_images = getattr(item, "images", None)
+    if raw_images:
+        if isinstance(raw_images, list):
+            images_list = [str(x) for x in raw_images if isinstance(x, (str, bytes))]
+        else:
+            try:
+                parsed_imgs = json.loads(raw_images)
+                if isinstance(parsed_imgs, list):
+                    images_list = [str(x) for x in parsed_imgs if isinstance(x, str)]
+            except Exception:
+                images_list = []
+
     return {
         "id": item.id,
         "donor_id": getattr(item, "donor_id", None),
@@ -511,6 +529,7 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "contamination_warning": getattr(item, "contamination_warning", None),
         "dietary_tags": getattr(item, "dietary_tags", None),
         "ingredients_list": getattr(item, "ingredients_list", None),
+        "images": images_list,
         "donor": donor_payload,
     }
 
@@ -1364,6 +1383,32 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         if address is not None and address != item.address:
             item.address = address
             address_changed = True
+
+        # Optional images update: accept a list of URL strings or a JSON
+        # string. Apply the same validation as create.
+        if 'images' in body:
+            raw_imgs = body.get('images')
+            try:
+                if isinstance(raw_imgs, str):
+                    raw_imgs = json.loads(raw_imgs)
+            except Exception:
+                raw_imgs = None
+            if isinstance(raw_imgs, list):
+                cleaned = []
+                for u in raw_imgs:
+                    if not isinstance(u, str):
+                        continue
+                    s = u.strip()
+                    if not s or len(s) > 1024:
+                        continue
+                    if not (s.startswith("/uploads/") or s.startswith("http://") or s.startswith("https://")):
+                        continue
+                    cleaned.append(s)
+                    if len(cleaned) >= 8:
+                        break
+                item.images = json.dumps(cleaned) if cleaned else None
+            elif raw_imgs is None or raw_imgs == [] or raw_imgs == "":
+                item.images = None
 
         # If coords missing or address changed, attempt geocoding
         try:
@@ -2599,10 +2644,13 @@ async def update_trust_score(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/listings/create")
-async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: int, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: int = 0, db: Session = Depends(get_db)):
+async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Create a FoodResource and attempt server-side geocoding using Mapbox when an address is provided
     and coords are not supplied. Returns the created listing as JSON.
+
+    `images` may be a JSON-encoded array of URL strings (e.g. paths returned by
+    /api/ai/upload_image) to attach as listing photos.
     """
     try:
         # Enforce that donor has a phone number on file
@@ -2611,6 +2659,34 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             raise HTTPException(status_code=404, detail="Donor not found")
         if not donor.phone or len(str(donor.phone).strip()) < 7:
             raise HTTPException(status_code=400, detail="A valid phone number is required to create a listing")
+
+        # Validate and normalize the optional images parameter. We store a
+        # JSON-encoded array of URL strings; reject anything else to avoid
+        # storing arbitrary blobs (or huge data URLs) on the listing row.
+        images_json = None
+        if images:
+            try:
+                parsed = json.loads(images) if isinstance(images, str) else images
+            except Exception:
+                raise HTTPException(status_code=400, detail="images must be a JSON array of URL strings")
+            if not isinstance(parsed, list):
+                raise HTTPException(status_code=400, detail="images must be a JSON array of URL strings")
+            cleaned = []
+            for u in parsed:
+                if not isinstance(u, str):
+                    continue
+                s = u.strip()
+                if not s:
+                    continue
+                # Only accept relative /uploads/... paths or http(s) URLs.
+                if not (s.startswith("/uploads/") or s.startswith("http://") or s.startswith("https://")):
+                    continue
+                if len(s) > 1024:
+                    continue
+                cleaned.append(s)
+                if len(cleaned) >= 8:
+                    break
+            images_json = json.dumps(cleaned) if cleaned else None
 
         item = FoodResource(
             donor_id=donor_id,
@@ -2623,6 +2699,7 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             pickup_window_start=pickup_start,
             pickup_window_end=pickup_end,
             address=address,
+            images=images_json,
             created_at=datetime.utcnow()
         )
 
