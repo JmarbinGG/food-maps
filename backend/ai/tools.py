@@ -3513,9 +3513,24 @@ async def _bulk_import_listings(
 
     def _split_pickup_time_range(raw: str) -> tuple[Optional[str], Optional[str]]:
         """Split 'pickup_time' ranges like '9:00 AM - 12:00 PM' or
-        '09:00-13:00' into ISO start/end strings anchored to today.
+        '09:00-13:00' into ISO start/end strings anchored to the next
+        upcoming occurrence of that window.
+
+        Real-world donor CSVs describe a recurring window ("9 AM - 12 PM"
+        every day). If we naively anchor to today's UTC date, every row
+        whose end-of-window is already past in UTC gets rejected by
+        post_food_listing's "pickup_window_end is in the past" guard —
+        which means a 10 AM PT donor running an import after 5 PM UTC
+        sees only the few rows whose windows happen to span the current
+        moment in UTC succeed. The fix: if the computed window has
+        already ended, roll the entire window forward by full days
+        until end > now. This preserves the donor's stated time-of-day
+        and gives them the *next* available window, which is what they
+        actually mean by listing recurring hours.
+
         Returns (None, None) if the range can't be parsed; the caller
-        falls back to post_food_listing's defaults (now -> +48h)."""
+        falls back to post_food_listing's defaults (now -> +48h).
+        """
         s = (raw or "").strip()
         if not s or "-" not in s:
             return (None, None)
@@ -3526,7 +3541,8 @@ async def _bulk_import_listings(
                 left = left.strip()
                 right = right.strip()
                 if left and right:
-                    base = datetime.utcnow().date()
+                    now = datetime.utcnow()
+                    base = now.date()
                     fmts = ("%I:%M %p", "%I %p", "%H:%M", "%H")
                     def _parse_clock(piece: str) -> Optional[datetime]:
                         p = piece.replace(".", "").upper().strip()
@@ -3544,6 +3560,14 @@ async def _bulk_import_listings(
                         # ambiguity), bump end by a day.
                         if e_dt <= s_dt:
                             e_dt = e_dt + timedelta(days=1)
+                        # Roll forward whole days until the window ends
+                        # in the future. Cap at 7 days as a sanity limit
+                        # so a malformed time can't infinite-loop.
+                        rolls = 0
+                        while e_dt <= now and rolls < 7:
+                            s_dt = s_dt + timedelta(days=1)
+                            e_dt = e_dt + timedelta(days=1)
+                            rolls += 1
                         return (s_dt.isoformat(), e_dt.isoformat())
         return (None, None)
 
