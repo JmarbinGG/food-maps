@@ -2964,6 +2964,64 @@ async def _post_food_listing(
             db.add(item)
             db.commit()
             db.refresh(item)
+
+            # ----------------------------------------------------------
+            # Verification pass: re-query the listing as a fresh row and
+            # confirm it would actually show up on the map. We check the
+            # same conditions the frontend uses to decide whether to
+            # render a marker:
+            #   - row exists with the new id
+            #   - status == 'available'
+            #   - coords_lat / coords_lng are non-null
+            #   - pickup_window_end is in the future (not auto-expired)
+            # If any of those fail, we still return success (the row is
+            # in the DB) but flag verified=false with a reason so the
+            # AI can tell the donor 'posted but won't be visible because
+            # X' instead of pretending everything is fine.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = (
+                db.query(FoodResource)
+                .filter(FoodResource.id == item.id)
+                .first()
+            )
+            verified = False
+            verify_issues: list[str] = []
+            visible_count = None
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "available":
+                    verify_issues.append(f"status={status_val!r} (expected 'available')")
+                if check.coords_lat is None or check.coords_lng is None:
+                    verify_issues.append("missing map coordinates")
+                if check.pickup_window_end and check.pickup_window_end <= datetime.utcnow():
+                    verify_issues.append("pickup window already ended")
+                # Also confirm it would be returned by the public listings
+                # query the map uses. We replicate the simplest version of
+                # that filter (status=available, coords present) and count
+                # the donor's currently-visible listings so the AI can
+                # report 'now N of your listings are live' if helpful.
+                from sqlalchemy import and_
+                visible_count = (
+                    db.query(FoodResource)
+                    .filter(
+                        and_(
+                            FoodResource.donor_id == uid,
+                            FoodResource.status == "available",
+                            FoodResource.coords_lat.isnot(None),
+                            FoodResource.coords_lng.isnot(None),
+                        )
+                    )
+                    .count()
+                )
+                verified = not verify_issues
+
             # Include the resolved address + coords in the summary so the
             # user (and the chip in the chat) gets visible confirmation
             # of WHERE the pin was dropped on the map. Donors frequently
@@ -2971,16 +3029,31 @@ async def _post_food_listing(
             # tool used profile coords silently — this surfaces it.
             addr_part = f" at {resolved_address}" if resolved_address else ""
             coord_part = f" (pin {lat:.4f}, {lng:.4f})"
+            if verified:
+                summary = (
+                    f"Posted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}. "
+                    f"Verified live on the map"
+                    + (f" ({visible_count} of your listings now visible)." if visible_count else ".")
+                )
+            else:
+                summary = (
+                    f"Posted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}. "
+                    f"WARNING: post-check found issues — "
+                    + "; ".join(verify_issues)
+                    + ". The row is in the database but may NOT show on the map."
+                )
             return {
                 "success": True,
                 "listing_id": item.id,
                 "address": resolved_address,
                 "coords_lat": lat,
                 "coords_lng": lng,
-                "summary": (
-                    f"Posted listing #{item.id} — '{item.title}' "
-                    f"({cat_enum.value}){addr_part}{coord_part}."
-                ),
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "visible_listings_for_donor": visible_count,
+                "summary": summary,
             }
         except Exception as exc:
             logger.exception("post_food_listing failed")
@@ -3222,21 +3295,40 @@ async def _bulk_import_listings(
             continue
         if isinstance(res, dict) and res.get("success"):
             successes += 1
-            results.append({"row": idx, "ok": True, "listing_id": res.get("listing_id"), "title": title})
+            results.append({
+                "row": idx,
+                "ok": True,
+                "listing_id": res.get("listing_id"),
+                "title": title,
+                "verified": bool(res.get("verified")),
+                "verify_issues": res.get("verify_issues") or [],
+            })
         else:
             err = (res or {}).get("error") if isinstance(res, dict) else "unknown error"
             results.append({"row": idx, "ok": False, "error": err, "title": title})
 
-    summary = (
-        f"Bulk import complete: {successes}/{attempted} listings posted."
-        if successes
-        else f"Bulk import: 0/{attempted} succeeded — see per-row errors."
-    )
+    verified_count = sum(1 for r in results if r.get("ok") and r.get("verified"))
+    unverified = [r for r in results if r.get("ok") and not r.get("verified")]
+    if successes:
+        summary = (
+            f"Bulk import complete: {successes}/{attempted} listings posted; "
+            f"{verified_count}/{successes} verified live on the map."
+        )
+        if unverified:
+            first = unverified[0]
+            issues = "; ".join(first.get("verify_issues") or []) or "verification check failed"
+            summary += (
+                f" {len(unverified)} listing(s) posted but failed the post-check "
+                f"(e.g. row {first.get('row')}: {issues})."
+            )
+    else:
+        summary = f"Bulk import: 0/{attempted} succeeded — see per-row errors."
     if attempted == 0:
         return {"error": "CSV has no non-empty data rows"}
     return {
         "success": successes > 0,
         "posted": successes,
+        "verified": verified_count,
         "total": attempted,
         "results": results,
         "summary": summary,
