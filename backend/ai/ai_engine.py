@@ -1632,7 +1632,7 @@ class ConversationEngine:
                         # don't want a transient fetch failure to leave the
                         # donor staring at an unmoved map after a successful
                         # post.
-                        for extra_key in ("coords_lat", "coords_lng", "address", "verified", "verify_issues"):
+                        for extra_key in ("coords_lat", "coords_lng", "address", "verified", "verify_issues", "duplicate_of_recent"):
                             if extra_key in result and result[extra_key] is not None:
                                 entry[extra_key] = result[extra_key]
                         actions_out.append(entry)

@@ -2578,23 +2578,29 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
                     )
             verified = not verify_issues
 
-            try:
-                donor = db.query(User).filter(User.id == item.donor_id).first()
-                claimant = db.query(User).filter(User.id == uid).first()
-                if claimant and claimant.phone:
-                    send_sms(
-                        claimant.phone,
-                        f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
-                        f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
-                    )
-                if donor and donor.phone:
-                    send_sms(
-                        donor.phone,
-                        f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
-                        f"will pick up '{item.title}'.",
-                    )
-            except Exception as exc:  # pragma: no cover
-                logger.warning("confirm SMS delivery failed: %s", exc)
+            # Only blast confirmation SMS when the post-write check
+            # actually agrees the row is now claimed by this user.
+            # Otherwise we'd tell both parties "Claim confirmed!" via
+            # SMS while telling the chat user "verify failed" — a
+            # contradiction that's worse than no SMS at all.
+            if verified:
+                try:
+                    donor = db.query(User).filter(User.id == item.donor_id).first()
+                    claimant = db.query(User).filter(User.id == uid).first()
+                    if claimant and claimant.phone:
+                        send_sms(
+                            claimant.phone,
+                            f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
+                            f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
+                        )
+                    if donor and donor.phone:
+                        send_sms(
+                            donor.phone,
+                            f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
+                            f"will pick up '{item.title}'.",
+                        )
+                except Exception as exc:  # pragma: no cover
+                    logger.warning("confirm SMS delivery failed: %s", exc)
 
             if verified:
                 summary = f"Claim confirmed for '{item.title}'. You're cleared to pick it up."
@@ -2998,6 +3004,30 @@ async def _post_food_listing(
             if not user:
                 return {"error": "User not found"}
 
+            # Role gate: anyone except a pure RECIPIENT may post listings
+            # via the AI. Recipients aren't blocked outright — we auto-
+            # promote them to DONOR the first time they share food, since
+            # the only thing that distinguishes a 'recipient' from a
+            # 'donor' is which side of the transaction they're on right
+            # now. Driver/dispatcher are still excluded to avoid role-
+            # blurring on the dispatch dashboard.
+            #
+            # IMPORTANT: this gate runs BEFORE the dedup short-circuit
+            # below — otherwise a banned role could probe for an
+            # existing duplicate and get a "success" reply for a
+            # listing they're not allowed to post against.
+            blocked_roles = {UserRole.DRIVER, UserRole.DISPATCHER}
+            if user.role in blocked_roles:
+                return {"error": "Drivers and dispatchers can't post donor listings from chat."}
+            if user.role == UserRole.RECIPIENT:
+                user.role = UserRole.DONOR
+                # commit the role change separately so a later listing
+                # failure doesn't roll it back — they've shown intent.
+                try:
+                    db.commit()
+                except Exception:
+                    db.rollback()
+
             # ----------------------------------------------------------
             # Idempotency / duplicate-post guard.
             # The most common cause of duplicate listings is the model
@@ -3049,25 +3079,6 @@ async def _post_food_listing(
                 # Dedup is best-effort; never block the post on a
                 # query-shape problem.
                 logger.exception("post_food_listing: dedup check failed (continuing)")
-
-            # Role gate: anyone except a pure RECIPIENT may post listings
-            # via the AI. Recipients aren't blocked outright — we auto-
-            # promote them to DONOR the first time they share food, since
-            # the only thing that distinguishes a 'recipient' from a
-            # 'donor' is which side of the transaction they're on right
-            # now. Driver/dispatcher are still excluded to avoid role-
-            # blurring on the dispatch dashboard.
-            blocked_roles = {UserRole.DRIVER, UserRole.DISPATCHER}
-            if user.role in blocked_roles:
-                return {"error": "Drivers and dispatchers can't post donor listings from chat."}
-            if user.role == UserRole.RECIPIENT:
-                user.role = UserRole.DONOR
-                # commit the role change separately so a later listing
-                # failure doesn't roll it back — they've shown intent.
-                try:
-                    db.commit()
-                except Exception:
-                    db.rollback()
 
             # A listing must be findable. If neither the call nor the user
             # profile has an address AND the user has no coords, the listing
