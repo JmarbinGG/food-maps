@@ -38,14 +38,97 @@ function BulkListing({ user, onCancel, onSuccess }) {
   };
 
   const handleSubmit = async () => {
+    // Validate required fields up-front so we don't fire off half-baked
+    // requests against the server.
+    const missing = [];
+    listings.forEach((l, idx) => {
+      if (!l.title || !l.title.trim()) missing.push(`#${idx + 1} title`);
+      if (!l.qty || isNaN(parseFloat(l.qty)) || parseFloat(l.qty) <= 0) missing.push(`#${idx + 1} qty`);
+      if (!l.pickup_location || !l.pickup_location.trim()) missing.push(`#${idx + 1} pickup location`);
+      if (!l.best_before) missing.push(`#${idx + 1} best-before`);
+    });
+    if (missing.length) {
+      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
+        ? window.showAlert : ((m) => alert(m));
+      showAlert(
+        `Please complete the required fields: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? '…' : ''}.`,
+        { title: 'Missing info', variant: 'error' }
+      );
+      return;
+    }
+    if (!user || user.id == null) {
+      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
+        ? window.showAlert : ((m) => alert(m));
+      showAlert('Please sign in as a donor before posting listings.', { title: 'Sign in required', variant: 'error' });
+      return;
+    }
+
     setIsSubmitting(true);
+    const results = { success: [], failed: [] };
     try {
-      console.log('Creating bulk listings:', listings);
-      alert(`Successfully created ${listings.length} food listings!`);
-      onSuccess();
+      for (let i = 0; i < listings.length; i++) {
+        const l = listings[i];
+        // best_before is a datetime-local string (YYYY-MM-DDTHH:mm). Use
+        // it for both expiration_date AND as the pickup window end so the
+        // listing is still pickable until the food expires. Default the
+        // pickup start to "now" so recipients can pick it up immediately.
+        const expiry = l.best_before;
+        const pickupStart = new Date().toISOString();
+        const pickupEnd = new Date(expiry).toISOString();
+        const payload = {
+          donor_id: user.id,
+          title: l.title.trim(),
+          desc: (l.description || '').trim(),
+          category: l.category || 'prepared',
+          qty: parseFloat(l.qty),
+          unit: l.unit || 'units',
+          perishability: 'medium',
+          address: l.pickup_location.trim(),
+          pickup_start: pickupStart,
+          pickup_end: pickupEnd,
+          images: (l.photo_url && l.photo_url.trim()) ? [l.photo_url.trim()] : [],
+        };
+        try {
+          const res = await window.databaseService.createListing(payload);
+          if (res && (res.success || res.listing)) {
+            results.success.push(l.title);
+          } else {
+            results.failed.push({ title: l.title, error: (res && res.error) || 'unknown error' });
+          }
+        } catch (rowErr) {
+          results.failed.push({ title: l.title, error: rowErr.message || 'network error' });
+        }
+      }
+
+      // Notify the rest of the app so the map refetches.
+      try {
+        window.dispatchEvent(new CustomEvent('foodmaps:listings_changed', {
+          detail: { actions: results.success.map(() => ({ tool: 'bulk_import_listings', ok: true })) },
+        }));
+      } catch (_) { /* ignore */ }
+
+      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
+        ? window.showAlert : ((m) => alert(m));
+      if (results.failed.length === 0) {
+        showAlert(`Successfully posted ${results.success.length} listing${results.success.length === 1 ? '' : 's'}!`, { title: 'Done', variant: 'success' });
+        if (typeof onSuccess === 'function') onSuccess();
+      } else if (results.success.length === 0) {
+        showAlert(
+          `All ${results.failed.length} listings failed. First error: ${results.failed[0].error}`,
+          { title: 'Bulk post failed', variant: 'error' }
+        );
+      } else {
+        showAlert(
+          `Posted ${results.success.length} of ${listings.length} listings. ${results.failed.length} failed (e.g. "${results.failed[0].title}": ${results.failed[0].error}).`,
+          { title: 'Partial success', variant: 'warning' }
+        );
+        if (typeof onSuccess === 'function') onSuccess();
+      }
     } catch (error) {
       console.error('Error creating bulk listings:', error);
-      alert('Failed to create listings. Please try again.');
+      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
+        ? window.showAlert : ((m) => alert(m));
+      showAlert(`Failed to create listings: ${error.message || error}`, { title: 'Error', variant: 'error' });
     } finally {
       setIsSubmitting(false);
     }

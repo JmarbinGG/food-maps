@@ -2950,10 +2950,23 @@ async def _post_food_listing(
             db.add(item)
             db.commit()
             db.refresh(item)
+            # Include the resolved address + coords in the summary so the
+            # user (and the chip in the chat) gets visible confirmation
+            # of WHERE the pin was dropped on the map. Donors frequently
+            # complained that the address step felt skipped because the
+            # tool used profile coords silently — this surfaces it.
+            addr_part = f" at {resolved_address}" if resolved_address else ""
+            coord_part = f" (pin {lat:.4f}, {lng:.4f})"
             return {
                 "success": True,
                 "listing_id": item.id,
-                "summary": f"Posted listing #{item.id} — '{item.title}' ({cat_enum.value}).",
+                "address": resolved_address,
+                "coords_lat": lat,
+                "coords_lng": lng,
+                "summary": (
+                    f"Posted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}."
+                ),
             }
         except Exception as exc:
             logger.exception("post_food_listing failed")
