@@ -572,9 +572,17 @@ TOOL_DEFINITIONS = [
             "description": (
                 "ACTION: create MANY food listings at once from a CSV blob (or a "
                 "PDF that the frontend has already converted to text). Use this "
-                "when the donor pastes/uploads a spreadsheet of inventory. The "
-                "server parses each row into a listing and reports how many "
-                "succeeded / failed with per-row errors. Header row required: "
+                "when the donor pastes/uploads a spreadsheet of inventory. "
+                "PRE-FLIGHT: the server first validates that every row has a "
+                "title and that an address is resolvable (row column → "
+                "default_address arg → donor profile address). If any row is "
+                "missing a title or address, the call returns success=false "
+                "with `needs` listing what's missing and per-row indices in "
+                "`missing_title_rows` / `missing_address_rows` — DO NOT pretend "
+                "the import succeeded; ask the donor for the missing info "
+                "(usually a default_address) and call the tool again. Only "
+                "when the pre-flight passes does the server actually post "
+                "rows and return per-row results. Header row required: "
                 "title,qty,unit,category,perishability,address,description "
                 "(extra columns ignored, missing optional columns get defaults)."
             ),
@@ -3086,11 +3094,99 @@ async def _bulk_import_listings(
     if not rows:
         return {"error": "CSV has no data rows"}
 
+    # ------------------------------------------------------------------
+    # Pre-flight: scan rows for missing required fields (title, qty,
+    # address) BEFORE we start posting anything. This lets the AI ask the
+    # donor one focused question ("what address should I use for the 7
+    # rows that don't have one?") instead of partial-posting and reporting
+    # half-failures. Required-field policy:
+    #   - title: per-row, no defaulting
+    #   - qty:   per-row (defaults to 1 only if the donor explicitly says
+    #            "qty 1 each" — here we just report it as missing)
+    #   - address: row -> default_address arg -> donor profile address
+    # ------------------------------------------------------------------
+    rows_normalized: list[dict] = []
+    for idx, raw_row in enumerate(rows, start=2):
+        row = {norm_headers.get(k, k): (v or "").strip() for k, v in raw_row.items()}
+        if not any(row.values()):
+            continue
+        rows_normalized.append((idx, row))
+
+    if not rows_normalized:
+        return {"error": "CSV has no non-empty data rows"}
+
+    # Resolve the donor's profile address as the second-tier fallback.
+    profile_address: Optional[str] = None
+    try:
+        from backend.app import SessionLocal
+        from backend.models import User
+        uid_int = _to_int(user_id)
+        if uid_int is not None:
+            db = SessionLocal()
+            try:
+                u = db.query(User).filter(User.id == uid_int).first()
+                if u and u.address and str(u.address).strip():
+                    profile_address = str(u.address).strip()
+            finally:
+                db.close()
+    except Exception:
+        profile_address = None
+
+    fallback_address = (default_address or profile_address or "").strip() or None
+
+    missing_title_rows: list[int] = []
+    missing_qty_rows: list[int] = []
+    missing_address_rows: list[int] = []
+    for idx, row in rows_normalized:
+        if not row.get("title"):
+            missing_title_rows.append(idx)
+        if not row.get("qty"):
+            missing_qty_rows.append(idx)
+        if not row.get("address") and not fallback_address:
+            missing_address_rows.append(idx)
+
+    # If structural problems exist, refuse to post and report what's
+    # missing so the AI can ask the donor to fix it conversationally.
+    if missing_title_rows or missing_address_rows:
+        needs: list[str] = []
+        if missing_title_rows:
+            needs.append("title")
+        if missing_address_rows:
+            needs.append("address")
+        return {
+            "success": False,
+            "posted": 0,
+            "total": len(rows_normalized),
+            "needs": needs,
+            "missing_title_rows": missing_title_rows,
+            "missing_qty_rows": missing_qty_rows,
+            "missing_address_rows": missing_address_rows,
+            "fallback_address": fallback_address,
+            "summary": (
+                "Bulk import paused — "
+                + (
+                    f"{len(missing_title_rows)} row(s) missing a title"
+                    if missing_title_rows
+                    else ""
+                )
+                + (
+                    (
+                        ("; " if missing_title_rows else "")
+                        + f"{len(missing_address_rows)} row(s) missing an address "
+                        "(no default_address provided and donor profile has no address)"
+                    )
+                    if missing_address_rows
+                    else ""
+                )
+                + ". Ask the donor to supply the missing info, then call "
+                "bulk_import_listings again with default_address (or fix the rows)."
+            ),
+        }
+
     results: list[dict] = []
     successes = 0
     attempted = 0
-    for idx, raw_row in enumerate(rows, start=2):  # start=2 (row 1 = header)
-        row = {norm_headers.get(k, k): (v or "").strip() for k, v in raw_row.items()}
+    for idx, row in rows_normalized:
         # Skip blank rows (e.g. trailing newline) silently.
         if not any(row.values()):
             continue
@@ -3112,7 +3208,7 @@ async def _bulk_import_listings(
             "category": row.get("category") or _guess_category_from_title(title),
             "perishability": row.get("perishability") or "medium",
             "description": row.get("description") or None,
-            "address": row.get("address") or default_address,
+            "address": row.get("address") or fallback_address,
             "expiration_date": row.get("expiration_date") or None,
             "pickup_window_start": row.get("pickup_window_start") or None,
             "pickup_window_end": row.get("pickup_window_end") or None,
