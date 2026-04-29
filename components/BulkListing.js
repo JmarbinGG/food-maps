@@ -37,7 +37,23 @@ function BulkListing({ user, onCancel, onSuccess }) {
     ));
   };
 
+  // A guaranteed-visible alert: prefer the in-app modal, but ALWAYS
+  // fall back to window.alert so the user never gets a silent button.
+  const notify = (msg, opts) => {
+    try {
+      if (typeof window !== 'undefined' && typeof window.showAlert === 'function') {
+        window.showAlert(msg, opts || {});
+        return;
+      }
+    } catch (_) { /* fall through to alert */ }
+    try { alert(msg); } catch (_) { /* nothing else we can do */ }
+  };
+
   const handleSubmit = async () => {
+    // Diagnostic: confirm the click handler fired even when something
+    // else swallows the alert. Visible in DevTools console.
+    try { console.log('[BulkListing] Post clicked', { rows: listings.length, user: user && user.id }); } catch (_) {}
+
     // Validate required fields up-front so we don't fire off half-baked
     // requests against the server.
     const missing = [];
@@ -48,18 +64,18 @@ function BulkListing({ user, onCancel, onSuccess }) {
       if (!l.best_before) missing.push(`#${idx + 1} best-before`);
     });
     if (missing.length) {
-      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
-        ? window.showAlert : ((m) => alert(m));
-      showAlert(
+      notify(
         `Please complete the required fields: ${missing.slice(0, 6).join(', ')}${missing.length > 6 ? '…' : ''}.`,
         { title: 'Missing info', variant: 'error' }
       );
       return;
     }
     if (!user || user.id == null) {
-      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
-        ? window.showAlert : ((m) => alert(m));
-      showAlert('Please sign in as a donor before posting listings.', { title: 'Sign in required', variant: 'error' });
+      notify('Please sign in as a donor before posting listings.', { title: 'Sign in required', variant: 'error' });
+      return;
+    }
+    if (!window.databaseService || typeof window.databaseService.createListing !== 'function') {
+      notify('App is still loading. Please wait a moment and try again.', { title: 'Not ready', variant: 'error' });
       return;
     }
 
@@ -73,8 +89,16 @@ function BulkListing({ user, onCancel, onSuccess }) {
         // listing is still pickable until the food expires. Default the
         // pickup start to "now" so recipients can pick it up immediately.
         const expiry = l.best_before;
-        const pickupStart = new Date().toISOString();
-        const pickupEnd = new Date(expiry).toISOString();
+        let pickupStart, pickupEnd;
+        try {
+          pickupStart = new Date().toISOString();
+          const d = new Date(expiry);
+          if (isNaN(d.getTime())) throw new Error('Invalid best-before date');
+          pickupEnd = d.toISOString();
+        } catch (dateErr) {
+          results.failed.push({ title: l.title, error: `Invalid best-before date (${expiry || 'empty'})` });
+          continue;
+        }
         const payload = {
           donor_id: user.id,
           title: l.title.trim(),
@@ -107,28 +131,24 @@ function BulkListing({ user, onCancel, onSuccess }) {
         }));
       } catch (_) { /* ignore */ }
 
-      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
-        ? window.showAlert : ((m) => alert(m));
       if (results.failed.length === 0) {
-        showAlert(`Successfully posted ${results.success.length} listing${results.success.length === 1 ? '' : 's'}!`, { title: 'Done', variant: 'success' });
+        notify(`Successfully posted ${results.success.length} listing${results.success.length === 1 ? '' : 's'}!`, { title: 'Done', variant: 'success' });
         if (typeof onSuccess === 'function') onSuccess();
       } else if (results.success.length === 0) {
-        showAlert(
+        notify(
           `All ${results.failed.length} listings failed. First error: ${results.failed[0].error}`,
           { title: 'Bulk post failed', variant: 'error' }
         );
       } else {
-        showAlert(
+        notify(
           `Posted ${results.success.length} of ${listings.length} listings. ${results.failed.length} failed (e.g. "${results.failed[0].title}": ${results.failed[0].error}).`,
           { title: 'Partial success', variant: 'warning' }
         );
         if (typeof onSuccess === 'function') onSuccess();
       }
     } catch (error) {
-      console.error('Error creating bulk listings:', error);
-      const showAlert = (typeof window !== 'undefined' && typeof window.showAlert === 'function')
-        ? window.showAlert : ((m) => alert(m));
-      showAlert(`Failed to create listings: ${error.message || error}`, { title: 'Error', variant: 'error' });
+      console.error('[BulkListing] submit error:', error);
+      notify(`Failed to create listings: ${error && error.message || error}`, { title: 'Error', variant: 'error' });
     } finally {
       setIsSubmitting(false);
     }
@@ -148,7 +168,7 @@ function BulkListing({ user, onCancel, onSuccess }) {
           <div className="bg-white rounded-lg shadow-sm p-6">
             <div className="flex items-center justify-between mb-6">
               <h1 className="text-2xl font-bold">Bulk Food Listing</h1>
-              <button onClick={onCancel} className="btn-secondary">
+              <button type="button" onClick={onCancel} className="btn-secondary">
                 Cancel
               </button>
             </div>
@@ -160,6 +180,7 @@ function BulkListing({ user, onCancel, onSuccess }) {
                     <h3 className="text-lg font-medium">Listing #{index + 1}</h3>
                     {listings.length > 1 && (
                       <button
+                        type="button"
                         onClick={() => removeListing(listing.id)}
                         className="text-red-500 hover:text-red-700"
                       >
@@ -256,6 +277,7 @@ function BulkListing({ user, onCancel, onSuccess }) {
               ))}
 
               <button
+                type="button"
                 onClick={addListing}
                 className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-500 hover:border-green-300 hover:text-green-600 transition-colors"
               >
@@ -265,13 +287,14 @@ function BulkListing({ user, onCancel, onSuccess }) {
 
               <div className="flex space-x-4">
                 <button
+                  type="button"
                   onClick={handleSubmit}
                   disabled={isSubmitting}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
                   {isSubmitting ? 'Creating Listings...' : `Post ${listings.length} Listings`}
                 </button>
-                <button onClick={onCancel} className="btn-secondary">
+                <button type="button" onClick={onCancel} className="btn-secondary">
                   Cancel
                 </button>
               </div>
