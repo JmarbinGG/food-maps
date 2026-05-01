@@ -928,6 +928,7 @@ function VoiceAssistant({ onClose, getAuth }) {
   const finalTranscriptRef = React.useRef('');
   const wantListeningRef = React.useRef(false);
   const restartTimerRef = React.useRef(null);
+  const submittingRef = React.useRef(false);
 
   // MediaRecorder fallback
   const recorderRef = React.useRef(null);
@@ -936,6 +937,21 @@ function VoiceAssistant({ onClose, getAuth }) {
 
   // TTS playback
   const audioRef = React.useRef(null);
+
+  // Barge-in state: keep status accessible inside SR callbacks (which
+  // capture stale closures), remember the AI's last reply so we can tell
+  // it which part the user actually heard before interrupting, and track
+  // how much of that reply had played so the AI can respond consciously.
+  const statusRef = React.useRef('idle');
+  const lastAiReplyRef = React.useRef('');
+  const replyStartedAtRef = React.useRef(0);
+  const replyDurationRef = React.useRef(0);
+  const interruptedRef = React.useRef(false);
+
+  function setStatusBoth(s) {
+    statusRef.current = s;
+    setStatus(s);
+  }
 
   const SR = (typeof window !== 'undefined') &&
     (window.SpeechRecognition || window.webkitSpeechRecognition);
@@ -979,7 +995,7 @@ function VoiceAssistant({ onClose, getAuth }) {
   function startNativeRecognition() {
     const blocker = preflightMic();
     if (blocker) {
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg(blocker);
       return;
     }
@@ -995,6 +1011,7 @@ function VoiceAssistant({ onClose, getAuth }) {
     } catch (e) {
       // Some Safari builds throw on construction; fall back.
       console.warn('SpeechRecognition unavailable, falling back', e);
+      setStatusBoth('error');
       startMediaRecorder();
       return;
     }
@@ -1004,7 +1021,12 @@ function VoiceAssistant({ onClose, getAuth }) {
     rec.maxAlternatives = 1;
 
     rec.onstart = () => {
-      setStatus('listening');
+      // Only flip the UI to "listening" when we're not currently mid-AI
+      // reply. While speaking/thinking, we keep recognition running in
+      // the background for barge-in but don't visually steal the state.
+      if (statusRef.current !== 'speaking' && statusRef.current !== 'thinking') {
+        setStatusBoth('listening');
+      }
     };
     rec.onresult = (event) => {
       let interim = '';
@@ -1015,6 +1037,19 @@ function VoiceAssistant({ onClose, getAuth }) {
         if (r.isFinal) finalChunk += text;
         else interim += text;
       }
+      const interimTrim = interim.trim();
+      const finalTrim = finalChunk.trim();
+
+      // Barge-in: if the user starts speaking while the AI is thinking
+      // or speaking, immediately interrupt the audio and switch to
+      // listening. Require a few characters of interim speech (or any
+      // final result) to filter out coughs / echo blips.
+      const meaningful = finalTrim.length >= 1 || interimTrim.length >= 3;
+      if (meaningful &&
+          (statusRef.current === 'speaking' || statusRef.current === 'thinking')) {
+        interruptAi();
+      }
+
       if (finalChunk) {
         finalTranscriptRef.current = (finalTranscriptRef.current + ' ' + finalChunk).trim();
         setUserText(finalTranscriptRef.current);
@@ -1026,7 +1061,7 @@ function VoiceAssistant({ onClose, getAuth }) {
       console.warn('SR error:', err);
       if (err === 'not-allowed' || err === 'service-not-allowed') {
         wantListeningRef.current = false;
-        setStatus('error');
+        setStatusBoth('error');
         setErrorMsg(explainMicErrorName(err));
         return;
       }
@@ -1036,22 +1071,23 @@ function VoiceAssistant({ onClose, getAuth }) {
       }
     };
     rec.onend = () => {
-      // If we're still in listening mode, decide: submit if we have a
-      // final transcript, otherwise restart recognition (handles browser
-      // auto-stop after silence).
+      // Keep the recognizer alive across utterances so the user can
+      // barge in while the AI is speaking. If we have a finalized
+      // transcript and we're not already submitting, send it now.
       if (!wantListeningRef.current) return;
       const text = finalTranscriptRef.current.trim();
-      if (text) {
-        wantListeningRef.current = false;
+      const canSubmit = text && !submittingRef.current &&
+        (statusRef.current === 'listening' || statusRef.current === 'idle');
+      if (canSubmit) {
+        finalTranscriptRef.current = '';
         submitTranscript(text);
-      } else {
-        // Brief debounce before restarting
-        if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
-        restartTimerRef.current = setTimeout(() => {
-          if (!wantListeningRef.current) return;
-          try { rec.start(); } catch (e) { /* already started */ }
-        }, 300);
       }
+      // Always restart — silent gaps and AI playback shouldn't kill the mic.
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = setTimeout(() => {
+        if (!wantListeningRef.current) return;
+        try { rec.start(); } catch (e) { /* already running */ }
+      }, 250);
     };
 
     recognitionRef.current = rec;
@@ -1078,19 +1114,72 @@ function VoiceAssistant({ onClose, getAuth }) {
     if (submit && text) {
       submitTranscript(text);
     } else if (!submit) {
-      setStatus('idle');
+      setStatusBoth('idle');
     }
+  }
+
+  // ---- Barge-in: user starts speaking while AI is replying ----------
+
+  function interruptAi() {
+    // Stop the playing TTS audio (if any) and remember how much of the
+    // reply the user actually heard, so the AI can answer consciously.
+    let heardMs = 0;
+    if (audioRef.current) {
+      try {
+        const a = audioRef.current;
+        const startedAt = replyStartedAtRef.current || 0;
+        if (startedAt) heardMs = Math.max(0, Date.now() - startedAt);
+        a.onended = null;
+        a.onerror = null;
+        a.pause();
+      } catch (e) { /* ignore */ }
+      audioRef.current = null;
+    }
+    replyDurationRef.current = heardMs;
+    interruptedRef.current = true;
+    // Flip the UI back to listening so the live transcript is visible.
+    if (statusRef.current !== 'listening') {
+      setStatusBoth('listening');
+    }
+    setAiText('Listening…');
   }
 
   // ---- Send transcript through /api/ai/chat -------------------------
 
   async function submitTranscript(text) {
-    setStatus('thinking');
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setStatusBoth('thinking');
     setInterimText('');
     setAiText('Thinking…');
+
+    // If the user spoke while the AI was talking, give the AI conscious
+    // context: which part of its previous reply the user actually heard
+    // before being cut off, so its next answer references that gracefully
+    // ("Sorry, let me address that — you asked about…") instead of
+    // continuing as if nothing happened.
+    let messageToSend = text;
+    if (interruptedRef.current && lastAiReplyRef.current) {
+      const heardSec = (replyDurationRef.current || 0) / 1000;
+      const heardLabel = heardSec > 0 ? `~${heardSec.toFixed(1)}s of` : 'the start of';
+      messageToSend =
+        `[Voice context: the user interrupted you mid-reply. They heard ${heardLabel} ` +
+        `your previous message: "${lastAiReplyRef.current.slice(0, 400)}". ` +
+        `Acknowledge the interruption briefly if it changes the topic, then respond to ` +
+        `their new request.] User now says: ${text}`;
+    }
+    interruptedRef.current = false;
+    replyDurationRef.current = 0;
+
+    // Clear the prior turn's committed transcript from the orb display
+    // (the live one is already cleared); the next utterance will populate
+    // fresh text as the user speaks.
+    setUserText('');
+
     const { token, userId } = getAuth();
     if (!token || !userId) {
-      setStatus('error');
+      submittingRef.current = false;
+      setStatusBoth('error');
       setErrorMsg('Please sign in to use the voice assistant.');
       return;
     }
@@ -1103,60 +1192,68 @@ function VoiceAssistant({ onClose, getAuth }) {
         },
         body: JSON.stringify({
           user_id: String(userId),
-          message: text,
+          message: messageToSend,
           include_audio: true,
         }),
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      setAiText(data.text || '(no response)');
+      const replyText = data.text || '(no response)';
+      setAiText(replyText);
+      lastAiReplyRef.current = replyText;
       maybeBroadcastListingsChanged(data.actions);
       maybeBroadcastUIControl(data.actions);
       await playReply(data.audio_url);
     } catch (e) {
       console.error('voice chat error:', e);
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg('Could not reach the assistant. Try again.');
+    } finally {
+      submittingRef.current = false;
     }
   }
 
   function playReply(audioUrl) {
     return new Promise((resolve) => {
       if (!audioUrl) {
-        setStatus('idle');
-        // Auto-resume listening for a hands-free conversation
-        autoResume();
+        // No TTS available — go straight back to listening.
+        setStatusBoth('listening');
+        if (!useNativeSR) autoResume();
         resolve();
         return;
       }
       try {
         const audio = new Audio(audioUrl);
         audioRef.current = audio;
+        replyStartedAtRef.current = Date.now();
+        replyDurationRef.current = 0;
         const done = () => {
-          setStatus('idle');
-          autoResume();
+          // Audio either ended naturally or was interrupted by barge-in.
+          // If barge-in already flipped status to 'listening', leave it.
+          if (audioRef.current === audio) audioRef.current = null;
+          if (statusRef.current === 'speaking') {
+            setStatusBoth('listening');
+            if (!useNativeSR) autoResume();
+          }
           resolve();
         };
         audio.onended = done;
         audio.onerror = done;
-        setStatus('speaking');
+        setStatusBoth('speaking');
         audio.play().catch(() => done());
       } catch (e) {
-        setStatus('idle');
-        autoResume();
+        setStatusBoth('listening');
+        if (!useNativeSR) autoResume();
         resolve();
       }
     });
   }
 
   function autoResume() {
-    // Slight delay so the AI's tail end doesn't get echoed back.
+    // Only used by the MediaRecorder fallback. Native SR stays live.
     setTimeout(() => {
-      if (useNativeSR) {
-        startNativeRecognition();
-      } else {
-        startMediaRecorder();
-      }
+      if (useNativeSR) return;
+      startMediaRecorder();
     }, 400);
   }
 
@@ -1165,12 +1262,12 @@ function VoiceAssistant({ onClose, getAuth }) {
   async function startMediaRecorder() {
     const blocker = preflightMic();
     if (blocker) {
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg(blocker);
       return;
     }
     if (typeof window.MediaRecorder === 'undefined') {
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg('Your browser does not support audio recording.');
       return;
     }
@@ -1192,10 +1289,10 @@ function VoiceAssistant({ onClose, getAuth }) {
       };
       recorderRef.current = rec;
       rec.start();
-      setStatus('listening');
+      setStatusBoth('listening');
     } catch (e) {
       console.error('mic error:', e);
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg(explainMicErrorName(e && e.name));
     }
   }
@@ -1204,14 +1301,14 @@ function VoiceAssistant({ onClose, getAuth }) {
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.stop();
     }
-    setStatus('thinking');
+    setStatusBoth('thinking');
     setAiText('Thinking…');
   }
 
   async function sendVoiceBlob(blob) {
     const { token, userId } = getAuth();
     if (!token || !userId) {
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg('Please sign in to use the voice assistant.');
       return;
     }
@@ -1228,13 +1325,15 @@ function VoiceAssistant({ onClose, getAuth }) {
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       if (data.transcript) setUserText(data.transcript);
-      setAiText(data.text || '(no response)');
+      const replyText = data.text || '(no response)';
+      setAiText(replyText);
+      lastAiReplyRef.current = replyText;
       maybeBroadcastListingsChanged(data.actions);
       maybeBroadcastUIControl(data.actions);
       await playReply(data.audio_url);
     } catch (e) {
       console.error('voice error:', e);
-      setStatus('error');
+      setStatusBoth('error');
       setErrorMsg('Could not reach the assistant. Try again.');
     }
   }
@@ -1244,9 +1343,9 @@ function VoiceAssistant({ onClose, getAuth }) {
   function handleOrbClick() {
     if (status === 'thinking') return;
     if (status === 'speaking') {
-      if (audioRef.current) { try { audioRef.current.pause(); } catch (e) { } }
-      setStatus('idle');
-      autoResume();
+      // Manual interrupt: treat the same as voice barge-in so the AI
+      // gets context on what was cut off.
+      interruptAi();
       return;
     }
     if (status === 'listening') {
