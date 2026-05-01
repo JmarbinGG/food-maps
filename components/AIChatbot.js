@@ -950,6 +950,11 @@ function VoiceAssistant({ onClose, getAuth }) {
   // Resolver for the in-flight playReply() so barge-in can unblock the
   // awaiting submitTranscript() and release submittingRef.
   const pendingPlayResolveRef = React.useRef(null);
+  // Debounced silence-based submit: continuous mode pushes utterances
+  // to the AI ~END_OF_UTTERANCE_MS after the last final result, so the
+  // user doesn't have to wait for the browser to fully end the session.
+  const utteranceTimerRef = React.useRef(null);
+  const END_OF_UTTERANCE_MS = 900;
 
   function setStatusBoth(s) {
     statusRef.current = s;
@@ -1058,6 +1063,30 @@ function VoiceAssistant({ onClose, getAuth }) {
         setUserText(finalTranscriptRef.current);
       }
       setInterimText(interim);
+
+      // Continuous mode: any new speech (interim or final) cancels a
+      // pending submit so we don't cut the user off mid-thought. Then,
+      // if we have a final chunk, schedule a submit after a short
+      // silence window — that's our end-of-utterance trigger.
+      if (utteranceTimerRef.current) {
+        clearTimeout(utteranceTimerRef.current);
+        utteranceTimerRef.current = null;
+      }
+      if (finalChunk) {
+        utteranceTimerRef.current = setTimeout(() => {
+          utteranceTimerRef.current = null;
+          if (!wantListeningRef.current) return;
+          if (submittingRef.current) return;
+          const text = finalTranscriptRef.current.trim();
+          if (!text) return;
+          // Only submit when the user has the floor (status is listening).
+          // If they happened to barge-in mid-AI, interruptAi() already
+          // flipped status to 'listening' so this still fires.
+          if (statusRef.current !== 'listening') return;
+          finalTranscriptRef.current = '';
+          submitTranscript(text);
+        }, END_OF_UTTERANCE_MS);
+      }
     };
     rec.onerror = (e) => {
       const err = e && e.error;
@@ -1075,11 +1104,15 @@ function VoiceAssistant({ onClose, getAuth }) {
     };
     rec.onend = () => {
       // Keep the recognizer alive across utterances so the user can
-      // barge in while the AI is speaking. If we have a finalized
-      // transcript and we're not already submitting, send it now.
+      // barge in while the AI is speaking. Submission is handled by the
+      // end-of-utterance timer in onresult, not here — onend only fires
+      // when the engine fully stops, which can lag well behind the
+      // user's natural pause.
       if (!wantListeningRef.current) return;
+      // If we somehow have a queued transcript and no pending timer
+      // (rare), submit it as a safety net.
       const text = finalTranscriptRef.current.trim();
-      const canSubmit = text && !submittingRef.current &&
+      const canSubmit = text && !submittingRef.current && !utteranceTimerRef.current &&
         (statusRef.current === 'listening' || statusRef.current === 'idle');
       if (canSubmit) {
         finalTranscriptRef.current = '';
@@ -1108,6 +1141,10 @@ function VoiceAssistant({ onClose, getAuth }) {
     if (restartTimerRef.current) {
       clearTimeout(restartTimerRef.current);
       restartTimerRef.current = null;
+    }
+    if (utteranceTimerRef.current) {
+      clearTimeout(utteranceTimerRef.current);
+      utteranceTimerRef.current = null;
     }
     const rec = recognitionRef.current;
     const text = finalTranscriptRef.current.trim();
@@ -1410,6 +1447,7 @@ function VoiceAssistant({ onClose, getAuth }) {
     return () => {
       wantListeningRef.current = false;
       if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (utteranceTimerRef.current) clearTimeout(utteranceTimerRef.current);
       if (recognitionRef.current) {
         try { recognitionRef.current.abort(); } catch (e) { }
       }
