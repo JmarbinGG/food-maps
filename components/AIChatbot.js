@@ -947,6 +947,9 @@ function VoiceAssistant({ onClose, getAuth }) {
   const replyStartedAtRef = React.useRef(0);
   const replyDurationRef = React.useRef(0);
   const interruptedRef = React.useRef(false);
+  // Resolver for the in-flight playReply() so barge-in can unblock the
+  // awaiting submitTranscript() and release submittingRef.
+  const pendingPlayResolveRef = React.useRef(null);
 
   function setStatusBoth(s) {
     statusRef.current = s;
@@ -1137,11 +1140,30 @@ function VoiceAssistant({ onClose, getAuth }) {
     }
     replyDurationRef.current = heardMs;
     interruptedRef.current = true;
+    // Unblock the awaiting playReply() promise so submitTranscript()
+    // can release submittingRef and accept the next utterance.
+    if (pendingPlayResolveRef.current) {
+      const r = pendingPlayResolveRef.current;
+      pendingPlayResolveRef.current = null;
+      try { r(); } catch (e) { /* ignore */ }
+    }
     // Flip the UI back to listening so the live transcript is visible.
     if (statusRef.current !== 'listening') {
       setStatusBoth('listening');
     }
     setAiText('Listening…');
+    // Make sure recognition is actually running. Chrome's SR can be in
+    // an "ended" state right now (after a long silence during playback)
+    // and would otherwise stay deaf until the next onend tick.
+    kickRecognizer();
+  }
+
+  function kickRecognizer() {
+    if (!useNativeSR) return;
+    if (!wantListeningRef.current) return;
+    const rec = recognitionRef.current;
+    if (!rec) return;
+    try { rec.start(); } catch (e) { /* already running — fine */ }
   }
 
   // ---- Send transcript through /api/ai/chat -------------------------
@@ -1210,16 +1232,33 @@ function VoiceAssistant({ onClose, getAuth }) {
       setErrorMsg('Could not reach the assistant. Try again.');
     } finally {
       submittingRef.current = false;
+      // After the turn ends (success, error, or barge-in), make sure
+      // the recognizer is actively listening for the next utterance.
+      kickRecognizer();
     }
   }
 
   function playReply(audioUrl) {
     return new Promise((resolve) => {
+      // Wrap resolve so interruptAi() and the audio callbacks cooperate
+      // — whichever fires first wins and the other becomes a no-op.
+      let settled = false;
+      const settle = () => {
+        if (settled) return;
+        settled = true;
+        if (pendingPlayResolveRef.current === settle) {
+          pendingPlayResolveRef.current = null;
+        }
+        resolve();
+      };
+      pendingPlayResolveRef.current = settle;
+
       if (!audioUrl) {
         // No TTS available — go straight back to listening.
         setStatusBoth('listening');
+        kickRecognizer();
         if (!useNativeSR) autoResume();
-        resolve();
+        settle();
         return;
       }
       try {
@@ -1233,9 +1272,12 @@ function VoiceAssistant({ onClose, getAuth }) {
           if (audioRef.current === audio) audioRef.current = null;
           if (statusRef.current === 'speaking') {
             setStatusBoth('listening');
-            if (!useNativeSR) autoResume();
           }
-          resolve();
+          // Always make sure the mic is actively listening for the next
+          // turn. Chrome's SR may have ended during playback.
+          kickRecognizer();
+          if (!useNativeSR) autoResume();
+          settle();
         };
         audio.onended = done;
         audio.onerror = done;
@@ -1243,8 +1285,9 @@ function VoiceAssistant({ onClose, getAuth }) {
         audio.play().catch(() => done());
       } catch (e) {
         setStatusBoth('listening');
+        kickRecognizer();
         if (!useNativeSR) autoResume();
-        resolve();
+        settle();
       }
     });
   }
