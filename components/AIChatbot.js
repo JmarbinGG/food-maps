@@ -911,28 +911,262 @@ function AIChatbot() {
 }
 
 // Modern voice assistant modal: gradient background, pulsing orb, live status.
+// Auto-starts listening on open and shows a live partial transcript on the
+// orb as the user speaks (Web Speech API), so the user knows the AI is
+// really listening. Falls back to MediaRecorder + Whisper when the browser
+// has no SpeechRecognition (e.g., Firefox).
 function VoiceAssistant({ onClose, getAuth }) {
   // status: 'idle' | 'listening' | 'thinking' | 'speaking' | 'error'
   const [status, setStatus] = React.useState('idle');
-  const [userText, setUserText] = React.useState('');
-  const [aiText, setAiText] = React.useState('Tap the orb and start talking.');
+  const [userText, setUserText] = React.useState('');     // committed transcript
+  const [interimText, setInterimText] = React.useState(''); // live partial
+  const [aiText, setAiText] = React.useState('Listening… start talking.');
   const [errorMsg, setErrorMsg] = React.useState('');
+
+  // Web Speech API
+  const recognitionRef = React.useRef(null);
+  const finalTranscriptRef = React.useRef('');
+  const wantListeningRef = React.useRef(false);
+  const restartTimerRef = React.useRef(null);
+
+  // MediaRecorder fallback
   const recorderRef = React.useRef(null);
   const chunksRef = React.useRef([]);
   const streamRef = React.useRef(null);
+
+  // TTS playback
   const audioRef = React.useRef(null);
 
-  async function startListening() {
-    setErrorMsg('');
-    // Upfront context check — avoids cryptic DOMException on HTTP pages
+  const SR = (typeof window !== 'undefined') &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+  const useNativeSR = !!SR;
+
+  function pickLang() {
+    try {
+      const docLang = (document.documentElement.lang || '').toLowerCase();
+      if (docLang.startsWith('es')) return 'es-ES';
+      const nav = (navigator.language || 'en-US').toLowerCase();
+      if (nav.startsWith('es')) return 'es-ES';
+    } catch (e) { }
+    return 'en-US';
+  }
+
+  function preflightMic() {
     if (typeof window !== 'undefined' && !window.isSecureContext) {
-      setStatus('error');
-      setErrorMsg('Voice needs a secure (HTTPS) connection. Please open this site on https:// to use the voice assistant.');
-      return;
+      return 'Voice needs a secure (HTTPS) connection. Please open this site on https:// to use the voice assistant.';
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      return 'Your browser does not support microphone capture.';
+    }
+    return null;
+  }
+
+  function explainMicErrorName(name) {
+    if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'not-allowed') {
+      return 'Microphone access blocked. Click the lock icon in your address bar and allow microphone for this site.';
+    }
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') {
+      return 'No microphone detected. Plug one in or check your device settings.';
+    }
+    if (name === 'NotReadableError') {
+      return 'Microphone is in use by another app. Close it and try again.';
+    }
+    return 'Microphone unavailable. Please check your browser permissions.';
+  }
+
+  // ---- Web Speech API path (live partial transcripts) ----------------
+
+  function startNativeRecognition() {
+    const blocker = preflightMic();
+    if (blocker) {
       setStatus('error');
-      setErrorMsg('Your browser does not support microphone capture.');
+      setErrorMsg(blocker);
+      return;
+    }
+    setErrorMsg('');
+    finalTranscriptRef.current = '';
+    setUserText('');
+    setInterimText('');
+    setAiText('Listening… start talking.');
+
+    let rec;
+    try {
+      rec = new SR();
+    } catch (e) {
+      // Some Safari builds throw on construction; fall back.
+      console.warn('SpeechRecognition unavailable, falling back', e);
+      startMediaRecorder();
+      return;
+    }
+    rec.lang = pickLang();
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.maxAlternatives = 1;
+
+    rec.onstart = () => {
+      setStatus('listening');
+    };
+    rec.onresult = (event) => {
+      let interim = '';
+      let finalChunk = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const r = event.results[i];
+        const text = r[0] && r[0].transcript ? r[0].transcript : '';
+        if (r.isFinal) finalChunk += text;
+        else interim += text;
+      }
+      if (finalChunk) {
+        finalTranscriptRef.current = (finalTranscriptRef.current + ' ' + finalChunk).trim();
+        setUserText(finalTranscriptRef.current);
+      }
+      setInterimText(interim);
+    };
+    rec.onerror = (e) => {
+      const err = e && e.error;
+      console.warn('SR error:', err);
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        wantListeningRef.current = false;
+        setStatus('error');
+        setErrorMsg(explainMicErrorName(err));
+        return;
+      }
+      if (err === 'no-speech' || err === 'aborted' || err === 'audio-capture') {
+        // Let onend handle restart / submission.
+        return;
+      }
+    };
+    rec.onend = () => {
+      // If we're still in listening mode, decide: submit if we have a
+      // final transcript, otherwise restart recognition (handles browser
+      // auto-stop after silence).
+      if (!wantListeningRef.current) return;
+      const text = finalTranscriptRef.current.trim();
+      if (text) {
+        wantListeningRef.current = false;
+        submitTranscript(text);
+      } else {
+        // Brief debounce before restarting
+        if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+        restartTimerRef.current = setTimeout(() => {
+          if (!wantListeningRef.current) return;
+          try { rec.start(); } catch (e) { /* already started */ }
+        }, 300);
+      }
+    };
+
+    recognitionRef.current = rec;
+    wantListeningRef.current = true;
+    try {
+      rec.start();
+    } catch (e) {
+      // Already started or transient — try again shortly
+      setTimeout(() => { try { rec.start(); } catch (_) { } }, 250);
+    }
+  }
+
+  function stopNativeRecognition({ submit = true } = {}) {
+    wantListeningRef.current = false;
+    if (restartTimerRef.current) {
+      clearTimeout(restartTimerRef.current);
+      restartTimerRef.current = null;
+    }
+    const rec = recognitionRef.current;
+    const text = finalTranscriptRef.current.trim();
+    if (rec) {
+      try { rec.stop(); } catch (e) { }
+    }
+    if (submit && text) {
+      submitTranscript(text);
+    } else if (!submit) {
+      setStatus('idle');
+    }
+  }
+
+  // ---- Send transcript through /api/ai/chat -------------------------
+
+  async function submitTranscript(text) {
+    setStatus('thinking');
+    setInterimText('');
+    setAiText('Thinking…');
+    const { token, userId } = getAuth();
+    if (!token || !userId) {
+      setStatus('error');
+      setErrorMsg('Please sign in to use the voice assistant.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          user_id: String(userId),
+          message: text,
+          include_audio: true,
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      setAiText(data.text || '(no response)');
+      maybeBroadcastListingsChanged(data.actions);
+      maybeBroadcastUIControl(data.actions);
+      await playReply(data.audio_url);
+    } catch (e) {
+      console.error('voice chat error:', e);
+      setStatus('error');
+      setErrorMsg('Could not reach the assistant. Try again.');
+    }
+  }
+
+  function playReply(audioUrl) {
+    return new Promise((resolve) => {
+      if (!audioUrl) {
+        setStatus('idle');
+        // Auto-resume listening for a hands-free conversation
+        autoResume();
+        resolve();
+        return;
+      }
+      try {
+        const audio = new Audio(audioUrl);
+        audioRef.current = audio;
+        const done = () => {
+          setStatus('idle');
+          autoResume();
+          resolve();
+        };
+        audio.onended = done;
+        audio.onerror = done;
+        setStatus('speaking');
+        audio.play().catch(() => done());
+      } catch (e) {
+        setStatus('idle');
+        autoResume();
+        resolve();
+      }
+    });
+  }
+
+  function autoResume() {
+    // Slight delay so the AI's tail end doesn't get echoed back.
+    setTimeout(() => {
+      if (useNativeSR) {
+        startNativeRecognition();
+      } else {
+        startMediaRecorder();
+      }
+    }, 400);
+  }
+
+  // ---- MediaRecorder fallback (Firefox etc.) ------------------------
+
+  async function startMediaRecorder() {
+    const blocker = preflightMic();
+    if (blocker) {
+      setStatus('error');
+      setErrorMsg(blocker);
       return;
     }
     if (typeof window.MediaRecorder === 'undefined') {
@@ -940,6 +1174,10 @@ function VoiceAssistant({ onClose, getAuth }) {
       setErrorMsg('Your browser does not support audio recording.');
       return;
     }
+    setErrorMsg('');
+    setUserText('');
+    setInterimText('');
+    setAiText('Listening… tap the orb when you finish.');
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -955,25 +1193,14 @@ function VoiceAssistant({ onClose, getAuth }) {
       recorderRef.current = rec;
       rec.start();
       setStatus('listening');
-      setUserText('');
-      setAiText('Listening…');
     } catch (e) {
       console.error('mic error:', e);
       setStatus('error');
-      const name = e && e.name;
-      if (name === 'NotAllowedError' || name === 'SecurityError') {
-        setErrorMsg('Microphone access blocked. Click the lock icon in your address bar and allow microphone for this site.');
-      } else if (name === 'NotFoundError' || name === 'OverconstrainedError') {
-        setErrorMsg('No microphone detected. Plug one in or check your device settings.');
-      } else if (name === 'NotReadableError') {
-        setErrorMsg('Microphone is in use by another app. Close it and try again.');
-      } else {
-        setErrorMsg('Microphone unavailable. Please check your browser permissions.');
-      }
+      setErrorMsg(explainMicErrorName(e && e.name));
     }
   }
 
-  function stopListening() {
+  function stopMediaRecorder() {
     if (recorderRef.current && recorderRef.current.state !== 'inactive') {
       recorderRef.current.stop();
     }
@@ -1002,20 +1229,9 @@ function VoiceAssistant({ onClose, getAuth }) {
       const data = await res.json();
       if (data.transcript) setUserText(data.transcript);
       setAiText(data.text || '(no response)');
-      // Voice path can also trigger listing-mutating tools; broadcast so
-      // the rest of the app patches/refetches just like in text chat.
       maybeBroadcastListingsChanged(data.actions);
       maybeBroadcastUIControl(data.actions);
-      if (data.audio_url) {
-        setStatus('speaking');
-        const audio = new Audio(data.audio_url);
-        audioRef.current = audio;
-        audio.onended = () => setStatus('idle');
-        audio.onerror = () => setStatus('idle');
-        audio.play().catch(() => setStatus('idle'));
-      } else {
-        setStatus('idle');
-      }
+      await playReply(data.audio_url);
     } catch (e) {
       console.error('voice error:', e);
       setStatus('error');
@@ -1023,29 +1239,52 @@ function VoiceAssistant({ onClose, getAuth }) {
     }
   }
 
+  // ---- Orb click handler --------------------------------------------
+
   function handleOrbClick() {
-    if (status === 'listening') return stopListening();
     if (status === 'thinking') return;
     if (status === 'speaking') {
       if (audioRef.current) { try { audioRef.current.pause(); } catch (e) { } }
       setStatus('idle');
+      autoResume();
       return;
     }
-    startListening();
+    if (status === 'listening') {
+      // Tap to send what we've captured so far
+      if (useNativeSR) stopNativeRecognition({ submit: true });
+      else stopMediaRecorder();
+      return;
+    }
+    // idle / error → start listening
+    if (useNativeSR) startNativeRecognition();
+    else startMediaRecorder();
   }
 
+  // ---- Auto-start on mount + cleanup --------------------------------
+
   React.useEffect(() => {
+    if (useNativeSR) startNativeRecognition();
+    else startMediaRecorder();
     return () => {
+      wantListeningRef.current = false;
+      if (restartTimerRef.current) clearTimeout(restartTimerRef.current);
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch (e) { }
+      }
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+        try { recorderRef.current.stop(); } catch (e) { }
+      }
       if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       if (audioRef.current) { try { audioRef.current.pause(); } catch (e) { } }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const statusLabel = {
     idle: 'Tap to talk',
-    listening: 'Listening… tap to stop',
+    listening: useNativeSR ? 'Listening…' : 'Listening… tap to send',
     thinking: 'Thinking…',
-    speaking: 'Speaking… tap to stop',
+    speaking: 'Speaking… tap to interrupt',
     error: 'Something went wrong',
   }[status];
 
@@ -1080,13 +1319,22 @@ function VoiceAssistant({ onClose, getAuth }) {
         FoodMaps Voice Assistant
       </div>
 
-      {/* User transcript */}
+      {/* User transcript — shows live partial as you speak */}
       <div style={{
         minHeight: 28, maxWidth: 560, textAlign: 'center',
         color: 'rgba(255,255,255,0.85)', fontSize: 16, fontStyle: 'italic',
         marginBottom: 24, padding: '0 20px',
+        transition: 'color 0.2s ease',
       }}>
-        {userText ? `"${userText}"` : ''}
+        {userText && <span>{userText}</span>}
+        {interimText && (
+          <span style={{ color: 'rgba(255,255,255,0.55)' }}>
+            {userText ? ' ' : ''}{interimText}
+          </span>
+        )}
+        {!userText && !interimText && status === 'listening' && (
+          <span style={{ color: 'rgba(255,255,255,0.45)' }}>I'm listening…</span>
+        )}
       </div>
 
       {/* Orb */}
