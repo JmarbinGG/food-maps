@@ -10,10 +10,12 @@ function CreateListing({ user, onCancel, onSuccess }) {
     perishability: 'medium',
     address: '',
     pickup_window_start: '',
-    pickup_window_end: ''
+    pickup_window_end: '',
+    images: []
   });
   const [safetyData, setSafetyData] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
   const [errors, setErrors] = React.useState({});
   // Address (Mapbox Autofill element)
   const [addressQuery, setAddressQuery] = React.useState('');
@@ -68,6 +70,83 @@ function CreateListing({ user, onCancel, onSuccess }) {
     if (errors[field]) {
       setErrors({ ...errors, [field]: null });
     }
+  };
+
+  // Maximum number of photos and per-file size cap (in bytes).
+  const MAX_IMAGES = 6;
+  const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB
+
+  const uploadOneImage = async (file) => {
+    const token = localStorage.getItem('auth_token');
+    const fd = new FormData();
+    fd.append('image', file);
+    if (user && user.id != null) fd.append('user_id', String(user.id));
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch('/api/ai/upload_image', {
+      method: 'POST',
+      headers,
+      body: fd
+    });
+    if (!res.ok) {
+      let msg = 'Upload failed';
+      try {
+        const j = await res.json();
+        msg = (j && (j.detail || j.error)) || msg;
+      } catch (_) { /* ignore */ }
+      throw new Error(typeof msg === 'string' ? msg : 'Upload failed');
+    }
+    const data = await res.json();
+    if (!data || !data.url) throw new Error('Upload returned no URL');
+    return data.url;
+  };
+
+  const handleImageFiles = async (fileList) => {
+    if (!fileList || fileList.length === 0) return;
+    const remaining = MAX_IMAGES - (formData.images ? formData.images.length : 0);
+    if (remaining <= 0) {
+      if (typeof window.showAlert === 'function') {
+        window.showAlert(`You can attach up to ${MAX_IMAGES} photos.`, { title: 'Photo limit', variant: 'warning' });
+      }
+      return;
+    }
+    const files = Array.from(fileList).slice(0, remaining);
+    setIsUploadingImage(true);
+    try {
+      const uploaded = [];
+      for (const f of files) {
+        if (!f || !f.type || !f.type.startsWith('image/')) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert(`${f && f.name ? f.name : 'File'} is not an image and was skipped.`, { title: 'Skipped', variant: 'warning' });
+          }
+          continue;
+        }
+        if (f.size > MAX_IMAGE_BYTES) {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert(`${f.name} is larger than 8MB and was skipped.`, { title: 'Too large', variant: 'warning' });
+          }
+          continue;
+        }
+        try {
+          const url = await uploadOneImage(f);
+          uploaded.push(url);
+        } catch (err) {
+          console.error('Image upload failed:', err);
+          if (typeof window.showAlert === 'function') {
+            window.showAlert(`Failed to upload ${f.name}: ${err && err.message ? err.message : 'unknown error'}`, { title: 'Upload error', variant: 'error' });
+          }
+        }
+      }
+      if (uploaded.length > 0) {
+        setFormData((prev) => ({ ...prev, images: [...(prev.images || []), ...uploaded] }));
+      }
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  const removeImage = (url) => {
+    setFormData((prev) => ({ ...prev, images: (prev.images || []).filter((u) => u !== url) }));
   };
 
   // Initialize addressQuery from formData on mount
@@ -265,7 +344,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
         perishability: formData.perishability,
         address: finalAddress,
         pickup_start: pickupStartUtc,
-        pickup_end: pickupEndUtc
+        pickup_end: pickupEndUtc,
+        images: Array.isArray(formData.images) ? formData.images : []
       };
 
       let res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
@@ -401,6 +481,51 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     placeholder="Describe the food items..."
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    Photos <span className="text-xs text-[var(--text-secondary)] font-normal">(optional, up to {MAX_IMAGES})</span>
+                  </label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <label
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[var(--border-color)] cursor-pointer hover:bg-[var(--bg-secondary,#f9fafb)] ${isUploadingImage || (formData.images && formData.images.length >= MAX_IMAGES) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                      <i className="fas fa-camera text-[var(--text-secondary)]"></i>
+                      <span className="text-sm text-[var(--text-secondary)]">
+                        {isUploadingImage ? 'Uploading…' : 'Add photos'}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        disabled={isUploadingImage || (formData.images && formData.images.length >= MAX_IMAGES)}
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          handleImageFiles(files);
+                          // reset so the same file can be re-selected if removed
+                          try { e.target.value = ''; } catch (_) { }
+                        }}
+                      />
+                    </label>
+                    {Array.isArray(formData.images) && formData.images.map((url) => (
+                      <div key={url} className="relative w-20 h-20 rounded-lg overflow-hidden border border-[var(--border-color)] bg-[var(--bg-secondary,#f3f4f6)]">
+                        <img src={url} alt="listing" className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeImage(url)}
+                          aria-label="Remove photo"
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-black/80"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    Clear photos help recipients trust and choose your food. Max 8MB per image.
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

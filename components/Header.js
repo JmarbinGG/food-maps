@@ -174,47 +174,51 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                      Voice Search
                   </a> */}
-                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
-                  {/* <button
-                    onClick={() => {
-                      window.openSmartNotifications?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
-                  >
-                     Smart Notifications
-                  </button> */}
-                  {/* <button
-                    onClick={() => {
-                      window.openStorageCoach?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
-                  >
-                     Storage Coach
-                  </button> */}
-                  {/* {role === 'recipient' && (
-                    <button
-                      onClick={() => {
-                        window.openSpoilageAlerts?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
-                    >
-                       Spoilage Alerts
-                    </button>
-                  )} */}
-                  {/* {role === 'recipient' && (
-                    <button
-                      onClick={() => {
-                        window.openMealSuggestions?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
-                    >
-                       Meal Suggestions
-                    </button>
-                  )} */}
+                  {/* AI Assistant section — surfaced to individual recipients */}
+                  {role === 'recipient' && (
+                    <div className="border-t-2 border-purple-200 mt-1">
+                      <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-purple-700 bg-gradient-to-r from-purple-50 via-blue-50 to-green-50 flex items-center gap-2">
+                        <span aria-hidden="true">✨</span>
+                        <span>Your AI Assistant</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          window.openMealSuggestions?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
+                      >
+                        🍽️ AI Meal Suggestions
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openSpoilageAlerts?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
+                      >
+                        ⚠️ Spoilage Risk Alerts
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openStorageCoach?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
+                      >
+                        🧊 AI Storage Coach
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openSmartNotifications?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
+                      >
+                        🔔 Smart Notifications
+                      </button>
+                    </div>
+                  )}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
                   {/* <button
                     onClick={() => {

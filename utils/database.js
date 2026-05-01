@@ -133,6 +133,11 @@ window.databaseService = {
       params.append('pickup_start', listingData.pickup_start);
       params.append('pickup_end', listingData.pickup_end);
       if (listingData.est_w) params.append('est_w', listingData.est_w);
+      if (Array.isArray(listingData.images) && listingData.images.length) {
+        try {
+          params.append('images', JSON.stringify(listingData.images));
+        } catch (_) { /* ignore */ }
+      }
 
       const response = await fetch(`/api/listings/create?${params.toString()}`, {
         method: 'POST'

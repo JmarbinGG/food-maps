@@ -189,6 +189,62 @@ function Dashboard({ user, onViewChange }) {
         }
       </div>
 
+      {/* AI Assistant — personalized tools for individual users */}
+      <div className="card p-0 overflow-hidden border-2 border-purple-200 shadow-lg">
+        <div className="bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 p-4 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl" aria-hidden="true">✨</span>
+              <div>
+                <div className="font-bold text-lg flex items-center gap-2">
+                  Your AI Assistant
+                  <span className="text-[10px] uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">Personalized</span>
+                </div>
+                <div className="text-sm opacity-90">Smart tools tailored to the food you claim</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3 bg-gradient-to-br from-purple-50 via-white to-blue-50">
+          <button
+            type="button"
+            onClick={() => window.openMealSuggestions?.()}
+            className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-white border border-purple-100 hover:border-purple-400 hover:shadow-md transition-all text-center"
+          >
+            <span className="text-2xl" aria-hidden="true">🍽️</span>
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Meal Suggestions</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">Recipes from your claims</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.openSpoilageAlerts?.()}
+            className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-white border border-red-100 hover:border-red-400 hover:shadow-md transition-all text-center"
+          >
+            <span className="text-2xl" aria-hidden="true">⚠️</span>
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Spoilage Alerts</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">Use, freeze, or toss?</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.openStorageCoach?.()}
+            className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-white border border-blue-100 hover:border-blue-400 hover:shadow-md transition-all text-center"
+          >
+            <span className="text-2xl" aria-hidden="true">🧊</span>
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Storage Coach</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">Keep food fresh longer</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => window.openSmartNotifications?.()}
+            className="flex flex-col items-center justify-center gap-2 p-3 rounded-lg bg-white border border-indigo-100 hover:border-indigo-400 hover:shadow-md transition-all text-center"
+          >
+            <span className="text-2xl" aria-hidden="true">🔔</span>
+            <span className="text-sm font-semibold text-[var(--text-primary)]">Smart Alerts</span>
+            <span className="text-[11px] text-[var(--text-secondary)]">Learns what you like</span>
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card">
           <div className="flex items-center space-x-3">

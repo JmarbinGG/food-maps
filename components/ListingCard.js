@@ -537,6 +537,19 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
         </div>
       )}
 
+      {/* Listing photo (donor or AI uploaded). Hidden when none provided so
+          the existing card layout stays compact for legacy listings. */}
+      {Array.isArray(listing.images) && listing.images.length > 0 && (
+        <div className="mb-2 -mx-4 -mt-4 sm:mx-0 sm:mt-0">
+          <img
+            src={listing.images[0]}
+            alt={listing.title}
+            className="w-full h-32 object-cover sm:rounded-lg"
+            onError={(e) => { try { e.currentTarget.style.display = 'none'; } catch (_) { } }}
+          />
+        </div>
+      )}
+
       <h4 className="font-semibold">{listing.title}</h4>
 
       {/* Donor Trust Badges */}

@@ -162,6 +162,19 @@ def _is_gitignored_path(relative_path: str) -> bool:
 
 # Global request input constraints for API routes.
 MAX_API_BODY_BYTES = 64 * 1024
+# Per-path overrides for multipart upload endpoints whose handlers enforce
+# their own size caps. Keep these slightly above the handler cap so we don't
+# pre-empt the handler's friendlier error message.
+UPLOAD_PATH_LIMITS = {
+    "/api/ai/voice": 26 * 1024 * 1024,        # handler caps at 25MB
+    "/api/ai/upload_image": 9 * 1024 * 1024,  # handler caps at 8MB
+}
+
+
+def _max_body_bytes_for(path: str) -> int:
+    return UPLOAD_PATH_LIMITS.get(path.rstrip("/"), MAX_API_BODY_BYTES)
+
+
 MAX_QUERY_STRING_BYTES = 2048
 MAX_QUERY_PARAM_NAME_CHARS = 64
 MAX_QUERY_PARAM_VALUE_CHARS = 512
@@ -242,17 +255,19 @@ async def sanitize_api_input(request: Request, call_next):
     if path.startswith("/api"):
         _validate_query_params(request)
 
+        max_body_bytes = _max_body_bytes_for(path)
+
         content_length = request.headers.get("content-length")
         if content_length:
             try:
-                if int(content_length) > MAX_API_BODY_BYTES:
+                if int(content_length) > max_body_bytes:
                     raise HTTPException(status_code=413, detail="Request body is too large")
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid Content-Length header")
 
         if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
             body = await request.body()
-            if len(body) > MAX_API_BODY_BYTES:
+            if len(body) > max_body_bytes:
                 raise HTTPException(status_code=413, detail="Request body is too large")
 
             if body:
