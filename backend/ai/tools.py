@@ -2342,6 +2342,25 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
         db = SessionLocal()
         try:
             lid = int(listing_id)
+            # Role guard: donors/dispatchers/etc. cannot claim food. Claiming is
+            # a recipient action. Refuse early with a clear message so the AI
+            # can tell the user to sign in as a recipient instead of attempting
+            # the claim and getting a generic failure later.
+            caller = db.query(User).filter(User.id == uid).first()
+            if caller and caller.role:
+                role_value = caller.role.value if hasattr(caller.role, "value") else str(caller.role)
+                if role_value == "donor":
+                    return {
+                        "error": (
+                            "This account is a donor account and cannot claim "
+                            "food. Please sign in as a recipient to claim "
+                            "listings."
+                        ),
+                        "reason": "wrong_role",
+                        "current_role": "donor",
+                        "required_role": "recipient",
+                    }
+
             # Atomic claim: only one concurrent caller can transition
             # 'available' -> 'pending_confirmation'. Prevents the read-then-
             # update race that could let two users both "win" a listing.

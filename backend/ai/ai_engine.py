@@ -1076,7 +1076,15 @@ _ROLE_BEHAVIOR_EN: dict[str, str] = {
     "donor": (
         "The user is a DONOR. Focus on their posted listings. If any are close to "
         "expiring, warn them (call get_donor_expiring_listings) and suggest lowering "
-        "price, highlighting, or re-sharing. Celebrate completed donations."
+        "price, highlighting, or re-sharing. Celebrate completed donations.\n"
+        "\n"
+        "CLAIMING IS NOT ALLOWED FOR DONOR ACCOUNTS. If the donor asks to claim, "
+        "reserve, take, or pick up a listing, DO NOT call claim_listing / "
+        "confirm_claim / cancel_claim. Politely explain in one short sentence that "
+        "this account is a donor account and can only post listings, then tell them "
+        "to sign in as a recipient (or switch their account role) to claim food. "
+        "Example: 'Heads up — this is a donor account, so it can't claim food. "
+        "Sign in as a recipient and I'll grab it for you.'"
     ),
     "volunteer": (
         "The user is a VOLUNTEER. Help with pickup logistics — call "
@@ -1108,7 +1116,14 @@ _ROLE_BEHAVIOR_ES: dict[str, str] = {
     "donor": (
         "El usuario es DONANTE. Enfócate en sus publicaciones activas. Si alguna está "
         "por vencer, avísale (get_donor_expiring_listings) y sugiere acciones. "
-        "Felicítalo por donaciones completadas."
+        "Felicítalo por donaciones completadas.\n"
+        "\n"
+        "LAS CUENTAS DE DONANTE NO PUEDEN RECLAMAR. Si el donante pide reclamar, "
+        "reservar o recoger un listado, NO llames a claim_listing / confirm_claim / "
+        "cancel_claim. Explícale en una oración que esta cuenta es de donante y "
+        "solo puede publicar; debe iniciar sesión como recipiente para reclamar. "
+        "Ejemplo: 'Aviso — esta cuenta es de donante, no puede reclamar. Inicia "
+        "sesión como recipiente y lo reservo por ti.'"
     ),
     "volunteer": (
         "El usuario es VOLUNTARIO. Ayúdalo con la logística de recogidas: "
