@@ -1581,6 +1581,7 @@ class ConversationEngine:
             "conversation_id": str(conversation_id) if conversation_id else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "actions": actions,
+            "suggestions": generate_quick_replies(response_text, lang),
         }
 
     async def _persist_conversation(
@@ -1947,4 +1948,163 @@ class ConversationEngine:
             return None
 
 
+def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
+    """Heuristic 'smart reply' / autofill chips for the chat UI.
+
+    Looks at the last AI message and returns up to 4 short tappable
+    suggestions the user is likely to want to reply with. Pure string
+    matching — no extra LLM call, so it's free and instant.
+
+    Rule of thumb: it is better to return [] (no chips) than to return
+    chips that don't match the question. Yes/No/Later under "what food
+    would you like to share?" is worse than no chips at all.
+    """
+    if not text:
+        return []
+    t = text.lower()
+    # Only suggest when the AI is actually asking the user something,
+    # otherwise chips would clutter every reply.
+    if "?" not in t and "¿" not in t:
+        return []
+
+    es = lang == "es"
+    out: list[str] = []
+
+    def add(*items: str) -> None:
+        for it in items:
+            if it and it not in out and len(out) < 4:
+                out.append(it)
+
+    # An "open-ended" question is one that asks WHAT / WHICH / WHEN /
+    # WHERE / HOW MANY / HOW MUCH — never answerable with yes/no.
+    open_ended = any(
+        k in t for k in (
+            "what ", "which ", "when ", "where ", "how many", "how much",
+            "what's", "what is",
+            "qué ", "que ", "cuál", "cual", "cuándo", "cuando",
+            "dónde", "donde", "cuántos", "cuántas", "cuanto", "cuanta",
+        )
+    )
+
+    # ---- Specific intent branches (run before any generic fallback) -----
+
+    # Final confirm: "Post it?" / "Confirm?" / "Publicarlo?"
+    if any(k in t for k in ("post it?", "confirm?", "publicarlo", "¿confirmas", "¿lo publico", "post that?")):
+        if es:
+            add("Sí, publícalo", "Espera, edítalo", "Cancelar")
+        else:
+            add("Yes, post it", "Wait, edit it", "Cancel")
+        return out
+
+    # Handoff method (pickup vs drop-off)
+    if any(k in t for k in ("pick this up", "pick it up", "drop it off", "drop-off", "drop off",
+                            "deliver", "pickup or", "recoger", "entregar", "entrega")):
+        if es:
+            add("Recogida en mi casa", "Yo lo entrego", "Cualquiera")
+        else:
+            add("Pickup at my place", "I'll drop it off", "Either works")
+        if any(k in t for k in ("radius", "how far", "miles", "millas", "qué tan lejos")):
+            if es:
+                add("5 millas", "10 millas")
+            else:
+                add("Within 5 mi", "Within 10 mi")
+        return out
+
+    # Address confirmation
+    if any(k in t for k in ("profile address", "dirección de tu perfil", "use your address",
+                            "different one", "distinta", "diferente", "what address")):
+        if es:
+            add("Sí, usa esa", "Es otra dirección", "No tengo una guardada")
+        else:
+            add("Yes, use that one", "Use a different address", "I don't have one saved")
+        return out
+
+    # Allergens
+    if "allerg" in t or "alérgen" in t or "alergia" in t:
+        if es:
+            add("Sin alérgenos", "Solo gluten", "Lácteos", "Frutos secos")
+        else:
+            add("No allergens", "Just gluten", "Dairy", "Nuts")
+        return out
+
+    # Photo
+    if "photo" in t or "picture" in t or "foto" in t or "imagen" in t:
+        if es:
+            add("Adjuntar foto", "Sin foto", "Después")
+        else:
+            add("I'll add one", "Skip the photo", "Maybe later")
+        return out
+
+    # Pickup window / when
+    if any(k in t for k in ("when can", "pick them up", "pickup window", "what time",
+                            "cuándo pueden", "cuando pueden", "qué horario", "que horario")):
+        if es:
+            add("Hoy 5–8pm", "Mañana", "Próximas 24h", "Cuando sea")
+        else:
+            add("Today 5–8pm", "Tomorrow morning", "Next 24h", "Whenever")
+        return out
+
+    # Freshness / expiration
+    if any(k in t for k in ("best by", "expir", "fresh", "baked", "made it",
+                            "caduc", "vence", "fresco", "horneado", "preparado")):
+        if es:
+            add("Hecho hoy", "Hecho ayer", "Vence mañana")
+        else:
+            add("Made today", "Made yesterday", "Good for 24h")
+        return out
+
+    # Quantity prompt ("how many", "three what?")
+    if any(k in t for k in ("how many", "how much", "what unit", "three what",
+                            "cuántos", "cuántas", "qué unidad")):
+        if es:
+            add("1", "3", "5", "10")
+        else:
+            add("1", "3", "5", "10")
+        return out
+
+    # "What food / what would you like to share / what is it / what are you donating"
+    if any(k in t for k in (
+            "what food", "what would you like to share", "what would you like to donate",
+            "what are you sharing", "what are you donating", "what is it", "what's the food",
+            "what do you have", "what kind of food",
+            "qué comida", "que comida", "qué quieres compartir", "que quieres compartir",
+            "qué tienes", "que tienes", "qué vas a donar", "que vas a donar",
+    )):
+        if es:
+            add("Pan", "Frutas", "Verduras", "Comida preparada")
+        else:
+            add("Bread", "Fruit", "Vegetables", "Prepared meal")
+        return out
+
+    # "What are you looking for" (recipient side)
+    if any(k in t for k in (
+            "what are you looking for", "what do you need",
+            "qué buscas", "que buscas", "qué necesitas", "que necesitas",
+    )):
+        if es:
+            add("Pan", "Frutas", "Verduras", "Comida preparada")
+        else:
+            add("Bread", "Fruit", "Vegetables", "Prepared meal")
+        return out
+
+    # ---- Fallbacks --------------------------------------------------
+
+    # Open-ended wh-question with no specific branch above: don't guess.
+    # Empty chips > wrong chips.
+    if open_ended:
+        return out
+
+    # Generic yes/no question — only safe when NOT open-ended.
+    if any(k in t for k in ("would you like", "do you want", "ready to", "should i",
+                            "quieres", "te gustaría", "¿listo", "¿debo")):
+        if es:
+            add("Sí", "No", "Más tarde")
+        else:
+            add("Yes", "No", "Later")
+        return out
+
+    return out
+
+
 conversation_engine = ConversationEngine()
+

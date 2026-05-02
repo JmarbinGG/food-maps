@@ -590,6 +590,7 @@ function AIChatbot() {
         role: 'assistant',
         text: data.text || '(no response)',
         actions: Array.isArray(data.actions) ? data.actions : [],
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
       }]);
       maybeBroadcastListingsChanged(data.actions);
       maybeBroadcastUIControl(data.actions);
@@ -686,6 +687,7 @@ function AIChatbot() {
         role: 'assistant',
         text: data.text || '(no response)',
         actions: Array.isArray(data.actions) ? data.actions : [],
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
       }]);
       maybeBroadcastListingsChanged(data.actions);
       maybeBroadcastUIControl(data.actions);
@@ -750,7 +752,11 @@ function AIChatbot() {
           <button onClick={() => setMode('idle')} style={{ background: 'transparent', border: 'none', color: 'white', fontSize: '22px', cursor: 'pointer' }}>×</button>
         </div>
         <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '12px', background: '#f9fafb' }}>
-          {messages.map((m, i) => (
+          {messages.map((m, i) => {
+            const isLastAssistant = m.role === 'assistant' && i === messages.length - 1;
+            const showSuggestions = isLastAssistant && !sending
+              && Array.isArray(m.suggestions) && m.suggestions.length > 0;
+            return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '8px' }}>
               <div style={{
                 maxWidth: '80%',
@@ -773,8 +779,47 @@ function AIChatbot() {
                   ))}
                 </div>
               )}
+              {showSuggestions && (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginTop: '6px',
+                  maxWidth: '90%',
+                }}>
+                  {m.suggestions.map((s, j) => (
+                    <button
+                      key={j}
+                      type="button"
+                      onClick={() => { if (!sending) sendMessage(s); }}
+                      disabled={sending}
+                      style={{
+                        background: 'white',
+                        color: '#10b981',
+                        border: '1px solid #10b981',
+                        borderRadius: '999px',
+                        padding: '6px 12px',
+                        fontSize: '13px',
+                        cursor: sending ? 'default' : 'pointer',
+                        whiteSpace: 'nowrap',
+                        transition: 'background 0.15s, color 0.15s',
+                      }}
+                      onMouseEnter={(e) => {
+                        if (sending) return;
+                        e.currentTarget.style.background = '#10b981';
+                        e.currentTarget.style.color = 'white';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'white';
+                        e.currentTarget.style.color = '#10b981';
+                      }}
+                    >{s}</button>
+                  ))}
+                </div>
+              )}
             </div>
-          ))}
+            );
+          })}
           {sending && (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '6px', padding: '4px 4px 8px' }}>
               <PendingActionChip tool={pendingTool} label={pendingLabel} />

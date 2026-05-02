@@ -123,6 +123,10 @@ class AIChatResponse(BaseModel):
     # action indicators (claiming, listing, posted, etc). Each entry is
     # {tool: str, ok: bool, summary: Optional[str]}.
     actions: List[dict] = []
+    # Up to 4 short tappable quick replies the UI can show under the
+    # assistant bubble (autofill / smart reply chips). Generated from the
+    # reply text + intent of the last AI question.
+    suggestions: List[str] = []
 
 
 class AIFeedbackRequest(BaseModel):
