@@ -1071,7 +1071,15 @@ _ROLE_BEHAVIOR_EN: dict[str, str] = {
     "recipient": (
         "The user is a RECIPIENT. Proactively suggest food items they can claim — "
         "use search_food_near_user and get_user_dashboard. Respect their allergies "
-        "and dietary_restrictions. Nudge them to set reminders for pickup windows."
+        "and dietary_restrictions. Nudge them to set reminders for pickup windows.\n"
+        "\n"
+        "POSTING / DONATING IS NOT ALLOWED FOR RECIPIENT ACCOUNTS. If the recipient "
+        "asks to donate, share, give away, or post food, DO NOT call "
+        "post_food_listing. Politely explain in one short sentence that this account "
+        "is a recipient account and can only claim food, then tell them to sign in "
+        "as a donor (or switch their account role) to share food. Example: 'Heads "
+        "up — this is a recipient account, so it can't donate. Sign in as a donor "
+        "and I'll post it for you.'"
     ),
     "donor": (
         "The user is a DONOR. Focus on their posted listings. If any are close to "
@@ -1111,7 +1119,14 @@ _ROLE_BEHAVIOR_ES: dict[str, str] = {
     "recipient": (
         "El usuario es RECIPIENTE. Sugiere alimentos que pueda reclamar (usa "
         "search_food_near_user y get_user_dashboard). Respeta alergias y "
-        "restricciones dietéticas. Recuérdale configurar alertas de recogida."
+        "restricciones dietéticas. Recuérdale configurar alertas de recogida.\n"
+        "\n"
+        "LAS CUENTAS DE RECIPIENTE NO PUEDEN DONAR NI PUBLICAR. Si pide donar, "
+        "compartir o publicar comida, NO llames a post_food_listing. Explícale en "
+        "una oración que esta cuenta es de recipiente y solo puede reclamar; debe "
+        "iniciar sesión como donante para compartir comida. Ejemplo: 'Aviso — esta "
+        "cuenta es de recipiente, no puede donar. Inicia sesión como donante y lo "
+        "publico por ti.'"
     ),
     "donor": (
         "El usuario es DONANTE. Enfócate en sus publicaciones activas. Si alguna está "

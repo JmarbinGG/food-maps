@@ -3030,29 +3030,30 @@ async def _post_food_listing(
             if not user:
                 return {"error": "User not found"}
 
-            # Role gate: anyone except a pure RECIPIENT may post listings
-            # via the AI. Recipients aren't blocked outright — we auto-
-            # promote them to DONOR the first time they share food, since
-            # the only thing that distinguishes a 'recipient' from a
-            # 'donor' is which side of the transaction they're on right
-            # now. Driver/dispatcher are still excluded to avoid role-
-            # blurring on the dispatch dashboard.
+            # Role gate: only DONOR / VOLUNTEER / ADMIN accounts may post
+            # food listings via the AI. Recipients are explicitly blocked
+            # so the AI tells them to sign in as a donor (mirror of the
+            # donor-cannot-claim guard). Drivers and dispatchers are also
+            # excluded to avoid role-blurring on the dispatch dashboard.
             #
             # IMPORTANT: this gate runs BEFORE the dedup short-circuit
             # below — otherwise a banned role could probe for an
             # existing duplicate and get a "success" reply for a
             # listing they're not allowed to post against.
+            if user.role == UserRole.RECIPIENT:
+                return {
+                    "error": (
+                        "This account is a recipient account and cannot "
+                        "donate or post food listings. Please sign in as "
+                        "a donor to share food."
+                    ),
+                    "reason": "wrong_role",
+                    "current_role": "recipient",
+                    "required_role": "donor",
+                }
             blocked_roles = {UserRole.DRIVER, UserRole.DISPATCHER}
             if user.role in blocked_roles:
                 return {"error": "Drivers and dispatchers can't post donor listings from chat."}
-            if user.role == UserRole.RECIPIENT:
-                user.role = UserRole.DONOR
-                # commit the role change separately so a later listing
-                # failure doesn't roll it back — they've shown intent.
-                try:
-                    db.commit()
-                except Exception:
-                    db.rollback()
 
             # ----------------------------------------------------------
             # Idempotency / duplicate-post guard.
