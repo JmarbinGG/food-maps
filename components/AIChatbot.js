@@ -795,14 +795,16 @@ function AIChatbot() {
                       disabled={sending}
                       style={{
                         background: 'white',
-                        color: '#10b981',
-                        border: '1px solid #10b981',
+                        color: '#059669',
+                        border: '1.5px solid #10b981',
                         borderRadius: '999px',
-                        padding: '6px 12px',
+                        padding: '7px 14px',
                         fontSize: '13px',
+                        fontWeight: 600,
                         cursor: sending ? 'default' : 'pointer',
                         whiteSpace: 'nowrap',
-                        transition: 'background 0.15s, color 0.15s',
+                        boxShadow: '0 1px 2px rgba(16,185,129,0.15)',
+                        transition: 'background 0.15s, color 0.15s, transform 0.1s',
                       }}
                       onMouseEnter={(e) => {
                         if (sending) return;

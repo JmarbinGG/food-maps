@@ -1988,8 +1988,24 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
 
     # ---- Specific intent branches (run before any generic fallback) -----
 
-    # Final confirm: "Post it?" / "Confirm?" / "Publicarlo?"
-    if any(k in t for k in ("post it?", "confirm?", "publicarlo", "¿confirmas", "¿lo publico", "post that?")):
+    # Final confirm: any phrasing where the AI is asking the donor/recipient
+    # to greenlight posting the listing/request. The AI's confirm summary
+    # always ends with one of these — match generously so chips are right.
+    confirm_post_keys = (
+        "post it", "post that", "post this", "post the listing",
+        "publish it", "publish that", "publish this", "publish the listing",
+        "should i post", "shall i post", "want me to post", "ok to post",
+        "ready to post", "ready to publish", "go ahead and post",
+        "good to post", "good to publish", "look good", "looks good",
+        "sound good", "sounds good", "all set", "all good",
+        "confirm?", "confirm and post", "shall i go ahead", "should i go ahead",
+        # Spanish
+        "publicarlo", "publicar la", "publicar el", "publico la", "publico el",
+        "¿confirmas", "¿lo publico", "¿lo publicamos", "¿publicamos",
+        "¿está bien", "¿esta bien", "¿se ve bien", "¿todo bien",
+        "listo para publicar",
+    )
+    if any(k in t for k in confirm_post_keys):
         if es:
             add("Sí, publícalo", "Espera, edítalo", "Cancelar")
         else:
