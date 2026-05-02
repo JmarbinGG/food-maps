@@ -2007,12 +2007,14 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
 
     # An "open-ended" question is one that asks WHAT / WHICH / WHEN /
     # WHERE / HOW MANY / HOW MUCH — never answerable with yes/no.
+    # NOTE on Spanish: only match accented "qué " (the question word).
+    # Unaccented "que " is a connector/pronoun ("¿Quieres que…?") and
+    # would mis-fire as open-ended on yes/no questions.
     open_ended = any(
         k in t for k in (
             "what ", "which ", "when ", "where ", "how many", "how much",
             "what's", "what is",
-            "qué ", "que ", "cuál", "cual", "cuándo", "cuando",
-            "dónde", "donde", "cuántos", "cuántas", "cuanto", "cuanta",
+            "qué ", "cuál", "cuándo", "dónde", "cuántos", "cuántas",
         )
     )
 
@@ -2042,9 +2044,16 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
             add("Yes, post it", "Wait, edit it", "Cancel")
         return out
 
-    # Handoff method (pickup vs drop-off)
-    if any(k in t for k in ("pick this up", "pick it up", "drop it off", "drop-off", "drop off",
-                            "deliver", "pickup or", "recoger", "entregar", "entrega")):
+    # Handoff method (pickup vs drop-off). Skip if the question is about
+    # WHEN — "¿cuándo pueden recogerlo?" is a pickup-window question, not
+    # a handoff question, even though it contains "recoger".
+    is_when_question = any(
+        k in t for k in ("when can", "what time", "cuándo", "cuando", "qué horario", "que horario")
+    )
+    if (not is_when_question) and any(
+        k in t for k in ("pick this up", "pick it up", "drop it off", "drop-off", "drop off",
+                         "deliver", "pickup or", "recoger", "entregar", "entrega")
+    ):
         if es:
             add("Recogida en mi casa", "Yo lo entrego", "Cualquiera")
         else:
@@ -2057,8 +2066,12 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
         return out
 
     # Address confirmation
-    if any(k in t for k in ("profile address", "dirección de tu perfil", "use your address",
-                            "different one", "distinta", "diferente", "what address")):
+    if any(k in t for k in (
+            "profile address", "use your address", "different one", "what address",
+            "dirección de tu perfil", "dirección del perfil", "tu dirección guardada",
+            "uso tu dirección", "uso la dirección", "qué dirección", "que direccion",
+            "otra dirección", "distinta", "diferente",
+    )):
         if es:
             add("Sí, usa esa", "Es otra dirección", "No tengo una guardada")
         else:
@@ -2113,8 +2126,16 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
             "what food", "what would you like to share", "what would you like to donate",
             "what are you sharing", "what are you donating", "what is it", "what's the food",
             "what do you have", "what kind of food",
-            "qué comida", "que comida", "qué quieres compartir", "que quieres compartir",
-            "qué tienes", "que tienes", "qué vas a donar", "que vas a donar",
+            # Spanish
+            "qué comida", "que comida",
+            "qué quieres compartir", "que quieres compartir",
+            "qué te gustaría compartir", "que te gustaria compartir",
+            "qué tienes", "que tienes",
+            "qué vas a donar", "que vas a donar",
+            "qué quieres donar", "que quieres donar",
+            "qué te gustaría donar", "que te gustaria donar",
+            "qué tipo de comida", "que tipo de comida",
+            "qué vas a compartir", "que vas a compartir",
     )):
         if es:
             add("Pan", "Frutas", "Verduras", "Comida preparada")
@@ -2125,7 +2146,10 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
     # "What are you looking for" (recipient side)
     if any(k in t for k in (
             "what are you looking for", "what do you need",
-            "qué buscas", "que buscas", "qué necesitas", "que necesitas",
+            "qué buscas", "que buscas",
+            "qué necesitas", "que necesitas",
+            "qué te hace falta", "que te hace falta",
+            "qué estás buscando", "que estas buscando",
     )):
         if es:
             add("Pan", "Frutas", "Verduras", "Comida preparada")
@@ -2141,8 +2165,12 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
         return out
 
     # Generic yes/no question — only safe when NOT open-ended.
-    if any(k in t for k in ("would you like", "do you want", "ready to", "should i",
-                            "quieres", "te gustaría", "¿listo", "¿debo")):
+    if any(k in t for k in (
+            "would you like", "do you want", "ready to", "should i",
+            "shall i", "want me to", "can i",
+            "¿quieres", "quieres que", "¿te gustaría", "te gustaría que",
+            "¿listo", "¿debo", "¿puedo", "¿lo hago", "¿lo hacemos",
+    )):
         if es:
             add("Sí", "No", "Más tarde")
         else:

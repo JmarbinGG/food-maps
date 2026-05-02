@@ -85,3 +85,106 @@ def test_yes_no_fallback_only_when_truly_yes_no():
     out = generate_quick_replies("Would you like me to remind you tomorrow?")
     # "Would you like" with no open-wh and no specific branch → yes/no/later.
     assert "Yes" in out and "No" in out
+
+
+# ---------------------------------------------------------------------------
+# Spanish coverage — every English branch must have a working ES counterpart.
+# ---------------------------------------------------------------------------
+
+
+def test_es_no_question_returns_empty():
+    assert generate_quick_replies("¡Listo! Publicación #42 en vivo.", lang="es") == []
+
+
+def test_es_what_food_question_suggests_food_options():
+    cases = [
+        "¿Qué comida quieres compartir hoy?",
+        "¿Qué te gustaría donar?",
+        "¿Qué tipo de comida tienes?",
+        "¿Qué vas a compartir?",
+    ]
+    for q in cases:
+        out = generate_quick_replies(q, lang="es")
+        assert out, f"no chips for: {q!r}"
+        # Must not be yes/no fallback
+        assert "Sí" not in out or "No" not in out or "Más tarde" not in out, (
+            f"fell through to yes/no on: {q!r}"
+        )
+        joined = " ".join(out).lower()
+        assert any(x in joined for x in ("pan", "frut", "verdur", "comida"))
+
+
+def test_es_post_confirm_variants():
+    confirm_phrasings = [
+        "Resumen rápido — 3 panes, recogida en tu casa. ¿Lo publico?",
+        "¿Lo publicamos?",
+        "¿Listo para publicar?",
+        "¿Está bien así? ¿Publicarlo?",
+        "¿Confirmas y publico?",
+    ]
+    for q in confirm_phrasings:
+        out = generate_quick_replies(q, lang="es")
+        assert out, f"no chips for: {q!r}"
+        joined = " ".join(out).lower()
+        assert any(x in joined for x in ("publí", "edít", "cancel")), (
+            f"wrong chips for {q!r}: {out}"
+        )
+
+
+def test_es_handoff_question():
+    out = generate_quick_replies(
+        "¿Lo van a recoger en tu casa, o tú lo entregas?", lang="es"
+    )
+    assert out
+    joined = " ".join(out).lower()
+    assert "recog" in joined or "entreg" in joined or "cualquiera" in joined
+
+
+def test_es_address_confirm():
+    out = generate_quick_replies(
+        "¿Uso la dirección de tu perfil 1423 Park St?", lang="es"
+    )
+    assert out
+    joined = " ".join(out).lower()
+    assert "direcci" in joined or "usa esa" in joined
+
+
+def test_es_quantity_question():
+    out = generate_quick_replies("¿Cuántos panes?", lang="es")
+    assert out
+    assert any(s.isdigit() for s in out)
+
+
+def test_es_allergen_question():
+    out = generate_quick_replies("¿Algún alérgeno?", lang="es")
+    assert out
+    joined = " ".join(out).lower()
+    assert "alérgeno" in joined or "gluten" in joined or "lácteo" in joined
+
+
+def test_es_pickup_window():
+    out = generate_quick_replies("¿Cuándo pueden recogerlo?", lang="es")
+    assert out
+    joined = " ".join(out).lower()
+    assert "hoy" in joined or "mañana" in joined or "24h" in joined
+
+
+def test_es_freshness_question():
+    out = generate_quick_replies("¿Cuándo se horneó? ¿Vence pronto?", lang="es")
+    assert out
+    joined = " ".join(out).lower()
+    assert "hecho" in joined or "vence" in joined
+
+
+def test_es_photo_question():
+    out = generate_quick_replies("¿Puedes mandar una foto?", lang="es")
+    assert out
+    joined = " ".join(out).lower()
+    assert "foto" in joined or "después" in joined
+
+
+def test_es_yes_no_fallback():
+    out = generate_quick_replies("¿Quieres que te recuerde mañana?", lang="es")
+    # Generic yes/no in Spanish
+    assert "Sí" in out and "No" in out
+
