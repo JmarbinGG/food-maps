@@ -1289,6 +1289,42 @@ class ConversationEngine:
     def _detect_lang(self, text: str) -> str:
         return "es" if detect_spanish(text) else "en"
 
+    def _detect_lang_sticky(
+        self,
+        message: str,
+        history: Optional[list] = None,
+        profile: Optional[dict] = None,
+    ) -> str:
+        """Sticky language detection.
+
+        Short replies like 'sí', 'ok', 'gracias', 'vale' don't carry
+        enough Spanish markers for the per-message detector, which makes
+        the assistant flip back to English mid-conversation. Resolve
+        language using (in priority order):
+          1) the current message itself, if confidently Spanish;
+          2) the user's profile.language preference, if set;
+          3) any recent user/assistant turn that was Spanish;
+          4) default English.
+        """
+        if message and detect_spanish(message):
+            return "es"
+        try:
+            pref = (profile or {}).get("language")
+            if isinstance(pref, str) and pref.lower().startswith("es"):
+                return "es"
+        except Exception:
+            pass
+        if history:
+            for h in reversed(history[-8:]):
+                # History items use either "message" (DB rows) or
+                # "content" (chat-style dicts). Accept both.
+                content = (h or {}).get("message") or (h or {}).get("content") or ""
+                if not isinstance(content, str) or not content.strip():
+                    continue
+                if detect_spanish(content):
+                    return "es"
+        return "en"
+
     # ---- Profile lookup via SQLAlchemy ------------------------------------
 
     async def get_user_profile(self, user_id: int) -> Optional[dict]:
@@ -1418,11 +1454,14 @@ class ConversationEngine:
         message: str,
         include_audio: bool = False,
     ) -> dict:
-        lang = self._detect_lang(message)
-
         profile_task = asyncio.create_task(self.get_user_profile(user_id))
         history_task = asyncio.create_task(self.get_conversation_history(user_id, limit=12))
         profile, history = await asyncio.gather(profile_task, history_task)
+
+        # Sticky language: use the message, then profile preference, then
+        # recent history. Prevents short replies like 'sí' / 'ok' from
+        # flipping a Spanish conversation back to English.
+        lang = self._detect_lang_sticky(message, history=history, profile=profile)
 
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
 
@@ -1430,8 +1469,16 @@ class ConversationEngine:
             messages.append({
                 "role": "system",
                 "content": (
-                    "The user is writing in Spanish. You MUST respond entirely in Spanish. "
-                    "Maintain a warm, helpful personality."
+                    "The user is communicating in Spanish. You MUST respond "
+                    "ENTIRELY in Spanish for this turn and every following "
+                    "turn unless the user explicitly switches to another "
+                    "language. This includes: your reply text, any natural-"
+                    "language summaries of tool results, error explanations, "
+                    "confirmation prompts, and follow-up questions. Do NOT "
+                    "slip into English even for short phrases (e.g. say "
+                    "'¡Listo!' not 'Done!', 'Reclamado' not 'Claimed', "
+                    "'Publicado' not 'Posted'). Maintain a warm, helpful "
+                    "personality."
                 ),
             })
 
@@ -1603,6 +1650,17 @@ class ConversationEngine:
         if include_audio:
             audio_b64 = await self._generate_audio_b64(response_text, lang=lang)
 
+        # Quick-reply chips must reflect the LANGUAGE OF THE AI'S REPLY,
+        # not the user's last message. Sticky-lang already handles short
+        # replies, but the response text itself is the strongest signal:
+        # if the model wrote in Spanish, the chips must be Spanish too.
+        chip_lang = lang
+        try:
+            if response_text and detect_spanish(response_text):
+                chip_lang = "es"
+        except Exception:
+            pass
+
         return {
             "text": response_text,
             "audio_url": audio_b64,  # data URL, or None
@@ -1611,7 +1669,7 @@ class ConversationEngine:
             "conversation_id": str(conversation_id) if conversation_id else None,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "actions": actions,
-            "suggestions": generate_quick_replies(response_text, lang),
+            "suggestions": generate_quick_replies(response_text, chip_lang),
         }
 
     async def _persist_conversation(
