@@ -12,6 +12,7 @@ import json
 import logging
 import math
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -834,6 +835,109 @@ def _guess_category_from_title(title: str) -> str:
             if kw in t:
                 return cat
     return "prepared"
+
+
+# ---------------------------------------------------------------------------
+# Spanish → English glossary for listing fields.
+#
+# Listings are stored in English so the recipient-side UI / search /
+# filters work consistently. The AI prompt already instructs the model
+# to translate before calling post_food_listing, but this is a backend
+# safety net for the case where the model lapses (especially on bulk /
+# CSV imports). Word-boundary, case-preserving substitution.
+# ---------------------------------------------------------------------------
+
+_LISTING_ES_EN: dict[str, str] = {
+    # produce
+    "manzanas": "apples", "manzana": "apple",
+    "naranjas": "oranges", "naranja": "orange",
+    "plátanos": "bananas", "plátano": "banana", "platanos": "bananas", "platano": "banana",
+    "uvas": "grapes", "uva": "grape",
+    "fresas": "strawberries", "fresa": "strawberry",
+    "limones": "lemons", "limón": "lemon", "limon": "lemon",
+    "lechuga": "lettuce",
+    "tomates": "tomatoes", "tomate": "tomato",
+    "cebollas": "onions", "cebolla": "onion",
+    "zanahorias": "carrots", "zanahoria": "carrot",
+    "papas": "potatoes", "papa": "potato", "patatas": "potatoes",
+    "verduras": "vegetables", "verdura": "vegetable",
+    "frutas": "fruit", "fruta": "fruit",
+    "produce fresco": "fresh produce", "produce": "produce",
+    # bakery
+    "pan": "bread", "panes": "loaves of bread",
+    "panecillos": "rolls", "bollos": "rolls",
+    "tortillas": "tortillas",
+    "galletas": "cookies",
+    "pastel": "cake", "pasteles": "cakes",
+    # prepared / leftovers
+    "comida preparada": "prepared meal",
+    "sobras": "leftovers",
+    "arroz": "rice",
+    "frijoles": "beans", "habichuelas": "beans",
+    "sopa": "soup",
+    "guisado": "stew", "guiso": "stew",
+    "pollo": "chicken",
+    "carne": "beef", "res": "beef",
+    "puerco": "pork", "cerdo": "pork",
+    "pescado": "fish",
+    "ensalada": "salad",
+    # packaged / dairy
+    "leche": "milk",
+    "queso": "cheese",
+    "yogur": "yogurt", "yogurt": "yogurt",
+    "huevos": "eggs", "huevo": "egg",
+    "agua": "water",
+    "jugo": "juice", "zumo": "juice",
+    # allergens / dietary tags
+    "gluten": "gluten",
+    "lácteos": "dairy", "lacteos": "dairy",
+    "frutos secos": "nuts", "nueces": "nuts",
+    "soya": "soy", "soja": "soy",
+    "mariscos": "shellfish",
+    "sin gluten": "gluten-free",
+    "sin lácteos": "dairy-free", "sin lacteos": "dairy-free",
+    "vegetariano": "vegetarian",
+    "vegano": "vegan",
+    # handoff phrasing donors often write in description
+    "recogida solamente": "Pickup only.",
+    "recogida solo": "Pickup only.",
+    "solo recogida": "Pickup only.",
+    "entrega disponible": "Donor delivery available.",
+    "entrega del donante": "Donor delivery available.",
+    # units
+    "libras": "lbs", "libra": "lb",
+    "kilos": "kg", "kilo": "kg",
+    "cajas": "boxes", "caja": "box",
+    "bolsas": "bags", "bolsa": "bag",
+    "piezas": "pieces", "pieza": "piece",
+    "barras": "loaves", "barra": "loaf",
+}
+
+
+def _translate_listing_text(value: Optional[str]) -> Optional[str]:
+    """Translate a Spanish listing field to English using a small glossary.
+
+    Conservative: substitutes only known terms with word-boundary matching
+    (case-insensitive, preserves leading-capital). If nothing matches, the
+    text is returned unchanged. Never raises; never blocks posting.
+    """
+    if not value or not isinstance(value, str):
+        return value
+    out = value
+    for es, en in _LISTING_ES_EN.items():
+        # word-boundary, case-insensitive
+        pattern = r"\b" + re.escape(es) + r"\b"
+
+        def _replace(match: "re.Match[str]") -> str:
+            src = match.group(0)
+            if src.isupper():
+                return en.upper()
+            if src[:1].isupper():
+                return en[:1].upper() + en[1:]
+            return en
+
+        out = re.sub(pattern, _replace, out, flags=re.IGNORECASE)
+    return out
 
 
 async def _run(sync_fn):
@@ -2830,6 +2934,15 @@ async def _post_food_request(
         except ValueError:
             return {"error": f"Unknown category '{category}'. Allowed: produce, prepared, packaged, bakery, water, fruit, leftovers"}
 
+    # Normalize free-text fields to English so requests show up
+    # consistently in the recipient/dispatcher UI.
+    if notes:
+        notes = _translate_listing_text(notes)
+    if isinstance(special_needs, list):
+        special_needs = [_translate_listing_text(s) or s for s in special_needs]
+    if isinstance(dietary_restrictions, list):
+        dietary_restrictions = [_translate_listing_text(d) or d for d in dietary_restrictions]
+
     try:
         latest_by_dt = _parse_iso(latest_by)
     except _ParseError as exc:
@@ -2948,6 +3061,19 @@ async def _post_food_listing(
 
     if not (title or "").strip():
         return {"error": "title is required"}
+
+    # Listings are stored in English so search/filters work for all
+    # recipients regardless of donor language. Translate any Spanish
+    # the AI may have left in title/description/unit/allergens/tags.
+    title = _translate_listing_text(title) or title
+    if description:
+        description = _translate_listing_text(description)
+    if unit:
+        unit = _translate_listing_text(unit)
+    if isinstance(allergens, list):
+        allergens = [_translate_listing_text(a) or a for a in allergens]
+    if isinstance(dietary_tags, list):
+        dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
 
     # Smart category default: guess from title keywords so the AI doesn't
     # have to interrogate the donor about it. The donor can still override.
