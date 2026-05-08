@@ -532,6 +532,11 @@ TOOL_DEFINITIONS = [
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
                     "images": {"type": "array", "items": {"type": "string"}, "description": "Optional list of image URLs (or data URLs) the donor uploaded for this listing."},
+                    "language": {
+                        "type": "string",
+                        "enum": ["en", "es"],
+                        "description": "Language to STORE the listing in. Default 'en' (English). Set 'es' ONLY if the donor explicitly asked to keep the listing in Spanish (e.g. 'publícalo en español', 'in Spanish please'). When 'en', any Spanish in title/description/unit/allergens/dietary_tags is auto-translated to English by the server.",
+                    },
                 },
                 "required": ["user_id", "title", "qty"],
             },
@@ -3051,6 +3056,7 @@ async def _post_food_listing(
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
     images: Optional[list] = None,
+    language: Optional[str] = None,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -3062,18 +3068,25 @@ async def _post_food_listing(
     if not (title or "").strip():
         return {"error": "title is required"}
 
-    # Listings are stored in English so search/filters work for all
-    # recipients regardless of donor language. Translate any Spanish
-    # the AI may have left in title/description/unit/allergens/tags.
-    title = _translate_listing_text(title) or title
-    if description:
-        description = _translate_listing_text(description)
-    if unit:
-        unit = _translate_listing_text(unit)
-    if isinstance(allergens, list):
-        allergens = [_translate_listing_text(a) or a for a in allergens]
-    if isinstance(dietary_tags, list):
-        dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
+    # Listing language toggle. Default = English so listings are
+    # searchable by any recipient regardless of donor language. The
+    # donor (or the AI on their behalf) can opt in to keep Spanish
+    # by passing language="es".
+    listing_lang = (language or "en").strip().lower()
+    if listing_lang not in {"en", "es"}:
+        listing_lang = "en"
+    if listing_lang == "en":
+        # English-only safety net: translate any Spanish the AI/donor
+        # may have left in title/description/unit/allergens/tags.
+        title = _translate_listing_text(title) or title
+        if description:
+            description = _translate_listing_text(description)
+        if unit:
+            unit = _translate_listing_text(unit)
+        if isinstance(allergens, list):
+            allergens = [_translate_listing_text(a) or a for a in allergens]
+        if isinstance(dietary_tags, list):
+            dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
 
     # Smart category default: guess from title keywords so the AI doesn't
     # have to interrogate the donor about it. The donor can still override.

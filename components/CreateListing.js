@@ -11,7 +11,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
     address: '',
     pickup_window_start: '',
     pickup_window_end: '',
-    images: []
+    images: [],
+    language: 'en'
   });
   const [safetyData, setSafetyData] = React.useState(null);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -345,7 +346,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
         address: finalAddress,
         pickup_start: pickupStartUtc,
         pickup_end: pickupEndUtc,
-        images: Array.isArray(formData.images) ? formData.images : []
+        images: Array.isArray(formData.images) ? formData.images : [],
+        language: formData.language || 'en'
       };
 
       let res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
@@ -456,6 +458,35 @@ function CreateListing({ user, onCancel, onSuccess }) {
 
             {step === 1 && (
               <form onSubmit={handleSubmit} className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+                    Listing language
+                  </label>
+                  <div className="inline-flex rounded-lg border border-[var(--border-color)] overflow-hidden" role="group" aria-label="Listing language">
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('language', 'en')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors ${formData.language === 'en' ? 'bg-[var(--primary-color,#16a34a)] text-white' : 'bg-white text-[var(--text-primary)] hover:bg-gray-50'}`}
+                      aria-pressed={formData.language === 'en'}
+                    >
+                      English
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleInputChange('language', 'es')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors border-l border-[var(--border-color)] ${formData.language === 'es' ? 'bg-[var(--primary-color,#16a34a)] text-white' : 'bg-white text-[var(--text-primary)] hover:bg-gray-50'}`}
+                      aria-pressed={formData.language === 'es'}
+                    >
+                      Español
+                    </button>
+                  </div>
+                  <p className="text-xs text-[var(--text-secondary)] mt-1">
+                    {formData.language === 'es'
+                      ? 'El listado se guardará en español tal y como lo escribas.'
+                      : 'Listing will be saved in English. Spanish text will be auto-translated.'}
+                  </p>
+                </div>
+
                 <div>
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Title *
