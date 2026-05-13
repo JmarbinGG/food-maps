@@ -343,16 +343,23 @@ function maybeBroadcastUIControl(actions) {
         }));
       } else if (a.tool === 'show_route_to_listing' && a.route) {
         // First flip to the map view so the listener has something to
-        // draw on, then dispatch the route payload.
+        // draw on, then dispatch the route payload. We also stash the
+        // route on window so a freshly-mounted Map component (which
+        // missed the event during the view switch) can pick it up.
+        try { window.__foodmapsPendingRoute = { route: a.route, summary: a.summary || null, at: Date.now() }; } catch (_) {}
         window.dispatchEvent(new CustomEvent('foodmaps:show_map', {
           detail: { summary: a.summary || null },
         }));
-        window.dispatchEvent(new CustomEvent('foodmaps:show_route', {
-          detail: {
-            route: a.route,
-            summary: a.summary || null,
-          },
-        }));
+        // Defer the route event so React has a chance to mount the
+        // Map component if we just switched views — otherwise the
+        // event fires synchronously into an unmounted listener and
+        // the route never appears.
+        const payload = { route: a.route, summary: a.summary || null };
+        setTimeout(() => {
+          try {
+            window.dispatchEvent(new CustomEvent('foodmaps:show_route', { detail: payload }));
+          } catch (_) { /* ignore */ }
+        }, 250);
       }
     } catch (_) { /* ignore */ }
   }

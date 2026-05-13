@@ -361,12 +361,14 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             type: 'line',
             source: SOURCE_ID,
             layout: { 'line-join': 'round', 'line-cap': 'round' },
-            paint: {
-              'line-color': route.fallback ? '#6b7280' : '#2563eb',
-              'line-width': 5,
-              'line-opacity': 0.95,
-              'line-dasharray': route.fallback ? [2, 1.5] : [1, 0],
-            },
+            paint: Object.assign(
+              {
+                'line-color': route.fallback ? '#6b7280' : '#2563eb',
+                'line-width': 5,
+                'line-opacity': 0.95,
+              },
+              route.fallback ? { 'line-dasharray': [2, 1.5] } : {},
+            ),
           });
         } catch (err) {
           console.warn('Failed to draw AI route:', err);
@@ -413,6 +415,23 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
     window.addEventListener('foodmaps:show_route', handler);
     window.addEventListener('foodmaps:clear_route', clearHandler);
+
+    // If a route was queued while the Map was unmounted (e.g. the AI
+    // asked for show_map + show_route in the same tick, before the
+    // view-switch finished), drain it now. Use a small delay so the
+    // map style has time to load on a fresh mount.
+    try {
+      const pending = (typeof window !== 'undefined') ? window.__foodmapsPendingRoute : null;
+      if (pending && pending.route && (Date.now() - (pending.at || 0)) < 15000) {
+        setTimeout(() => {
+          try {
+            drawRoute(pending.route);
+            window.__foodmapsPendingRoute = null;
+          } catch (_) { /* ignore */ }
+        }, 300);
+      }
+    } catch (_) { /* ignore */ }
+
     return () => {
       window.removeEventListener('foodmaps:show_route', handler);
       window.removeEventListener('foodmaps:clear_route', clearHandler);
