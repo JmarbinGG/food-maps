@@ -365,6 +365,139 @@ function maybeBroadcastUIControl(actions) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Starter suggestions
+// ---------------------------------------------------------------------------
+// Shown as clickable chips under the very first assistant greeting so a
+// new user has obvious things to try instead of staring at an empty
+// chat. The set is tailored to the user's role (donor / recipient /
+// driver / admin) and the active UI language. Clicking a chip sends it
+// as a normal user message — the same as typing.
+//
+// Keep these PHRASED EXACTLY as a user would type them, because the
+// chip text is what gets sent to the AI.
+
+const STARTER_SUGGESTIONS = {
+  en: {
+    anonymous: [
+      "How does FoodMaps work?",
+      "Is sharing food safe?",
+      "How do I sign up?",
+      "What can I share?",
+    ],
+    recipient: [
+      "What food is available near me?",
+      "Show me the map",
+      "Any expiring food I should grab?",
+      "Set a pickup reminder",
+    ],
+    donor: [
+      "Post a new listing",
+      "What's expiring soon?",
+      "Show my dashboard",
+      "How do pickups work?",
+    ],
+    driver: [
+      "Show my route plan",
+      "What's in the dispatch queue?",
+      "Next pickup details",
+    ],
+    admin: [
+      "Show platform stats",
+      "Open admin panel",
+      "Recent feedback",
+    ],
+    default: [
+      "What food is available near me?",
+      "Show me the map",
+      "Post a new listing",
+      "Storage tips for vegetables",
+    ],
+  },
+  es: {
+    anonymous: [
+      "¿Cómo funciona FoodMaps?",
+      "¿Es seguro compartir comida?",
+      "¿Cómo me registro?",
+      "¿Qué puedo compartir?",
+    ],
+    recipient: [
+      "¿Qué comida hay cerca?",
+      "Muéstrame el mapa",
+      "¿Hay comida por vencer?",
+      "Pon un recordatorio de recogida",
+    ],
+    donor: [
+      "Publicar una donación",
+      "¿Qué se vence pronto?",
+      "Abre mi panel",
+      "¿Cómo funcionan las recogidas?",
+    ],
+    driver: [
+      "Muéstrame mi ruta",
+      "¿Qué hay en la cola de despacho?",
+      "Detalles de la próxima recogida",
+    ],
+    admin: [
+      "Estadísticas de la plataforma",
+      "Abre el panel admin",
+      "Comentarios recientes",
+    ],
+    default: [
+      "¿Qué comida hay cerca?",
+      "Muéstrame el mapa",
+      "Publicar una donación",
+      "Consejos para guardar verduras",
+    ],
+  },
+};
+
+function getStarterSuggestions(anonymous) {
+  let lang = 'en';
+  try {
+    if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.getCurrentLanguage === 'function') {
+      lang = window.i18n.getCurrentLanguage() || 'en';
+    }
+  } catch (_) { /* ignore */ }
+  const bank = STARTER_SUGGESTIONS[lang] || STARTER_SUGGESTIONS.en;
+  if (anonymous) return bank.anonymous.slice();
+
+  let role = '';
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+      role = (cu && cu.role ? String(cu.role) : '').toLowerCase();
+    }
+  } catch (_) { /* ignore */ }
+  if (role && bank[role]) return bank[role].slice();
+  return bank.default.slice();
+}
+
+function buildGreetingMessage(anonymous) {
+  let lang = 'en';
+  try {
+    if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.getCurrentLanguage === 'function') {
+      lang = window.i18n.getCurrentLanguage() || 'en';
+    }
+  } catch (_) { /* ignore */ }
+  const greetings = {
+    en: {
+      anon: "Hi! I'm the FoodMaps assistant. Ask me anything about how food sharing works, food safety, or how to sign up.",
+      auth: "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes.",
+    },
+    es: {
+      anon: "¡Hola! Soy el asistente de FoodMaps. Pregúntame sobre cómo funciona compartir comida, seguridad alimentaria o cómo registrarte.",
+      auth: "¡Hola! Soy tu asistente de FoodMaps. Pregúntame sobre publicaciones, recogidas, recordatorios o recetas.",
+    },
+  };
+  const greet = greetings[lang] || greetings.en;
+  return {
+    role: 'assistant',
+    text: anonymous ? greet.anon : greet.auth,
+    suggestions: getStarterSuggestions(anonymous),
+  };
+}
+
 function AIChatbot() {
   // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
   // no voice assistant, no mic in chat.
@@ -373,12 +506,8 @@ function AIChatbot() {
   // mode: 'idle' (just bot) | 'chooser' (two round options) | 'chat' | 'voice'
   const [mode, setMode] = React.useState('idle');
   const open = mode === 'chat';
-  const [messages, setMessages] = React.useState([
-    {
-      role: 'assistant', text: anonymous
-        ? "Hi! I'm the FoodMaps assistant. Ask me anything about how food sharing works, food safety, or how to sign up."
-        : "Hi! I'm your FoodMaps assistant. Ask me about listings, pickups, reminders, or recipes."
-    }
+  const [messages, setMessages] = React.useState(() => [
+    buildGreetingMessage(anonymous),
   ]);
   const [input, setInput] = React.useState('');
   const [sending, setSending] = React.useState(false);
