@@ -379,9 +379,11 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
               .setLngLat([oLng, oLat])
               .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText('You'))
               .addTo(m);
+            const destLabel = dest.title
+              || (dest.listing_id != null ? `Listing #${dest.listing_id}` : 'Pickup');
             destMarker = new window.mapboxgl.Marker({ color: '#dc2626' })
               .setLngLat([dLng, dLat])
-              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText(dest.title || `Listing #${dest.listing_id}`))
+              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText(destLabel))
               .addTo(m);
           }
         } catch (_) { /* ignore */ }
@@ -395,10 +397,20 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         } catch (_) { /* ignore */ }
       };
 
-      if (m.isStyleLoaded && m.isStyleLoaded()) {
+      // Robust readiness check: 'load' only fires once during init, so
+      // a route dispatched AFTER load (e.g. the user requests a second
+      // route) must run apply() right away if the style is already up.
+      const styleReady = (typeof m.isStyleLoaded === 'function' && m.isStyleLoaded())
+        || (typeof m.loaded === 'function' && m.loaded());
+      if (styleReady) {
         apply();
       } else {
-        m.once('load', apply);
+        // Run apply once on the next 'load' OR 'idle' (whichever fires
+        // first); a guard makes sure we don't draw twice.
+        let applied = false;
+        const once = () => { if (applied) return; applied = true; apply(); };
+        m.once('load', once);
+        try { m.once('idle', once); } catch (_) { /* older mapbox-gl */ }
       }
     };
 
