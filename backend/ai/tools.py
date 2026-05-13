@@ -532,11 +532,6 @@ TOOL_DEFINITIONS = [
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
                     "images": {"type": "array", "items": {"type": "string"}, "description": "Optional list of image URLs (or data URLs) the donor uploaded for this listing."},
-                    "language": {
-                        "type": "string",
-                        "enum": ["en", "es"],
-                        "description": "Language to STORE the listing in. Default 'en' (English). Set 'es' ONLY if the donor explicitly asked to keep the listing in Spanish (e.g. 'publícalo en español', 'in Spanish please'). When 'en', any Spanish in title/description/unit/allergens/dietary_tags is auto-translated to English by the server.",
-                    },
                 },
                 "required": ["user_id", "title", "qty"],
             },
@@ -655,6 +650,41 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "show_route_to_listing",
+            "description": (
+                "ACTION: draw a driving route on the map from the recipient's saved "
+                "address to a specific food listing's pickup location. Call this when "
+                "the recipient asks 'how do I get there?', 'show me directions', "
+                "'route to listing #N', 'cómo llego', 'dame las direcciones', or "
+                "right AFTER a successful claim so they can see the path to pickup. "
+                "Requires the recipient to have an address on file AND the listing "
+                "to have map coordinates. Returns origin/destination coords plus a "
+                "GeoJSON LineString geometry the frontend renders as a blue route "
+                "line. The UI will switch to the map view and fit both points in "
+                "the viewport. DO NOT call for arbitrary curiosity — only when the "
+                "user actually wants directions to a real listing they can reach."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {
+                        "type": "integer",
+                        "description": "Numeric id of the FoodResource listing to route to.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["driving", "walking", "cycling"],
+                        "description": "Mapbox profile. Default 'driving'.",
+                    },
+                },
+                "required": ["user_id", "listing_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "navigate_ui",
             "description": (
                 "ACTION: drive the FoodMaps web UI on the user's behalf — open or close "
@@ -755,6 +785,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "bulk_import_listings": _bulk_import_listings,
         "send_user_message": _send_user_message,
         "show_map": _show_map,
+        "show_route_to_listing": _show_route_to_listing,
         "navigate_ui": _navigate_ui,
     }
     handler = handlers.get(name)
@@ -3056,7 +3087,6 @@ async def _post_food_listing(
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
     images: Optional[list] = None,
-    language: Optional[str] = None,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -3068,25 +3098,18 @@ async def _post_food_listing(
     if not (title or "").strip():
         return {"error": "title is required"}
 
-    # Listing language toggle. Default = English so listings are
-    # searchable by any recipient regardless of donor language. The
-    # donor (or the AI on their behalf) can opt in to keep Spanish
-    # by passing language="es".
-    listing_lang = (language or "en").strip().lower()
-    if listing_lang not in {"en", "es"}:
-        listing_lang = "en"
-    if listing_lang == "en":
-        # English-only safety net: translate any Spanish the AI/donor
-        # may have left in title/description/unit/allergens/tags.
-        title = _translate_listing_text(title) or title
-        if description:
-            description = _translate_listing_text(description)
-        if unit:
-            unit = _translate_listing_text(unit)
-        if isinstance(allergens, list):
-            allergens = [_translate_listing_text(a) or a for a in allergens]
-        if isinstance(dietary_tags, list):
-            dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
+    # Listings are stored in English so search/filters work for all
+    # recipients regardless of donor language. Translate any Spanish
+    # the AI may have left in title/description/unit/allergens/tags.
+    title = _translate_listing_text(title) or title
+    if description:
+        description = _translate_listing_text(description)
+    if unit:
+        unit = _translate_listing_text(unit)
+    if isinstance(allergens, list):
+        allergens = [_translate_listing_text(a) or a for a in allergens]
+    if isinstance(dietary_tags, list):
+        dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
 
     # Smart category default: guess from title keywords so the AI doesn't
     # have to interrogate the donor about it. The donor can still override.
@@ -3911,6 +3934,183 @@ async def _show_map(user_id: str, focus: Optional[str] = None) -> dict:
         "summary": summary,
         "view": "map",
         "focus": focus_norm,
+    }
+
+
+async def _show_route_to_listing(
+    user_id: str,
+    listing_id: int,
+    mode: Optional[str] = None,
+) -> dict:
+    """Build a driving route from the user's saved address to a listing.
+
+    Returns an envelope the frontend turns into a blue line on the map:
+
+        {
+            "success": True,
+            "view": "map",
+            "route": {
+                "origin": {"lat": .., "lng": .., "address": ..},
+                "destination": {"lat": .., "lng": .., "address": ..,
+                                 "listing_id": .., "title": ..},
+                "mode": "driving",
+                "distance_m": float, "duration_s": float,
+                "geometry": {"type": "LineString", "coordinates": [...]},
+                "fallback": bool,
+            },
+            "summary": "Route to '<title>' — N miles, ~M min",
+        }
+
+    When the Mapbox Directions API is unreachable we still return a
+    success envelope with a straight-line (fallback=true) so the user
+    at least sees the two endpoints connected on the map.
+    """
+    from backend.app import SessionLocal
+    from backend.models import User, FoodResource
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    try:
+        lid = int(listing_id)
+    except (TypeError, ValueError):
+        return {"error": "Invalid listing_id"}
+
+    profile = (mode or "driving").strip().lower()
+    if profile not in {"driving", "walking", "cycling"}:
+        profile = "driving"
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {"error": "User not found"}
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found"}
+
+            # Origin: prefer the user's coords, else geocode their address.
+            o_lat = user.coords_lat
+            o_lng = user.coords_lng
+            o_addr = (user.address or "").strip() or None
+            if (o_lat is None or o_lng is None) and o_addr:
+                geo = _geocode_address(o_addr)
+                if geo is not None:
+                    o_lat, o_lng = geo
+            if o_lat is None or o_lng is None:
+                return {
+                    "error": (
+                        "I can't draw a route without your address. Please "
+                        "add a pickup/home address to your profile first."
+                    ),
+                    "reason": "missing_origin",
+                }
+
+            # Destination: the listing's pin.
+            d_lat = listing.coords_lat
+            d_lng = listing.coords_lng
+            d_addr = (listing.address or "").strip() or None
+            if (d_lat is None or d_lng is None) and d_addr:
+                geo = _geocode_address(d_addr)
+                if geo is not None:
+                    d_lat, d_lng = geo
+            if d_lat is None or d_lng is None:
+                return {
+                    "error": (
+                        f"Listing #{lid} doesn't have a map location, so I "
+                        "can't draw directions to it."
+                    ),
+                    "reason": "missing_destination",
+                }
+
+            return {
+                "_origin": (float(o_lat), float(o_lng), o_addr),
+                "_destination": (float(d_lat), float(d_lng), d_addr, listing.id, getattr(listing, "title", None)),
+            }
+        finally:
+            db.close()
+
+    pre = await asyncio.to_thread(_sync)
+    if "error" in pre:
+        return pre
+
+    o_lat, o_lng, o_addr = pre["_origin"]
+    d_lat, d_lng, d_addr, l_id, l_title = pre["_destination"]
+
+    # Call Mapbox Directions. Best-effort: if anything goes wrong we fall
+    # back to a straight-line geometry so the UI can still show the path.
+    geometry: dict = {
+        "type": "LineString",
+        "coordinates": [[o_lng, o_lat], [d_lng, d_lat]],
+    }
+    distance_m: Optional[float] = None
+    duration_s: Optional[float] = None
+    fallback = True
+
+    if MAPBOX_TOKEN:
+        url = (
+            f"{MAPBOX_DIRECTIONS_URL}/{profile}/"
+            f"{o_lng},{o_lat};{d_lng},{d_lat}"
+        )
+        params = {
+            "access_token": MAPBOX_TOKEN,
+            "geometries": "geojson",
+            "overview": "full",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, params=params)
+            if resp.status_code == 200:
+                data = resp.json() or {}
+                routes = data.get("routes") or []
+                if routes:
+                    r0 = routes[0]
+                    geom = r0.get("geometry")
+                    if isinstance(geom, dict) and isinstance(geom.get("coordinates"), list):
+                        geometry = geom
+                        fallback = False
+                    distance_m = (
+                        float(r0.get("distance")) if r0.get("distance") is not None else None
+                    )
+                    duration_s = (
+                        float(r0.get("duration")) if r0.get("duration") is not None else None
+                    )
+        except Exception as exc:
+            logger.warning("Mapbox Directions failed for listing %s: %s", l_id, exc)
+
+    # Build a human summary in the same language the AI will reply in.
+    def _fmt_summary() -> str:
+        bits = [f"Route to '{l_title or f'listing #{l_id}'}'"]
+        if distance_m is not None:
+            miles = distance_m / 1609.344
+            bits.append(f"{miles:.1f} mi")
+        if duration_s is not None:
+            mins = int(round(duration_s / 60.0))
+            bits.append(f"~{mins} min")
+        if fallback:
+            bits.append("(approximate)")
+        return " — ".join([bits[0], ", ".join(bits[1:])]) if len(bits) > 1 else bits[0]
+
+    return {
+        "success": True,
+        "view": "map",
+        "summary": _fmt_summary(),
+        "route": {
+            "origin": {"lat": o_lat, "lng": o_lng, "address": o_addr},
+            "destination": {
+                "lat": d_lat,
+                "lng": d_lng,
+                "address": d_addr,
+                "listing_id": l_id,
+                "title": l_title,
+            },
+            "mode": profile,
+            "distance_m": distance_m,
+            "duration_s": duration_s,
+            "geometry": geometry,
+            "fallback": fallback,
+        },
     }
 
 

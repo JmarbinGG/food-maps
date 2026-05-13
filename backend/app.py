@@ -2659,7 +2659,7 @@ async def update_trust_score(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/listings/create")
-async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, language: str = "en", db: Session = Depends(get_db)):
+async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db)):
     """
     Create a FoodResource and attempt server-side geocoding using Mapbox when an address is provided
     and coords are not supplied. Returns the created listing as JSON.
@@ -2702,26 +2702,6 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
                 if len(cleaned) >= 8:
                     break
             images_json = json.dumps(cleaned) if cleaned else None
-
-        # Listing language toggle. When language='en' (default) we run
-        # the Spanish->English safety net on the user-facing text fields
-        # so all listings are searchable in English. When language='es'
-        # the donor explicitly opted to keep the listing in Spanish.
-        listing_lang = (language or "en").strip().lower()
-        if listing_lang not in {"en", "es"}:
-            listing_lang = "en"
-        if listing_lang == "en":
-            try:
-                from backend.ai.tools import _translate_listing_text
-                title = _translate_listing_text(title) or title
-                if desc:
-                    desc = _translate_listing_text(desc) or desc
-                if unit:
-                    unit = _translate_listing_text(unit) or unit
-            except Exception:
-                # Translation is a best-effort safety net; never block
-                # listing creation if it fails.
-                pass
 
         item = FoodResource(
             donor_id=donor_id,

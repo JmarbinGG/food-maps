@@ -510,6 +510,12 @@ def _build_system_prompt(training_data: dict) -> str:
         "  • create_reminder        -> 'Reminder set for <time>.'\n"
         "  • send_user_message      -> 'Sent! They'll see it in their inbox.'\n"
         "  • show_map / navigate_ui -> 'Opened <surface>.' / 'Closed <surface>.'\n"
+        "  • show_route_to_listing  -> 'Drew the route to <title> on your map — "
+        "    <miles> mi, ~<minutes> min.' (Call this tool whenever the user "
+        "    asks for directions, 'how do I get there', 'show me the way', "
+        "    'cómo llego', or right after a successful claim_listing so they "
+        "    can see the pickup path on the map. It uses the user's saved "
+        "    address as origin and the listing pickup as destination.)\n"
         "  • get_recipes / get_storage_tips / search_food_near_user / "
         "    get_user_dashboard / get_pickup_schedule -> after presenting the "
         "    results, end with a brief completion line so the user knows the "
@@ -842,23 +848,19 @@ def _build_system_prompt(training_data: dict) -> str:
         "post). For requests, instead of allergens/photo, ask about "
         "household size, urgency, dietary restrictions, and pickup "
         "vs. delivery preference.\n"
-        "  9. LISTINGS DEFAULT TO ENGLISH (CRITICAL). Even "
+        "  9. LISTINGS ARE ALWAYS POSTED IN ENGLISH (CRITICAL). Even "
         "when the donor is talking to you in Spanish or any other "
         "language, the `title`, `description`, `unit`, `allergens`, "
         "and `dietary_tags` fields you send to post_food_listing / "
         "post_food_request / bulk_post_food_listings MUST be in "
-        "English by default. Translate the donor's words: 'pan' → 'Bread', "
+        "English. Translate the donor's words: 'pan' → 'Bread', "
         "'manzanas' → 'Apples', 'comida preparada' → 'Prepared meal', "
         "'lácteos' → 'dairy', 'sin gluten' → 'gluten-free', "
         "'recogida solamente' → 'Pickup only.'. Numbers, addresses, "
         "and phone numbers stay as the donor wrote them. Continue the "
         "CONVERSATION in Spanish — only the data sent to the listing "
-        "tools is English. EXCEPTION: if the donor explicitly asks to "
-        "keep the listing in Spanish (e.g. 'publícalo en español', "
-        "'déjalo en español', 'in Spanish please'), pass "
-        "`language: \"es\"` to post_food_listing and DO NOT translate "
-        "the fields — leave them exactly as the donor wrote them. "
-        "Otherwise omit `language` (defaults to 'en') and translate.\n"
+        "tools is English. The recipient-side UI is English; mixed-"
+        "language listings break search and filters.\n"
         "\n"
         "### PHOTO HANDLING (IMPORTANT)\n"
         "When the donor uploads a photo, the chat will contain a user "
@@ -1954,6 +1956,11 @@ class ConversationEngine:
                         for extra_key in ("action", "target", "view", "focus"):
                             if extra_key in result and result[extra_key] is not None:
                                 entry[extra_key] = result[extra_key]
+                        # show_route_to_listing returns a `route` envelope
+                        # (origin/destination/geometry) that the frontend
+                        # draws on the map. Forward it as-is.
+                        if isinstance(result.get("route"), dict):
+                            entry["route"] = result["route"]
                         # Forward coords + verification status from
                         # post_food_listing so app.js can fly the map to the
                         # new pin even if a follow-up refreshForUser() fetch

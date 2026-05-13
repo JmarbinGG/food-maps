@@ -189,6 +189,7 @@ const ACTION_CHIP_LABELS = {
   update_user_profile: { ok: '✓ Profile updated', err: '✗ Update failed',   verb: 'Updating profile…' },
   send_user_message:   { ok: '✓ Message sent',    err: '✗ Send failed',     verb: 'Sending…' },
   show_map:            { ok: '✓ Map opened',      err: '✗ Could not open map', verb: 'Opening map…' },
+  show_route_to_listing: { ok: '✓ Route on map',  err: '✗ Could not draw route', verb: 'Drawing route…' },
   navigate_ui:         { ok: '✓ UI updated',      err: '✗ Could not update UI', verb: 'Updating UI…' },
   bulk_import_listings:{ ok: '✓ Listings imported', err: '✗ Bulk import failed', verb: 'Bulk-importing listings…' },
 };
@@ -322,7 +323,7 @@ function maybeBroadcastListingsChanged(actions) {
 // UI-control tools tell the rest of the app to navigate / change view.
 // We broadcast a separate event so app.js can flip viewMode/currentView
 // without having to refresh listings.
-const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui']);
+const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui', 'show_route_to_listing']);
 function maybeBroadcastUIControl(actions) {
   if (!Array.isArray(actions) || typeof window === 'undefined') return;
   const ui = actions.filter(a => a && a.ok && UI_CONTROL_TOOLS.has(a.tool));
@@ -337,6 +338,18 @@ function maybeBroadcastUIControl(actions) {
           detail: {
             action: a.action || null,
             target: a.target || null,
+            summary: a.summary || null,
+          },
+        }));
+      } else if (a.tool === 'show_route_to_listing' && a.route) {
+        // First flip to the map view so the listener has something to
+        // draw on, then dispatch the route payload.
+        window.dispatchEvent(new CustomEvent('foodmaps:show_map', {
+          detail: { summary: a.summary || null },
+        }));
+        window.dispatchEvent(new CustomEvent('foodmaps:show_route', {
+          detail: {
+            route: a.route,
             summary: a.summary || null,
           },
         }));
@@ -547,7 +560,7 @@ function AIChatbot() {
         const res = await fetch('/api/ai/public_chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message: trimmed }),
+          body: JSON.stringify({ message: trimmed, lang: (window.i18n && window.i18n.getCurrentLanguage()) || 'en' }),
         });
         if (!res.ok) throw new Error(`${res.status}: ${await res.text()}`);
         const data = await res.json();
@@ -579,7 +592,7 @@ function AIChatbot() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
-        body: JSON.stringify({ user_id: userId, message: trimmed, include_audio: false }),
+        body: JSON.stringify({ user_id: userId, message: trimmed, include_audio: false, lang: (window.i18n && window.i18n.getCurrentLanguage()) || 'en' }),
       });
       if (!res.ok) {
         const err = await res.text();
@@ -1300,6 +1313,7 @@ function VoiceAssistant({ onClose, getAuth }) {
           user_id: String(userId),
           message: messageToSend,
           include_audio: true,
+          lang: (window.i18n && window.i18n.getCurrentLanguage()) || 'en',
         }),
       });
       if (!res.ok) throw new Error(await res.text());

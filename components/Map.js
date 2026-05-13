@@ -294,6 +294,132 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     return () => window.removeEventListener('foodmaps:fly_to', handler);
   }, []);
 
+  // Listen for AI-driven route-drawing requests. The chat assistant
+  // dispatches `foodmaps:show_route` after calling the
+  // show_route_to_listing tool. We render the route as a blue line on
+  // a dedicated GeoJSON source so re-issuing the event simply replaces
+  // the previous path. Two helper markers (origin = green, destination
+  // = red) make the endpoints obvious, and we fit both into view.
+  React.useEffect(() => {
+    const SOURCE_ID = 'ai-route-source';
+    const LAYER_ID = 'ai-route-layer';
+    const LAYER_CASING_ID = 'ai-route-casing-layer';
+    let originMarker = null;
+    let destMarker = null;
+
+    const clearRoute = () => {
+      try {
+        const m = map.current;
+        if (!m) return;
+        if (m.getLayer(LAYER_ID)) m.removeLayer(LAYER_ID);
+        if (m.getLayer(LAYER_CASING_ID)) m.removeLayer(LAYER_CASING_ID);
+        if (m.getSource(SOURCE_ID)) m.removeSource(SOURCE_ID);
+      } catch (_) { /* ignore */ }
+      try { if (originMarker) originMarker.remove(); } catch (_) {}
+      try { if (destMarker) destMarker.remove(); } catch (_) {}
+      originMarker = null;
+      destMarker = null;
+    };
+
+    const drawRoute = (route) => {
+      const m = map.current;
+      if (!m || !route || !route.geometry) return;
+      const origin = route.origin || {};
+      const dest = route.destination || {};
+      const oLng = parseFloat(origin.lng);
+      const oLat = parseFloat(origin.lat);
+      const dLng = parseFloat(dest.lng);
+      const dLat = parseFloat(dest.lat);
+      if (!Number.isFinite(oLng) || !Number.isFinite(oLat) ||
+          !Number.isFinite(dLng) || !Number.isFinite(dLat)) return;
+
+      const apply = () => {
+        clearRoute();
+        try {
+          m.addSource(SOURCE_ID, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: route.geometry,
+            },
+          });
+          // Casing (white outline) for contrast against any basemap.
+          m.addLayer({
+            id: LAYER_CASING_ID,
+            type: 'line',
+            source: SOURCE_ID,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 8,
+              'line-opacity': 0.9,
+            },
+          });
+          m.addLayer({
+            id: LAYER_ID,
+            type: 'line',
+            source: SOURCE_ID,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': route.fallback ? '#6b7280' : '#2563eb',
+              'line-width': 5,
+              'line-opacity': 0.95,
+              'line-dasharray': route.fallback ? [2, 1.5] : [1, 0],
+            },
+          });
+        } catch (err) {
+          console.warn('Failed to draw AI route:', err);
+        }
+        try {
+          if (typeof window !== 'undefined' && window.mapboxgl) {
+            originMarker = new window.mapboxgl.Marker({ color: '#16a34a' })
+              .setLngLat([oLng, oLat])
+              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText('You'))
+              .addTo(m);
+            destMarker = new window.mapboxgl.Marker({ color: '#dc2626' })
+              .setLngLat([dLng, dLat])
+              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText(dest.title || `Listing #${dest.listing_id}`))
+              .addTo(m);
+          }
+        } catch (_) { /* ignore */ }
+        try {
+          const bounds = new window.mapboxgl.LngLatBounds([oLng, oLat], [oLng, oLat]);
+          (route.geometry.coordinates || []).forEach((c) => {
+            if (Array.isArray(c) && c.length >= 2) bounds.extend([c[0], c[1]]);
+          });
+          bounds.extend([dLng, dLat]);
+          m.fitBounds(bounds, { padding: 80, duration: 1200, maxZoom: 15 });
+        } catch (_) { /* ignore */ }
+      };
+
+      if (m.isStyleLoaded && m.isStyleLoaded()) {
+        apply();
+      } else {
+        m.once('load', apply);
+      }
+    };
+
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail;
+        if (!detail || !detail.route) return;
+        drawRoute(detail.route);
+      } catch (err) {
+        console.warn('foodmaps:show_route handler failed:', err);
+      }
+    };
+    const clearHandler = () => clearRoute();
+
+    window.addEventListener('foodmaps:show_route', handler);
+    window.addEventListener('foodmaps:clear_route', clearHandler);
+    return () => {
+      window.removeEventListener('foodmaps:show_route', handler);
+      window.removeEventListener('foodmaps:clear_route', clearHandler);
+      clearRoute();
+    };
+  }, []);
+
   // Update markers when listings or centers change
   React.useEffect(() => {
     if (!map.current || !mapLoaded) {
