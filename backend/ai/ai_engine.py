@@ -1340,6 +1340,17 @@ class ConversationEngine:
         """
         if message and detect_spanish(message):
             return "es"
+        # If the current message is *clearly* English (multiple ASCII
+        # words, no Spanish punctuation or accents), trust it and don't
+        # let stale Spanish history flip the reply. Sticky behavior is
+        # only meant to rescue short ambiguous tokens like 'ok', 'sí',
+        # 'gracias', 'vale' — not full English sentences.
+        if message:
+            lower = message.lower()
+            has_spanish_chars = bool(re.search(r"[¿¡ñáéíóúü]", lower))
+            ascii_words = re.findall(r"[a-z]{2,}", lower)
+            if not has_spanish_chars and len(ascii_words) >= 3:
+                return "en"
         try:
             pref = (profile or {}).get("language")
             if isinstance(pref, str) and pref.lower().startswith("es"):
