@@ -498,6 +498,168 @@ function buildGreetingMessage(anonymous) {
   };
 }
 
+// --- Inline ghost-text autocomplete -------------------------------
+// Gmail Smart Compose-style: as the user types in the chat input, the
+// longest matching common phrase from a role+language-keyed dictionary
+// is shown grayed out after the cursor. Tab or ArrowRight (when caret
+// is at end of input) accepts it; Esc dismisses just that suggestion;
+// Enter still sends what's actually typed (NOT the ghost).
+//
+// We deliberately keep the dictionary small and 100% local — no extra
+// API call, no model latency. The pool is built from:
+//   1. The same STARTER_SUGGESTIONS bucket the user is in (so role
+//      coverage + i18n come for free).
+//   2. A small set of EXTRA_AUTOCOMPLETE patterns that are common
+//      mid-typing prefixes ("Claim listing #", "Update my address to",
+//      "Find food near", confirmation codes) which don't make sense as
+//      a starter chip but are useful as completions.
+//   3. The user's own last 30 sent messages (foodmaps_chat_history in
+//      localStorage), so frequently-repeated questions auto-suggest
+//      themselves on the next visit.
+const EXTRA_AUTOCOMPLETE = {
+  en: [
+    "Claim listing #",
+    "Cancel my claim for ",
+    "Confirm pickup code ",
+    "Update my address to ",
+    "Update my phone to ",
+    "Find food near ",
+    "What can I do with ",
+    "Storage tips for ",
+    "Recipe ideas for ",
+    "How long does ",
+    "Is it safe to eat ",
+    "Set a pickup reminder for ",
+    "Show me listings expiring today",
+    "Show me listings expiring this week",
+    "Open my dashboard",
+    "Open the admin panel",
+  ],
+  es: [
+    "Reclamar publicación #",
+    "Cancelar mi reclamo de ",
+    "Confirmar código de recogida ",
+    "Actualizar mi dirección a ",
+    "Actualizar mi teléfono a ",
+    "Buscar comida cerca de ",
+    "¿Qué puedo hacer con ",
+    "Consejos para guardar ",
+    "Ideas de recetas para ",
+    "¿Cuánto dura ",
+    "¿Es seguro comer ",
+    "Pon un recordatorio de recogida para ",
+    "Muéstrame publicaciones que vencen hoy",
+    "Muéstrame publicaciones que vencen esta semana",
+    "Abrir mi panel",
+    "Abrir el panel admin",
+  ],
+};
+
+const CHAT_HISTORY_KEY = 'foodmaps_chat_history';
+const CHAT_HISTORY_MAX = 30;
+
+function _currentLang() {
+  try {
+    if (typeof window !== 'undefined' && window.i18n && typeof window.i18n.getCurrentLanguage === 'function') {
+      return window.i18n.getCurrentLanguage() || 'en';
+    }
+  } catch (_) { /* ignore */ }
+  return 'en';
+}
+
+function _currentRole() {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+      return (cu && cu.role ? String(cu.role) : '').toLowerCase();
+    }
+  } catch (_) { /* ignore */ }
+  return '';
+}
+
+function _loadChatHistory() {
+  try {
+    if (typeof localStorage === 'undefined') return [];
+    const raw = localStorage.getItem(CHAT_HISTORY_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr) ? arr.filter((s) => typeof s === 'string' && s.trim()) : [];
+  } catch (_) { return []; }
+}
+
+function pushChatHistory(text) {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const trimmed = (text || '').trim();
+    if (!trimmed || trimmed.length > 200) return;
+    const prev = _loadChatHistory();
+    // De-dupe (case-insensitive) + put newest at the front + cap size.
+    const lower = trimmed.toLowerCase();
+    const filtered = prev.filter((s) => s.toLowerCase() !== lower);
+    filtered.unshift(trimmed);
+    localStorage.setItem(
+      CHAT_HISTORY_KEY,
+      JSON.stringify(filtered.slice(0, CHAT_HISTORY_MAX)),
+    );
+  } catch (_) { /* ignore */ }
+}
+
+// Build the full autocomplete pool for the current (lang, role, mode).
+function getAutocompletePool(anonymous) {
+  const lang = _currentLang();
+  const bank = STARTER_SUGGESTIONS[lang] || STARTER_SUGGESTIONS.en;
+  const extras = EXTRA_AUTOCOMPLETE[lang] || EXTRA_AUTOCOMPLETE.en;
+
+  let starters = [];
+  if (anonymous) {
+    starters = bank.anonymous || [];
+  } else {
+    const role = _currentRole();
+    starters = (role && bank[role]) ? bank[role] : (bank.default || []);
+  }
+
+  // For non-anonymous users, only include extras that make sense.
+  // Anonymous users on the landing page can't claim/update profile, so
+  // we skip those entries.
+  const pool = anonymous
+    ? starters.slice()
+    : starters.concat(extras);
+
+  // History last (highest priority for matching). De-dupe case-insensitively.
+  const history = anonymous ? [] : _loadChatHistory();
+  const seen = new Set();
+  const out = [];
+  for (const list of [history, pool]) {
+    for (const phrase of list) {
+      const k = phrase.toLowerCase();
+      if (seen.has(k)) continue;
+      seen.add(k);
+      out.push(phrase);
+    }
+  }
+  return out;
+}
+
+// Find the shortest phrase that case-insensitively starts with `input`
+// and is strictly longer. Shortest = least intrusive completion.
+function findAutocompleteSuggestion(input, anonymous, dismissed) {
+  if (!input) return '';
+  // Require at least 2 visible characters before suggesting anything,
+  // and bail out if the user has just typed whitespace (no ghost on
+  // ' ').
+  const visible = input.replace(/^\s+/, '');
+  if (visible.length < 2) return '';
+  const needle = input.toLowerCase();
+  let best = '';
+  for (const phrase of getAutocompletePool(anonymous)) {
+    if (phrase.length <= input.length) continue;
+    if (!phrase.toLowerCase().startsWith(needle)) continue;
+    if (dismissed && dismissed.has(phrase.toLowerCase())) continue;
+    if (!best || phrase.length < best.length) best = phrase;
+  }
+  return best;
+}
+
 function AIChatbot() {
   // Anonymous mode (e.g. landing page) — no auth, uses /api/ai/public_chat,
   // no voice assistant, no mic in chat.
@@ -511,6 +673,20 @@ function AIChatbot() {
   ]);
   const [input, setInput] = React.useState('');
   const [sending, setSending] = React.useState(false);
+  // Inline ghost-text autocomplete state. `dismissedSuggestions` holds
+  // case-folded phrases the user has explicitly Esc'd this session so
+  // we don't keep re-proposing the same completion every keystroke.
+  const dismissedSuggestionsRef = React.useRef(new Set());
+  const autocompleteSuggestion = React.useMemo(
+    () => findAutocompleteSuggestion(input, anonymous, dismissedSuggestionsRef.current),
+    [input, anonymous],
+  );
+  // Clear the dismissed-set whenever the input becomes empty (a new
+  // message starts fresh — old dismissals shouldn't haunt the next
+  // sentence).
+  React.useEffect(() => {
+    if (!input) dismissedSuggestionsRef.current = new Set();
+  }, [input]);
   // Hint text shown next to the animated typing dots while a reply is
   // pending, so the user knows what kind of work is happening.
   const [pendingLabel, setPendingLabel] = React.useState('Thinking…');
@@ -688,6 +864,8 @@ function AIChatbot() {
     if (anonymous) {
       setMessages(m => [...m, { role: 'user', text: displayText }]);
       setInput('');
+      // Record real typed messages (not file uploads) for autocomplete.
+      if (!opts.displayText) pushChatHistory(trimmed);
       const guess = guessPending(trimmed);
       setPendingLabel(guess.label);
       setPendingTool(guess.tool);
@@ -717,6 +895,8 @@ function AIChatbot() {
     }
     setMessages(m => [...m, { role: 'user', text: displayText }]);
     setInput('');
+    // Record real typed messages (not file uploads) for autocomplete.
+    if (!opts.displayText) pushChatHistory(trimmed);
     const guess = guessPending(trimmed);
     setPendingLabel(guess.label);
     setPendingTool(guess.tool);
@@ -984,36 +1164,92 @@ function AIChatbot() {
           )}
         </div>
         <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white', alignItems: 'center' }}>
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                if (!sending) sendMessage(input);
-              }
-            }}
-            placeholder={sending ? 'Waiting for reply…' : 'Type a message…'}
-            readOnly={sending}
-            aria-busy={sending}
-            autoFocus
-            style={{
-              flex: '1 1 0',
-              // Without min-width:0 the input refuses to shrink below
-              // its placeholder width, pushing the Send button off the
-              // right edge on narrow viewports (mobile, 360px panel).
-              minWidth: 0,
-              padding: '8px 12px',
-              border: '1px solid #d1d5db',
-              borderRadius: '8px',
-              fontSize: '14px',
-              outline: 'none',
-              caretColor: '#10b981',
-              opacity: sending ? 0.7 : 1,
-              background: sending ? '#f9fafb' : 'white'
-            }}
-          />
+          <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, display: 'flex', background: sending ? '#f9fafb' : 'white', borderRadius: '8px' }}>
+            {/* Ghost-text overlay — sits behind the input, exact same
+                font/padding/border so the user's typed text occupies
+                the same horizontal space (rendered transparent) and
+                only the ghost suffix is visible in gray. */}
+            {autocompleteSuggestion && !sending && (
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  pointerEvents: 'none',
+                  padding: '8px 12px',
+                  border: '1px solid transparent',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  lineHeight: 'normal',
+                  whiteSpace: 'pre',
+                  overflow: 'hidden',
+                  textOverflow: 'clip',
+                  color: '#9ca3af',
+                  fontFamily: 'inherit',
+                }}
+              >
+                <span style={{ color: 'transparent' }}>{input}</span>
+                <span>{autocompleteSuggestion.slice(input.length)}</span>
+              </div>
+            )}
+            <input
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                // Accept the ghost suggestion with Tab (always) or
+                // ArrowRight when the caret is already at the end of
+                // the typed text. We never hijack ArrowRight in the
+                // middle of the line — that would break normal cursor
+                // navigation.
+                if (autocompleteSuggestion && !sending) {
+                  const atEnd = e.target.selectionStart === input.length
+                    && e.target.selectionEnd === input.length;
+                  if (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd)) {
+                    e.preventDefault();
+                    setInput(autocompleteSuggestion);
+                    return;
+                  }
+                  if (e.key === 'Escape') {
+                    e.preventDefault();
+                    dismissedSuggestionsRef.current.add(autocompleteSuggestion.toLowerCase());
+                    // Force a re-render so the ghost disappears now.
+                    setInput((v) => v);
+                    return;
+                  }
+                }
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  if (!sending) sendMessage(input);
+                }
+              }}
+              placeholder={sending ? 'Waiting for reply…' : 'Type a message…'}
+              readOnly={sending}
+              aria-busy={sending}
+              aria-autocomplete="inline"
+              autoComplete="off"
+              autoFocus
+              style={{
+                width: '100%',
+                // Without min-width:0 the input refuses to shrink below
+                // its placeholder width, pushing the Send button off the
+                // right edge on narrow viewports (mobile, 360px panel).
+                minWidth: 0,
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '8px',
+                fontSize: '14px',
+                lineHeight: 'normal',
+                fontFamily: 'inherit',
+                outline: 'none',
+                caretColor: '#10b981',
+                opacity: sending ? 0.7 : 1,
+                background: sending ? '#f9fafb' : 'transparent',
+                position: 'relative',
+                zIndex: 1,
+              }}
+            />
+          </div>
           {!anonymous && (
             <>
               <input
