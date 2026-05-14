@@ -863,6 +863,35 @@ function AIChatbot() {
     return () => window.removeEventListener('foodmaps:navigate_ui', handler);
   }, [mode]);
 
+  // External components (DetailedModal "Get directions" button, listing
+  // cards, etc.) can ask the assistant a question programmatically by
+  // dispatching a `foodmaps:ai_ask` CustomEvent. We open the chat panel
+  // and forward the text to sendMessage on the next tick (so the panel
+  // is mounted/visible by the time the user message lands).
+  //
+  //   window.dispatchEvent(new CustomEvent('foodmaps:ai_ask', {
+  //     detail: { text: 'directions to listing #42',
+  //               displayText: '🧭 Get directions to Fresh Tomatoes' }
+  //   }));
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = (event) => {
+      const detail = (event && event.detail) || {};
+      const text = (detail.text || '').trim();
+      if (!text) return;
+      setMode('chat');
+      // Defer so React commits the mode change (panel becomes visible)
+      // before we kick off the fetch. Without this, the user message
+      // can flash in before the panel animates open.
+      setTimeout(() => {
+        sendMessage(text, detail.displayText ? { displayText: detail.displayText } : {});
+      }, 50);
+    };
+    window.addEventListener('foodmaps:ai_ask', handler);
+    return () => window.removeEventListener('foodmaps:ai_ask', handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function getAuth() {
     const token = localStorage.getItem('auth_token');
     let userId = null;

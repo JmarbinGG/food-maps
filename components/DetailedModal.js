@@ -485,7 +485,27 @@ function DetailedModal({ listing, onClose, onClaim }) {
           }, 'Claim This Food'),
           React.createElement('button', {
             onClick: () => {
-              if (listing.coords) {
+              // Prefer the in-app AI assistant: it draws the route on
+              // our own Mapbox map AND speaks the turn-by-turn list in
+              // the chat reply (show_route_to_listing). Falls back to
+              // Google Maps for anonymous users (no auth token) or
+              // listings without coords.
+              const hasAuth = !!(
+                typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')
+              );
+              const hasCoords = !!(listing.coords && listing.coords.lat && listing.coords.lng);
+              if (hasAuth && (hasCoords || listing.id)) {
+                const titleSnippet = (listing.title || `listing #${listing.id}`).slice(0, 60);
+                window.dispatchEvent(new CustomEvent('foodmaps:ai_ask', {
+                  detail: {
+                    text: `directions to listing #${listing.id}`,
+                    displayText: `🧭 Get directions to ${titleSnippet}`,
+                  },
+                }));
+                onClose && onClose();
+                return;
+              }
+              if (hasCoords) {
                 const url = `https://www.google.com/maps/dir/?api=1&destination=${listing.coords.lat},${listing.coords.lng}&travelmode=driving`;
                 window.open(url, '_blank');
               }

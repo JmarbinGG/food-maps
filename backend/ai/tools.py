@@ -4046,6 +4046,7 @@ async def _show_route_to_listing(
     }
     distance_m: Optional[float] = None
     duration_s: Optional[float] = None
+    steps: list = []
     fallback = True
 
     if MAPBOX_TOKEN:
@@ -4057,6 +4058,11 @@ async def _show_route_to_listing(
             "access_token": MAPBOX_TOKEN,
             "geometries": "geojson",
             "overview": "full",
+            # Request per-maneuver instructions so we can surface a
+            # short turn-by-turn list ("Head north on Main St for
+            # 0.4 mi, then turn right onto Elm Ave"). Without
+            # steps=true the route only includes total distance/time.
+            "steps": "true",
         }
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -4080,6 +4086,23 @@ async def _show_route_to_listing(
                         duration_s = (
                             float(r0.get("duration")) if r0.get("duration") is not None else None
                         )
+                        # Flatten step instructions out of legs[*].steps.
+                        # We keep distance per step so the frontend (and
+                        # the assistant's text reply) can say "Head
+                        # north on Main St for 0.4 mi".
+                        for leg in (r0.get("legs") or []):
+                            for step in (leg.get("steps") or []):
+                                man = step.get("maneuver") or {}
+                                instr = (man.get("instruction") or "").strip()
+                                if not instr:
+                                    continue
+                                step_dist = step.get("distance")
+                                steps.append({
+                                    "instruction": instr,
+                                    "distance_m": (
+                                        float(step_dist) if step_dist is not None else None
+                                    ),
+                                })
             else:
                 logger.warning(
                     "Mapbox Directions returned %s for listing %s",
@@ -4087,6 +4110,19 @@ async def _show_route_to_listing(
                 )
         except Exception as exc:
             logger.warning("Mapbox Directions failed for listing %s: %s", l_id, exc)
+
+    def _fmt_step(step: dict) -> str:
+        """One human line, e.g. 'Turn right onto Elm Ave (0.4 mi)'."""
+        instr = step.get("instruction") or ""
+        dm = step.get("distance_m")
+        if dm is None or dm <= 0:
+            return instr
+        miles = dm / 1609.344
+        # Sub-tenth-mile turns read better in feet.
+        if miles < 0.1:
+            feet = int(round(dm * 3.28084 / 10.0)) * 10
+            return f"{instr} ({feet} ft)"
+        return f"{instr} ({miles:.1f} mi)"
 
     # Build a human summary in the same language the AI will reply in.
     def _fmt_summary() -> str:
@@ -4103,7 +4139,19 @@ async def _show_route_to_listing(
             parts.append(", ".join(metrics))
         if fallback:
             parts.append("(approximate)")
-        return " — ".join(parts)
+        first_line = " — ".join(parts)
+        # Append the first few turn instructions so the assistant has
+        # actual directions to read back, not just total mileage. Cap
+        # at 6 turns to keep the chat reply readable; the frontend can
+        # render the full list from route.steps if it wants.
+        if steps:
+            shown = [_fmt_step(s) for s in steps[:6] if s.get("instruction")]
+            shown = [s for s in shown if s]
+            if shown:
+                turn_block = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(shown))
+                more = f"\n…and {len(steps) - len(shown)} more turn(s)" if len(steps) > len(shown) else ""
+                return f"{first_line}\n\n{turn_block}{more}"
+        return first_line
 
     return {
         "success": True,
@@ -4122,6 +4170,7 @@ async def _show_route_to_listing(
             "distance_m": distance_m,
             "duration_s": duration_s,
             "geometry": geometry,
+            "steps": steps,
             "fallback": fallback,
         },
     }
