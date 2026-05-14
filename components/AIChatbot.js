@@ -677,15 +677,25 @@ function AIChatbot() {
   // case-folded phrases the user has explicitly Esc'd this session so
   // we don't keep re-proposing the same completion every keystroke.
   const dismissedSuggestionsRef = React.useRef(new Set());
+  // Bumped whenever the dismissed set mutates, so the useMemo below
+  // re-runs even though the Set reference is the same. (Without this,
+  // pressing Esc would only hide the ghost on the NEXT keystroke,
+  // because React bails on setState updates that return the same
+  // reference.)
+  const [dismissTick, setDismissTick] = React.useState(0);
   const autocompleteSuggestion = React.useMemo(
     () => findAutocompleteSuggestion(input, anonymous, dismissedSuggestionsRef.current),
-    [input, anonymous],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [input, anonymous, dismissTick],
   );
   // Clear the dismissed-set whenever the input becomes empty (a new
   // message starts fresh — old dismissals shouldn't haunt the next
   // sentence).
   React.useEffect(() => {
-    if (!input) dismissedSuggestionsRef.current = new Set();
+    if (!input && dismissedSuggestionsRef.current.size) {
+      dismissedSuggestionsRef.current = new Set();
+      setDismissTick((t) => t + 1);
+    }
   }, [input]);
   // Hint text shown next to the animated typing dots while a reply is
   // pending, so the user knows what kind of work is happening.
@@ -1213,8 +1223,10 @@ function AIChatbot() {
                   if (e.key === 'Escape') {
                     e.preventDefault();
                     dismissedSuggestionsRef.current.add(autocompleteSuggestion.toLowerCase());
-                    // Force a re-render so the ghost disappears now.
-                    setInput((v) => v);
+                    // Bump the tick so the memo re-runs immediately;
+                    // setInput((v)=>v) would no-op since React bails
+                    // on identical state.
+                    setDismissTick((t) => t + 1);
                     return;
                   }
                 }
