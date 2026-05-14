@@ -4070,27 +4070,40 @@ async def _show_route_to_listing(
                     if isinstance(geom, dict) and isinstance(geom.get("coordinates"), list):
                         geometry = geom
                         fallback = False
-                    distance_m = (
-                        float(r0.get("distance")) if r0.get("distance") is not None else None
-                    )
-                    duration_s = (
-                        float(r0.get("duration")) if r0.get("duration") is not None else None
-                    )
+                        # Only trust Mapbox's distance/duration when we
+                        # actually accepted its geometry. Otherwise we'd
+                        # report road-network mileage while drawing a
+                        # straight line, which confuses the user.
+                        distance_m = (
+                            float(r0.get("distance")) if r0.get("distance") is not None else None
+                        )
+                        duration_s = (
+                            float(r0.get("duration")) if r0.get("duration") is not None else None
+                        )
+            else:
+                logger.warning(
+                    "Mapbox Directions returned %s for listing %s",
+                    resp.status_code, l_id,
+                )
         except Exception as exc:
             logger.warning("Mapbox Directions failed for listing %s: %s", l_id, exc)
 
     # Build a human summary in the same language the AI will reply in.
     def _fmt_summary() -> str:
-        bits = [f"Route to '{l_title or f'listing #{l_id}'}'"]
+        head = f"Route to '{l_title or f'listing #{l_id}'}'"
+        metrics: list = []
         if distance_m is not None:
             miles = distance_m / 1609.344
-            bits.append(f"{miles:.1f} mi")
+            metrics.append(f"{miles:.1f} mi")
         if duration_s is not None:
             mins = int(round(duration_s / 60.0))
-            bits.append(f"~{mins} min")
+            metrics.append(f"~{mins} min")
+        parts = [head]
+        if metrics:
+            parts.append(", ".join(metrics))
         if fallback:
-            bits.append("(approximate)")
-        return " — ".join([bits[0], ", ".join(bits[1:])]) if len(bits) > 1 else bits[0]
+            parts.append("(approximate)")
+        return " — ".join(parts)
 
     return {
         "success": True,
