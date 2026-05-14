@@ -983,7 +983,7 @@ function AIChatbot() {
             </div>
           )}
         </div>
-        <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white' }}>
+        <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white', alignItems: 'center' }}>
           <input
             ref={inputRef}
             value={input}
@@ -999,7 +999,11 @@ function AIChatbot() {
             aria-busy={sending}
             autoFocus
             style={{
-              flex: 1,
+              flex: '1 1 0',
+              // Without min-width:0 the input refuses to shrink below
+              // its placeholder width, pushing the Send button off the
+              // right edge on narrow viewports (mobile, 360px panel).
+              minWidth: 0,
               padding: '8px 12px',
               border: '1px solid #d1d5db',
               borderRadius: '8px',
@@ -1032,14 +1036,14 @@ function AIChatbot() {
                 title="Attach a photo of the food"
                 aria-label="Attach a photo"
                 disabled={sending}
-                style={{ padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flexShrink: 0, padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               ><CameraIcon size={18} /></button>
               <button
                 onClick={() => csvInputRef.current && csvInputRef.current.click()}
                 title="Bulk-import listings from a CSV file"
                 aria-label="Bulk import CSV"
                 disabled={sending}
-                style={{ padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                style={{ flexShrink: 0, padding: '8px 10px', border: 'none', borderRadius: '8px', background: '#f3f4f6', color: '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
               ><FileIcon size={18} /></button>
             </>
           )}
@@ -1052,13 +1056,13 @@ function AIChatbot() {
               title="Hold to record"
               aria-label="Hold to record voice message"
               disabled={sending}
-              style={{ padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ flexShrink: 0, padding: '8px 12px', border: 'none', borderRadius: '8px', background: recording ? '#ef4444' : '#f3f4f6', color: recording ? 'white' : '#374151', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             ><MicIcon size={18} /></button>
           )}
           <button
             onClick={() => sendMessage(input)}
             disabled={sending || !input.trim()}
-            style={{ padding: '8px 14px', border: 'none', borderRadius: '8px', background: '#10b981', color: 'white', cursor: 'pointer', fontSize: '14px', opacity: (sending || !input.trim()) ? 0.6 : 1 }}
+            style={{ flexShrink: 0, padding: '8px 14px', border: 'none', borderRadius: '8px', background: '#10b981', color: 'white', cursor: 'pointer', fontSize: '14px', opacity: (sending || !input.trim()) ? 0.6 : 1 }}
           >Send</button>
         </div>
       </div>
