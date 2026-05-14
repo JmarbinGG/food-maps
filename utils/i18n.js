@@ -153,6 +153,20 @@
       const l = normalize(lang);
       translations[l] = Object.assign({}, translations[l] || {}, entries || {});
     },
+    // Back-compat shims for legacy static pages (privacy/terms/cookies)
+    // that expect a richer API. The runtime DOM auto-translator handles
+    // actual translation, so these are safe no-ops aside from triggering
+    // a re-translation pass.
+    initLanguageSystem() {
+      if (typeof window !== 'undefined' && window.i18nAuto && window.i18nAuto.translateAll) {
+        try { window.i18nAuto.translateAll(); } catch (e) {}
+      }
+    },
+    translatePage() {
+      if (typeof window !== 'undefined' && window.i18nAuto && window.i18nAuto.translateAll) {
+        try { window.i18nAuto.translateAll(); } catch (e) {}
+      }
+    },
   };
 
   if (typeof window !== 'undefined') {
