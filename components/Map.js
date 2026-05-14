@@ -432,10 +432,11 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     // asked for show_map + show_route in the same tick, before the
     // view-switch finished), drain it now. Use a small delay so the
     // map style has time to load on a fresh mount.
+    let pendingTimer = null;
     try {
       const pending = (typeof window !== 'undefined') ? window.__foodmapsPendingRoute : null;
       if (pending && pending.route && (Date.now() - (pending.at || 0)) < 15000) {
-        setTimeout(() => {
+        pendingTimer = setTimeout(() => {
           try {
             drawRoute(pending.route);
             window.__foodmapsPendingRoute = null;
@@ -447,6 +448,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     return () => {
       window.removeEventListener('foodmaps:show_route', handler);
       window.removeEventListener('foodmaps:clear_route', clearHandler);
+      if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (_) {} }
       clearRoute();
     };
   }, []);
