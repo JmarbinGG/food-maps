@@ -646,7 +646,14 @@ function findAutocompleteSuggestion(input, anonymous, dismissed) {
   if (!input) return '';
   // Require at least 2 visible characters before suggesting anything,
   // and bail out if the user has just typed whitespace (no ghost on
-  // ' ').
+  // ' '). We intentionally match against the FULL input (incl. any
+  // leading whitespace) instead of the stripped form, because the
+  // overlay renders the ghost as `phrase.slice(input.length)`. If we
+  // matched on a stripped needle, leading-whitespace input would
+  // produce a misaligned ghost (e.g. '  hi' + slice('Hi there',4) =
+  // '  hi'+'here' = '  hihere'). Phrases never start with whitespace,
+  // so leading-whitespace input simply yields no suggestion \u2014 the
+  // desired behavior.
   const visible = input.replace(/^\s+/, '');
   if (visible.length < 2) return '';
   const needle = input.toLowerCase();
@@ -683,6 +690,12 @@ function AIChatbot() {
   // because React bails on setState updates that return the same
   // reference.)
   const [dismissTick, setDismissTick] = React.useState(0);
+  // Horizontal scroll offset of the chat input. We mirror it onto the
+  // ghost-overlay's translateX so that, when the user types more text
+  // than fits in the visible width and the <input> scrolls, the ghost
+  // suggestion stays glued to the actual caret position instead of
+  // floating at the left edge.
+  const [inputScrollLeft, setInputScrollLeft] = React.useState(0);
   const autocompleteSuggestion = React.useMemo(
     () => findAutocompleteSuggestion(input, anonymous, dismissedSuggestionsRef.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1198,23 +1211,37 @@ function AIChatbot() {
                   fontFamily: 'inherit',
                 }}
               >
-                <span style={{ color: 'transparent' }}>{input}</span>
-                <span>{autocompleteSuggestion.slice(input.length)}</span>
+                <span style={{ display: 'inline-block', transform: `translateX(${-inputScrollLeft}px)` }}>
+                  <span style={{ color: 'transparent' }}>{input}</span>
+                  <span>{autocompleteSuggestion.slice(input.length)}</span>
+                </span>
               </div>
             )}
             <input
               ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onScroll={(e) => setInputScrollLeft(e.target.scrollLeft)}
               onKeyDown={(e) => {
+                // While the user is mid-composition with an IME (CJK,
+                // dead-key accents, etc.), e.isComposing is true and
+                // the keystroke is part of building the next character.
+                // Hijacking Tab / ArrowRight / Escape during that
+                // window would break Chinese / Japanese / accented
+                // input completely, so we let those keys pass through.
+                if (e.nativeEvent && e.nativeEvent.isComposing) return;
                 // Accept the ghost suggestion with Tab (always) or
                 // ArrowRight when the caret is already at the end of
                 // the typed text. We never hijack ArrowRight in the
                 // middle of the line — that would break normal cursor
                 // navigation.
                 if (autocompleteSuggestion && !sending) {
-                  const atEnd = e.target.selectionStart === input.length
-                    && e.target.selectionEnd === input.length;
+                  // Compare against e.target.value rather than the
+                  // React state — the DOM is the source of truth at the
+                  // exact moment of the keypress.
+                  const liveLen = e.target.value.length;
+                  const atEnd = e.target.selectionStart === liveLen
+                    && e.target.selectionEnd === liveLen;
                   if (e.key === 'Tab' || (e.key === 'ArrowRight' && atEnd)) {
                     e.preventDefault();
                     setInput(autocompleteSuggestion);
