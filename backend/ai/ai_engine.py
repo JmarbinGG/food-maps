@@ -92,6 +92,25 @@ _SPANISH_MARKERS = {
     "soy", "eres", "estoy", "está", "ser", "hacer", "tiene",
 }
 
+# English-only markers used to flip sticky language back to English
+# when the user clearly writes in English. These are words that don't
+# also exist in Spanish, so any single occurrence is a strong signal.
+_ENGLISH_MARKERS = {
+    "hi", "hello", "hey", "thanks", "thank", "please", "yes", "yeah",
+    "no", "nope", "ok", "okay", "sure", "the", "a", "an", "is", "are",
+    "was", "were", "be", "been", "being", "have", "has", "had", "do",
+    "does", "did", "will", "would", "should", "could", "can", "may",
+    "might", "must", "i", "you", "your", "yours", "me", "my", "mine",
+    "we", "us", "our", "they", "them", "their", "he", "she", "him",
+    "her", "what", "where", "when", "why", "how", "which", "who",
+    "show", "find", "get", "give", "send", "make", "want", "need",
+    "help", "tell", "ask", "see", "look", "food", "near", "nearby",
+    "around", "here", "there", "today", "tomorrow", "now", "later",
+    "directions", "listing", "listings", "claim", "pickup", "drop",
+    "off", "on", "in", "at", "to", "from", "with", "without", "for",
+    "and", "or", "but", "if", "because", "so", "than", "then",
+}
+
 
 def detect_spanish(text: str) -> bool:
     lower = text.lower()
@@ -106,6 +125,21 @@ def detect_spanish(text: str) -> bool:
         return True
     has_accent = accent_hits >= 1
     return marker_hits >= 2 or (marker_hits >= 1 and has_accent)
+
+
+def detect_english(text: str) -> bool:
+    """Symmetric to detect_spanish — returns True when the message
+    contains at least one English-only marker word and has no Spanish-
+    specific characters. Used so short messages like 'hi', 'thanks',
+    'ok' are correctly identified as English even when the user has a
+    Spanish profile or Spanish conversation history."""
+    if not text:
+        return False
+    lower = text.lower()
+    if re.search(r"[¿¡ñáéíóúü]", lower):
+        return False
+    words = set(re.split(r"\W+", lower))
+    return bool(words & _ENGLISH_MARKERS)
 
 
 # ---------------------------------------------------------------------------
@@ -1340,11 +1374,15 @@ class ConversationEngine:
         """
         if message and detect_spanish(message):
             return "es"
-        # If the current message is *clearly* English (multiple ASCII
-        # words, no Spanish punctuation or accents), trust it and don't
-        # let stale Spanish history flip the reply. Sticky behavior is
-        # only meant to rescue short ambiguous tokens like 'ok', 'sí',
-        # 'gracias', 'vale' — not full English sentences.
+        # If the current message contains ANY English-only marker word
+        # (and no Spanish chars), treat it as English. This catches
+        # short greetings like 'hi', 'hello', 'thanks', 'ok' that don't
+        # have 3+ words but are obviously English. The user reported the
+        # AI replying in Spanish to plain English messages — this is the
+        # fix: English markers beat Spanish profile / Spanish history.
+        if message and detect_english(message):
+            return "en"
+        # Multi-word ASCII-only messages without Spanish chars also win.
         if message:
             lower = message.lower()
             has_spanish_chars = bool(re.search(r"[¿¡ñáéíóúü]", lower))
