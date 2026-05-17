@@ -1524,6 +1524,26 @@ class ConversationEngine:
                     "personality."
                 ),
             })
+        else:
+            # Symmetric English lock. Without this, if any prior assistant
+            # turn in history was Spanish, the model copies that style and
+            # keeps replying in Spanish even though the user just wrote in
+            # English. This system message overrides that drift.
+            messages.append({
+                "role": "system",
+                "content": (
+                    "The user is communicating in English. You MUST respond "
+                    "ENTIRELY in English for this turn, even if earlier turns "
+                    "in the conversation history were in Spanish or another "
+                    "language. The user has switched (or always was) writing "
+                    "in English — match them. This applies to your reply "
+                    "text, tool-result summaries, confirmation prompts, "
+                    "follow-up questions, and error explanations. Do not "
+                    "include Spanish phrases or translations. Only switch "
+                    "back to Spanish if the user explicitly writes in Spanish "
+                    "again."
+                ),
+            })
 
         if profile:
             # Build a rich, conversational context block so the model has
