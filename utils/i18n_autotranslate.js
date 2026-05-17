@@ -1313,6 +1313,37 @@
     }
   }
 
+  // Multi-pass sweep used on explicit language toggle. The synchronous
+  // translateAll() walks the current DOM, but React components (and
+  // async-rendered children such as listing cards loaded after a fetch,
+  // map popups, modal contents, lazy-mounted badges) may commit DOM
+  // mutations *during* the walk (while the MutationObserver is paused)
+  // or shortly after. Those late mutations would otherwise stay in the
+  // previous language until the next user interaction. Re-sweep a few
+  // times to converge.
+  function translateAllDeferred() {
+    translateAll();
+    // Next animation frame catches mutations that React queued during
+    // the synchronous walk (observer was disconnected then).
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () {
+        pendingRoots.add(document.body || document.documentElement);
+        if (!scheduled) { scheduled = true; flush(); }
+      });
+    }
+    // Catch slower async renders (data fetches, image loads triggering
+    // layout-dependent text, leaflet popups, dynamically mounted
+    // subcomponents) without being so late that the UI feels laggy.
+    setTimeout(function () {
+      pendingRoots.add(document.body || document.documentElement);
+      if (!scheduled) { scheduled = true; flush(); }
+    }, 250);
+    setTimeout(function () {
+      pendingRoots.add(document.body || document.documentElement);
+      if (!scheduled) { scheduled = true; flush(); }
+    }, 1000);
+  }
+
   function startObserving() {
     if (!observer) {
       observer = new MutationObserver(function (mutations) {
@@ -1351,7 +1382,7 @@
 
   // React to language toggle.
   window.addEventListener('languageChanged', function () {
-    translateAll();
+    translateAllDeferred();
   });
 
   // Wait for DOM ready before doing the initial sweep.
