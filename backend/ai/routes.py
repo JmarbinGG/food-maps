@@ -36,10 +36,12 @@ from backend.ai.ai_engine import (
     conversation_engine,
     check_rate_limit,
     close_http_client,
+    OpenAIRateLimitError,
 )
 from backend.ai.errors import (
     AIDatabaseError,
     AIError,
+    AIRateLimited,
     AIServiceUnavailable,
     AITimeout,
     AIUpstreamError,
@@ -267,6 +269,9 @@ async def ai_chat(
         raise AITimeout(lang) from exc
     except httpx.HTTPError as exc:
         raise AIUpstreamError(lang) from exc
+    except OpenAIRateLimitError as exc:
+        logger.warning("AI chat rate-limited by OpenAI: %s", exc)
+        raise AIRateLimited(lang, retry_after=exc.retry_after) from exc
     except RuntimeError as exc:
         logger.error("AI chat RuntimeError: %s", exc)
         raise AIServiceUnavailable(lang) from exc
@@ -521,6 +526,8 @@ async def ai_voice(
         raise AITimeout(lang) from exc
     except httpx.HTTPError as exc:
         raise AIUpstreamError(lang) from exc
+    except OpenAIRateLimitError as exc:
+        raise AIRateLimited(lang, retry_after=exc.retry_after) from exc
     except RuntimeError as exc:
         raise AIServiceUnavailable(lang) from exc
     except Exception as exc:
@@ -555,6 +562,8 @@ async def ai_tts(
         raise AITimeout(lang) from exc
     except httpx.HTTPError as exc:
         raise AIUpstreamError(lang) from exc
+    except OpenAIRateLimitError as exc:
+        raise AIRateLimited(lang, retry_after=exc.retry_after) from exc
     except RuntimeError as exc:
         raise AIServiceUnavailable(lang) from exc
     except Exception as exc:

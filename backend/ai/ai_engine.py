@@ -165,12 +165,14 @@ CANNED_RESPONSES = {
     "en": {
         "timeout": "I'm taking longer than usual — please try again in a moment. In the meantime you can browse food on the Find Food page.",
         "api_down": "I can't reach my AI service right now. You can still browse listings and check your dashboard — I'll be back shortly!",
+        "rate_limited": "I'm getting more questions than I can answer right now. Please try again in a minute — in the meantime you can browse listings or check your dashboard.",
         "general_error": "Something went wrong on my end. Please try again, or contact support if the issue persists.",
         "tool_error": "I couldn't look that up right now, but I can still help with general questions.",
     },
     "es": {
         "timeout": "Estoy tardando más de lo normal — inténtalo de nuevo en un momento. Mientras tanto puedes explorar comida en Buscar Comida.",
         "api_down": "No puedo conectarme a mi servicio de IA en este momento. Aún puedes explorar los listados y revisar tu panel.",
+        "rate_limited": "Estoy recibiendo más preguntas de las que puedo responder ahora mismo. Inténtalo de nuevo en un minuto — mientras tanto puedes explorar los listados o revisar tu panel.",
         "general_error": "Algo salió mal. Inténtalo de nuevo o contacta a soporte.",
         "tool_error": "No pude buscar esa información, pero puedo ayudarte con preguntas generales.",
     },
@@ -291,6 +293,18 @@ _circuit = CircuitBreaker()
 # OpenAI request helper
 # ---------------------------------------------------------------------------
 
+class OpenAIRateLimitError(RuntimeError):
+    """Raised when OpenAI returns 429 after we've exhausted retries.
+
+    Carries the upstream ``Retry-After`` hint (seconds) so the caller
+    can pass it back to the client in a Retry-After response header.
+    """
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
 async def _openai_with_retry(
     method: str,
     url: str,
@@ -304,6 +318,7 @@ async def _openai_with_retry(
 ) -> httpx.Response:
     NON_RETRYABLE = {401, 403, 404, 422}
     last_exc: Exception | None = None
+    last_429_retry_after: float | None = None
 
     # Circuit breaker: refuse to issue requests when the breaker is OPEN
     # (consecutive recent failures). Previously the breaker recorded
@@ -328,13 +343,30 @@ async def _openai_with_retry(
 
             if resp.status_code == 429:
                 _circuit.record_failure()
-                await asyncio.sleep(min(2 ** attempt + 1, 10))
+                # Capture diagnostics so the final exception isn't
+                # "failed after N attempts: None". Honor OpenAI's
+                # Retry-After header when present, capped at 30s so a
+                # buggy upstream value can't stall the worker.
+                retry_after_hdr = resp.headers.get("retry-after")
+                try:
+                    retry_after = float(retry_after_hdr) if retry_after_hdr else None
+                except (TypeError, ValueError):
+                    retry_after = None
+                last_429_retry_after = retry_after
+                last_exc = RuntimeError(
+                    f"OpenAI 429 rate limit (retry-after={retry_after_hdr!r})"
+                )
+                if attempt < retries - 1:
+                    sleep_s = retry_after if retry_after is not None else min(2 ** attempt + 1, 10)
+                    await asyncio.sleep(min(max(sleep_s, 0.5), 30.0))
                 continue
             if resp.status_code in NON_RETRYABLE:
                 resp.raise_for_status()
             if resp.status_code >= 500:
                 _circuit.record_failure()
-                await asyncio.sleep(min(2 ** attempt + 1, 10))
+                last_exc = RuntimeError(f"OpenAI {resp.status_code}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(min(2 ** attempt + 1, 10))
                 continue
 
             resp.raise_for_status()
@@ -348,6 +380,14 @@ async def _openai_with_retry(
             if attempt < retries - 1:
                 await asyncio.sleep(min(2 ** attempt + 1, 10))
 
+    # If the last failure was a 429, raise the dedicated subclass so the
+    # route layer can map it to a Retry-After header and a clearer
+    # user-facing message ("AI is busy" rather than "AI is down").
+    if last_429_retry_after is not None or (last_exc and "429" in str(last_exc)):
+        raise OpenAIRateLimitError(
+            f"OpenAI request rate-limited after {retries} attempts: {last_exc}",
+            retry_after=last_429_retry_after,
+        )
     raise RuntimeError(f"OpenAI request failed after {retries} attempts: {last_exc}")
 
 

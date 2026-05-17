@@ -58,6 +58,25 @@ class AIServiceUnavailable(AIError):
     canned_key = "api_down"
 
 
+class AIRateLimited(AIError):
+    """Upstream returned 429 (we've blown our OpenAI quota/RPM/TPM cap).
+
+    Distinct from ``AIServiceUnavailable`` so the user sees "I'm busy,
+    try again in a minute" instead of the misleading "can't reach my
+    AI service". Carries a ``retry_after`` so the response includes a
+    Retry-After header.
+    """
+    status_code = 429
+    canned_key = "rate_limited"
+
+    def __init__(self, lang: str = "en", detail: Optional[str] = None,
+                 retry_after: Optional[float] = None):
+        super().__init__(lang=lang, detail=detail)
+        if retry_after is not None and retry_after > 0:
+            # FastAPI will surface this header to the client.
+            self.headers = {"Retry-After": str(int(max(1, round(retry_after))))}
+
+
 class AIDatabaseError(AIError):
     """Database failed (connection, integrity, deadlock, etc.)."""
     status_code = 503
@@ -85,6 +104,7 @@ __all__ = [
     "AITimeout",
     "AIUpstreamError",
     "AIServiceUnavailable",
+    "AIRateLimited",
     "AIDatabaseError",
     "resolve_lang",
 ]
