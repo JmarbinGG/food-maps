@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 from datetime import datetime
 from typing import Optional, List
 from enum import Enum
@@ -79,6 +79,27 @@ class FoodResourceCreate(BaseModel):
     coords_lat: Optional[float] = None
     coords_lng: Optional[float] = None
     images: Optional[List[str]] = None
+
+    @field_validator("coords_lat")
+    @classmethod
+    def _validate_lat(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (-90.0 <= float(v) <= 90.0):
+            raise ValueError("coords_lat must be between -90 and 90")
+        return v
+
+    @field_validator("coords_lng")
+    @classmethod
+    def _validate_lng(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None and not (-180.0 <= float(v) <= 180.0):
+            raise ValueError("coords_lng must be between -180 and 180")
+        return v
+
+    @field_validator("qty")
+    @classmethod
+    def _validate_qty(cls, v: float) -> float:
+        if v is None or float(v) <= 0:
+            raise ValueError("qty must be greater than 0")
+        return v
 
 class FoodResourceResponse(BaseModel):
     id: int

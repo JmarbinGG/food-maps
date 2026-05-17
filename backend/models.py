@@ -121,6 +121,13 @@ class FoodResource(Base):
     images = Column(Text, nullable=True)  # JSON array of image URLs
     urgency_score = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Mirror the raw CREATE TABLE in backend/app.py:
+    # `updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP`.
+    # Without this column on the model, `item.updated_at = datetime.utcnow()`
+    # in update_listing was silently dropped on commit (the ORM didn't
+    # know about the attribute) — timestamps relied purely on MySQL's
+    # ON UPDATE clause, which fires only when at least one column changes.
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=True)
     
     # Pickup Verification
     verification_status = Column(String(50), default='not_required', nullable=True)

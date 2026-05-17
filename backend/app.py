@@ -1820,8 +1820,14 @@ async def get_public_stats(response: Response, db: Session = Depends(get_db)):
         response.headers["Cache-Control"] = "public, max-age=300"
         return fallback
 
-# Store for pending confirmations
-pending_confirmations = {}
+# Store for pending confirmations.
+# auto_release_claim runs on a threading.Timer (separate OS thread) while
+# claim_listing / confirm_claim run on FastAPI's async worker. Concurrent
+# access to a plain dict can race (the `if key in d ... del d[key]`
+# pattern below in auto_release_claim is a classic TOCTOU). A single
+# module-level Lock is enough — contention is low and operations are O(1).
+pending_confirmations: dict = {}
+_pending_confirmations_lock = Lock()
 
 def generate_reset_code(length: int = 6) -> str:
     """Generate a random numeric code for SMS confirmation"""
@@ -1870,7 +1876,13 @@ def auto_release_claim(listing_id: int):
     db = None
     try:
         db = SessionLocal()
-        if listing_id in pending_confirmations:
+        # Atomic check-and-remove under the lock so a concurrent
+        # confirm_claim can't race us into a KeyError on `del`.
+        with _pending_confirmations_lock:
+            still_pending = listing_id in pending_confirmations
+            if still_pending:
+                pending_confirmations.pop(listing_id, None)
+        if still_pending:
             item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
             if item and item.status == "pending_confirmation":
                 item.status = "available"
@@ -1878,7 +1890,6 @@ def auto_release_claim(listing_id: int):
                 item.claimed_at = None
                 db.commit()
                 print(f"\u23f0 Auto-released listing {listing_id} due to timeout")
-            del pending_confirmations[listing_id]
     except Exception as e:
         print(f"Error in auto_release_claim: {e}")
         if db is not None:
@@ -2102,11 +2113,12 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
 
         # Store confirmation code (the listing was already moved to
         # pending_confirmation by the atomic update above).
-        pending_confirmations[listing_id] = {
-            'code': confirmation_code,
-            'recipient_id': uid_int,
-            'expires_at': datetime.utcnow() + timedelta(minutes=5)
-        }
+        with _pending_confirmations_lock:
+            pending_confirmations[listing_id] = {
+                'code': confirmation_code,
+                'recipient_id': uid_int,
+                'expires_at': datetime.utcnow() + timedelta(minutes=5)
+            }
         
         # Send SMS to recipient
         recipient_msg = f"You claimed '{item.title}'. Reply with code {confirmation_code} within 5 minutes to confirm. Address: {item.address}"
@@ -2143,20 +2155,22 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
         if not code:
             raise HTTPException(status_code=400, detail="Confirmation code required")
         
-        # Check if confirmation is pending
-        if listing_id not in pending_confirmations:
-            raise HTTPException(status_code=400, detail="No pending confirmation for this listing")
-        
-        confirmation = pending_confirmations[listing_id]
-        
+        # Atomically pop-and-validate so the auto-release Timer can't
+        # race us into a KeyError or a double-confirm.
+        with _pending_confirmations_lock:
+            confirmation = pending_confirmations.get(listing_id)
+            if confirmation is None:
+                raise HTTPException(status_code=400, detail="No pending confirmation for this listing")
+
         # Check if code matches. Use a constant-time compare so a
         # remote attacker can't infer the code from response timing.
         if not hmac.compare_digest(str(confirmation['code']), str(code)):
             raise HTTPException(status_code=400, detail="Invalid confirmation code")
-        
+
         # Check if expired
         if datetime.utcnow() > confirmation['expires_at']:
-            del pending_confirmations[listing_id]
+            with _pending_confirmations_lock:
+                pending_confirmations.pop(listing_id, None)
             raise HTTPException(status_code=400, detail="Confirmation code expired")
         
         # Verify user authorization
@@ -2177,7 +2191,8 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
         db.commit()
         
         # Clean up confirmation
-        del pending_confirmations[listing_id]
+        with _pending_confirmations_lock:
+            pending_confirmations.pop(listing_id, None)
         
         # Get user details for notification
         claimant = db.query(User).filter(User.id == user_id).first()
