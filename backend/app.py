@@ -1392,9 +1392,27 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         if expiration_date_provided:
             item.expiration_date = expiration_date
         if status is not None:
-            item.status = status
+            # Validate against the canonical state list. Without this the
+            # donor could set status to any string (including arbitrary
+            # junk like "lolwut" or jumping to "completed" without going
+            # through the SMS confirmation flow). The set mirrors the
+            # values the rest of the app filters on.
+            allowed_statuses = {"available", "claimed", "pending_confirmation", "completed", "expired", "cancelled"}
+            if str(status).lower() not in allowed_statuses:
+                raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(allowed_statuses)}")
+            item.status = str(status).lower()
+        # NOTE: recipient_id is intentionally NOT writable here. It is
+        # only set by the claim / confirm endpoints. Allowing it on PUT
+        # would let a donor pin any user_id as the recipient of their
+        # own listing without that user's consent (spam / IDOR).
         if recipient_id_provided:
-            item.recipient_id = recipient_id
+            try:
+                print(
+                    f"update_listing: ignoring client-supplied recipient_id={recipient_id!r} "
+                    f"on listing={item.id} (read-only here)"
+                )
+            except Exception:
+                pass
         if address is not None and address != item.address:
             item.address = address
             address_changed = True
@@ -1612,8 +1630,10 @@ async def reset_password(payload: ResetPasswordRequest, request: Request, db: Se
         
         stored = password_reset_codes[email]
         
-        # Verify code
-        if stored['code'] != code:
+        # Verify code. Constant-time compare guards against a timing
+        # side-channel that could in principle leak the code digit by
+        # digit (very small leak for a numeric code, but cheap to close).
+        if not hmac.compare_digest(str(stored['code']), str(code)):
             raise HTTPException(status_code=400, detail="Invalid reset code")
         
         # Check expiration
@@ -2129,8 +2149,9 @@ async def confirm_claim(listing_id: int, request: Request, db: Session = Depends
         
         confirmation = pending_confirmations[listing_id]
         
-        # Check if code matches
-        if confirmation['code'] != code:
+        # Check if code matches. Use a constant-time compare so a
+        # remote attacker can't infer the code from response timing.
+        if not hmac.compare_digest(str(confirmation['code']), str(code)):
             raise HTTPException(status_code=400, detail="Invalid confirmation code")
         
         # Check if expired
@@ -3299,7 +3320,24 @@ async def get_referral_stats(
 ):
     """Get referral statistics for admin"""
     try:
-        user = verify_token(credentials.credentials, db)
+        # NOTE: verify_token() only takes a HTTPAuthorizationCredentials
+        # arg and returns the raw JWT payload — not a User object. The
+        # previous `verify_token(credentials.credentials, db)` call was
+        # passing two positional args and treating the dict as a User,
+        # which raised TypeError on every request and made this endpoint
+        # 500 unconditionally.
+        try:
+            payload = jwt.decode(
+                credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+            )
+            uid = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except (jwt.PyJWTError, ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if uid is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == uid).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
         
         # Check if user is admin
         if user.role != UserRole.ADMIN:
@@ -3358,7 +3396,20 @@ async def get_user_referrals(
 ):
     """Get all users referred by a specific user"""
     try:
-        user = verify_token(credentials.credentials, db)
+        # See note in get_referral_stats: verify_token() returns the JWT
+        # payload, not a User. Resolve the User ourselves.
+        try:
+            payload = jwt.decode(
+                credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+            )
+            uid = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except (jwt.PyJWTError, ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if uid is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == uid).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
         
         # Check if user is admin or the user themselves
         if user.role != UserRole.ADMIN and user.id != user_id:
@@ -3409,7 +3460,20 @@ async def get_my_referral_code(
 ):
     """Get current user's referral code"""
     try:
-        user = verify_token(credentials.credentials, db)
+        # See note in get_referral_stats: verify_token() returns the JWT
+        # payload, not a User. Resolve the User ourselves.
+        try:
+            payload = jwt.decode(
+                credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM]
+            )
+            uid = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+        except (jwt.PyJWTError, ValueError, TypeError):
+            raise HTTPException(status_code=401, detail="Invalid token")
+        if uid is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        user = db.query(User).filter(User.id == uid).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found")
         
         # Generate referral code if user doesn't have one
         if not user.referral_code:

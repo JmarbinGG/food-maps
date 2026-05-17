@@ -2,6 +2,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from html import escape as _html_escape
 from typing import Optional
 
 from backend.aws_secrets import load_aws_secrets
@@ -41,12 +42,16 @@ def _send_email(to_email: str, subject: str, text_content: str, html_content: Op
 
 def send_reset_email(to_email: str, reset_code: str, user_name: str) -> None:
     """Send a password reset code email."""
+    # user_name is user-supplied and lands in an HTML body; escape it so a
+    # display name like '<script>...</script>' or '<img onerror=...>'
+    # can't render as live markup in mail clients that honour HTML.
+    safe_name = _html_escape(user_name or "there")
     html_content = f"""
     <html>
       <body>
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2d5a27;">Password Reset Request</h2>
-          <p>Hi {user_name},</p>
+          <p>Hi {safe_name},</p>
           <p>You requested a password reset for your Food Maps account.</p>
           <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
             <h3 style="color: #2d5a27; margin: 0;">Your verification code is:</h3>
@@ -86,6 +91,12 @@ Food Maps - Connecting communities through food sharing
 
 def send_verification_email(to_email: str, user_name: str, verification_link: str) -> None:
     """Send an email verification link."""
+    # Escape the user-supplied display name for the HTML body. The link
+    # itself is built server-side so it doesn't need escaping, but we
+    # still pass it through escape() defensively in the href in case the
+    # token format ever changes.
+    safe_name = _html_escape(user_name or "there")
+    safe_link = _html_escape(verification_link, quote=True)
     text_content = f"""Hello {user_name},
 
 Thank you for joining Food Maps! Please verify your email address by visiting the link below:
@@ -105,9 +116,9 @@ The Food Maps Team
       <body>
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2d5a27;">Verify Your Email Address</h2>
-          <p>Hello {user_name},</p>
+          <p>Hello {safe_name},</p>
           <p>Thank you for joining Food Maps! Please verify your email address by clicking the link below:</p>
-          <p><a href="{verification_link}">{verification_link}</a></p>
+          <p><a href="{safe_link}">{safe_link}</a></p>
           <p>This link will expire in 24 hours.</p>
           <p>If you did not create an account with Food Maps, please ignore this email.</p>
           <p>Best regards,<br>The Food Maps Team</p>
