@@ -28,6 +28,19 @@ load_aws_secrets()
 
 logger = logging.getLogger("ai_tools")
 
+
+def _utcnow() -> datetime:
+    """Naive-UTC `now`, replacing the deprecated ``datetime.utcnow()``.
+
+    Returns a tz-NAIVE datetime expressed in UTC, matching the existing
+    DB column conventions (timestamp columns are stored as naive UTC).
+    Centralising it here avoids the `DeprecationWarning` flood on
+    Python 3.12+ and gives us a single place to migrate to tz-aware
+    storage when we're ready.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN") or os.getenv("VITE_MAPBOX_TOKEN", "")
 MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
 MAPBOX_GEOCODE_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json"
@@ -1407,7 +1420,7 @@ async def _get_user_dashboard(user_id: str) -> dict:
                 .limit(5)
                 .all()
             )
-            now = datetime.utcnow()
+            now = _utcnow()
             upcoming_reminders = (
                 db.query(AIReminder)
                 .filter(AIReminder.user_id == uid)
@@ -1482,7 +1495,7 @@ async def _check_pickup_schedule(
     def _sync() -> dict:
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             future = now + timedelta(days=days_ahead)
 
             reminders_q = (
@@ -1723,7 +1736,7 @@ async def _get_donor_expiring_listings(user_id: str, hours_ahead: int = 48) -> d
     def _sync() -> dict:
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             horizon = now + timedelta(hours=hours_ahead)
             rows = (
                 db.query(FoodResource)
@@ -1901,7 +1914,7 @@ async def _get_platform_stats(user_id: str) -> dict:
             admin = db.query(User).filter(User.id == uid).first()
             if not admin or (admin.role and admin.role.value != "admin"):
                 return {"error": "Admin role required"}
-            now = datetime.utcnow()
+            now = _utcnow()
             last_24h = now - timedelta(hours=24)
             last_7d = now - timedelta(days=7)
 
@@ -2066,7 +2079,7 @@ async def _search_food_by_location(
             rows = q.order_by(FoodResource.created_at.desc()).limit(500).all()
 
             candidates = []
-            now = datetime.utcnow()
+            now = _utcnow()
             for r in rows:
                 if r.coords_lat is None or r.coords_lng is None:
                     continue
@@ -2504,7 +2517,7 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
             # Atomic claim: only one concurrent caller can transition
             # 'available' -> 'pending_confirmation'. Prevents the read-then-
             # update race that could let two users both "win" a listing.
-            now = datetime.utcnow()
+            now = _utcnow()
             updated = (
                 db.query(FoodResource)
                 .filter(
@@ -2683,7 +2696,7 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
             if confirmation.get("code") != code_clean:
                 return {"error": "Invalid confirmation code"}
             expires_at = confirmation.get("expires_at")
-            if expires_at is None or datetime.utcnow() > expires_at:
+            if expires_at is None or _utcnow() > expires_at:
                 pending_confirmations.pop(lid, None)
                 return {"error": "Confirmation code expired. Please claim again."}
 
@@ -2915,10 +2928,10 @@ async def _update_user_profile(
             if sms_consent_given is not None:
                 u.sms_consent_given = bool(sms_consent_given)
                 if sms_consent_given:
-                    u.sms_consent_date = datetime.utcnow()
+                    u.sms_consent_date = _utcnow()
                     u.sms_opt_out_date = None
                 else:
-                    u.sms_opt_out_date = datetime.utcnow()
+                    u.sms_opt_out_date = _utcnow()
                 changed.append("sms_consent_given")
             if notification_preferences is not None:
                 existing = {}
@@ -3141,7 +3154,7 @@ async def _post_food_listing(
     #   1) reject any pickup window or expiration that is already past
     #   2) supply sensible defaults when the model omits them
     # ------------------------------------------------------------------
-    now = datetime.utcnow()
+    now = _utcnow()
     if win_end is None and win_start is None:
         # Default pickup window: now -> +48h (good for most donations).
         win_start = now
@@ -3235,7 +3248,7 @@ async def _post_food_listing(
                 normalized_addr = ((address or user.address or "").strip() or None)
                 if normalized_title:
                     from sqlalchemy import func as _sa_func
-                    recent_cutoff = datetime.utcnow() - timedelta(seconds=10)
+                    recent_cutoff = _utcnow() - timedelta(seconds=10)
                     dup_q = (
                         db.query(FoodResource)
                         .filter(FoodResource.donor_id == uid)
@@ -3365,7 +3378,7 @@ async def _post_food_listing(
                     verify_issues.append(f"status={status_val!r} (expected 'available')")
                 if check.coords_lat is None or check.coords_lng is None:
                     verify_issues.append("missing map coordinates")
-                if check.pickup_window_end and check.pickup_window_end <= datetime.utcnow():
+                if check.pickup_window_end and check.pickup_window_end <= _utcnow():
                     verify_issues.append("pickup window already ended")
                 # Also confirm it would be returned by the public listings
                 # query the map uses. We replicate the simplest version of
@@ -3725,7 +3738,7 @@ async def _bulk_import_listings(
                 left = left.strip()
                 right = right.strip()
                 if left and right:
-                    now = datetime.utcnow()
+                    now = _utcnow()
                     base = now.date()
                     fmts = ("%I:%M %p", "%I %p", "%H:%M", "%H")
                     def _parse_clock(piece: str) -> Optional[datetime]:

@@ -50,12 +50,31 @@ logger = logging.getLogger("ai_routes")
 
 load_aws_secrets()
 
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+# JWT_SECRET must be configured in any non-test environment. The previous
+# default of "your-secret-key" is public on GitHub and would let an attacker
+# forge tokens for any user. Fail loudly at import time instead.
+_DEFAULT_JWT_SECRET = "your-secret-key"
+JWT_SECRET = os.getenv("JWT_SECRET", _DEFAULT_JWT_SECRET)
+if JWT_SECRET == _DEFAULT_JWT_SECRET:
+    if os.getenv("FOODMAPS_ENV", "").lower() in {"", "dev", "test", "local"}:
+        logger.warning(
+            "JWT_SECRET is unset; falling back to dev default. DO NOT run "
+            "in production without setting JWT_SECRET."
+        )
+    else:
+        raise RuntimeError(
+            "JWT_SECRET environment variable must be set in non-dev environments. "
+            "The hard-coded default is insecure and would allow token forgery."
+        )
 JWT_ALGORITHM = "HS256"
 
 REMINDER_CHECK_INTERVAL = int(os.getenv("REMINDER_CHECK_INTERVAL", "900"))
 
 router = APIRouter(prefix="/api/ai", tags=["ai"])
+# auto_error=False so the dependency itself doesn't raise — we want a
+# uniform JSON error shape via _require_auth() below, AND a few endpoints
+# (public_chat, health) accept anonymous callers. Every authenticated
+# endpoint MUST call _require_auth(credentials, uid).
 security = HTTPBearer(auto_error=False)
 
 
@@ -69,7 +88,32 @@ def _client_ip(request: Request) -> str:
 
 def _enforce_rate_limit(request: Request) -> None:
     if not check_rate_limit(_client_ip(request)):
-        raise HTTPException(429, "Rate limit exceeded. Try again later.")
+        lang = resolve_lang(request)
+        msg = (
+            "Demasiadas solicitudes — espera un momento e inténtalo de nuevo."
+            if lang == "es"
+            else "Too many requests — please wait a moment and try again."
+        )
+        raise HTTPException(429, msg)
+
+
+def _enforce_user_rate_limit(uid: int, request: Request) -> None:
+    """Per-authenticated-user cost cap on the heavy AI endpoints.
+
+    Backs the documented OpenAI spend protection: even with a valid token,
+    a single account cannot burn unlimited GPT-4.1 turns. The cap is
+    deliberately generous (default 200 turns/hour) so normal users never
+    notice it; abuse / runaway clients do.
+    """
+    from backend.ai.ai_engine import check_user_rate_limit
+    if not check_user_rate_limit(uid):
+        lang = resolve_lang(request)
+        msg = (
+            "Has alcanzado el límite por hora del asistente. Inténtalo más tarde."
+            if lang == "es"
+            else "You've hit the assistant's hourly limit. Please try again later."
+        )
+        raise HTTPException(429, msg)
 
 
 def _parse_user_id(raw: str) -> int:
@@ -95,8 +139,29 @@ def _auth_user_id(credentials: HTTPAuthorizationCredentials | None) -> int | Non
 
 
 def _check_ownership(auth_uid: int | None, requested_uid: int) -> None:
+    """Legacy soft-check kept for any callers that need it. New code should
+    use :func:`_require_auth` instead, which also rejects missing tokens."""
     if auth_uid is not None and auth_uid != requested_uid:
         raise HTTPException(403, "user_id does not match authenticated user")
+
+
+def _require_auth(
+    credentials: HTTPAuthorizationCredentials | None,
+    requested_uid: int,
+) -> int:
+    """Authenticate the caller and confirm they own ``requested_uid``.
+
+    Returns the authenticated user_id. Raises 401 if no/invalid token (so
+    an anonymous caller cannot impersonate any user_id by simply omitting
+    the Authorization header), and 403 if the token belongs to a
+    different user than the one in the request body / path.
+    """
+    auth_uid = _auth_user_id(credentials)
+    if auth_uid is None:
+        raise HTTPException(401, "Authentication required")
+    if auth_uid != requested_uid:
+        raise HTTPException(403, "user_id does not match authenticated user")
+    return auth_uid
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +174,11 @@ class AIChatRequest(BaseModel):
     # Photo uploads use /api/ai/upload_image and only send a short URL.
     message: str = Field(min_length=1, max_length=200000)
     include_audio: bool = False
+    # Frontend-supplied language hint ('en' | 'es'). When provided, takes
+    # precedence over server-side sniffing so short replies ('ok', 'si',
+    # numeric codes) don't flip the conversation back to the wrong
+    # language. Optional — missing/unknown values fall back to sniffing.
+    lang: Optional[str] = Field(default=None, max_length=8)
 
 
 class AIChatResponse(BaseModel):
@@ -174,14 +244,22 @@ async def ai_chat(
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(body.user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
-    lang = resolve_lang(request, body.message)
+    _require_auth(credentials, uid)
+    _enforce_user_rate_limit(uid, request)
+    # Client-supplied lang wins when valid; otherwise sniff from message
+    # text + Accept-Language. resolve_lang already implements that order.
+    client_lang = (body.lang or "").strip().lower()
+    if client_lang in {"en", "es"}:
+        lang = client_lang
+    else:
+        lang = resolve_lang(request, body.message)
 
     try:
         return await conversation_engine.chat(
             user_id=uid,
             message=body.message,
             include_audio=body.include_audio,
+            lang_hint=lang,
         )
     except HTTPException:
         raise
@@ -261,7 +339,7 @@ async def ai_history(
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
+    _require_auth(credentials, uid)
 
     if limit < 1 or limit > 200:
         raise HTTPException(400, "limit must be between 1 and 200")
@@ -286,7 +364,7 @@ async def ai_clear_history(
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
+    _require_auth(credentials, uid)
     lang = resolve_lang(request)
 
     try:
@@ -339,7 +417,7 @@ async def ai_upload_image(
     """
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
+    _require_auth(credentials, uid)
 
     base_type = (image.content_type or "").split(";")[0].strip().lower()
     if base_type not in ALLOWED_IMAGE_TYPES:
@@ -400,15 +478,20 @@ async def ai_voice(
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
+    _require_auth(credentials, uid)
+    _enforce_user_rate_limit(uid, request)
 
     allowed = {
         "audio/webm", "audio/wav", "audio/mpeg", "audio/mp4",
         "audio/ogg", "audio/x-m4a", "audio/mp3",
     }
     base_type = (audio.content_type or "").split(";")[0].strip().lower()
-    if base_type and base_type not in allowed:
-        raise HTTPException(400, f"Unsupported audio type: {audio.content_type}")
+    # Reject missing/unknown content-types outright. The previous
+    # `if base_type and base_type not in allowed` check let an empty
+    # Content-Type bypass the allow-list (the magic-byte sniff inside
+    # Whisper is not a substitute for our own gate).
+    if base_type not in allowed:
+        raise HTTPException(400, f"Unsupported audio type: {audio.content_type or 'missing'}")
 
     audio_bytes = await audio.read()
     if len(audio_bytes) > 25 * 1024 * 1024:
@@ -449,10 +532,20 @@ async def ai_voice(
 async def ai_tts(
     body: TTSRequest,
     request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
-    """Generate TTS audio as a base64 data URL."""
+    """Generate TTS audio as a base64 data URL. Requires authentication.
+
+    Previously anonymous — a single attacker could synthesize unlimited
+    audio against the OpenAI TTS quota. Now requires a valid JWT so abuse
+    is tied to an account we can disable.
+    """
     import base64
     _enforce_rate_limit(request)
+    auth_uid = _auth_user_id(credentials)
+    if auth_uid is None:
+        raise HTTPException(401, "Authentication required")
+    _enforce_user_rate_limit(auth_uid, request)
     lang = resolve_lang(request, body.text)
     try:
         audio_bytes = await conversation_engine.generate_speech(body.text, lang=body.lang)
@@ -477,7 +570,7 @@ async def ai_feedback(
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(body.user_id)
-    _check_ownership(_auth_user_id(credentials), uid)
+    _require_auth(credentials, uid)
 
     try:
         conv_id = int(body.conversation_id)
@@ -543,7 +636,11 @@ async def process_pending_reminders() -> int:
     def _fetch_and_mark() -> list[dict]:
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            # Use a tz-aware UTC datetime so DB comparisons don't drift
+            # against TZ-aware columns. .replace(tzinfo=None) keeps the
+            # value naive at the storage layer (matches the existing
+            # `sent_at` column type).
+            now = datetime.now(timezone.utc).replace(tzinfo=None)
             due = (
                 db.query(AIReminder)
                 .filter(AIReminder.sent == False)  # noqa: E712

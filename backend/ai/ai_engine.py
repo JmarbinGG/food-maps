@@ -61,20 +61,30 @@ RATE_LIMIT_WINDOW = 60
 TRAINING_DATA_PATH = os.path.join(os.path.dirname(__file__), "ai_training_data.json")
 
 # Shared HTTP client
-_http_client: Optional[httpx.AsyncClient] = None
+# We keep one shared client per (timeout) bucket so distinct callers
+# (chat=30s, Whisper=60s, TTS=30s) actually get the timeout they asked
+# for. The previous singleton ignored every timeout after the first call
+# — long Whisper transcripts could die at 30s when they asked for 60.
+_http_clients: dict[float, httpx.AsyncClient] = {}
 
 
 def _get_http_client(timeout: float = TIMEOUT_SECONDS) -> httpx.AsyncClient:
-    global _http_client
-    if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=timeout)
-    return _http_client
+    key = float(timeout)
+    client = _http_clients.get(key)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(timeout=key)
+        _http_clients[key] = client
+    return client
 
 
 async def close_http_client() -> None:
-    global _http_client
-    if _http_client and not _http_client.is_closed:
-        await _http_client.aclose()
+    for client in list(_http_clients.values()):
+        if client and not client.is_closed:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+    _http_clients.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -85,11 +95,16 @@ _SPANISH_MARKERS = {
     "hola", "gracias", "por favor", "ayuda", "comida", "buscar",
     "quiero", "necesito", "dónde", "donde", "cómo", "como",
     "cuándo", "cuando", "tengo", "puedo", "buenos", "buenas",
-    "qué", "que", "disponible", "recoger", "compartir",
+    "qué", "disponible", "recoger", "compartir",
     "alimentos", "comunidad", "recordatorio", "horario",
     "muéstrame", "muestrame", "muestra", "mostrar", "dame",
-    "panel", "mi", "tu", "para", "con", "sin", "una", "uno",
+    "panel", "sin",
     "soy", "eres", "estoy", "está", "ser", "hacer", "tiene",
+    # Note: dropped 'mi', 'tu', 'para', 'con', 'una', 'uno', 'que'
+    # because they're either common in English borrowings or too short
+    # to be reliable signals — they were producing false-positive
+    # Spanish detections on messages like 'tu' (short for 'tutorial')
+    # or 'que' inside an English brand name.
 }
 
 # English-only markers used to flip sticky language back to English
@@ -169,9 +184,32 @@ def get_canned_response(error_type: str, lang: str = "en") -> str:
 
 # ---------------------------------------------------------------------------
 # Rate limiter (per-IP, in-memory)
+#
+# In-memory + per-process — fine for the current single-worker uvicorn
+# deployment. For multi-worker / horizontal scaling, swap for Redis.
+# The store is bounded (LRU-style eviction at MAX_RATE_KEYS) so it can't
+# leak memory from a long tail of unique IPs / user_ids over weeks.
 # ---------------------------------------------------------------------------
 
 _rate_store: dict[str, list[float]] = {}
+_user_rate_store: dict[int, list[float]] = {}
+# Cap unique keys so attackers can't OOM us by spraying random IPs.
+_MAX_RATE_KEYS = 10_000
+# Per-user hourly cap on heavy AI calls (chat + voice). Cost cap that
+# survives even when an attacker has stolen a single account's token.
+_USER_RATE_LIMIT = int(os.getenv("AI_USER_RATE_LIMIT", "200"))
+_USER_RATE_WINDOW = int(os.getenv("AI_USER_RATE_WINDOW", "3600"))
+
+
+def _evict_oldest(store: dict) -> None:
+    """Drop the single key with the oldest most-recent timestamp."""
+    if not store:
+        return
+    try:
+        oldest_key = min(store, key=lambda k: store[k][-1] if store[k] else 0)
+        store.pop(oldest_key, None)
+    except ValueError:
+        pass
 
 
 def check_rate_limit(client_ip: str, limit: int = RATE_LIMIT_DEFAULT) -> bool:
@@ -181,6 +219,28 @@ def check_rate_limit(client_ip: str, limit: int = RATE_LIMIT_DEFAULT) -> bool:
     if len(_rate_store[client_ip]) >= limit:
         return False
     _rate_store[client_ip].append(now)
+    # Best-effort bounded growth. Eviction is amortized: only trigger
+    # when we cross the cap.
+    if len(_rate_store) > _MAX_RATE_KEYS:
+        _evict_oldest(_rate_store)
+    return True
+
+
+def check_user_rate_limit(user_id: int, limit: int = _USER_RATE_LIMIT) -> bool:
+    """Per-user hourly cap on chat/voice calls.
+
+    Bounded in-memory — ok at our current scale. Resets on restart, which
+    is acceptable for a cost cap (the goal is to stop runaway loops, not
+    to be a billing system).
+    """
+    now = time.time()
+    timestamps = _user_rate_store.setdefault(user_id, [])
+    _user_rate_store[user_id] = [t for t in timestamps if now - t < _USER_RATE_WINDOW]
+    if len(_user_rate_store[user_id]) >= limit:
+        return False
+    _user_rate_store[user_id].append(now)
+    if len(_user_rate_store) > _MAX_RATE_KEYS:
+        _evict_oldest(_user_rate_store)
     return True
 
 
@@ -243,6 +303,14 @@ async def _openai_with_retry(
 ) -> httpx.Response:
     NON_RETRYABLE = {401, 403, 404, 422}
     last_exc: Exception | None = None
+
+    # Circuit breaker: refuse to issue requests when the breaker is OPEN
+    # (consecutive recent failures). Previously the breaker recorded
+    # failures but never gated calls, so it never actually shed load.
+    if not _circuit.allow_request():
+        raise RuntimeError(
+            "OpenAI circuit breaker is open — too many recent failures, refusing to call upstream"
+        )
 
     for attempt in range(retries):
         try:
@@ -1534,15 +1602,19 @@ class ConversationEngine:
         user_id: int,
         message: str,
         include_audio: bool = False,
+        lang_hint: Optional[str] = None,
     ) -> dict:
         profile_task = asyncio.create_task(self.get_user_profile(user_id))
         history_task = asyncio.create_task(self.get_conversation_history(user_id, limit=12))
         profile, history = await asyncio.gather(profile_task, history_task)
 
-        # Sticky language: use the message, then profile preference, then
-        # recent history. Prevents short replies like 'sí' / 'ok' from
-        # flipping a Spanish conversation back to English.
-        lang = self._detect_lang_sticky(message, history=history, profile=profile)
+        # Sticky language: explicit client hint > message > profile > history.
+        # The hint lets the UI's language switcher win over short messages
+        # ('ok', 'sí', numeric codes) that don't carry strong signal.
+        if lang_hint in {"en", "es"}:
+            lang = lang_hint
+        else:
+            lang = self._detect_lang_sticky(message, history=history, profile=profile)
 
         messages: list[dict] = [{"role": "system", "content": self.system_prompt}]
 
@@ -1750,8 +1822,13 @@ class ConversationEngine:
 
         for msg in history:
             content = msg["message"]
-            if len(content) > 800:
-                content = content[:800] + "... [truncated]"
+            # 4000 chars is comfortably enough room for a bulk-import
+            # success summary (with listing IDs the next turn needs to
+            # reference) without bloating the context window. The previous
+            # 800-char cap was dropping listing IDs and tool-result refs
+            # the model needed to act on follow-up requests.
+            if len(content) > 4000:
+                content = content[:4000] + "... [truncated]"
             messages.append({"role": msg["role"], "content": content})
 
         messages.append({"role": "user", "content": message})
@@ -1791,12 +1868,15 @@ class ConversationEngine:
     async def _persist_conversation(
         self, user_id: int, user_msg: str, assistant_msg: str, lang: str
     ) -> Optional[int]:
+        # Persist sequentially — the previous asyncio.gather() concurrent
+        # INSERTs could interleave so that the assistant row got an
+        # earlier created_at than the user row, which broke history
+        # replay ordering (the next turn would see the assistant message
+        # before the user prompt).
         try:
-            _, row_id = await asyncio.gather(
-                self.store_message(user_id, "user", user_msg),
-                self.store_message(
-                    user_id, "assistant", assistant_msg, metadata={"lang": lang}
-                ),
+            await self.store_message(user_id, "user", user_msg)
+            row_id = await self.store_message(
+                user_id, "assistant", assistant_msg, metadata={"lang": lang}
             )
             return row_id
         except Exception as exc:
@@ -1856,45 +1936,21 @@ class ConversationEngine:
             return get_canned_response("general_error", lang)
 
     @staticmethod
-    def _needs_tools(message: str) -> bool:
-        lower = message.lower()
-        tool_keywords = {
-            "dashboard", "profile", "my account", "my info",
-            "pickup", "schedule", "claim", "claimed",
-            "remind", "reminder", "set a reminder",
-            "near me", "nearby", "find food", "available food",
-            "search food", "food near", "listings near",
-            "direction", "directions", "route", "routes",
-            "distribution", "community", "communities", "center",
-            "my listings", "my food",
-            # role-specific
-            "expiring", "expire", "expiry", "about to expire",
-            "queue", "dispatch", "assignment", "assign", "unassigned",
-            "stats", "metrics", "platform", "how are we doing",
-            "complete my profile", "fill my profile", "profile gap",
-            "dietary", "allergies", "preferences",
-            # voice / GPS / routing / query
-            "current location", "here", "my location", "gps",
-            "urgent", "urgency", "most urgent",
-            "optimize", "optimise", "best route", "plan route",
-            "recipe", "recipes", "cook", "meal",
-            "how many", "how much", "query", "list all", "show me",
-            # actions (write)
-            "reserve", "take it", "grab it", "i'll take",
-            "cancel", "release", "unclaim", "drop",
-            "update my", "change my", "set my", "save my",
-            "add allergy", "add allergies", "add dietary",
-            "opt in", "opt out", "sms", "text me",
-            "post a request", "request food", "ask for",
-            "post a listing", "list my", "donate", "share food", "give away",
-            "loaves", "loaf", "bread", "fruit", "produce", "vegetables",
-            "send message", "tell admin", "tell donor", "message them",
-        }
-        return any(kw in lower for kw in tool_keywords)
+    def _needs_tools(_message: str) -> bool:
+        """DEPRECATED — kept for backward compatibility, always returns True.
 
-    # Tools that write on behalf of the user — user_id MUST come from the
-    # authenticated session, never from the model's arguments.
-    _ACTION_TOOLS = {
+        Tools are unconditionally attached on every chat turn so the model
+        can self-correct mid-flow. The keyword heuristic that used to live
+        here was removed because it silently dropped tools on phrasings
+        like "I have a few cans of soup spare", making donations
+        "sometimes work, sometimes not".
+        """
+        return True
+
+    # Tools that write on behalf of the user. Kept as documentation of the
+    # write-side surface; the actual `user_id` override at the call site
+    # below applies to EVERY tool with a `user_id` argument (read or write).
+    _ACTION_TOOLS = frozenset({
         "claim_listing",
         "cancel_claim",
         "update_user_profile",
@@ -1904,7 +1960,7 @@ class ConversationEngine:
         "send_user_message",
         "create_ai_reminder",
         "create_reminder",
-    }
+    })
 
     async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, actions_out: Optional[list] = None) -> str:
         if not OPENAI_API_KEY:
@@ -2000,11 +2056,23 @@ class ConversationEngine:
                     result = {"error": True, "message": f"{fn_name} failed. Please try again."}
 
                 # Trace tool calls so we can debug why the model picked a tool.
+                # PII scrub: address / phone / allergen / dietary fields can
+                # contain personal data. Only log a hash + the non-PII keys.
                 try:
+                    _PII_KEYS = {
+                        "address", "phone", "phone_number", "email",
+                        "allergens", "dietary_tags", "dietary_restrictions",
+                        "name", "message", "comment", "description",
+                    }
+                    safe_args = {
+                        k: ("<redacted>" if k in _PII_KEYS else v)
+                        for k, v in fn_args.items()
+                        if k != "user_id"
+                    }
                     logger.info(
                         "AI tool call: %s args=%s ok=%s",
                         fn_name,
-                        {k: v for k, v in fn_args.items() if k != "user_id"},
+                        safe_args,
                         not (isinstance(result, dict) and result.get("error")),
                     )
                 except Exception:
@@ -2067,14 +2135,21 @@ class ConversationEngine:
                     # For bulk operations, the per-row `results` array can be
                     # huge. Drop it and keep the summary so the AI can still
                     # report success/failure counts without blowing the
-                    # context window. For other tools, fall back to a hard
-                    # truncate.
+                    # context window. For other tools, return a clean,
+                    # structured stub (valid JSON) instead of a mid-string
+                    # truncation that would corrupt the model's view of the
+                    # tool result.
                     if isinstance(result, dict) and isinstance(result.get("results"), list):
                         trimmed = {k: v for k, v in result.items() if k != "results"}
                         trimmed["results_omitted"] = len(result["results"])
                         result_str = json.dumps(trimmed, default=str)
                     if len(result_str) > 4000:
-                        result_str = result_str[:4000] + "...[truncated]"
+                        stub: dict = {"truncated": True, "original_size": len(result_str)}
+                        if isinstance(result, dict):
+                            for k in ("success", "error", "summary", "listing_id", "count"):
+                                if k in result:
+                                    stub[k] = result[k]
+                        result_str = json.dumps(stub, default=str)
                 tool_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],
