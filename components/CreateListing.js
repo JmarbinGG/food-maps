@@ -308,8 +308,21 @@ function CreateListing({ user, onCancel, onSuccess }) {
     const pickupStartUtc = toUtcIso(formData.pickup_window_start);
     const pickupEndUtc = toUtcIso(formData.pickup_window_end);
 
+    // Prefer the React-managed `user` prop (fresh from auth state) over
+    // `localStorage.current_user`, which can be stale after account
+    // switching. The server will also override `donor_id` from the JWT.
+    let donorIdForRequest = null;
+    try {
+      if (user && (user.id || user.id === 0)) {
+        donorIdForRequest = user.id;
+      } else {
+        const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+        if (cu && (cu.id || cu.id === 0)) donorIdForRequest = cu.id;
+      }
+    } catch (_) { /* no-op */ }
+
     const urlParams = new URLSearchParams({
-      donor_id: JSON.parse(localStorage.getItem("current_user"))['id'],
+      donor_id: donorIdForRequest,
       title: formData.title,
       desc: formData.description,
       category: formData.category,
@@ -335,7 +348,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
       } catch (_) { }
 
       const payload = {
-        donor_id: JSON.parse(localStorage.getItem('current_user'))['id'],
+        donor_id: donorIdForRequest,
         title: formData.title,
         desc: formData.description,
         category: formData.category,

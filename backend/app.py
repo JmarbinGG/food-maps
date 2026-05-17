@@ -2659,15 +2659,43 @@ async def update_trust_score(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/listings/create")
-async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db)):
+async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db), credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)):
     """
     Create a FoodResource and attempt server-side geocoding using Mapbox when an address is provided
     and coords are not supplied. Returns the created listing as JSON.
 
     `images` may be a JSON-encoded array of URL strings (e.g. paths returned by
     /api/ai/upload_image) to attach as listing photos.
+
+    SECURITY: the authoritative donor_id is taken from the JWT (Authorization
+    header). The legacy `donor_id` URL parameter is kept for backward
+    compatibility but is IGNORED when a valid token is present — otherwise a
+    stale `localStorage.current_user` on the client could cause a listing to
+    be attributed to the wrong user (and surface that user's profile address
+    on the listing card).
     """
     try:
+        # Resolve the authenticated donor from the JWT. Fall back to the URL
+        # parameter only if no token was supplied (legacy callers); never
+        # silently trust a client-supplied id when auth context disagrees.
+        authed_donor_id: Optional[int] = None
+        if credentials and getattr(credentials, "credentials", None):
+            try:
+                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+                sub = payload.get("sub") if isinstance(payload, dict) else None
+                if sub is not None:
+                    authed_donor_id = int(sub)
+            except Exception:
+                raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
+
+        if authed_donor_id is not None:
+            if int(donor_id) != authed_donor_id:
+                try:
+                    print(f"[create_listing] overriding client donor_id={donor_id} with authenticated id={authed_donor_id}")
+                except Exception:
+                    pass
+            donor_id = authed_donor_id
+
         # Enforce that donor has a phone number on file
         donor = db.query(User).filter(User.id == int(donor_id)).first()
         if not donor:
