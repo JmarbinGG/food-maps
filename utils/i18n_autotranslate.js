@@ -1137,6 +1137,163 @@
     'Captcha Verification': 'Verificación Captcha',
     'Verify': 'Verificar',
 
+    // === ListingCard urgency labels & banners ===
+    'Critical': 'Crítico',
+    'High': 'Alto',
+    'Expired': 'Expirado',
+    'Safety Verified': 'Seguridad Verificada',
+    'Cancel': 'Cancelar',
+    'Remove': 'Quitar',
+
+    // === SmartNotifications ===
+    ' Smart Notifications': ' Notificaciones Inteligentes',
+    'Smart Notifications': 'Notificaciones Inteligentes',
+    'AI learns what you care about - no spam': 'La IA aprende lo que te importa - sin spam',
+    ' Settings': ' Configuración',
+    'Settings': 'Configuración',
+    'Enable Smart Notifications': 'Habilitar Notificaciones Inteligentes',
+    'Get notified about fresh food near you, saved location restocks, and urgent items - only when it matters.':
+      'Recibe notificaciones sobre comida fresca cerca de ti, reabastecimientos en ubicaciones guardadas y artículos urgentes - solo cuando importe.',
+    'Enable Notifications': 'Habilitar Notificaciones',
+    'Notifications Blocked': 'Notificaciones Bloqueadas',
+    'Please enable notifications in your browser settings to receive smart alerts.':
+      'Por favor habilita las notificaciones en la configuración de tu navegador para recibir alertas inteligentes.',
+    ' Smart Notifications Active': ' Notificaciones Inteligentes Activas',
+    'Smart Notifications Active': 'Notificaciones Inteligentes Activas',
+    '⏸ Notifications Paused': '⏸ Notificaciones en Pausa',
+    'Notifications Paused': 'Notificaciones en Pausa',
+    'No notifications will be sent': 'No se enviarán notificaciones',
+    'Enabled': 'Habilitado',
+    'Max Distance': 'Distancia Máxima',
+    'Daily Limit': 'Límite Diario',
+    'Mode': 'Modo',
+    ' Urgent Only': ' Solo Urgentes',
+    'Urgent Only': 'Solo Urgentes',
+    ' AI Learning Your Preferences': ' La IA Aprende Tus Preferencias',
+    'AI Learning Your Preferences': 'La IA Aprende Tus Preferencias',
+    'Categories You Like:': 'Categorías Que Te Gustan:',
+    'Response Rate:': 'Tasa de Respuesta:',
+    'Advanced Settings': 'Configuración Avanzada',
+    'Quiet Hours (No Notifications)': 'Horas de Silencio (Sin Notificaciones)',
+    'Start': 'Inicio',
+    'End': 'Fin',
+    ' Send Test Notification': ' Enviar Notificación de Prueba',
+    'Send Test Notification': 'Enviar Notificación de Prueba',
+    'Recent Notifications': 'Notificaciones Recientes',
+    ' Notifications': ' Notificaciones',
+    'Notifications': 'Notificaciones',
+    'Notifications enabled': 'Notificaciones habilitadas',
+    'Notifications disabled': 'Notificaciones deshabilitadas',
+    'Please enable notifications first': 'Por favor habilita las notificaciones primero',
+    'This browser does not support notifications': 'Este navegador no admite notificaciones',
+
+    // === FeedbackModal ===
+    'Send Feedback': 'Enviar Comentarios',
+    'Help us improve Food Maps': 'Ayúdanos a mejorar Food Maps',
+    'What type of feedback is this?': '¿Qué tipo de comentario es este?',
+    'Bug Report': 'Reporte de Error',
+    "Report something that isn't working": 'Reporta algo que no funciona',
+    'Error Report': 'Reporte de Error Técnico',
+    'Report a technical error': 'Reportar un error técnico',
+    'Feature Request': 'Solicitud de Función',
+    'Suggest a new feature': 'Sugerir una nueva función',
+    'Improvement': 'Mejora',
+    'Suggest an enhancement': 'Sugerir una mejora',
+    'General Feedback': 'Comentarios Generales',
+    'Share your thoughts': 'Comparte tus pensamientos',
+    'Subject *': 'Asunto *',
+    'Brief description of the issue or feedback': 'Breve descripción del problema o comentario',
+    'Details *': 'Detalles *',
+    'Please provide as much detail as possible. What happened? What did you expect to happen?':
+      'Proporciona la mayor cantidad de detalles posible. ¿Qué pasó? ¿Qué esperabas que pasara?',
+    'The more details you provide, the better we can help!':
+      '¡Cuantos más detalles proporciones, mejor podremos ayudarte!',
+    'Email (optional)': 'Correo electrónico (opcional)',
+    "We'll use this to follow up with you (optional)":
+      'Usaremos esto para hacer seguimiento contigo (opcional)',
+    'Error Information (automatically captured)': 'Información de Error (capturada automáticamente)',
+    'Include Screenshot': 'Incluir Captura de Pantalla',
+    'Capturing...': 'Capturando...',
+    'Captured': 'Capturado',
+    'Capture Screen': 'Capturar Pantalla',
+    'A screenshot helps us understand the issue better':
+      'Una captura de pantalla nos ayuda a entender mejor el problema',
+    'Screenshot attached': 'Captura adjunta',
+    'Technical information (automatically included)':
+      'Información técnica (incluida automáticamente)',
+    'URL:': 'URL:',
+    'Browser:': 'Navegador:',
+    'Submitting...': 'Enviando...',
+    'Submit Feedback': 'Enviar Comentarios',
+    'Thank You!': '¡Gracias!',
+    'Your feedback has been submitted successfully.': 'Tus comentarios se han enviado correctamente.',
+    'We appreciate you taking the time to help us improve.':
+      'Apreciamos que te hayas tomado el tiempo para ayudarnos a mejorar.',
+    'Screenshot library is still loading. Please try again in a moment.':
+      'La biblioteca de capturas de pantalla aún se está cargando. Por favor inténtalo de nuevo en un momento.',
+    'Please Wait': 'Por Favor Espera',
+    'Screenshot captured successfully!': '¡Captura de pantalla exitosa!',
+    'Success': 'Éxito',
+    'Could not capture screenshot. Please describe the issue in detail instead.':
+      'No se pudo capturar la pantalla. Por favor describe el problema en detalle.',
+    'Could not capture screenshot. Please describe the issue in detail.':
+      'No se pudo capturar la pantalla. Por favor describe el problema en detalle.',
+    'Capture Failed': 'Captura Fallida',
+    'Failed to submit feedback. Please try again or contact support directly.':
+      'No se pudieron enviar los comentarios. Por favor inténtalo de nuevo o contacta a soporte directamente.',
+
+    // === FeedbackViewer (admin) ===
+    'User Feedback & Reports': 'Comentarios y Reportes de Usuarios',
+    'Manage user feedback and error reports': 'Gestiona comentarios y reportes de error de usuarios',
+    'Type': 'Tipo',
+    'All Types': 'Todos los Tipos',
+    ' Bug Reports': ' Reportes de Error',
+    'Bug Reports': 'Reportes de Error',
+    ' Error Reports': ' Reportes de Error Técnico',
+    'Error Reports': 'Reportes de Error Técnico',
+    ' Feature Requests': ' Solicitudes de Función',
+    'Feature Requests': 'Solicitudes de Función',
+    ' Improvements': ' Mejoras',
+    'Improvements': 'Mejoras',
+    ' General': ' General',
+    'General': 'General',
+    'Status': 'Estado',
+    'All Statuses': 'Todos los Estados',
+    'New': 'Nuevo',
+    'Reviewing': 'En Revisión',
+    'In Progress': 'En Progreso',
+    'Resolved': 'Resuelto',
+    'Closed': 'Cerrado',
+    'Loading feedback...': 'Cargando comentarios...',
+    'No feedback found': 'No se encontraron comentarios',
+    'Feedback Details': 'Detalles del Comentario',
+    'Subject': 'Asunto',
+    'Message': 'Mensaje',
+    'Contact Email': 'Correo de Contacto',
+    'Page URL': 'URL de la Página',
+    'Submitted': 'Enviado',
+    'Screenshot': 'Captura de Pantalla',
+    'Error Stack Trace': 'Traza de Error',
+    'Failed to load screenshot. The image data may be corrupted.':
+      'No se pudo cargar la captura. Los datos de la imagen pueden estar corruptos.',
+    'Screenshot was captured but data is not available. This may be due to database storage limits.':
+      'La captura se tomó pero los datos no están disponibles. Esto puede deberse a límites de almacenamiento en la base de datos.',
+    'Failed to load feedback': 'No se pudieron cargar los comentarios',
+    'Status updated successfully': 'Estado actualizado correctamente',
+    'Failed to update status': 'No se pudo actualizar el estado',
+
+    // === FeedbackViewer dynamic type/status labels (after .replace('_',' ')) ===
+    'bug': 'error',
+    'error report': 'reporte de error',
+    'feature request': 'solicitud de función',
+    'improvement': 'mejora',
+    'general': 'general',
+    'new': 'nuevo',
+    'reviewing': 'en revisión',
+    'in progress': 'en progreso',
+    'resolved': 'resuelto',
+    'closed': 'cerrado',
+
     // === Landing / static HTML ===
     'Food Maps - Share and Find Food': 'Food Maps - Comparte y Encuentra Comida',
     'A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.':
@@ -1151,6 +1308,38 @@
     REVERSE[PHRASES[k]] = k;
   }
 
+  // Pattern-based translations for text containing dynamic values that
+  // exact-match lookup can't handle (e.g. "URGENT - Expires in 2h!",
+  // "Packaging: Excellent", "3/5 sent today", "0.5 mi"). Patterns run
+  // AFTER exact-match misses. Capture groups are substituted into the
+  // target with $1, $2, ... Use anchored regexes to avoid partial matches
+  // that could mistranslate user content.
+  const PATTERNS_EN_TO_ES = [
+    { re: /^URGENT - Expires in (.+)!$/,                 to: '¡URGENTE - Vence en $1!' },
+    { re: /^Claim now before it expires$/,               to: 'Reclama ahora antes de que expire' },
+    { re: /^Safety Verified (\d+)%$/,                    to: 'Seguridad Verificada $1%' },
+    { re: /^Packaging: Excellent$/,                      to: 'Empaque: Excelente' },
+    { re: /^Packaging: Good$/,                           to: 'Empaque: Bueno' },
+    { re: /^Packaging: Fair$/,                           to: 'Empaque: Regular' },
+    { re: /^Packaging: Poor$/,                           to: 'Empaque: Pobre' },
+    { re: /^(\d+)\/(\d+) sent today$/,                   to: '$1/$2 enviadas hoy' },
+    { re: /^(\d+)\/day$/,                                to: '$1/día' },
+    { re: /^([\d.]+) mi$/,                               to: '$1 mi' },
+    { re: /^You click (\d+)% of notifications$/,         to: 'Haces clic en el $1% de las notificaciones' },
+  ];
+  const PATTERNS_ES_TO_EN = [
+    { re: /^¡URGENTE - Vence en (.+)!$/,                 to: 'URGENT - Expires in $1!' },
+    { re: /^Reclama ahora antes de que expire$/,         to: 'Claim now before it expires' },
+    { re: /^Seguridad Verificada (\d+)%$/,               to: 'Safety Verified $1%' },
+    { re: /^Empaque: Excelente$/,                        to: 'Packaging: Excellent' },
+    { re: /^Empaque: Bueno$/,                            to: 'Packaging: Good' },
+    { re: /^Empaque: Regular$/,                          to: 'Packaging: Fair' },
+    { re: /^Empaque: Pobre$/,                            to: 'Packaging: Poor' },
+    { re: /^(\d+)\/(\d+) enviadas hoy$/,                 to: '$1/$2 sent today' },
+    { re: /^(\d+)\/día$/,                                to: '$1/day' },
+    { re: /^Haces clic en el (\d+)% de las notificaciones$/, to: 'You click $1% of notifications' },
+  ];
+
   // Attributes we translate. value-of-input is handled separately.
   const TEXT_ATTRS = ['placeholder', 'title', 'aria-label', 'alt'];
 
@@ -1163,8 +1352,8 @@
     // Always try both directions: a phrase might currently be in either
     // language depending on whether React just re-rendered something.
     return lang === 'es'
-      ? { primary: PHRASES, secondary: null }
-      : { primary: REVERSE, secondary: null };
+      ? { primary: PHRASES, secondary: null, patterns: PATTERNS_EN_TO_ES }
+      : { primary: REVERSE, secondary: null, patterns: PATTERNS_ES_TO_EN };
   }
 
   function shouldSkipNode(node) {
@@ -1180,7 +1369,7 @@
     return false;
   }
 
-  function translateText(raw, map) {
+  function translateText(raw, map, patterns) {
     if (!raw) return null;
     // Preserve leading/trailing whitespace.
     const m = raw.match(/^(\s*)([\s\S]*?)(\s*)$/);
@@ -1190,19 +1379,27 @@
     if (Object.prototype.hasOwnProperty.call(map, core)) {
       return lead + map[core] + trail;
     }
+    if (patterns && patterns.length) {
+      for (let i = 0; i < patterns.length; i++) {
+        const p = patterns[i];
+        if (p.re.test(core)) {
+          return lead + core.replace(p.re, p.to) + trail;
+        }
+      }
+    }
     return null;
   }
 
-  function translateTextNode(node, map) {
+  function translateTextNode(node, map, patterns) {
     if (node.nodeType !== 3) return;
     if (shouldSkipNode(node)) return;
-    const out = translateText(node.nodeValue, map);
+    const out = translateText(node.nodeValue, map, patterns);
     if (out !== null && out !== node.nodeValue) {
       node.nodeValue = out;
     }
   }
 
-  function translateAttributes(el, map) {
+  function translateAttributes(el, map, patterns) {
     if (!el || el.nodeType !== 1) return;
     if (SKIP_TAGS.has(el.tagName)) return;
     if (el.hasAttribute && el.hasAttribute('data-no-i18n')) return;
@@ -1210,7 +1407,7 @@
     for (const a of TEXT_ATTRS) {
       if (el.hasAttribute && el.hasAttribute(a)) {
         const v = el.getAttribute(a);
-        const out = translateText(v, map);
+        const out = translateText(v, map, patterns);
         if (out !== null && out !== v) {
           el.setAttribute(a, out);
         }
@@ -1221,7 +1418,7 @@
       const t = (el.getAttribute('type') || '').toLowerCase();
       if (t === 'submit' || t === 'button' || t === 'reset') {
         const v = el.value;
-        const out = translateText(v, map);
+        const out = translateText(v, map, patterns);
         if (out !== null && out !== v) {
           el.value = out;
         }
@@ -1229,17 +1426,17 @@
     }
   }
 
-  function walkAndTranslate(root, map) {
+  function walkAndTranslate(root, map, patterns) {
     if (!root) return;
     if (root.nodeType === 3) {
-      translateTextNode(root, map);
+      translateTextNode(root, map, patterns);
       return;
     }
     if (root.nodeType !== 1 && root.nodeType !== 9 && root.nodeType !== 11) return;
     if (root.nodeType === 1) {
       if (SKIP_TAGS.has(root.tagName)) return;
       if (root.hasAttribute && root.hasAttribute('data-no-i18n')) return;
-      translateAttributes(root, map);
+      translateAttributes(root, map, patterns);
     }
 
     // Use TreeWalker for performance.
@@ -1262,9 +1459,9 @@
     let n;
     while ((n = walker.nextNode())) {
       if (n.nodeType === 3) {
-        translateTextNode(n, map);
+        translateTextNode(n, map, patterns);
       } else if (n.nodeType === 1) {
-        translateAttributes(n, map);
+        translateAttributes(n, map, patterns);
       }
     }
   }
@@ -1276,7 +1473,7 @@
   function flush() {
     scheduled = false;
     const lang = (window.i18n && window.i18n.getCurrentLanguage()) || 'en';
-    const { primary } = getTargetMap(lang);
+    const { primary, patterns } = getTargetMap(lang);
     const roots = Array.from(pendingRoots);
     pendingRoots.clear();
     // Pause observer while we mutate to avoid feedback.
@@ -1284,7 +1481,7 @@
     try {
       for (const r of roots) {
         if (r && r.isConnected !== false) {
-          walkAndTranslate(r, primary);
+          walkAndTranslate(r, primary, patterns);
         }
       }
     } finally {
