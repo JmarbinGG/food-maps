@@ -495,6 +495,10 @@ function buildGreetingMessage(anonymous) {
     role: 'assistant',
     text: anonymous ? greet.anon : greet.auth,
     suggestions: getStarterSuggestions(anonymous),
+    // Marker so the languageChanged listener can find and replace this
+    // greeting (and any subsequent regenerated greetings) without
+    // touching the user's real conversation history.
+    _initialGreeting: true,
   };
 }
 
@@ -891,6 +895,36 @@ function AIChatbot() {
     return () => window.removeEventListener('foodmaps:ai_ask', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // When the user toggles the UI language, the initial assistant
+  // greeting and its starter-suggestion chips are stale (they were
+  // built in the previous language and stored in `messages` state).
+  // Rebuild them in place so the chat reflects the new language
+  // without requiring a page refresh. Real conversation messages
+  // (lacking the _initialGreeting marker) are left untouched.
+  const [, setLangTick] = React.useState(0);
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = () => {
+      setMessages((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev;
+        let changed = false;
+        const next = prev.map((m) => {
+          if (m && m._initialGreeting) {
+            changed = true;
+            return buildGreetingMessage(anonymous);
+          }
+          return m;
+        });
+        return changed ? next : prev;
+      });
+      // Force any memoized labels/autocomplete pools that read the
+      // current language at render time to recompute.
+      setLangTick((t) => t + 1);
+    };
+    window.addEventListener('languageChanged', handler);
+    return () => window.removeEventListener('languageChanged', handler);
+  }, [anonymous]);
 
   function getAuth() {
     const token = localStorage.getItem('auth_token');
@@ -1291,7 +1325,11 @@ function AIChatbot() {
                   if (!sending) sendMessage(input);
                 }
               }}
-              placeholder={sending ? 'Waiting for reply…' : 'Type a message…'}
+              placeholder={(() => {
+                const lang = _currentLang();
+                if (sending) return lang === 'es' ? 'Esperando respuesta…' : 'Waiting for reply…';
+                return lang === 'es' ? 'Escribe un mensaje…' : 'Type a message…';
+              })()}
               readOnly={sending}
               aria-busy={sending}
               aria-autocomplete="inline"
@@ -1394,12 +1432,12 @@ function AIChatbot() {
           <div style={{ position: 'fixed', right: '36px', bottom: '110px', display: 'flex', flexDirection: 'column', gap: '14px', zIndex: 9999, animation: 'foodmapsChooserIn 0.25s ease-out' }}>
             <ChooserBubble
               icon={<ChatIcon size={22} />}
-              label="Chat"
+              label={_currentLang() === 'es' ? 'Chat' : 'Chat'}
               onClick={() => setMode('chat')}
             />
             <ChooserBubble
               icon={<MicIcon size={22} />}
-              label="Voice Assistant"
+              label={_currentLang() === 'es' ? 'Asistente de voz' : 'Voice Assistant'}
               onClick={() => setMode('voice')}
             />
           </div>
