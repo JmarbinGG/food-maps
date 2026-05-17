@@ -214,15 +214,16 @@ def _evict_oldest(store: dict) -> None:
 
 def check_rate_limit(client_ip: str, limit: int = RATE_LIMIT_DEFAULT) -> bool:
     now = time.time()
+    # Evict BEFORE inserting a brand-new key so the store cannot exceed
+    # the cap even by one. setdefault below would otherwise add the new
+    # key first and check the cap after.
+    if client_ip not in _rate_store and len(_rate_store) >= _MAX_RATE_KEYS:
+        _evict_oldest(_rate_store)
     timestamps = _rate_store.setdefault(client_ip, [])
     _rate_store[client_ip] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
     if len(_rate_store[client_ip]) >= limit:
         return False
     _rate_store[client_ip].append(now)
-    # Best-effort bounded growth. Eviction is amortized: only trigger
-    # when we cross the cap.
-    if len(_rate_store) > _MAX_RATE_KEYS:
-        _evict_oldest(_rate_store)
     return True
 
 
@@ -234,13 +235,13 @@ def check_user_rate_limit(user_id: int, limit: int = _USER_RATE_LIMIT) -> bool:
     to be a billing system).
     """
     now = time.time()
+    if user_id not in _user_rate_store and len(_user_rate_store) >= _MAX_RATE_KEYS:
+        _evict_oldest(_user_rate_store)
     timestamps = _user_rate_store.setdefault(user_id, [])
     _user_rate_store[user_id] = [t for t in timestamps if now - t < _USER_RATE_WINDOW]
     if len(_user_rate_store[user_id]) >= limit:
         return False
     _user_rate_store[user_id].append(now)
-    if len(_user_rate_store) > _MAX_RATE_KEYS:
-        _evict_oldest(_user_rate_store)
     return True
 
 
@@ -1821,7 +1822,10 @@ class ConversationEngine:
             logger.debug("profile gap prompt failed: %s", exc)
 
         for msg in history:
-            content = msg["message"]
+            # message column is NOT NULL at the DB layer but be defensive:
+            # a stray None (legacy row, manual SQL) would crash len() and
+            # tank the whole turn.
+            content = msg.get("message") or ""
             # 4000 chars is comfortably enough room for a bulk-import
             # success summary (with listing IDs the next turn needs to
             # reference) without bloating the context window. The previous
@@ -2003,9 +2007,17 @@ class ConversationEngine:
             headers=headers,
             json_payload=payload,
         )
-        data = resp.json()
-        choice = data["choices"][0]
-        msg = choice["message"]
+        # Defensive parse: a 200 with unexpected shape (rare but observed
+        # when an upstream proxy injects an HTML error page with a 200
+        # status) used to raise IndexError/KeyError and bubble up as a
+        # generic 500. Convert to a clean RuntimeError the route layer
+        # already maps to AIServiceUnavailable.
+        try:
+            data = resp.json()
+            choice = data["choices"][0]
+            msg = choice["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"Malformed OpenAI chat response: {exc}") from exc
 
         # Multi-round tool calling. The previous single-round design meant
         # that if the FIRST tool call returned an error (bad address, past
@@ -2148,8 +2160,18 @@ class ConversationEngine:
                         if isinstance(result, dict):
                             for k in ("success", "error", "summary", "listing_id", "count"):
                                 if k in result:
-                                    stub[k] = result[k]
+                                    val = result[k]
+                                    # Carry-over fields like `error` /
+                                    # `summary` can themselves be huge;
+                                    # clip each to keep the stub bounded.
+                                    if isinstance(val, str) and len(val) > 500:
+                                        val = val[:500] + "..."
+                                    stub[k] = val
                         result_str = json.dumps(stub, default=str)
+                        # Final hard cap — even with the per-field clip
+                        # above, an exotic payload could still exceed 4k.
+                        if len(result_str) > 4000:
+                            result_str = result_str[:4000]
                 tool_messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],

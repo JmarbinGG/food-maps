@@ -2064,6 +2064,12 @@ async def _search_food_by_location(
     except (TypeError, ValueError):
         return {"error": "lat/lng must be numeric"}
 
+    # Reject out-of-range coords before they hit _haversine. A garbage
+    # value like lat=999 produces a huge but technically-valid distance
+    # and would silently drop every real candidate as "too far".
+    if not (-90.0 <= lat <= 90.0 and -180.0 <= lng <= 180.0):
+        return {"error": "lat must be in [-90,90] and lng in [-180,180]"}
+
     w = max(0.0, min(1.0, float(urgency_weight)))
 
     def _sync() -> dict:
