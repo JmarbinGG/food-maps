@@ -1605,7 +1605,22 @@ class ConversationEngine:
             if profile.get("household_size"):
                 facts.append(f"household size: {profile['household_size']}")
             if profile.get("language"):
-                facts.append(f"preferred language: {profile['language']}")
+                # Annotate the saved preference with the *currently
+                # detected* language so the model doesn't get a mixed
+                # signal (e.g. saved 'es' but they're typing English
+                # right now → reply in English).
+                saved = str(profile.get("language"))
+                if lang == "es":
+                    facts.append(
+                        f"preferred language: {saved} — they ARE writing in "
+                        f"Spanish this turn, respond in Spanish."
+                    )
+                else:
+                    facts.append(
+                        f"preferred language: {saved} (saved), but they are "
+                        f"writing in English this turn — RESPOND IN ENGLISH. "
+                        f"Saved preference does not override the live message."
+                    )
             facts.append(
                 f"When calling tools that require user_id, always use \"{user_id}\" "
                 "— NEVER ask the user for their id or any other field listed above. "
