@@ -1294,6 +1294,76 @@
     'resolved': 'resuelto',
     'closed': 'cerrado',
 
+    // === Listings sidebar / heading ===
+    'All Listings': 'Todas las Publicaciones',
+    'No listings found for your account ': 'No se encontraron anuncios para tu cuenta ',
+    'No listings found for your account': 'No se encontraron anuncios para tu cuenta',
+
+    // === SMS Consent Manager ===
+    'Loading SMS preferences...': 'Cargando preferencias de SMS...',
+    'Choose which text messages you want to receive': 'Elige qué mensajes de texto deseas recibir',
+    'Preferences Saved!': '¡Preferencias guardadas!',
+    'You will not receive any text messages': 'No recibirás mensajes de texto',
+    'Phone Number on File': 'Número de teléfono en archivo',
+    'Phone Number Required': 'Número de teléfono requerido',
+    'Verified': 'Verificado',
+    'You need to add a phone number before enabling SMS notifications.':
+      'Necesitas añadir un número de teléfono antes de habilitar las notificaciones SMS.',
+    'Add Phone Number in Profile →': 'Añadir número de teléfono en el perfil →',
+    'Current Status:': 'Estado actual:',
+    'SMS Enabled': 'SMS habilitado',
+    'SMS Disabled': 'SMS deshabilitado',
+    'Select Text Notifications to Receive:': 'Selecciona las notificaciones de texto a recibir:',
+    'Important Information:': 'Información importante:',
+    'Message frequency varies based on selected notification types':
+      'La frecuencia de mensajes varía según los tipos de notificación seleccionados',
+    'Message and data rates may apply': 'Pueden aplicarse tarifas de mensajes y datos',
+    'You can opt out anytime by replying STOP to any message':
+      'Puedes darte de baja en cualquier momento respondiendo STOP a cualquier mensaje',
+    'Reply HELP for assistance': 'Responde HELP para obtener ayuda',
+    'Your consent and preferences are recorded for compliance':
+      'Tu consentimiento y preferencias se registran para cumplimiento',
+    'We will never share your phone number with third parties without your explicit consent':
+      'Nunca compartiremos tu número de teléfono con terceros sin tu consentimiento explícito',
+    'Disable All SMS': 'Deshabilitar todos los SMS',
+    'Opt Out': 'Darse de baja',
+    'Failed to save SMS preferences. Please try again.':
+      'No se pudieron guardar las preferencias de SMS. Por favor, inténtalo de nuevo.',
+    'Failed to opt out. Please try again.':
+      'No se pudo dar de baja. Por favor, inténtalo de nuevo.',
+    'Please add a phone number to your profile before enabling SMS notifications.':
+      'Por favor, añade un número de teléfono a tu perfil antes de habilitar las notificaciones SMS.',
+    'Are you sure you want to stop receiving ALL text messages?':
+      '¿Estás seguro de que quieres dejar de recibir TODOS los mensajes de texto?',
+    'You can always opt back in later.':
+      'Siempre puedes volver a suscribirte más tarde.',
+
+    // === SMS notification type cards ===
+    'New Listings Nearby': 'Nuevos Anuncios Cerca',
+    'Get notified when fresh food is available near you':
+      'Recibe notificaciones cuando haya alimentos frescos cerca',
+    'Pickup Ready': 'Recogida lista',
+    'Confirmation when your claimed food is ready for pickup':
+      'Confirmación cuando la comida reclamada esté lista para recoger',
+    'Expiration Reminders': 'Recordatorios de vencimiento',
+    'Alerts when your claimed items are expiring soon':
+      'Alertas cuando los artículos reclamados estén por vencer',
+    'Spoilage Warnings': 'Advertencias de deterioro',
+    'Critical food safety alerts for items that may be unsafe':
+      'Alertas críticas de seguridad alimentaria para artículos potencialmente inseguros',
+    'Pickup Time Reminders': 'Recordatorios de hora de recogida',
+    'Reminders 1 hour and 15 minutes before scheduled pickup':
+      'Recordatorios 1 hora y 15 minutos antes de la recogida programada',
+    'Favorite Location Updates': 'Actualizaciones de ubicaciones favoritas',
+    'When your saved locations get new inventory':
+      'Cuando tus ubicaciones guardadas reciben nuevo inventario',
+    'Meal Ideas': 'Ideas de comidas',
+    'Quick recipes to use your expiring items (max 1/day)':
+      'Recetas rápidas para usar tus artículos por vencer (máx. 1/día)',
+    'Urgent Alerts Only': 'Solo alertas urgentes',
+    'Only critical safety alerts and time-sensitive pickups':
+      'Solo alertas críticas de seguridad y recogidas urgentes',
+
     // === Landing / static HTML ===
     'Food Maps - Share and Find Food': 'Food Maps - Comparte y Encuentra Comida',
     'A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.':
@@ -1326,6 +1396,17 @@
     { re: /^(\d+)\/day$/,                                to: '$1/día' },
     { re: /^([\d.]+) mi$/,                               to: '$1 mi' },
     { re: /^You click (\d+)% of notifications$/,         to: 'Haces clic en el $1% de las notificaciones' },
+    { re: /^All Listings \((\d+)\)$/,                    to: 'Todas las Publicaciones ($1)' },
+    { re: /^My Listings \((\d+)\)$/,                     to: 'Mis Publicaciones ($1)' },
+    { re: /^Consented on:\s*(.+)$/,                      to: 'Consentimiento dado el: $1' },
+    { re: /^Example:\s*(.+)$/,                           to: 'Ejemplo: $1' },
+    { re: /^Enable (\d+) Notification\(s\)$/,            to: 'Activar $1 notificación(es)' },
+    { re: /^You'll receive (\d+) type\(s\) of text notifications$/,
+      to: 'Recibirás $1 tipo(s) de notificaciones de texto' },
+    { re: /^• By enabling SMS, you agree to receive text messages at (.+)$/,
+      to: '• Al activar SMS, aceptas recibir mensajes de texto al $1' },
+    { re: /^You'll receive approximately (.+) text messages per week based on your selections$/,
+      to: 'Recibirás aproximadamente $1 mensajes de texto por semana según tus selecciones' },
   ];
   const PATTERNS_ES_TO_EN = [
     { re: /^¡URGENTE - Vence en (.+)!$/,                 to: 'URGENT - Expires in $1!' },
@@ -1338,6 +1419,17 @@
     { re: /^(\d+)\/(\d+) enviadas hoy$/,                 to: '$1/$2 sent today' },
     { re: /^(\d+)\/día$/,                                to: '$1/day' },
     { re: /^Haces clic en el (\d+)% de las notificaciones$/, to: 'You click $1% of notifications' },
+    { re: /^Todas las Publicaciones \((\d+)\)$/,         to: 'All Listings ($1)' },
+    { re: /^Mis Publicaciones \((\d+)\)$/,               to: 'My Listings ($1)' },
+    { re: /^Consentimiento dado el:\s*(.+)$/,            to: 'Consented on: $1' },
+    { re: /^Ejemplo:\s*(.+)$/,                           to: 'Example: $1' },
+    { re: /^Activar (\d+) notificación\(es\)$/,          to: 'Enable $1 Notification(s)' },
+    { re: /^Recibirás (\d+) tipo\(s\) de notificaciones de texto$/,
+      to: "You'll receive $1 type(s) of text notifications" },
+    { re: /^• Al activar SMS, aceptas recibir mensajes de texto al (.+)$/,
+      to: '• By enabling SMS, you agree to receive text messages at $1' },
+    { re: /^Recibirás aproximadamente (.+) mensajes de texto por semana según tus selecciones$/,
+      to: "You'll receive approximately $1 text messages per week based on your selections" },
   ];
 
   // Attributes we translate. value-of-input is handled separately.
