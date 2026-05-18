@@ -1894,6 +1894,21 @@ async def _get_dispatch_queue(user_id: str, max_items: int = 20) -> dict:
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
+            # Privacy gate: the dispatch queue exposes other users' addresses
+            # and household sizes. Only operational roles (dispatcher /
+            # driver / volunteer / admin) may view it; regular donors and
+            # recipients must not be able to enumerate strangers' details
+            # via the AI.
+            role_value = (user.role.value if user.role else "").lower()
+            if role_value not in {"dispatcher", "driver", "volunteer", "admin"}:
+                return {
+                    "error": (
+                        "Dispatch queue access is restricted to "
+                        "dispatchers, drivers, and admins."
+                    ),
+                    "reason": "wrong_role",
+                }
+            is_admin = role_value == "admin"
             open_requests = (
                 db.query(FoodRequest)
                 .filter(FoodRequest.status == "open")
@@ -1911,7 +1926,9 @@ async def _get_dispatch_queue(user_id: str, max_items: int = 20) -> dict:
             )
             reqs = [{
                 "id": r.id,
-                "recipient_id": r.recipient_id,
+                # recipient_id is internal PII (lets you cross-reference a
+                # specific person across the platform). Only admins get it.
+                "recipient_id": r.recipient_id if is_admin else None,
                 "category": r.category.value if r.category else None,
                 "household_size": r.household_size,
                 "address": r.address,
@@ -2232,7 +2249,12 @@ async def _optimize_pickup_route(
 
             q = db.query(FoodResource)
             if listing_ids:
-                q = q.filter(FoodResource.id.in_(listing_ids))
+                # Scope to the caller's own claims so the AI can't enumerate
+                # someone else's pickup addresses by guessing listing ids.
+                if uid is None:
+                    return {"error": "user_id required to resolve listing_ids"}
+                q = q.filter(FoodResource.id.in_(listing_ids)).filter(
+                    FoodResource.recipient_id == uid)
             elif uid is not None:
                 q = q.filter(FoodResource.recipient_id == uid).filter(
                     FoodResource.status.in_(["claimed", "approved", "pending", "en_route"]))
