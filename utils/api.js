@@ -11,7 +11,10 @@ window.listingAPI = {
     }
   },
 
-  claim: async function (listingId, userId) {
+  claim: async function (listingId, userId, options = {}) {
+    const controller = new AbortController();
+    const timeoutMs = Number(options.timeout) > 0 ? Number(options.timeout) : 15000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const token = localStorage.getItem('auth_token');
       const response = await fetch(`/api/listings/claim/${listingId}`, {
@@ -19,17 +22,43 @@ window.listingAPI = {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        signal: controller.signal
       });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const detail = errorData.detail || `Failed to claim (HTTP ${response.status})`;
         throw new Error(detail);
       }
-      return await response.json();
+      const data = await response.json();
+      // SMS fallback: when Twilio is unavailable the backend returns the
+      // 4-digit code inline. Surface it to the recipient so they can type
+      // it into the confirmation modal — otherwise they wait for a text
+      // that never arrives and the claim silently auto-releases.
+      if (data && data.success && data.sms_delivered === false && data.confirm_code) {
+        try {
+          if (typeof window.showAlert === 'function') {
+            window.showAlert(
+              `SMS delivery is unavailable. Your confirmation code is ${data.confirm_code} — enter it in the confirmation dialog within 5 minutes.`,
+              { title: 'Confirmation code', variant: 'info' }
+            );
+          } else {
+            alert(`Your confirmation code is ${data.confirm_code}`);
+          }
+        } catch (_) {}
+      }
+      return data;
     } catch (error) {
+      if (error && error.name === 'AbortError') {
+        const e = new Error('Request timeout');
+        e.name = 'AbortError';
+        console.error('Claim error: timeout');
+        throw e;
+      }
       console.error('Claim error:', error);
       throw error;
+    } finally {
+      clearTimeout(timer);
     }
   },
 

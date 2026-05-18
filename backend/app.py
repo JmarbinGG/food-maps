@@ -2120,24 +2120,39 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
                 'expires_at': datetime.utcnow() + timedelta(minutes=5)
             }
         
-        # Send SMS to recipient
+        # Send SMS to recipient. Capture the delivery result — if Twilio
+        # is unconfigured or the send fails, we need to surface the code
+        # inline to the recipient so they can still confirm. Otherwise
+        # the listing silently auto-releases after 5 minutes and the
+        # user thinks "claiming is broken".
         recipient_msg = f"You claimed '{item.title}'. Reply with code {confirmation_code} within 5 minutes to confirm. Address: {item.address}"
-        send_sms(claimant.phone, recipient_msg)
-        
-        # Send SMS to donor if they have a phone
+        sms_delivered = bool(send_sms(claimant.phone, recipient_msg))
+
+        # Send SMS to donor if they have a phone (best-effort).
         if donor and donor.phone:
             donor_msg = f"Your listing '{item.title}' was claimed by {claimant.name}. Waiting for confirmation."
             send_sms(donor.phone, donor_msg)
-        
+
         # Set auto-release timer
         timer = Timer(300.0, auto_release_claim, args=[listing_id])  # 5 minutes
         timer.start()
-        
-        return {
-            "success": True, 
-            "message": "Claim initiated. Check your phone for confirmation code.",
-            "listing": serialize_listing(item)
+
+        response: dict = {
+            "success": True,
+            "message": (
+                "Claim initiated. Check your phone for confirmation code."
+                if sms_delivered
+                else "Claim initiated. SMS delivery is unavailable — use the code shown to confirm."
+            ),
+            "listing": serialize_listing(item),
+            "sms_delivered": sms_delivered,
         }
+        if not sms_delivered:
+            # Safe: the request is already authenticated as the recipient
+            # who just claimed, so they can confirm regardless. This
+            # prevents a silent dead-end when Twilio is not configured.
+            response["confirm_code"] = confirmation_code
+        return response
         
     except HTTPException:
         raise

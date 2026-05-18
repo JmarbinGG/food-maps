@@ -2339,6 +2339,71 @@ def generate_quick_replies(text: str, lang: str = "en") -> list[str]:
 
     # ---- Specific intent branches (run before any generic fallback) -----
 
+    # CLAIM FLOW chips. Detected first so they win over the generic
+    # "what food would you like to share" / yes-no branches when the AI
+    # is mid-claim. Phrases the model uses are taken from the system
+    # prompt's reference dialog (claim flow). Returning posting chips
+    # ("Bread, Fruit, Vegetables") during a claim is wrong UX.
+    claim_pick_keys = (
+        "which one would you like to claim", "which one sounds good",
+        "which one do you want", "pick one to claim", "reply with the number",
+        "which listing", "which would you like",
+        # Spanish
+        "¿cuál te gustaría", "cual te gustaria", "¿cuál quieres",
+        "cual quieres reclamar", "¿cuál reclamas", "elige una",
+        "responde con el número", "responde con el numero",
+    )
+    if any(k in t for k in claim_pick_keys):
+        if es:
+            add("La primera", "La segunda", "Muéstrame más", "Cancelar")
+        else:
+            add("The first one", "The second one", "Show more options", "Cancel")
+        return out
+
+    claim_lock_keys = (
+        "lock it in", "lock that in", "lock this in",
+        "want me to claim", "should i claim", "shall i claim",
+        "ready to claim", "go ahead and claim",
+        # Spanish
+        "¿la reclamo", "la reclamo ahora", "¿lo reclamo", "lo reclamo ahora",
+        "¿reservo", "reservo ahora", "¿confirmo el reclamo",
+    )
+    if any(k in t for k in claim_lock_keys):
+        if es:
+            add("Sí, recláma", "Espera", "Cancelar")
+        else:
+            add("Yes, claim it", "Wait", "Cancel")
+        return out
+
+    # Directions follow-up after a successful claim.
+    directions_keys = (
+        "want directions", "need directions", "show you the way",
+        "show you directions", "route to pickup", "show the route",
+        # Spanish
+        "¿quieres direcciones", "quieres direcciones", "¿te muestro la ruta",
+        "te muestro la ruta", "¿necesitas direcciones", "necesitas direcciones",
+    )
+    if any(k in t for k in directions_keys):
+        if es:
+            add("Sí, muéstrame la ruta", "No, gracias")
+        else:
+            add("Yes, show the route", "No thanks")
+        return out
+
+    # Cancel claim follow-up.
+    cancel_claim_keys = (
+        "cancel the claim", "release the claim", "release it back",
+        "cancel your claim", "release your claim",
+        # Spanish
+        "cancelar el reclamo", "liberar el reclamo", "cancelar tu reclamo",
+    )
+    if any(k in t for k in cancel_claim_keys):
+        if es:
+            add("Sí, cancélalo", "No, mantenlo")
+        else:
+            add("Yes, cancel it", "No, keep it")
+        return out
+
     # Final confirm: any phrasing where the AI is asking the donor/recipient
     # to greenlight posting the listing/request. The AI's confirm summary
     # always ends with one of these — match generously so chips are right.

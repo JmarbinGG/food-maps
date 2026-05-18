@@ -46,6 +46,42 @@ MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
 MAPBOX_GEOCODE_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json"
 
 
+# Per-user cache of the most recent search_food_near_user result.
+# Maps user_id (int) -> list of real listing_ids in the order they were
+# shown to the user. Lets claim_listing / show_route_to_listing rescue
+# the common case where the model passes the ordinal position the user
+# typed ("claim 2") through as the listing_id instead of resolving it
+# to the real 3-digit DB id of the 2nd item in the last search. Bounded
+# memory — one short list per active user, replaced on every search.
+_RECENT_SEARCH_IDS: dict[int, list[int]] = {}
+
+
+def _remember_search_ids(uid: int, ids: list[int]) -> None:
+    try:
+        _RECENT_SEARCH_IDS[int(uid)] = [int(x) for x in ids if x is not None][:20]
+    except Exception:
+        pass
+
+
+def _resolve_ordinal_listing_id(uid: int, listing_id: int) -> Optional[int]:
+    """If listing_id looks like an ordinal pick ("2" meaning the 2nd
+    result), return the real listing_id from this user's most recent
+    search. Returns None when no rescue is possible."""
+    try:
+        if listing_id is None:
+            return None
+        n = int(listing_id)
+    except Exception:
+        return None
+    if n < 1 or n > 20:
+        return None
+    ids = _RECENT_SEARCH_IDS.get(int(uid)) or []
+    if n - 1 >= len(ids):
+        return None
+    real = ids[n - 1]
+    return real if real != n else None
+
+
 def _geocode_address(address: str) -> Optional[tuple]:
     """Best-effort forward-geocode of an address via Mapbox.
 
@@ -1067,6 +1103,11 @@ async def _search_food_near_user(
                 summary = f"Found {len(results)} food item(s) near you:\n" + "\n".join(parts)
             else:
                 summary = "No available food listings found in your area right now."
+
+            # Remember the order of real listing_ids shown so a follow-up
+            # claim/route call with an ordinal ("claim 2") can be rescued
+            # if the model passes the ordinal through as listing_id.
+            _remember_search_ids(uid, [r.get("id") for r in results])
 
             return {
                 "results": results,
@@ -2132,6 +2173,12 @@ async def _search_food_by_location(
             scored.sort(key=lambda x: x["_score"])
             scored = scored[:max_results]
 
+            # Cache ids so a follow-up "claim 2" / "route to 3" can resolve
+            # the user's ordinal pick back to the real listing_id.
+            uid_int = _to_int(user_id) if user_id is not None else None
+            if uid_int is not None:
+                _remember_search_ids(uid_int, [x.get("id") for x in scored])
+
             parts = [
                 f"{i+1}. {x['title']} — {x['distance_km']} km, urgency {x['urgency_score']}/100"
                 for i, x in enumerate(scored)
@@ -2501,6 +2548,16 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
         db = SessionLocal()
         try:
             lid = int(listing_id)
+            # Ordinal rescue: if the model passed a small number (likely
+            # the user's ordinal pick "claim 2"), swap it for the real
+            # listing_id from the user's most recent search when that
+            # tiny id doesn't actually exist.
+            if 1 <= lid <= 20:
+                exists = db.query(FoodResource.id).filter(FoodResource.id == lid).first()
+                if not exists:
+                    rescued = _resolve_ordinal_listing_id(uid, lid)
+                    if rescued is not None:
+                        lid = rescued
             # Role guard: donors/dispatchers/etc. cannot claim food. Claiming is
             # a recipient action. Refuse early with a clear message so the AI
             # can tell the user to sign in as a recipient instead of attempting
@@ -4002,12 +4059,22 @@ async def _show_route_to_listing(
     def _sync() -> dict:
         db = SessionLocal()
         try:
+            cur_lid = lid
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
-            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            listing = db.query(FoodResource).filter(FoodResource.id == cur_lid).first()
+            if not listing and 1 <= cur_lid <= 20:
+                # Ordinal rescue: the model may have passed the user's "show
+                # me #2" ordinal through as listing_id. Swap for the real id
+                # from this user's most recent search result.
+                rescued = _resolve_ordinal_listing_id(uid, cur_lid)
+                if rescued is not None:
+                    listing = db.query(FoodResource).filter(FoodResource.id == rescued).first()
+                    if listing:
+                        cur_lid = rescued
             if not listing:
-                return {"error": f"Listing #{lid} not found"}
+                return {"error": f"Listing #{cur_lid} not found"}
 
             # Origin: prefer the user's coords, else geocode their address.
             o_lat = user.coords_lat
