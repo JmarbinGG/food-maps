@@ -33,7 +33,7 @@ const SmartNotifications = () => {
 
     // Listen for new listings
     if (preferences.enabled) {
-      startNotificationListener();
+      return startNotificationListener();
     }
   }, [preferences.enabled]);
 
@@ -42,7 +42,7 @@ const SmartNotifications = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:8000/api/notification-preferences', {
+      const response = await fetch('/api/notification-preferences', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -60,7 +60,7 @@ const SmartNotifications = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:8000/api/notification-behavior', {
+      const response = await fetch('/api/notification-behavior', {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -99,7 +99,7 @@ const SmartNotifications = () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      await fetch('http://localhost:8000/api/notification-preferences', {
+      await fetch('/api/notification-preferences', {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -279,7 +279,7 @@ const SmartNotifications = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await fetch('http://localhost:8000/api/notification-sent', {
+      await fetch('/api/notification-sent', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -295,7 +295,7 @@ const SmartNotifications = () => {
   const trackNotificationClick = async (listing) => {
     try {
       const token = localStorage.getItem('token');
-      await fetch('http://localhost:8000/api/notification-clicked', {
+      await fetch('/api/notification-clicked', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -328,7 +328,7 @@ const SmartNotifications = () => {
         const token = localStorage.getItem('token');
         if (!token) return;
 
-        const response = await fetch('http://localhost:8000/api/listings/recent?minutes=10', {
+        const response = await fetch('/api/listings/recent?minutes=10', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
 
