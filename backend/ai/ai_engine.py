@@ -1468,6 +1468,55 @@ class ConversationEngine:
         self.tool_definitions = TOOL_DEFINITIONS
         self._execute_tool = execute_tool
 
+    # Tools that only make sense for one role. The model never gets to
+    # *see* tools that don't apply to the current user — this is the
+    # strongest form of role-differentiation, stronger than relying on
+    # the system prompt or post-hoc rejection inside the tool body. A
+    # recipient literally cannot call post_food_listing because the
+    # schema for it never enters the OpenAI payload.
+    _DONOR_ONLY_TOOLS = frozenset({
+        "post_food_listing",
+        "bulk_post_food_listings",
+        "attach_photos_to_listing",
+        "get_donor_expiring_listings",
+    })
+    _RECIPIENT_ONLY_TOOLS = frozenset({
+        "claim_listing",
+        "cancel_claim",
+        "confirm_claim",
+        "post_food_request",
+    })
+    _DRIVER_ONLY_TOOLS = frozenset({
+        "get_driver_route_plan",
+        "optimize_pickup_route",
+        "get_dispatch_queue",
+    })
+
+    def _tools_for_role(self, role: Optional[str]) -> list[dict]:
+        """Return the subset of tool definitions the given role may call.
+
+        Admins and volunteers see everything (they help across roles).
+        Unknown / missing roles fall back to the full set so we never
+        accidentally lock a user out — the per-tool role guards in
+        tools.py will still reject misuse.
+        """
+        r = (role or "").lower().strip()
+        if r in ("admin", "volunteer", "", None):
+            return self.tool_definitions
+        hide: set[str] = set()
+        if r == "recipient":
+            hide |= self._DONOR_ONLY_TOOLS | self._DRIVER_ONLY_TOOLS
+        elif r == "donor":
+            hide |= self._RECIPIENT_ONLY_TOOLS | self._DRIVER_ONLY_TOOLS
+        elif r in ("driver", "dispatcher"):
+            hide |= self._DONOR_ONLY_TOOLS | self._RECIPIENT_ONLY_TOOLS
+        if not hide:
+            return self.tool_definitions
+        return [
+            t for t in self.tool_definitions
+            if t.get("function", {}).get("name") not in hide
+        ]
+
     @property
     def system_prompt(self) -> str:
         return _build_system_prompt(self.training_data)
@@ -1946,7 +1995,10 @@ class ConversationEngine:
 
         messages.append({"role": "user", "content": message})
 
-        response_text, actions = await self._call_with_fallbacks(messages, lang, auth_user_id=user_id)
+        response_text, actions = await self._call_with_fallbacks(
+            messages, lang, auth_user_id=user_id,
+            user_role=(profile or {}).get("role"),
+        )
 
         conversation_id = await self._persist_conversation(
             user_id, message, response_text, lang
@@ -1998,10 +2050,10 @@ class ConversationEngine:
 
     # ---- GPT call with fallback ------------------------------------------
 
-    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None) -> tuple[str, list[dict]]:
+    async def _call_with_fallbacks(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, user_role: Optional[str] = None) -> tuple[str, list[dict]]:
         actions: list[dict] = []
         try:
-            text = await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id, actions_out=actions)
+            text = await self._call_openai_chat(messages, lang=lang, auth_user_id=auth_user_id, actions_out=actions, user_role=user_role)
             return text, actions
         except httpx.TimeoutException:
             return get_canned_response("timeout", lang), actions
@@ -2075,9 +2127,13 @@ class ConversationEngine:
         "create_reminder",
     })
 
-    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, actions_out: Optional[list] = None) -> str:
+    async def _call_openai_chat(self, messages: list[dict], lang: str = "en", auth_user_id: Optional[int] = None, actions_out: Optional[list] = None, user_role: Optional[str] = None) -> str:
         if not OPENAI_API_KEY:
             raise RuntimeError("OPENAI_API_KEY not configured")
+        # Role-filter tools so the model can't even SEE actions that
+        # don't apply to this user (donor flow hidden from recipients,
+        # etc.). See _tools_for_role().
+        tools_for_call = self._tools_for_role(user_role)
 
         user_text = ""
         for m in reversed(messages):
@@ -2103,7 +2159,7 @@ class ConversationEngine:
             "max_tokens": 1024,
         }
         if use_tools:
-            payload["tools"] = self.tool_definitions
+            payload["tools"] = tools_for_call
 
         headers = {
             "Authorization": f"Bearer {OPENAI_API_KEY}",
@@ -2286,8 +2342,8 @@ class ConversationEngine:
                 "max_tokens": 1024,
                 # Keep tools attached so the model can retry after a tool
                 # error (e.g. correct an address, switch category) instead
-                # of silently giving up in text.
-                "tools": self.tool_definitions,
+                # of silently giving up in text. Same role-filter applies.
+                "tools": tools_for_call,
             }
             try:
                 resp = await _openai_with_retry(
