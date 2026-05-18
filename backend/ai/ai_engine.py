@@ -501,6 +501,17 @@ def _build_system_prompt(training_data: dict) -> str:
         "in context, call search_food_near_user FIRST (in the same turn) "
         "to fetch candidates — do not ask the user for the id.\n"
         "\n"
+        "CRITICAL: When the user types a bare small number ('2', 'the "
+        "second', '#3'), that number is almost always the ORDINAL POSITION "
+        "in the numbered list you just showed them — NOT a database "
+        "listing_id. Resolve it by looking up the Nth item in your most "
+        "recent search result and pass THAT item's real `id` field to "
+        "claim_listing / show_route_to_listing. Never pass the user's "
+        "ordinal number straight through as listing_id; database ids for "
+        "current listings are typically 3-digit numbers, not 1-9. If you "
+        "have no recent search result, call search_food_near_user FIRST "
+        "and present a numbered list before claiming or routing.\n"
+        "\n"
         "### ALWAYS PRESENT OPTIONS BEFORE CLAIMING (CRITICAL)\n"
         "Whenever the user expresses interest in food without naming a "
         "specific listing — e.g. 'I'm hungry', 'find me food', 'what's "
@@ -2135,22 +2146,14 @@ class ConversationEngine:
                 if actions_out is not None and isinstance(result, dict):
                     err_val = result.get("error")
                     ok = not err_val
-                    # Suppress noisy "✗ Claim failed" chips when the model
-                    # hallucinates a listing the user never asked for. The
-                    # backend returned an error and the chat reply itself
-                    # already explains it; an additional red chip just
-                    # confuses the user.
-                    suppress_chip = (
-                        not ok
-                        and fn_name in {"claim_listing", "confirm_claim", "cancel_claim"}
-                        and isinstance(err_val, str)
-                        and (
-                            "not found" in err_val.lower()
-                            or "invalid" in err_val.lower()
-                            or "no listing_id" in err_val.lower()
-                        )
-                    )
-                    if not suppress_chip:
+                    # Previously we suppressed "Listing not found" chips on
+                    # claim_listing/confirm_claim/cancel_claim assuming the
+                    # chat reply would explain. In practice the model
+                    # sometimes stays silent, leaving the user with zero
+                    # feedback after a failed claim. Always surface the
+                    # chip — even a "✗ Listing not found" chip is better
+                    # than total silence.
+                    if True:
                         summary_val = result.get("summary")
                         if not summary_val and err_val:
                             summary_val = err_val if isinstance(err_val, str) else None
