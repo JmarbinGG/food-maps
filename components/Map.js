@@ -467,6 +467,25 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     markersRef.current.forEach(marker => marker.remove());
     markersRef.current = [];
 
+    // Build a coord-collision map so multiple listings posted at the
+    // exact same address (a common pattern when a donor — especially via
+    // the AI chatbot — posts several items from their home) don't stack
+    // into a single pin. Without this, only one marker is visible and
+    // the donor thinks the others "didn't post on the map".
+    //
+    // For each unique (lat,lng) key we record how many listings share it
+    // and assign each one an index. At render time we offset every pin
+    // after the first into a tight circle (~6 metres per "ring step")
+    // around the true location so all of them are visible and clickable.
+    const COORD_KEY = (listing) => `${Number(listing.coords_lat).toFixed(6)},${Number(listing.coords_lng).toFixed(6)}`;
+    const coordGroups = new Map(); // key -> total count
+    safeListings.forEach(l => {
+      if (!l || !l.coords_lat || !l.coords_lng) return;
+      const k = COORD_KEY(l);
+      coordGroups.set(k, (coordGroups.get(k) || 0) + 1);
+    });
+    const coordSeenIndex = new Map(); // key -> next index to use
+
     // Add food listing markers (red/orange)
     safeListings.forEach(listing => {
       if (listing.coords_lat && listing.coords_lng) {
@@ -568,7 +587,35 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                     ` : '';
 
         const marker = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
-          .setLngLat([listing.coords_lng, listing.coords_lat])
+          .setLngLat((() => {
+            // If this listing shares its exact coords with one or more
+            // siblings, distribute the pins on a small circle so each is
+            // independently visible & clickable instead of stacking.
+            const key = COORD_KEY(listing);
+            const total = coordGroups.get(key) || 1;
+            if (total <= 1) {
+              return [listing.coords_lng, listing.coords_lat];
+            }
+            const idx = coordSeenIndex.get(key) || 0;
+            coordSeenIndex.set(key, idx + 1);
+            // ~0.00007 deg latitude ≈ 7.7 m; grow the ring as the group
+            // gets larger so 10+ pins still don't overlap. The first pin
+            // (idx 0) stays at the true location.
+            if (idx === 0) {
+              return [listing.coords_lng, listing.coords_lat];
+            }
+            const ringStep = 0.00007;
+            const ring = Math.ceil(idx / 8); // 8 pins per ring, then expand
+            const slotsInRing = Math.min(8, total - 1 - 8 * (ring - 1));
+            const slotIdx = (idx - 1) - 8 * (ring - 1);
+            const angle = (2 * Math.PI * slotIdx) / Math.max(1, slotsInRing);
+            const dLat = Math.cos(angle) * ringStep * ring;
+            // longitude shrinks with cos(latitude) so the visual offset
+            // matches the latitude offset at this map location.
+            const cosLat = Math.cos((listing.coords_lat * Math.PI) / 180) || 1;
+            const dLng = (Math.sin(angle) * ringStep * ring) / cosLat;
+            return [listing.coords_lng + dLng, listing.coords_lat + dLat];
+          })())
           .setPopup(
             new mapboxgl.Popup({ offset: 25, maxWidth: '320px' })
               .setHTML(`
