@@ -1714,6 +1714,64 @@ class ConversationEngine:
             facts = [f"Current user: {profile.get('name') or 'Community Member'} (ID: {user_id})"]
             role = profile.get("role") or "member"
             facts.append(f"role: {role}")
+            # Role-aware intent steering. Without this the model can drift
+            # into the donor "post a listing" flow whenever the user's
+            # phrasing is short or ambiguous (especially in Spanish, where
+            # 'quiero comida' / 'necesito comida' was being misread as an
+            # offer to donate). Anchor the intent to the configured role.
+            role_l = (role or "").lower()
+            if role_l == "recipient":
+                if lang == "es":
+                    facts.append(
+                        "ANCLA DE INTENCIÓN (CRÍTICO): este usuario es "
+                        "RECIPIENTE. RECLAMA / SOLICITA comida — NO "
+                        "publica listados. Por defecto, todo mensaje "
+                        "ambiguo sobre comida pertenece al flujo de "
+                        "RECLAMO (search_food_near_user → claim_listing) "
+                        "o a post_food_request. NUNCA llames a "
+                        "post_food_listing para este usuario. NUNCA hagas "
+                        "preguntas de intake de donante (cantidad a "
+                        "regalar, ventana de recogida, alérgenos de la "
+                        "comida que tienen). Frases como 'quiero comida', "
+                        "'necesito comida', 'tengo hambre', 'busco "
+                        "comida', 'dame comida' son intención de "
+                        "RECLAMO, no de donar. Si de verdad quiere donar, "
+                        "debe cambiar el rol en ajustes — díselo y "
+                        "detente."
+                    )
+                else:
+                    facts.append(
+                        "INTENT ANCHOR (CRITICAL): This user is a "
+                        "RECIPIENT. They CLAIM / REQUEST food — they do "
+                        "NOT post listings. Default every ambiguous food "
+                        "message to the CLAIM flow "
+                        "(search_food_near_user → claim_listing) or to "
+                        "post_food_request. NEVER call post_food_listing "
+                        "for this user. NEVER ask donor-intake questions "
+                        "(quantity to give away, pickup window, allergens "
+                        "of food they have). Phrases like 'I want food', "
+                        "'I need food', 'I'm hungry', 'looking for food' "
+                        "are CLAIM intent, not donate intent. If they "
+                        "truly want to switch to donating, they must "
+                        "change their role in settings — tell them that "
+                        "and stop."
+                    )
+            elif role_l == "donor":
+                if lang == "es":
+                    facts.append(
+                        "ANCLA DE INTENCIÓN: este usuario es DONANTE. "
+                        "Publica listados y entrega comida. Por defecto, "
+                        "todo mensaje ambiguo sobre comida pertenece al "
+                        "flujo post_food_listing. No lo lleves al flujo "
+                        "de reclamo."
+                    )
+                else:
+                    facts.append(
+                        "INTENT ANCHOR: This user is a DONOR. They post "
+                        "listings and hand off food. Default ambiguous "
+                        "food messages to the post_food_listing flow. Do "
+                        "not drive them through the claim flow."
+                    )
             if profile.get("address"):
                 facts.append(f"profile address on file: {profile['address']}")
             else:
