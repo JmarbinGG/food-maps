@@ -953,14 +953,18 @@ async def startup_event():
 
 @app.get("/api/dbtest")
 async def db_test():
+    db = SessionLocal()
     try:
-        db = SessionLocal()
         # Try a simple query (works for any SQLAlchemy model, e.g., User)
         db.execute(text("SELECT 1"))
-        db.close()
         return {"success": True, "message": "Database connection successful"}
     except Exception as e:
         return {"success": False, "error": str(e)}
+    finally:
+        # Always return the connection to the pool, even on failure,
+        # so a flapping DB doesn't leak connections from health-check
+        # traffic and exhaust the pool.
+        db.close()
 
 
 @app.get("/api/listings/get")

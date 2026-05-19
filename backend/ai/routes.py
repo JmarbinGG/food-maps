@@ -749,15 +749,30 @@ _background_task: asyncio.Task | None = None
 _broadcast_task: asyncio.Task | None = None
 
 
+def _log_background_task_result(name: str):
+    """Done-callback factory: surfaces any uncaught task exception in our
+    logger instead of letting asyncio swallow it as a 'Task exception was
+    never retrieved' message that's easy to miss in journalctl."""
+    def _cb(task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.error("AI %s loop crashed: %s", name, exc, exc_info=exc)
+    return _cb
+
+
 async def start_background_jobs() -> None:
     global _background_task, _broadcast_task
     if _background_task is None or _background_task.done():
         _background_task = asyncio.create_task(reminder_loop())
+        _background_task.add_done_callback(_log_background_task_result("reminder"))
         logger.info("AI reminder loop scheduled")
     if _broadcast_task is None or _broadcast_task.done():
         try:
             from backend.ai.notifications import broadcast_loop
             _broadcast_task = asyncio.create_task(broadcast_loop())
+            _broadcast_task.add_done_callback(_log_background_task_result("broadcast"))
             logger.info("AI broadcast loop scheduled")
         except Exception as exc:
             logger.error("Failed to start broadcast loop: %s", exc)

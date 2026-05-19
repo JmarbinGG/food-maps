@@ -694,12 +694,11 @@ function AIChatbot() {
   // because React bails on setState updates that return the same
   // reference.)
   const [dismissTick, setDismissTick] = React.useState(0);
-  // Horizontal scroll offset of the chat input. We mirror it onto the
-  // ghost-overlay's translateX so that, when the user types more text
-  // than fits in the visible width and the <input> scrolls, the ghost
-  // suggestion stays glued to the actual caret position instead of
-  // floating at the left edge.
-  const [inputScrollLeft, setInputScrollLeft] = React.useState(0);
+  // (Removed: inputScrollLeft state.  When the input was a single-line
+  // <input>, we tracked scrollLeft to align the ghost overlay with the
+  // caret.  After converting to a wrapping <textarea> with
+  // whiteSpace: pre-wrap, the ghost overlay aligns naturally and the
+  // scroll position is no longer needed.)
   const autocompleteSuggestion = React.useMemo(
     () => findAutocompleteSuggestion(input, anonymous, dismissedSuggestionsRef.current),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1352,7 +1351,6 @@ function AIChatbot() {
                 el.style.height = 'auto';
                 el.style.height = Math.min(el.scrollHeight, 140) + 'px';
               }}
-              onScroll={(e) => setInputScrollLeft(e.target.scrollLeft)}
               onKeyDown={(e) => {
                 // While the user is mid-composition with an IME (CJK,
                 // dead-key accents, etc.), e.isComposing is true and

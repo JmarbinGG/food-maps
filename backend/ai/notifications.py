@@ -48,9 +48,16 @@ def _safe_json_loads(raw: Optional[str]) -> list | dict | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
     except (TypeError, ValueError):
         return None
+    # Reject scalars (numbers, bools, strings) so downstream code that
+    # does `prefs.get(...)` or `"x" in prefs` doesn't crash with
+    # TypeError when a column accidentally holds e.g. `"42"` or
+    # `"true"` instead of a JSON object/array.
+    if isinstance(result, (list, dict)):
+        return result
+    return None
 
 
 def _as_lower_set(value) -> set[str]:
@@ -258,11 +265,21 @@ def _collect_candidates() -> list[dict]:
             q = q.filter(User.role.in_(candidate_roles))
         users = q.all()
 
+        # Prefetch donors in one query instead of one-per-listing (N+1).
+        donor_ids = {l.donor_id for l in listings if l.donor_id is not None}
+        donor_name_by_id: dict[int, str] = {}
+        if donor_ids:
+            for did, dname in (
+                db.query(User.id, User.name)
+                .filter(User.id.in_(donor_ids))
+                .all()
+            ):
+                donor_name_by_id[did] = dname or ""
+
         for food in listings:
             if food.id in already:
                 continue
-            donor = db.query(User).filter(User.id == food.donor_id).first()
-            donor_name = donor.name if donor else ""
+            donor_name = donor_name_by_id.get(food.donor_id, "")
             for u in users:
                 if u.id == food.donor_id:
                     continue
