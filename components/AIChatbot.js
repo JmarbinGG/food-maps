@@ -713,6 +713,12 @@ function AIChatbot() {
       dismissedSuggestionsRef.current = new Set();
       setDismissTick((t) => t + 1);
     }
+    // Reset the auto-grown textarea height when the field is cleared
+    // (e.g. after sendMessage()). Without this the box stays tall after
+    // a multi-line send.
+    if (!input && inputRef.current) {
+      inputRef.current.style.height = 'auto';
+    }
   }, [input]);
   // Hint text shown next to the animated typing dots while a reply is
   // pending, so the user knows what kind of work is happening.
@@ -1249,7 +1255,7 @@ function AIChatbot() {
             </div>
           )}
         </div>
-        <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white', alignItems: 'center' }}>
+        <div style={{ padding: '10px', borderTop: '1px solid #e5e7eb', display: 'flex', gap: '6px', background: 'white', alignItems: 'flex-end' }}>
           <div style={{ position: 'relative', flex: '1 1 0', minWidth: 0, display: 'flex', background: sending ? '#f9fafb' : 'white', borderRadius: '8px' }}>
             {/* Ghost-text overlay — sits behind the input, exact same
                 font/padding/border so the user's typed text occupies
@@ -1266,24 +1272,33 @@ function AIChatbot() {
                   border: '1px solid transparent',
                   borderRadius: '8px',
                   fontSize: '14px',
-                  lineHeight: 'normal',
-                  whiteSpace: 'pre',
+                  lineHeight: '1.4',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
                   overflow: 'hidden',
                   textOverflow: 'clip',
                   color: '#9ca3af',
                   fontFamily: 'inherit',
                 }}
               >
-                <span style={{ display: 'inline-block', transform: `translateX(${-inputScrollLeft}px)` }}>
+                <span style={{ display: 'inline' }}>
                   <span style={{ color: 'transparent' }}>{input}</span>
                   <span>{autocompleteSuggestion.slice(input.length)}</span>
                 </span>
               </div>
             )}
-            <input
+            <textarea
               ref={inputRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}
+              rows={1}
+              onChange={(e) => {
+                setInput(e.target.value);
+                // Auto-grow: snap to content height, capped so the
+                // panel doesn't get pushed off-screen on long pastes.
+                const el = e.target;
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+              }}
               onScroll={(e) => setInputScrollLeft(e.target.scrollLeft)}
               onKeyDown={(e) => {
                 // While the user is mid-composition with an IME (CJK,
@@ -1320,6 +1335,10 @@ function AIChatbot() {
                     return;
                   }
                 }
+                // Enter submits, Shift+Enter inserts a newline.
+                // Multi-line input lets users paste recipes, addresses
+                // with notes, or write longer messages without losing
+                // formatting.
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   if (!sending) sendMessage(input);
@@ -1345,7 +1364,7 @@ function AIChatbot() {
                 border: '1px solid #d1d5db',
                 borderRadius: '8px',
                 fontSize: '14px',
-                lineHeight: 'normal',
+                lineHeight: '1.4',
                 fontFamily: 'inherit',
                 outline: 'none',
                 caretColor: '#10b981',
@@ -1353,6 +1372,10 @@ function AIChatbot() {
                 background: sending ? '#f9fafb' : 'transparent',
                 position: 'relative',
                 zIndex: 1,
+                resize: 'none',
+                overflowY: 'auto',
+                maxHeight: '140px',
+                minHeight: '38px',
               }}
             />
           </div>
