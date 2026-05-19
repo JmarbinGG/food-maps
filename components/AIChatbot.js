@@ -984,6 +984,71 @@ function AIChatbot() {
     return () => window.removeEventListener('roleChanged', handler);
   }, [anonymous]);
 
+  // Reset conversation when the logged-in account changes.
+  //
+  // Why this exists: the chatbot's `messages` array lives in React state,
+  // so it survives navigations and stays mounted across login/logout.
+  // If account A signs out and account B signs in (or vice-versa, or a
+  // session expires and a fresh login lands), the previous user's
+  // bubbles would remain on screen and the next outbound message would
+  // mix A's UI history with B's server-side history → a privacy leak.
+  //
+  // We don't touch app.js (which performs the login/logout localStorage
+  // writes), so we detect the switch purely from this component:
+  //   1. A `storage` listener catches cross-tab login/logout instantly.
+  //   2. A short polling interval catches same-tab changes, since
+  //      `storage` events don't fire in the tab that did the write.
+  // Either path compares the freshly-read id against a ref and, on
+  // mismatch, drops all messages back to a single fresh greeting and
+  // clears any in-flight UI state. The next /api/ai/chat call will
+  // fetch only the newly-authenticated user's history server-side.
+  React.useEffect(() => {
+    if (typeof window === 'undefined' || anonymous) return undefined;
+    const readAuthId = () => {
+      try {
+        const cu = JSON.parse(localStorage.getItem('current_user') || 'null');
+        if (cu && cu.id != null) return String(cu.id);
+      } catch (_) { /* ignore */ }
+      // Fall back to the token's subject so a logout (current_user gone
+      // but token momentarily lingering, or vice-versa) still registers
+      // as a change rather than silently keeping the old conversation.
+      try {
+        const tok = localStorage.getItem('auth_token');
+        if (tok) {
+          const payload = JSON.parse(atob(tok.split('.')[1]));
+          if (payload && payload.sub != null) return String(payload.sub);
+        }
+      } catch (_) { /* ignore */ }
+      return null;
+    };
+    let lastId = readAuthId();
+    const resetForNewUser = () => {
+      setMessages([buildGreetingMessage(anonymous)]);
+      setInput('');
+      setSending(false);
+      setPendingLabel('Thinking…');
+      setPendingTool(null);
+    };
+    const check = () => {
+      const cur = readAuthId();
+      if (cur !== lastId) {
+        lastId = cur;
+        resetForNewUser();
+      }
+    };
+    const onStorage = (evt) => {
+      // Only the auth-related keys matter; ignore unrelated writes.
+      if (!evt || (evt.key && evt.key !== 'auth_token' && evt.key !== 'current_user')) return;
+      check();
+    };
+    window.addEventListener('storage', onStorage);
+    const intervalId = window.setInterval(check, 1000);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.clearInterval(intervalId);
+    };
+  }, [anonymous]);
+
   function getAuth() {
     const token = localStorage.getItem('auth_token');
     let userId = null;
