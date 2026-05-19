@@ -527,7 +527,21 @@ async def broadcast_loop() -> None:
             raise
         except Exception as exc:
             consecutive_failures += 1
-            logger.error("Broadcast loop error (#%d): %s", consecutive_failures, exc)
+            # Transient DB errors (DNS, 2003/2006) show up here during
+            # brief RDS / network blips. Log them at WARNING so they
+            # don't masquerade as real errors; the existing exponential
+            # backoff below still throttles retries.
+            from sqlalchemy.exc import OperationalError
+            if isinstance(exc, OperationalError):
+                logger.warning(
+                    "Broadcast loop transient DB error (#%d): %s",
+                    consecutive_failures, exc,
+                )
+            else:
+                logger.error(
+                    "Broadcast loop error (#%d): %s",
+                    consecutive_failures, exc,
+                )
 
         backoff = BROADCAST_INTERVAL
         if consecutive_failures:

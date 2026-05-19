@@ -674,8 +674,17 @@ async def process_pending_reminders() -> int:
             db.commit()
             return tasks
         except Exception as exc:
-            logger.error("Reminder fetch failed: %s", exc)
+            # OperationalError (2003/2006, DNS, timeouts) is transient —
+            # log at WARNING so it doesn't masquerade as an actionable
+            # error, and re-raise so the outer loop's exponential
+            # backoff actually engages instead of polling every 15 min
+            # straight through the outage.
+            from sqlalchemy.exc import OperationalError
             db.rollback()
+            if isinstance(exc, OperationalError):
+                logger.warning("Reminder fetch transient DB error: %s", exc)
+                raise
+            logger.error("Reminder fetch failed: %s", exc)
             return []
         finally:
             db.close()
@@ -713,7 +722,17 @@ async def reminder_loop() -> None:
             consecutive_failures = 0
         except Exception as exc:
             consecutive_failures += 1
-            logger.error("Reminder loop error (#%d): %s", consecutive_failures, exc)
+            from sqlalchemy.exc import OperationalError
+            if isinstance(exc, OperationalError):
+                logger.warning(
+                    "Reminder loop transient DB error (#%d): %s",
+                    consecutive_failures, exc,
+                )
+            else:
+                logger.error(
+                    "Reminder loop error (#%d): %s",
+                    consecutive_failures, exc,
+                )
 
         if consecutive_failures > 0:
             backoff = min(REMINDER_CHECK_INTERVAL * (2 ** consecutive_failures), 3600)
