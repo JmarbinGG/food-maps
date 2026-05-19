@@ -383,8 +383,9 @@ TOOL_DEFINITIONS = [
                     "food_type": {"type": "string"},
                     "max_results": {"type": "integer", "default": 10},
                     "urgency_weight": {"type": "number", "default": 0.4, "description": "0=pure distance, 1=pure urgency"},
+                    "user_id": {"type": "string", "description": "Auto-injected by the engine; do not set."},
                 },
-                "required": ["lat", "lng"],
+                "required": ["lat", "lng", "user_id"],
             },
         },
     },
@@ -858,7 +859,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         pass
     try:
         return await handler(**arguments)
-    except Exception as exc:
+    except Exception:
         # Log full traceback server-side, but return a generic message to
         # the model so internal errors (SQL exceptions, schema details,
         # file paths) don't leak into chat replies.
@@ -2107,6 +2108,7 @@ async def _search_food_by_location(
     food_type: Optional[str] = None,
     max_results: int = 10,
     urgency_weight: float = 0.4,
+    user_id: Optional[str] = None,
 ) -> dict:
     """Live-GPS search. Ranks results by a blend of distance and urgency.
 
@@ -2711,7 +2713,7 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                     f"or the claim auto-releases. Pickup address: {item.address}."
                 ),
             }
-        except Exception as exc:
+        except Exception:
             logger.exception("claim_listing failed")
             db.rollback()
             return {"error": "Could not complete the claim. Please try again."}
@@ -2881,7 +2883,7 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
                 "verify_issues": verify_issues,
                 "summary": summary,
             }
-        except Exception as exc:
+        except Exception:
             logger.exception("confirm_claim failed")
             db.rollback()
             return {"error": "Could not confirm the claim. Please try again."}
@@ -2993,7 +2995,7 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
                 "verify_issues": verify_issues,
                 "summary": summary,
             }
-        except Exception as exc:
+        except Exception:
             logger.exception("cancel_claim failed")
             db.rollback()
             return {"error": "Could not cancel the claim. Please try again."}
@@ -3555,7 +3557,7 @@ async def _post_food_listing(
                 "visible_listings_for_donor": visible_count,
                 "summary": summary,
             }
-        except Exception as exc:
+        except Exception:
             logger.exception("post_food_listing failed")
             db.rollback()
             return {"error": "Could not post the listing. Please try again."}

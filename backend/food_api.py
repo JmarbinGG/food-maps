@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime, timedelta
 import os
 import httpx
-from backend.models import FoodResource, User, ConsumptionLog, Base
+from backend.models import FoodResource, ConsumptionLog
 from backend.schemas import FoodResourceCreate, FoodResourceResponse, ConsumptionLogCreate, ConsumptionLogResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from backend.aws_secrets import load_aws_secrets

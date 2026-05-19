@@ -2135,21 +2135,6 @@ class ConversationEngine:
         # etc.). See _tools_for_role().
         tools_for_call = self._tools_for_role(user_role)
 
-        user_text = ""
-        for m in reversed(messages):
-            if m["role"] == "user":
-                user_text = m.get("content", "")
-                break
-        # Look at recent assistant turns too: if we just asked the user a
-        # data-gathering question (e.g. 'how many?'), their reply will be
-        # short ('3', 'yes') and won't match the keyword check on its own.
-        # Tools must stay attached or the model can only emit text and will
-        # hallucinate 'Posted!' without actually calling post_food_listing.
-        recent_assistant = ""
-        for m in reversed(messages[-6:]):
-            if m["role"] == "assistant" and m.get("content"):
-                recent_assistant = m["content"]
-                break
         use_tools = True
 
         payload = {
@@ -2225,7 +2210,7 @@ class ConversationEngine:
                     fn_args = _scope_safe_query(fn_args, auth_user_id)
                 try:
                     result = await self._execute_tool(fn_name, fn_args)
-                except Exception as tool_exc:
+                except Exception:
                     # Log full traceback server-side; surface a generic
                     # message so internal exception text doesn't reach
                     # the user via the AI's reply.

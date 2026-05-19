@@ -1,12 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Session
 from sqlalchemy import text, func, case
-from pydantic import BaseModel
 from datetime import datetime, timedelta
 from functools import lru_cache
 from typing import Optional, List, Dict, Any
@@ -26,8 +24,6 @@ from backend.email_service import (
     send_verification_email as send_verification_email_message,
 )
 from backend.schemas import (
-    FoodResourceResponse,
-    DistributionCenterCreate,
     DistributionCenterResponse,
     DistributionCenterWithInventory,
     CenterInventoryResponse,
@@ -40,8 +36,8 @@ from backend.models import (
     Base, FoodResource, User, UserRole, FoodCategory, PerishabilityLevel,
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
-    FeedbackType, FeedbackStatus, SafetyReport, ReportType, ReportStatus,
-    PickupReminder, PickupReminderStatus, FavoriteLocation
+    FeedbackType, FeedbackStatus, SafetyReport, ReportType,
+    FavoriteLocation
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -2560,7 +2556,7 @@ async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
         </body>
         </html>
         """, status_code=400)
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid or expired token")
 
 # ============================================================================
@@ -4972,9 +4968,8 @@ async def track_notification_sent(
 ):
     """Track that a notification was sent (for learning)"""
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub"))
-        
+        jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
         # Store notification history
         # In production, you'd want a dedicated notifications table
         # For now, we'll just return success
@@ -5057,9 +5052,8 @@ async def get_recent_listings(
 ):
     """Get listings created in the last N minutes (for notification checking)"""
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub"))
-        
+        jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+
         # Calculate time threshold
         time_threshold = datetime.utcnow() - timedelta(minutes=minutes)
         
