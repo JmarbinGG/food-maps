@@ -2089,8 +2089,14 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
                 raise HTTPException(status_code=400, detail="You cannot claim your own listing")
             raise HTTPException(status_code=400, detail="Listing is not available")
 
-        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+        # CRITICAL: commit the atomic status change immediately. Without
+        # this, get_db()'s session.close() at request-end would roll back
+        # the UPDATE, leaving the listing visible as 'available' to other
+        # users during the 5-minute confirmation window — letting a
+        # second user race in and claim the same listing.
+        db.commit()
 
+        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
         # Get user details (claimant must have a phone for SMS confirmation).
         claimant = db.query(User).filter(User.id == uid_int).first()
         if not claimant or not claimant.phone:
