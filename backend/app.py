@@ -5,7 +5,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, case
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
@@ -1025,7 +1025,14 @@ def get_listings(
             ]
             deadlines = [d for d in deadlines if d is not None]
 
-            if deadlines and min(deadlines) <= datetime.now().timestamp():
+            # _to_timestamp normalizes 'Z' / explicit offsets to UTC, so
+            # we must compare against a UTC `now` too. The previous
+            # `datetime.now().timestamp()` returned a local-time POSIX
+            # value: on any host where TZ != UTC the comparison was
+            # skewed by the offset, marking listings expired hours
+            # early (or late). `datetime.now(timezone.utc).timestamp()`
+            # is unambiguous regardless of the server's local TZ.
+            if deadlines and min(deadlines) <= datetime.now(timezone.utc).timestamp():
                 return 'expired'
 
             return raw_status or 'available'

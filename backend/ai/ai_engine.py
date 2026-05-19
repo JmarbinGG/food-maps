@@ -1627,7 +1627,18 @@ class ConversationEngine:
                 rows = (
                     db.query(AIConversation)
                     .filter(AIConversation.user_id == user_id)
-                    .order_by(AIConversation.created_at.desc())
+                    # `created_at` is a MySQL DATETIME (1-second resolution),
+                    # so the user message and assistant reply for the same
+                    # turn often share the same second. Without a second
+                    # sort key the two rows came back in undefined order,
+                    # so history replay could place the assistant turn
+                    # before the user prompt that produced it. Use the
+                    # auto-increment id (insertion order) as the
+                    # tiebreaker — newer id = inserted later.
+                    .order_by(
+                        AIConversation.created_at.desc(),
+                        AIConversation.id.desc(),
+                    )
                     .limit(limit)
                     .all()
                 )
