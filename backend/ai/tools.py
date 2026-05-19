@@ -2903,16 +2903,53 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
         db = SessionLocal()
         try:
             lid = int(listing_id)
-            item = db.query(FoodResource).filter(FoodResource.id == lid).first()
-            if not item:
+            # Read the row once for the title / error-classification.
+            # The actual release is done as an atomic UPDATE below so a
+            # parallel auto-release Timer or a confirm_claim from another
+            # session can't race us into clobbering a freshly-changed row.
+            pre = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not pre:
                 return {"error": "Listing not found"}
-            if item.recipient_id != uid:
+            if pre.recipient_id != uid:
                 return {"error": "Not your claim"}
-            if item.status not in ("claimed", "pending_confirmation", "pending", "approved"):
-                return {"error": f"Cannot cancel at status={item.status}"}
-            item.status = "available"
-            item.recipient_id = None
-            item.claimed_at = None
+            pre_status = (
+                pre.status.value if hasattr(pre.status, "value")
+                else str(pre.status or "")
+            )
+            if pre_status not in ("claimed", "pending_confirmation", "pending", "approved"):
+                return {"error": f"Cannot cancel at status={pre_status}"}
+            title = pre.title
+
+            # Atomic release: only flip the row if the caller is still
+            # the recipient AND the status is still one of the cancelable
+            # values. If anything moved between our SELECT and this
+            # UPDATE we return zero rows and report it instead of
+            # silently overwriting whatever state it's in now.
+            updated = (
+                db.query(FoodResource)
+                .filter(
+                    FoodResource.id == lid,
+                    FoodResource.recipient_id == uid,
+                    FoodResource.status.in_(
+                        ("claimed", "pending_confirmation", "pending", "approved")
+                    ),
+                )
+                .update(
+                    {
+                        FoodResource.status: "available",
+                        FoodResource.recipient_id: None,
+                        FoodResource.claimed_at: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            if not updated:
+                db.rollback()
+                return {
+                    "error": "Could not release: the listing changed state "
+                             "(possibly auto-released or claimed by you elsewhere). "
+                             "Refresh and try again.",
+                }
             db.commit()
             # Drop any pending SMS-confirmation code so an old code can't
             # re-confirm the listing after release.
@@ -2944,14 +2981,14 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
                     )
             verified = not verify_issues
             summary = (
-                f"Released '{item.title}' back to the community."
+                f"Released '{title}' back to the community."
                 if verified else
-                f"Released '{item.title}', but post-check found issues: "
+                f"Released '{title}', but post-check found issues: "
                 + "; ".join(verify_issues)
             )
             return {
                 "success": True,
-                "listing_id": item.id,
+                "listing_id": lid,
                 "verified": verified,
                 "verify_issues": verify_issues,
                 "summary": summary,
