@@ -932,6 +932,59 @@ function AIChatbot() {
     return () => window.removeEventListener('languageChanged', handler);
   }, [anonymous]);
 
+  // React to a role switch from the Profile screen. UserProfile.js
+  // dispatches a `roleChanged` event when the user saves a new role.
+  // The starter-suggestion chips and the role-specific tool surface
+  // both depend on role, so we:
+  //   1. Rebuild the initial greeting in-place (gets role-aware chips).
+  //   2. Append a short assistant note acknowledging the switch so the
+  //      user gets visible confirmation that the AI noticed.
+  // We do NOT clear real conversation history — only the marker
+  // greeting message is regenerated.
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    const handler = (evt) => {
+      const detail = (evt && evt.detail) || {};
+      const newRole = (detail.role || '').toLowerCase();
+      const prevRole = (detail.previousRole || '').toLowerCase();
+      let lang = 'en';
+      try {
+        if (window.i18n && typeof window.i18n.getCurrentLanguage === 'function') {
+          lang = window.i18n.getCurrentLanguage() || 'en';
+        }
+      } catch (_) { /* ignore */ }
+      const labelMap = lang === 'es'
+        ? { donor: 'donante', recipient: 'recipiente', volunteer: 'voluntario',
+            driver: 'conductor', dispatcher: 'despachador', admin: 'administrador' }
+        : { donor: 'donor', recipient: 'recipient', volunteer: 'volunteer',
+            driver: 'driver', dispatcher: 'dispatcher', admin: 'admin' };
+      const newLabel = labelMap[newRole] || newRole || (lang === 'es' ? 'miembro' : 'member');
+      const ackText = lang === 'es'
+        ? `Listo, ahora te ayudo como ${newLabel}. Cambié las sugerencias y acciones disponibles para este rol.`
+        : `Got it — I'll help you as a ${newLabel} now. I've updated the suggestions and available actions for this role.`;
+      setMessages((prev) => {
+        if (!Array.isArray(prev)) return prev;
+        // Rebuild the initial greeting so its starter chips reflect
+        // the new role.
+        const rebuilt = prev.map((m) => {
+          if (m && m._initialGreeting) {
+            return buildGreetingMessage(anonymous);
+          }
+          return m;
+        });
+        // Only append the ack when an actual role change happened
+        // (skip the no-op save where prev === next).
+        if (newRole && newRole !== prevRole) {
+          rebuilt.push({ role: 'assistant', text: ackText, _roleSwitchAck: true });
+        }
+        return rebuilt;
+      });
+      setLangTick((t) => t + 1);
+    };
+    window.addEventListener('roleChanged', handler);
+    return () => window.removeEventListener('roleChanged', handler);
+  }, [anonymous]);
+
   function getAuth() {
     const token = localStorage.getItem('auth_token');
     let userId = null;
