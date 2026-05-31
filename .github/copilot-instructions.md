@@ -182,7 +182,7 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 - UI: `DietaryPreferences.js` component with multi-select buttons
 
 **Urgency Countdown** (`URGENCY_COUNTDOWN_IMPLEMENTATION.md`):
-- 4-tier urgency: 🚨 Critical (<2h), ⚠️ High (<6h), ⏰ Medium (<24h), ✓ Low (>24h)
+- 4-tier urgency: Critical (<2h),  High (<6h),  Medium (<24h), ✓ Low (>24h)
 - `ListingCard.js` shows countdown timers updated every 60s, pulsing animation for critical
 - Listings auto-sorted by urgency on frontend
 
@@ -287,3 +287,7 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 - **Static assets**: Served directly by FastAPI (no nginx/CDN), includes HTML/JS/CSS/images
 - **Logs**: `sudo journalctl -u foodmaps -f` for systemd, or `backend/server.log` for script-based runs
 - **Monitoring**: Check `GET /api/health` endpoint for uptime checks
+
+
+UI:
+do not use emojis, if something like an emoji is required, use a stylized icon instead
