@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Launch smoke-tests for the DoGoods AI stack.
+Launch smoke-tests for the FoodMaps AI stack.
 
 Exercises:
   * /api/ai/health
@@ -225,7 +225,7 @@ def test_broadcast_admin(client: httpx.Client, report: Report) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> int:
-    print(f"== DoGoods AI launch tests ==  base={BASE_URL}")
+    print(f"== FoodMaps AI launch tests ==  base={BASE_URL}")
     report = Report()
     with httpx.Client() as client:
         test_health(client, report)

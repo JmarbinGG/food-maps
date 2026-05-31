@@ -133,9 +133,27 @@ window.databaseService = {
       params.append('pickup_start', listingData.pickup_start);
       params.append('pickup_end', listingData.pickup_end);
       if (listingData.est_w) params.append('est_w', listingData.est_w);
+      if (Array.isArray(listingData.images) && listingData.images.length) {
+        try {
+          params.append('images', JSON.stringify(listingData.images));
+        } catch (_) { /* ignore */ }
+      }
+
+      // Always send the JWT so the server can authoritatively bind the
+      // listing to the logged-in user. The `donor_id` URL param is kept for
+      // backward compatibility, but the server overrides it with the
+      // authenticated id from this token. This prevents stale
+      // `localStorage.current_user` (e.g. after switching accounts) from
+      // attributing a listing to the wrong user.
+      const headers = {};
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+      } catch (_) { /* no-op */ }
 
       const response = await fetch(`/api/listings/create?${params.toString()}`, {
-        method: 'POST'
+        method: 'POST',
+        headers
       });
 
       if (!response.ok) {

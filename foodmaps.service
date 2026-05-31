@@ -19,8 +19,12 @@ ExecStart=/bin/bash /home/ec2-user/project/backend/start_server.sh
 
 # Auto-restart configuration
 Restart=always
-RestartSec=5
-StartLimitInterval=0
+RestartSec=10
+# Bound restart attempts to avoid thundering-herd / CPU spin if the
+# process crashes immediately on boot (e.g. config error). Allow up to
+# 5 restarts per 60s before giving up.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 # Resource limits
 LimitNOFILE=65536

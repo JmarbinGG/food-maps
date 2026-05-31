@@ -2,19 +2,29 @@
 // Use this in React components to enable translations
 
 function useTranslation() {
-  const [language, setLanguage] = React.useState(window.i18n.getCurrentLanguage());
+  const initial = (typeof window !== 'undefined' && window.i18n && typeof window.i18n.getCurrentLanguage === 'function')
+    ? window.i18n.getCurrentLanguage()
+    : 'en';
+  const [language, setLanguage] = React.useState(initial);
 
   React.useEffect(() => {
     const handleLanguageChange = (event) => {
-      setLanguage(event.detail.language);
+      const next = (event && event.detail && event.detail.language) || (window.i18n && window.i18n.getCurrentLanguage()) || 'en';
+      setLanguage(next);
     };
 
     window.addEventListener('languageChanged', handleLanguageChange);
     return () => window.removeEventListener('languageChanged', handleLanguageChange);
   }, []);
 
-  const t = React.useCallback((key) => {
-    return window.i18n.t(key, language);
+  // Forward the caller's fallback so components like Header can do
+  // `t('header.support', 'Support')` and see the English fallback when
+  // a key is missing from the dictionary (instead of the raw key).
+  const t = React.useCallback((key, fallback) => {
+    if (!window.i18n || typeof window.i18n.t !== 'function') {
+      return (typeof fallback === 'string' && fallback) || key;
+    }
+    return window.i18n.t(key, language, fallback);
   }, [language]);
 
   return { t, language };

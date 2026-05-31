@@ -278,6 +278,12 @@ function DetailedModal({ listing, onClose, onClaim }) {
 
   const statusBadgeClass = getStatusBadgeClass(listingStatus);
   const categoryImage = getCategoryImage(listing.category);
+  // Prefer the actual photos uploaded for this listing (donor or AI-supplied);
+  // fall back to a category stock image if none are present.
+  const listingImages = Array.isArray(listing.images)
+    ? listing.images.filter((u) => typeof u === 'string' && u.trim().length > 0)
+    : [];
+  const heroImage = listingImages.length > 0 ? listingImages[0] : categoryImage;
   const canClaim = listingStatus === 'available';
 
   return React.createElement('div', {
@@ -317,10 +323,32 @@ function DetailedModal({ listing, onClose, onClaim }) {
 
         // Image
         React.createElement('img', {
-          src: categoryImage,
+          src: heroImage,
           alt: listing.title,
-          className: 'w-full h-32 object-cover rounded-lg mb-4'
+          className: 'w-full h-48 object-cover rounded-lg mb-2',
+          onError: (e) => {
+            // If the donor/AI-uploaded photo fails (e.g., file removed),
+            // fall back to the category stock image so we never show a
+            // broken image icon to the recipient.
+            try {
+              if (e && e.currentTarget && e.currentTarget.src !== categoryImage) {
+                e.currentTarget.src = categoryImage;
+              }
+            } catch (_) { /* ignore */ }
+          }
         }),
+
+        // Additional photos (thumbnails) when more than one was uploaded
+        listingImages.length > 1 && React.createElement('div', {
+          className: 'flex gap-2 mb-4 overflow-x-auto'
+        },
+          listingImages.slice(1, 6).map((url, idx) => React.createElement('img', {
+            key: url + idx,
+            src: url,
+            alt: `${listing.title} photo ${idx + 2}`,
+            className: 'w-16 h-16 object-cover rounded-md flex-shrink-0 border border-gray-200'
+          }))
+        ),
 
         // Title and Status
         React.createElement('h3', { className: 'font-bold text-lg mb-2' }, listing.title),
@@ -457,7 +485,27 @@ function DetailedModal({ listing, onClose, onClaim }) {
           }, 'Claim This Food'),
           React.createElement('button', {
             onClick: () => {
-              if (listing.coords) {
+              // Prefer the in-app AI assistant: it draws the route on
+              // our own Mapbox map AND speaks the turn-by-turn list in
+              // the chat reply (show_route_to_listing). Falls back to
+              // Google Maps for anonymous users (no auth token) or
+              // listings without coords.
+              const hasAuth = !!(
+                typeof localStorage !== 'undefined' && localStorage.getItem('auth_token')
+              );
+              const hasCoords = !!(listing.coords && listing.coords.lat && listing.coords.lng);
+              if (hasAuth && (hasCoords || listing.id)) {
+                const titleSnippet = (listing.title || `listing #${listing.id}`).slice(0, 60);
+                window.dispatchEvent(new CustomEvent('foodmaps:ai_ask', {
+                  detail: {
+                    text: `directions to listing #${listing.id}`,
+                    displayText: `🧭 Get directions to ${titleSnippet}`,
+                  },
+                }));
+                onClose && onClose();
+                return;
+              }
+              if (hasCoords) {
                 const url = `https://www.google.com/maps/dir/?api=1&destination=${listing.coords.lat},${listing.coords.lng}&travelmode=driving`;
                 window.open(url, '_blank');
               }

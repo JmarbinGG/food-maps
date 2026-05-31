@@ -1,5 +1,5 @@
 """
-DoGoods AI tools — MySQL edition.
+FoodMaps AI tools — MySQL edition.
 
 OpenAI function-calling tool definitions and handlers.
 All data operations go through SQLAlchemy against the main MySQL database.
@@ -12,15 +12,77 @@ import json
 import logging
 import math
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
 
+from backend.aws_secrets import load_aws_secrets
+
+# Pull secrets (e.g. MAPBOX_TOKEN) from AWS Secrets Manager into the
+# process env BEFORE we read module-level config below. In production the
+# secret name comes from the AWS_SECRET_NAME env var (set in the systemd
+# unit, e.g. "prod/env"); in tests/dev it's a no-op when unset.
+load_aws_secrets()
+
 logger = logging.getLogger("ai_tools")
 
 MAPBOX_TOKEN = os.getenv("MAPBOX_TOKEN") or os.getenv("VITE_MAPBOX_TOKEN", "")
 MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
+MAPBOX_GEOCODE_URL = "https://api.mapbox.com/geocoding/v5/mapbox.places/{}.json"
+
+
+def _geocode_address(address: str) -> Optional[tuple]:
+    """Best-effort forward-geocode of an address via Mapbox.
+
+    Returns ``(lat, lng)`` on success, ``None`` if no token, no match, or
+    on any error. Used to make sure AI-posted listings show up on the map
+    instead of only in the sidebar list. Filters out low-relevance hits
+    (country / region centroids) so a vague string like 'Alameda' doesn't
+    drop a listing in the middle of the wrong area.
+    """
+    addr = (address or "").strip()
+    if not addr or not MAPBOX_TOKEN:
+        return None
+    try:
+        from urllib.parse import quote as urlquote
+        url = MAPBOX_GEOCODE_URL.format(urlquote(addr))
+        # Two attempts; transient mapbox errors shouldn't permanently fail
+        # a listing post.
+        last_exc = None
+        for attempt in range(2):
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    resp = client.get(url, params={"access_token": MAPBOX_TOKEN, "limit": 1})
+                if resp.status_code != 200:
+                    continue
+                features = (resp.json() or {}).get("features") or []
+                if not features:
+                    return None
+                feat = features[0]
+                # Reject very low-relevance matches and country/region
+                # centroids — those are useless on a delivery map.
+                relevance = float(feat.get("relevance") or 0)
+                place_types = set(feat.get("place_type") or [])
+                if relevance < 0.5:
+                    return None
+                if place_types and place_types.issubset({"country", "region"}):
+                    return None
+                center = feat.get("center")
+                if not center or len(center) < 2:
+                    return None
+                # Mapbox returns [lng, lat]
+                return float(center[1]), float(center[0])
+            except Exception as exc:
+                last_exc = exc
+                continue
+        if last_exc is not None:
+            logger.warning("Geocode failed for %r: %s", addr, last_exc)
+        return None
+    except Exception as exc:
+        logger.warning("Geocode failed for %r: %s", addr, exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -329,16 +391,18 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "claim_listing",
             "description": (
-                "ACTION (DO NOT EXPLAIN, JUST CALL): claim an available food "
-                "listing for the current user. Call this tool IMMEDIATELY whenever "
-                "the user asks to claim, take, reserve, get, grab, or pick up a "
-                "specific listing (e.g. 'claim that one', 'I want the bread', "
-                "'reserve listing 42 for me'). Do NOT respond with instructions "
-                "on how to claim — actually call this tool. The tool itself "
-                "initiates the SMS-confirmation flow and the user gets a 4-digit "
-                "code by text. If the user has not pointed at a specific listing, "
-                "first call search_food_near_user to find candidates and ask which "
-                "one; otherwise call claim_listing now."
+                "Claim a SPECIFIC available food listing for the current user. "
+                "Call this whenever the user picks a listing — by id "
+                "('claim listing 42'), by name ('I want the kale', 'claim the "
+                "Fresh Organic Kale'), or by position ('the first one'). "
+                "Resolve the listing_id from your most recent search_food_near_user "
+                "result in this conversation. If you have no candidate list yet, "
+                "call search_food_near_user FIRST in the same turn — do not ask "
+                "the user for a numeric id. NEVER reply with stall text like "
+                "'one moment, I'll claim it' without emitting this tool_call. "
+                "On success the tool sends a 4-digit SMS code (or relays it "
+                "inline if SMS is unavailable) which the user must reply with "
+                "via confirm_claim."
             ),
             "parameters": {
                 "type": "object",
@@ -355,19 +419,22 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "confirm_claim",
             "description": (
-                "ACTION: finalize a claim using the 4-digit code the user received "
-                "by SMS after claim_listing. Call this when the user says something "
-                "like 'my code is 1234' or 'confirm 1234'. Without this step the "
-                "claim auto-releases after 5 minutes."
+                "Finalize a pending claim using the 4-digit code the user "
+                "received (by SMS or shown inline by claim_listing). Call this "
+                "whenever the user sends a 4-digit code in chat (e.g. '1234', "
+                "'my code is 1234', 'confirm 1234'). The listing_id is "
+                "optional — if omitted, the backend looks up the user's most "
+                "recent pending claim. Without this step the claim auto-releases "
+                "after 5 minutes."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "user_id": {"type": "string"},
-                    "listing_id": {"type": "integer"},
-                    "code": {"type": "string", "description": "4-digit code from SMS"},
+                    "listing_id": {"type": "integer", "description": "Optional. The listing id from the claim_listing response. Omit if unknown — the backend will resolve it from the code."},
+                    "code": {"type": "string", "description": "4-digit confirmation code"},
                 },
-                "required": ["user_id", "listing_id", "code"],
+                "required": ["user_id", "code"],
             },
         },
     },
@@ -440,7 +507,13 @@ TOOL_DEFINITIONS = [
                 "IMPORTANT: leave pickup_window_start, pickup_window_end and expiration_date "
                 "EMPTY unless the donor explicitly told you a specific time — the server picks "
                 "sensible defaults (next 48h pickup, 3-7 day expiration). Never guess dates; if "
-                "you supply a date in the past the call is rejected."
+                "you supply a date in the past the call is rejected. "
+                "VERIFY THE RESULT: success is ONLY when the response contains "
+                "`success: true` AND a numeric `listing_id`. If the response has an "
+                "`error` field (e.g. 'no pickup address', 'address could not be located'), "
+                "the listing WAS NOT created — relay the error to the donor and ask for "
+                "the missing info. Never tell the user 'I posted your listing' unless you "
+                "have a listing_id from this call."
             ),
             "parameters": {
                 "type": "object",
@@ -458,8 +531,75 @@ TOOL_DEFINITIONS = [
                     "expiration_date": {"type": "string", "description": "ISO 8601. OMIT unless printed on the package. Server defaults from perishability."},
                     "allergens": {"type": "array", "items": {"type": "string"}},
                     "dietary_tags": {"type": "array", "items": {"type": "string"}},
+                    "images": {"type": "array", "items": {"type": "string"}, "description": "Optional list of image URLs (or data URLs) the donor uploaded for this listing."},
                 },
-                "required": ["user_id", "title", "category", "qty"],
+                "required": ["user_id", "title", "qty"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "attach_photos_to_listing",
+            "description": (
+                "ACTION: append one or more photo URLs to an existing food "
+                "listing's gallery. Use this when the donor uploads a photo "
+                "AFTER the listing is already posted (the chat will contain "
+                "a message like 'image: /uploads/ai/<uuid>.jpg' or '📎 "
+                "Uploaded photo …'). Pick the listing_id from the most "
+                "recently posted listing in the conversation, or ask the "
+                "donor which listing if it's ambiguous. De-dups against "
+                "existing images so re-sending is safe."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {"type": "integer"},
+                    "images": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "URLs to attach (e.g. /uploads/ai/<uuid>.jpg).",
+                    },
+                },
+                "required": ["user_id", "listing_id", "images"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "bulk_import_listings",
+            "description": (
+                "ACTION: create MANY food listings at once from a CSV blob (or a "
+                "PDF that the frontend has already converted to text). Use this "
+                "when the donor pastes/uploads a spreadsheet of inventory. "
+                "PRE-FLIGHT: the server first validates that every row has a "
+                "title and that an address is resolvable (row column → "
+                "default_address arg → donor profile address). If any row is "
+                "missing a title or address, the call returns success=false "
+                "with `needs` listing what's missing and per-row indices in "
+                "`missing_title_rows` / `missing_address_rows` — DO NOT pretend "
+                "the import succeeded; ask the donor for the missing info "
+                "(usually a default_address) and call the tool again. Only "
+                "when the pre-flight passes does the server actually post "
+                "rows and return per-row results. The header row is required, "
+                "but column names are matched leniently — common synonyms work: "
+                "'food name'/'item'/'name'→title, 'quantity'/'amount'→qty, "
+                "'pickup location'/'location'→address, 'pickup time'→a single "
+                "range column like '9:00 AM - 12:00 PM' which the server splits, "
+                "'expiration date'/'best by'/'use by'→expiration_date. Quantity "
+                "cells may include the unit inline (e.g. '25 lbs', '100 cans') "
+                "and the server extracts both. Extra columns are ignored."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "csv_text": {"type": "string", "description": "Raw CSV text. First row must be the header."},
+                    "default_address": {"type": "string", "description": "Optional fallback address used for rows that don't include one."},
+                },
+                "required": ["user_id", "csv_text"],
             },
         },
     },
@@ -477,6 +617,133 @@ TOOL_DEFINITIONS = [
                     "conversation_id": {"type": "string", "description": "Optional. If set, overrides recipient_id and uses this exact thread id."},
                 },
                 "required": ["user_id", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "show_map",
+            "description": (
+                "ACTION: switch the FoodMaps UI to the interactive map view so the user "
+                "can see available food listings on the map. Call this whenever the user "
+                "asks to 'show the map', 'open the map', 'see food on the map', 'view "
+                "listings on the map', or anything similar. DO NOT EXPLAIN, JUST CALL — "
+                "the UI will navigate immediately."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "focus": {
+                        "type": "string",
+                        "description": (
+                            "Optional. What to focus the map on. One of 'me' (center on the "
+                            "user), 'all' (fit all listings), or a free-text place/category."
+                        ),
+                    },
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "show_route_to_listing",
+            "description": (
+                "ACTION: draw a driving route on the map from the recipient's saved "
+                "address to a specific food listing's pickup location. Call this when "
+                "the recipient asks 'how do I get there?', 'show me directions', "
+                "'route to listing #N', 'cómo llego', 'dame las direcciones', or "
+                "right AFTER a successful claim so they can see the path to pickup. "
+                "Requires the recipient to have an address on file AND the listing "
+                "to have map coordinates. Returns origin/destination coords plus a "
+                "GeoJSON LineString geometry the frontend renders as a blue route "
+                "line. The UI will switch to the map view and fit both points in "
+                "the viewport. DO NOT call for arbitrary curiosity — only when the "
+                "user actually wants directions to a real listing they can reach."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {
+                        "type": "integer",
+                        "description": "Numeric id of the FoodResource listing to route to.",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["driving", "walking", "cycling"],
+                        "description": "Mapbox profile. Default 'driving'.",
+                    },
+                },
+                "required": ["user_id", "listing_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "navigate_ui",
+            "description": (
+                "ACTION: drive the FoodMaps web UI on the user's behalf — open or close "
+                "views, panels and modals. Call this whenever the user asks to 'open', "
+                "'show', 'go to', 'close', 'hide', 'exit', 'leave', 'back to map', etc. "
+                "DO NOT EXPLAIN, JUST CALL — the UI will navigate immediately and the "
+                "assistant should keep its reply short. Use 'close' (no target) to return "
+                "to the map. Targets are page-level views; 'list' and 'map' also flip the "
+                "main map/list toggle."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "action": {
+                        "type": "string",
+                        "enum": ["open", "close", "toggle"],
+                        "description": "What to do. 'close' returns the UI to the map.",
+                    },
+                    "target": {
+                        "type": "string",
+                        "enum": [
+                            "map",
+                            "list",
+                            "create",
+                            "bulk-create",
+                            "dashboard",
+                            "dispatch",
+                            "admin",
+                            "driver",
+                            "schedule",
+                            "partners",
+                            "food-rescue",
+                            "meal-planning",
+                            "ai-matching",
+                            "routes",
+                            "emergency",
+                            "nutrition",
+                            "consumption",
+                            "filters",
+                            "favorites",
+                            "chat",
+                            "voice",
+                            "meal-suggestions",
+                            "spoilage-alerts",
+                            "storage-coach",
+                            "smart-notifications",
+                            "pickup-reminders",
+                            "sms-consent",
+                        ],
+                        "description": (
+                            "Which UI surface to act on. 'map' / 'list' toggle the main "
+                            "view; the rest open a dedicated page. 'filters' / 'favorites' "
+                            "control the side panels. 'chat' / 'voice' control the AI "
+                            "chatbot itself."
+                        ),
+                    },
+                },
+                "required": ["user_id", "action"],
             },
         },
     },
@@ -514,16 +781,40 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "update_user_profile": _update_user_profile,
         "post_food_request": _post_food_request,
         "post_food_listing": _post_food_listing,
+        "attach_photos_to_listing": _attach_photos_to_listing,
+        "bulk_import_listings": _bulk_import_listings,
         "send_user_message": _send_user_message,
+        "show_map": _show_map,
+        "show_route_to_listing": _show_route_to_listing,
+        "navigate_ui": _navigate_ui,
     }
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"Unknown tool: {name}"}
+    # Defense-in-depth: silently drop kwargs the handler doesn't accept.
+    # OpenAI tool calls occasionally include legacy/extra fields (e.g.
+    # 'confirmed' from a prior schema version) that would otherwise raise
+    # TypeError and surface as an ugly "Tool execution failed" message.
+    import inspect as _inspect
+    try:
+        sig = _inspect.signature(handler)
+        accepts_kwargs = any(
+            p.kind == _inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
+        )
+        if not accepts_kwargs and isinstance(arguments, dict):
+            allowed = set(sig.parameters.keys())
+            arguments = {k: v for k, v in arguments.items() if k in allowed}
+    except (TypeError, ValueError):
+        pass
     try:
         return await handler(**arguments)
     except Exception as exc:
-        logger.error("Tool %s failed: %s", name, exc)
-        return {"error": f"Tool execution failed: {exc}"}
+        # Log full traceback server-side, but return a generic message to
+        # the model so internal errors (SQL exceptions, schema details,
+        # file paths) don't leak into chat replies.
+        logger.exception("Tool %s failed", name)
+        return {"error": f"{name} failed. Please try again or rephrase."}
 
 
 # ---------------------------------------------------------------------------
@@ -548,6 +839,141 @@ def _to_int(value) -> Optional[int]:
         return int(str(value))
     except (ValueError, TypeError):
         return None
+
+
+# Keyword -> FoodCategory guessing so the AI doesn't have to ask the donor
+# what 'category' a loaf of bread is. Falls back to 'prepared'.
+_CATEGORY_KEYWORDS = {
+    "produce":   ["lettuce", "kale", "spinach", "carrot", "tomato", "onion", "potato",
+                  "pepper", "cucumber", "broccoli", "cabbage", "celery", "garlic",
+                  "vegetable", "veggie", "greens", "salad"],
+    "fruit":     ["apple", "banana", "orange", "berry", "berries", "grape", "pear",
+                  "peach", "plum", "melon", "watermelon", "mango", "pineapple",
+                  "fruit", "lemon", "lime"],
+    "bakery":    ["bread", "loaf", "loaves", "bagel", "croissant", "muffin", "pastry",
+                  "donut", "doughnut", "cake", "pie", "scone", "roll", "sourdough",
+                  "baguette", "tortilla"],
+    "prepared":  ["meal", "soup", "stew", "casserole", "pasta", "pizza", "rice",
+                  "curry", "sandwich", "burrito", "taco", "lasagna", "salad bowl",
+                  "leftover", "leftovers"],
+    "packaged":  ["can", "canned", "box", "boxed", "jar", "package", "snack",
+                  "cereal", "chips", "cookies", "crackers", "pasta dry", "rice dry",
+                  "beans", "lentils", "peanut butter", "sealed"],
+    "water":     ["water", "bottled water", "gallon"],
+    "leftovers": ["leftover", "leftovers"],
+}
+
+
+def _guess_category_from_title(title: str) -> str:
+    t = (title or "").lower()
+    for cat, kws in _CATEGORY_KEYWORDS.items():
+        for kw in kws:
+            if kw in t:
+                return cat
+    return "prepared"
+
+
+# ---------------------------------------------------------------------------
+# Spanish → English glossary for listing fields.
+#
+# Listings are stored in English so the recipient-side UI / search /
+# filters work consistently. The AI prompt already instructs the model
+# to translate before calling post_food_listing, but this is a backend
+# safety net for the case where the model lapses (especially on bulk /
+# CSV imports). Word-boundary, case-preserving substitution.
+# ---------------------------------------------------------------------------
+
+_LISTING_ES_EN: dict[str, str] = {
+    # produce
+    "manzanas": "apples", "manzana": "apple",
+    "naranjas": "oranges", "naranja": "orange",
+    "plátanos": "bananas", "plátano": "banana", "platanos": "bananas", "platano": "banana",
+    "uvas": "grapes", "uva": "grape",
+    "fresas": "strawberries", "fresa": "strawberry",
+    "limones": "lemons", "limón": "lemon", "limon": "lemon",
+    "lechuga": "lettuce",
+    "tomates": "tomatoes", "tomate": "tomato",
+    "cebollas": "onions", "cebolla": "onion",
+    "zanahorias": "carrots", "zanahoria": "carrot",
+    "papas": "potatoes", "papa": "potato", "patatas": "potatoes",
+    "verduras": "vegetables", "verdura": "vegetable",
+    "frutas": "fruit", "fruta": "fruit",
+    "produce fresco": "fresh produce", "produce": "produce",
+    # bakery
+    "pan": "bread", "panes": "loaves of bread",
+    "panecillos": "rolls", "bollos": "rolls",
+    "tortillas": "tortillas",
+    "galletas": "cookies",
+    "pastel": "cake", "pasteles": "cakes",
+    # prepared / leftovers
+    "comida preparada": "prepared meal",
+    "sobras": "leftovers",
+    "arroz": "rice",
+    "frijoles": "beans", "habichuelas": "beans",
+    "sopa": "soup",
+    "guisado": "stew", "guiso": "stew",
+    "pollo": "chicken",
+    "carne": "beef", "res": "beef",
+    "puerco": "pork", "cerdo": "pork",
+    "pescado": "fish",
+    "ensalada": "salad",
+    # packaged / dairy
+    "leche": "milk",
+    "queso": "cheese",
+    "yogur": "yogurt", "yogurt": "yogurt",
+    "huevos": "eggs", "huevo": "egg",
+    "agua": "water",
+    "jugo": "juice", "zumo": "juice",
+    # allergens / dietary tags
+    "gluten": "gluten",
+    "lácteos": "dairy", "lacteos": "dairy",
+    "frutos secos": "nuts", "nueces": "nuts",
+    "soya": "soy", "soja": "soy",
+    "mariscos": "shellfish",
+    "sin gluten": "gluten-free",
+    "sin lácteos": "dairy-free", "sin lacteos": "dairy-free",
+    "vegetariano": "vegetarian",
+    "vegano": "vegan",
+    # handoff phrasing donors often write in description
+    "recogida solamente": "Pickup only.",
+    "recogida solo": "Pickup only.",
+    "solo recogida": "Pickup only.",
+    "entrega disponible": "Donor delivery available.",
+    "entrega del donante": "Donor delivery available.",
+    # units
+    "libras": "lbs", "libra": "lb",
+    "kilos": "kg", "kilo": "kg",
+    "cajas": "boxes", "caja": "box",
+    "bolsas": "bags", "bolsa": "bag",
+    "piezas": "pieces", "pieza": "piece",
+    "barras": "loaves", "barra": "loaf",
+}
+
+
+def _translate_listing_text(value: Optional[str]) -> Optional[str]:
+    """Translate a Spanish listing field to English using a small glossary.
+
+    Conservative: substitutes only known terms with word-boundary matching
+    (case-insensitive, preserves leading-capital). If nothing matches, the
+    text is returned unchanged. Never raises; never blocks posting.
+    """
+    if not value or not isinstance(value, str):
+        return value
+    out = value
+    for es, en in _LISTING_ES_EN.items():
+        # word-boundary, case-insensitive
+        pattern = r"\b" + re.escape(es) + r"\b"
+
+        def _replace(match: "re.Match[str]") -> str:
+            src = match.group(0)
+            if src.isupper():
+                return en.upper()
+            if src[:1].isupper():
+                return en[:1].upper() + en[1:]
+            return en
+
+        out = re.sub(pattern, _replace, out, flags=re.IGNORECASE)
+    return out
 
 
 async def _run(sync_fn):
@@ -795,9 +1221,11 @@ async def _create_reminder(
             db.refresh(row)
             return {
                 "created": True,
+                "success": True,
                 "reminder_id": row.id,
                 "trigger_time": trigger_time,
                 "message": f"Reminder set for {trigger_time}.",
+                "summary": f"Done — reminder set for {trigger_time}. I'll ping you when it's time.",
             }
         except Exception as exc:
             db.rollback()
@@ -2054,6 +2482,25 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
         db = SessionLocal()
         try:
             lid = int(listing_id)
+            # Role guard: donors/dispatchers/etc. cannot claim food. Claiming is
+            # a recipient action. Refuse early with a clear message so the AI
+            # can tell the user to sign in as a recipient instead of attempting
+            # the claim and getting a generic failure later.
+            caller = db.query(User).filter(User.id == uid).first()
+            if caller and caller.role:
+                role_value = caller.role.value if hasattr(caller.role, "value") else str(caller.role)
+                if role_value == "donor":
+                    return {
+                        "error": (
+                            "This account is a donor account and cannot claim "
+                            "food. Please sign in as a recipient to claim "
+                            "listings."
+                        ),
+                        "reason": "wrong_role",
+                        "current_role": "donor",
+                        "required_role": "recipient",
+                    }
+
             # Atomic claim: only one concurrent caller can transition
             # 'available' -> 'pending_confirmation'. Prevents the read-then-
             # update race that could let two users both "win" a listing.
@@ -2111,12 +2558,13 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
                 "expires_at": now + timedelta(minutes=5),
             }
 
+            sms_ok = False
             try:
-                send_sms(
+                sms_ok = bool(send_sms(
                     claimant.phone,
                     f"You claimed '{item.title}'. Reply with code {code} within 5 minutes to confirm. "
                     f"Address: {item.address}",
-                )
+                ))
                 donor = db.query(User).filter(User.id == item.donor_id).first()
                 if donor and donor.phone:
                     send_sms(donor.phone,
@@ -2131,30 +2579,57 @@ async def _claim_listing(user_id: str, listing_id: int) -> dict:
             except Exception:
                 pass
 
+            # When SMS delivery is unavailable (e.g. Twilio not configured),
+            # surface the code in the tool result so the assistant can show
+            # it to the user inline. Safe because the chat session is
+            # already authenticated to this user via JWT.
+            if sms_ok:
+                summary = (
+                    f"Claim initiated for '{item.title}'. A 4-digit code was "
+                    f"texted to your phone. Reply here with 'confirm <code>' "
+                    f"within 5 minutes or it auto-releases."
+                )
+                return {
+                    "success": True,
+                    "listing_id": item.id,
+                    "status": item.status,
+                    "needs_confirmation": True,
+                    "summary": summary,
+                }
+            # SMS fallback: include the code in the result so the AI can
+            # relay it to the user in chat.
+            logger.warning("SMS unavailable; relaying claim code in chat for listing %s", item.id)
             return {
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
                 "needs_confirmation": True,
+                "sms_delivered": False,
+                "confirm_code": code,
                 "summary": (
-                    f"Claim initiated for '{item.title}'. A 4-digit code was "
-                    f"texted to your phone. Reply here with 'confirm <code>' "
-                    f"within 5 minutes or it auto-releases."
+                    f"Claim initiated for '{item.title}' (listing #{item.id}). "
+                    f"SMS delivery is currently unavailable, so your confirmation "
+                    f"code is {code}. Reply with 'confirm {code}' within 5 minutes "
+                    f"or the claim auto-releases. Pickup address: {item.address}."
                 ),
             }
         except Exception as exc:
-            logger.error("claim_listing failed: %s", exc)
+            logger.exception("claim_listing failed")
             db.rollback()
-            return {"error": f"claim failed: {exc}"}
+            return {"error": "Could not complete the claim. Please try again."}
         finally:
             db.close()
 
     return await _run(_sync)
 
 
-async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
+async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -> dict:
     """Finalize a pending claim by checking the SMS code, mirroring the
     /api/listings/confirm/{id} endpoint but callable from chat.
+
+    ``listing_id`` is optional: when omitted, we look up the user's most
+    recent pending confirmation by code. This lets the user simply reply
+    "1234" without remembering the listing id.
     """
     from backend.app import SessionLocal, pending_confirmations, send_sms
     from backend.models import FoodResource, User
@@ -2166,10 +2641,30 @@ async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
     if not code_clean:
         return {"error": "Confirmation code required"}
 
+    # Resolve listing_id from the in-memory pending map when not provided.
+    lid = _to_int(listing_id) if listing_id is not None else None
+    if lid is None:
+        candidates = [
+            (k, v) for k, v in pending_confirmations.items()
+            if v.get("recipient_id") == uid and v.get("code") == code_clean
+        ]
+        if not candidates:
+            return {
+                "error": (
+                    "No pending claim matches that code for your account. "
+                    "It may have expired (5 min) or already been confirmed."
+                )
+            }
+        # Pick the most recent (largest id wins as a proxy for newest).
+        lid = max(c[0] for c in candidates)
+
+    # Snapshot the resolved listing id for the inner sync closure.
+    resolved_lid = lid
+
     def _sync() -> dict:
         db = SessionLocal()
         try:
-            lid = int(listing_id)
+            lid = int(resolved_lid)
             confirmation = pending_confirmations.get(lid)
             if not confirmation:
                 # Maybe already confirmed or auto-released.
@@ -2187,7 +2682,8 @@ async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
                 return {"error": "This confirmation belongs to a different user."}
             if confirmation.get("code") != code_clean:
                 return {"error": "Invalid confirmation code"}
-            if datetime.utcnow() > confirmation.get("expires_at", datetime.utcnow()):
+            expires_at = confirmation.get("expires_at")
+            if expires_at is None or datetime.utcnow() > expires_at:
                 pending_confirmations.pop(lid, None)
                 return {"error": "Confirmation code expired. Please claim again."}
 
@@ -2195,38 +2691,102 @@ async def _confirm_claim(user_id: str, listing_id: int, code: str) -> dict:
             if not item:
                 return {"error": "Listing not found"}
 
-            item.status = "claimed"
+            # Atomic flip: only succeed if the listing is still
+            # pending_confirmation for THIS recipient. Prevents the race
+            # where auto_release_claim's Timer flips status back to
+            # 'available' between our pending_confirmations lookup above
+            # and the commit below — which previously could have produced
+            # a 'claimed' listing with a null recipient.
+            updated = (
+                db.query(FoodResource)
+                .filter(
+                    FoodResource.id == lid,
+                    FoodResource.status == "pending_confirmation",
+                    FoodResource.recipient_id == uid,
+                )
+                .update({FoodResource.status: "claimed"}, synchronize_session=False)
+            )
+            if not updated:
+                pending_confirmations.pop(lid, None)
+                db.rollback()
+                return {"error": "Claim is no longer pending — it may have been auto-released. Please claim again."}
             db.commit()
+            db.refresh(item)
             pending_confirmations.pop(lid, None)
 
-            try:
-                donor = db.query(User).filter(User.id == item.donor_id).first()
-                claimant = db.query(User).filter(User.id == uid).first()
-                if claimant and claimant.phone:
-                    send_sms(
-                        claimant.phone,
-                        f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
-                        f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
+            # ----------------------------------------------------------
+            # Post-write verification: re-query the row and confirm the
+            # status flip actually persisted with this user as recipient.
+            # If a parallel auto-release Timer fired between our atomic
+            # update and the commit, or a different process raced us,
+            # we'd otherwise tell the user "claim confirmed" while the
+            # row sits at status='available'. The atomic UPDATE above
+            # already guards against this, but verifying gives us a
+            # clear `verified` flag the AI/UI can use to warn instead
+            # of celebrating a phantom confirmation.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "claimed":
+                    verify_issues.append(f"status={status_val!r} (expected 'claimed')")
+                if check.recipient_id != uid:
+                    verify_issues.append(
+                        f"recipient_id={check.recipient_id!r} (expected {uid})"
                     )
-                if donor and donor.phone:
-                    send_sms(
-                        donor.phone,
-                        f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
-                        f"will pick up '{item.title}'.",
-                    )
-            except Exception as exc:  # pragma: no cover
-                logger.warning("confirm SMS delivery failed: %s", exc)
+            verified = not verify_issues
 
+            # Only blast confirmation SMS when the post-write check
+            # actually agrees the row is now claimed by this user.
+            # Otherwise we'd tell both parties "Claim confirmed!" via
+            # SMS while telling the chat user "verify failed" — a
+            # contradiction that's worse than no SMS at all.
+            if verified:
+                try:
+                    donor = db.query(User).filter(User.id == item.donor_id).first()
+                    claimant = db.query(User).filter(User.id == uid).first()
+                    if claimant and claimant.phone:
+                        send_sms(
+                            claimant.phone,
+                            f"Claim confirmed! Pick up '{item.title}' at {item.address}. "
+                            f"Donor contact: {donor.phone if donor and donor.phone else 'N/A'}",
+                        )
+                    if donor and donor.phone:
+                        send_sms(
+                            donor.phone,
+                            f"Claim confirmed! {claimant.name if claimant else 'Recipient'} "
+                            f"will pick up '{item.title}'.",
+                        )
+                except Exception as exc:  # pragma: no cover
+                    logger.warning("confirm SMS delivery failed: %s", exc)
+
+            if verified:
+                summary = f"Claim confirmed for '{item.title}'. You're cleared to pick it up."
+            else:
+                summary = (
+                    f"Claim status flipped for '{item.title}', but a post-write check "
+                    f"found issues: " + "; ".join(verify_issues) + ". Please reload and verify."
+                )
             return {
                 "success": True,
                 "listing_id": item.id,
                 "status": item.status,
-                "summary": f"Claim confirmed for '{item.title}'. You're cleared to pick it up.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
-            logger.error("confirm_claim failed: %s", exc)
+            logger.exception("confirm_claim failed")
             db.rollback()
-            return {"error": f"confirm failed: {exc}"}
+            return {"error": "Could not confirm the claim. Please try again."}
         finally:
             db.close()
 
@@ -2259,14 +2819,49 @@ async def _cancel_claim(user_id: str, listing_id: int) -> dict:
             # Drop any pending SMS-confirmation code so an old code can't
             # re-confirm the listing after release.
             pending_confirmations.pop(lid, None)
+
+            # ----------------------------------------------------------
+            # Post-write verification: re-query and confirm the row is
+            # actually back to status='available' with no recipient. If
+            # something else races us (a parallel claim from another
+            # session), we want to surface it instead of silently
+            # claiming "released!".
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "available":
+                    verify_issues.append(f"status={status_val!r} (expected 'available')")
+                if check.recipient_id is not None:
+                    verify_issues.append(
+                        f"recipient_id={check.recipient_id!r} (expected None)"
+                    )
+            verified = not verify_issues
+            summary = (
+                f"Released '{item.title}' back to the community."
+                if verified else
+                f"Released '{item.title}', but post-check found issues: "
+                + "; ".join(verify_issues)
+            )
             return {
                 "success": True,
                 "listing_id": item.id,
-                "summary": f"Released '{item.title}' back to the community.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
+            logger.exception("cancel_claim failed")
             db.rollback()
-            return {"error": f"cancel failed: {exc}"}
+            return {"error": "Could not cancel the claim. Please try again."}
         finally:
             db.close()
 
@@ -2340,7 +2935,7 @@ async def _update_user_profile(
             return {
                 "success": True,
                 "updated": changed,
-                "summary": f"Updated: {', '.join(changed)}.",
+                "summary": f"Done — updated your {', '.join(changed)}. All saved.",
             }
         except Exception as exc:
             db.rollback()
@@ -2375,6 +2970,15 @@ async def _post_food_request(
         except ValueError:
             return {"error": f"Unknown category '{category}'. Allowed: produce, prepared, packaged, bakery, water, fruit, leftovers"}
 
+    # Normalize free-text fields to English so requests show up
+    # consistently in the recipient/dispatcher UI.
+    if notes:
+        notes = _translate_listing_text(notes)
+    if isinstance(special_needs, list):
+        special_needs = [_translate_listing_text(s) or s for s in special_needs]
+    if isinstance(dietary_restrictions, list):
+        dietary_restrictions = [_translate_listing_text(d) or d for d in dietary_restrictions]
+
     try:
         latest_by_dt = _parse_iso(latest_by)
     except _ParseError as exc:
@@ -2391,13 +2995,20 @@ async def _post_food_request(
             allowed_roles = {UserRole.RECIPIENT, UserRole.ADMIN, UserRole.VOLUNTEER}
             if user.role not in allowed_roles:
                 return {"error": "Only recipients (or admins/volunteers) can post food requests."}
+            resolved_address = (address or user.address or "").strip() or None
+            lat = user.coords_lat
+            lng = user.coords_lng
+            if resolved_address:
+                geocoded = _geocode_address(resolved_address)
+                if geocoded is not None:
+                    lat, lng = geocoded
             req = FoodRequest(
                 recipient_id=uid,
                 category=cat_enum,
                 household_size=max(1, int(household_size or 1)),
-                address=(address or user.address or "").strip() or None,
-                coords_lat=user.coords_lat,
-                coords_lng=user.coords_lng,
+                address=resolved_address,
+                coords_lat=lat,
+                coords_lng=lng,
                 notes=(notes or None),
                 latest_by=latest_by_dt,
                 status="open",
@@ -2407,11 +3018,50 @@ async def _post_food_request(
             db.add(req)
             db.commit()
             db.refresh(req)
+
+            # ----------------------------------------------------------
+            # Post-write verification (parity with post_food_listing):
+            # re-query the request and confirm it would actually appear
+            # in the recipient feed. The map needs status='open' and
+            # coords; without coords the request is invisible to nearby
+            # donors. We surface this so the AI can warn the user
+            # ("posted but won't be visible because address didn't
+            # geocode") instead of pretending it's live.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = db.query(FoodRequest).filter(FoodRequest.id == req.id).first()
+            verify_issues: list[str] = []
+            if check is None:
+                verify_issues.append("request row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "open":
+                    verify_issues.append(f"status={status_val!r} (expected 'open')")
+                if check.coords_lat is None or check.coords_lng is None:
+                    verify_issues.append("missing map coordinates (donors won't see it nearby)")
+            verified = not verify_issues
+            base_summary = (
+                f"Posted food request #{req.id}"
+                f"{' for ' + cat_enum.value if cat_enum else ''}"
+            )
+            if verified:
+                summary = base_summary + ". Verified visible to nearby donors."
+            else:
+                summary = (
+                    base_summary
+                    + ". WARNING: post-check found issues — "
+                    + "; ".join(verify_issues)
+                )
             return {
                 "success": True,
                 "request_id": req.id,
-                "summary": f"Posted food request #{req.id}"
-                           f"{' for ' + cat_enum.value if cat_enum else ''}.",
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "summary": summary,
             }
         except Exception as exc:
             db.rollback()
@@ -2425,8 +3075,8 @@ async def _post_food_request(
 async def _post_food_listing(
     user_id: str,
     title: str,
-    category: str,
-    qty: float,
+    category: Optional[str] = None,
+    qty: float = 1,
     description: Optional[str] = None,
     unit: Optional[str] = None,
     perishability: str = "medium",
@@ -2436,6 +3086,7 @@ async def _post_food_listing(
     expiration_date: Optional[str] = None,
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
+    images: Optional[list] = None,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -2446,6 +3097,24 @@ async def _post_food_listing(
 
     if not (title or "").strip():
         return {"error": "title is required"}
+
+    # Listings are stored in English so search/filters work for all
+    # recipients regardless of donor language. Translate any Spanish
+    # the AI may have left in title/description/unit/allergens/tags.
+    title = _translate_listing_text(title) or title
+    if description:
+        description = _translate_listing_text(description)
+    if unit:
+        unit = _translate_listing_text(unit)
+    if isinstance(allergens, list):
+        allergens = [_translate_listing_text(a) or a for a in allergens]
+    if isinstance(dietary_tags, list):
+        dietary_tags = [_translate_listing_text(t) or t for t in dietary_tags]
+
+    # Smart category default: guess from title keywords so the AI doesn't
+    # have to interrogate the donor about it. The donor can still override.
+    if not category:
+        category = _guess_category_from_title(title)
 
     try:
         cat_enum = FoodCategory(str(category).lower())
@@ -2522,11 +3191,83 @@ async def _post_food_listing(
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
-            # Role gate: listings are donations; only donors (or admins acting
-            # on behalf) should create them via the AI.
-            allowed_roles = {UserRole.DONOR, UserRole.ADMIN, UserRole.VOLUNTEER}
-            if user.role not in allowed_roles:
-                return {"error": "Only donors (or admins/volunteers) can post food listings."}
+
+            # Role gate: only DONOR / VOLUNTEER / ADMIN accounts may post
+            # food listings via the AI. Recipients are explicitly blocked
+            # so the AI tells them to sign in as a donor (mirror of the
+            # donor-cannot-claim guard). Drivers and dispatchers are also
+            # excluded to avoid role-blurring on the dispatch dashboard.
+            #
+            # IMPORTANT: this gate runs BEFORE the dedup short-circuit
+            # below — otherwise a banned role could probe for an
+            # existing duplicate and get a "success" reply for a
+            # listing they're not allowed to post against.
+            if user.role == UserRole.RECIPIENT:
+                return {
+                    "error": (
+                        "This account is a recipient account and cannot "
+                        "donate or post food listings. Please sign in as "
+                        "a donor to share food."
+                    ),
+                    "reason": "wrong_role",
+                    "current_role": "recipient",
+                    "required_role": "donor",
+                }
+            blocked_roles = {UserRole.DRIVER, UserRole.DISPATCHER}
+            if user.role in blocked_roles:
+                return {"error": "Drivers and dispatchers can't post donor listings from chat."}
+
+            # ----------------------------------------------------------
+            # Idempotency / duplicate-post guard.
+            # The most common cause of duplicate listings is the model
+            # re-issuing the same tool call after a transient network
+            # blip — or a recipient hitting "share again" on a voice
+            # turn that timed out. If a listing with the same donor +
+            # title + address was created in the last 10 seconds, treat
+            # this call as a retry and return the EXISTING listing_id
+            # instead of creating a second row. We also surface
+            # `duplicate_of_recent: true` so the AI can phrase its reply
+            # honestly ("That listing is already up — id #N") rather
+            # than claiming a fresh post.
+            # ----------------------------------------------------------
+            try:
+                normalized_title = (title or "").strip()[:255].lower()
+                normalized_addr = ((address or user.address or "").strip() or None)
+                if normalized_title:
+                    from sqlalchemy import func as _sa_func
+                    recent_cutoff = datetime.utcnow() - timedelta(seconds=10)
+                    dup_q = (
+                        db.query(FoodResource)
+                        .filter(FoodResource.donor_id == uid)
+                        .filter(FoodResource.created_at >= recent_cutoff)
+                        .filter(_sa_func.lower(FoodResource.title) == normalized_title)
+                    )
+                    if normalized_addr:
+                        dup_q = dup_q.filter(FoodResource.address == normalized_addr)
+                    dup = dup_q.order_by(FoodResource.id.desc()).first()
+                    if dup is not None:
+                        logger.info(
+                            "post_food_listing: dedup hit for donor=%s title=%r addr=%r -> existing id=%s",
+                            uid, normalized_title, normalized_addr, dup.id,
+                        )
+                        return {
+                            "success": True,
+                            "listing_id": dup.id,
+                            "address": dup.address,
+                            "coords_lat": dup.coords_lat,
+                            "coords_lng": dup.coords_lng,
+                            "duplicate_of_recent": True,
+                            "verified": True,
+                            "verify_issues": [],
+                            "summary": (
+                                f"That listing is already up — id #{dup.id}, '{dup.title}'. "
+                                "Skipping the duplicate so you don't end up with two pins for the same food."
+                            ),
+                        }
+            except Exception:
+                # Dedup is best-effort; never block the post on a
+                # query-shape problem.
+                logger.exception("post_food_listing: dedup check failed (continuing)")
 
             # A listing must be findable. If neither the call nor the user
             # profile has an address AND the user has no coords, the listing
@@ -2537,6 +3278,32 @@ async def _post_food_listing(
                     "error": (
                         "Cannot post listing: no pickup address. Ask the user "
                         "for the pickup address (street + city) and call again."
+                    )
+                }
+
+            # Geocode the resolved address so the listing shows up on the
+            # map. Strategy:
+            #   1. Try to geocode the freshly-supplied address.
+            #   2. If that fails AND the user has good profile coords,
+            #      use those rather than rejecting the post outright.
+            #   3. Only reject when we have NEITHER a geocode hit NOR
+            #      profile coords — in that case the listing genuinely
+            #      can't appear on the map.
+            geocoded = _geocode_address(resolved_address) if resolved_address else None
+            if geocoded is not None:
+                lat, lng = geocoded
+            elif user.coords_lat is not None and user.coords_lng is not None:
+                lat, lng = user.coords_lat, user.coords_lng
+                logger.info(
+                    "post_food_listing: geocode miss for %r, using profile coords",
+                    resolved_address,
+                )
+            else:
+                return {
+                    "error": (
+                        "Cannot post listing: address could not be located on the map. "
+                        "Please provide a more specific street + city + state "
+                        "(e.g. '123 Main St, Alameda, CA')."
                     )
                 }
 
@@ -2552,27 +3319,529 @@ async def _post_food_listing(
                 pickup_window_start=win_start,
                 pickup_window_end=win_end,
                 address=resolved_address,
-                coords_lat=user.coords_lat,
-                coords_lng=user.coords_lng,
+                coords_lat=lat,
+                coords_lng=lng,
                 status="available",
                 allergens=json.dumps(list(allergens)) if allergens else None,
                 dietary_tags=json.dumps(list(dietary_tags)) if dietary_tags else None,
+                images=json.dumps([str(u) for u in images if u]) if images else None,
             )
             db.add(item)
             db.commit()
             db.refresh(item)
+
+            # ----------------------------------------------------------
+            # Verification pass: re-query the listing as a fresh row and
+            # confirm it would actually show up on the map. We check the
+            # same conditions the frontend uses to decide whether to
+            # render a marker:
+            #   - row exists with the new id
+            #   - status == 'available'
+            #   - coords_lat / coords_lng are non-null
+            #   - pickup_window_end is in the future (not auto-expired)
+            # If any of those fail, we still return success (the row is
+            # in the DB) but flag verified=false with a reason so the
+            # AI can tell the donor 'posted but won't be visible because
+            # X' instead of pretending everything is fine.
+            # ----------------------------------------------------------
+            db.expire_all()
+            check = (
+                db.query(FoodResource)
+                .filter(FoodResource.id == item.id)
+                .first()
+            )
+            verified = False
+            verify_issues: list[str] = []
+            visible_count = None
+            if check is None:
+                verify_issues.append("listing row not found on re-query")
+            else:
+                status_val = (
+                    check.status.value
+                    if hasattr(check.status, "value")
+                    else str(check.status or "")
+                )
+                if status_val != "available":
+                    verify_issues.append(f"status={status_val!r} (expected 'available')")
+                if check.coords_lat is None or check.coords_lng is None:
+                    verify_issues.append("missing map coordinates")
+                if check.pickup_window_end and check.pickup_window_end <= datetime.utcnow():
+                    verify_issues.append("pickup window already ended")
+                # Also confirm it would be returned by the public listings
+                # query the map uses. We replicate the simplest version of
+                # that filter (status=available, coords present) and count
+                # the donor's currently-visible listings so the AI can
+                # report 'now N of your listings are live' if helpful.
+                from sqlalchemy import and_
+                visible_count = (
+                    db.query(FoodResource)
+                    .filter(
+                        and_(
+                            FoodResource.donor_id == uid,
+                            FoodResource.status == "available",
+                            FoodResource.coords_lat.isnot(None),
+                            FoodResource.coords_lng.isnot(None),
+                        )
+                    )
+                    .count()
+                )
+                verified = not verify_issues
+
+            # Include the resolved address + coords in the summary so the
+            # user (and the chip in the chat) gets visible confirmation
+            # of WHERE the pin was dropped on the map. Donors frequently
+            # complained that the address step felt skipped because the
+            # tool used profile coords silently — this surfaces it.
+            addr_part = f" at {resolved_address}" if resolved_address else ""
+            coord_part = f" (pin {lat:.4f}, {lng:.4f})"
+            if verified:
+                summary = (
+                    f"Posted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}. "
+                    f"Verified live on the map"
+                    + (f" ({visible_count} of your listings now visible)." if visible_count else ".")
+                )
+            else:
+                summary = (
+                    f"Posted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}. "
+                    f"WARNING: post-check found issues — "
+                    + "; ".join(verify_issues)
+                    + ". The row is in the database but may NOT show on the map."
+                )
             return {
                 "success": True,
                 "listing_id": item.id,
-                "summary": f"Posted listing #{item.id} — '{item.title}' ({cat_enum.value}).",
+                "address": resolved_address,
+                "coords_lat": lat,
+                "coords_lng": lng,
+                "verified": verified,
+                "verify_issues": verify_issues,
+                "visible_listings_for_donor": visible_count,
+                "summary": summary,
             }
         except Exception as exc:
+            logger.exception("post_food_listing failed")
             db.rollback()
-            return {"error": f"post_food_listing failed: {exc}"}
+            return {"error": "Could not post the listing. Please try again."}
         finally:
             db.close()
 
     return await _run(_sync)
+
+
+async def _attach_photos_to_listing(
+    user_id: str,
+    listing_id: int,
+    images: list,
+) -> dict:
+    """Append one or more image URLs to an existing listing's photo gallery.
+
+    Only the donor who owns the listing (or an admin) can attach photos.
+    De-duplicates against any URLs already on the listing so re-sends are
+    idempotent. Returns the full image list so the AI can confirm.
+    """
+    from backend.app import SessionLocal
+    from backend.models import User, UserRole, FoodResource
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    lid = _to_int(listing_id)
+    if lid is None:
+        return {"error": "Invalid listing_id"}
+    cleaned = [str(u).strip() for u in (images or []) if u and str(u).strip()]
+    if not cleaned:
+        return {"error": "No image URLs provided."}
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {"error": "User not found"}
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found."}
+            if listing.donor_id != uid and user.role != UserRole.ADMIN:
+                return {"error": "You can only add photos to your own listings."}
+
+            existing: list = []
+            if listing.images:
+                try:
+                    parsed = json.loads(listing.images)
+                    if isinstance(parsed, list):
+                        existing = [str(u) for u in parsed if u]
+                except (ValueError, TypeError):
+                    existing = []
+
+            seen = set(existing)
+            for url in cleaned:
+                if url not in seen:
+                    existing.append(url)
+                    seen.add(url)
+
+            listing.images = json.dumps(existing)
+            db.commit()
+            return {
+                "success": True,
+                "listing_id": lid,
+                "image_count": len(existing),
+                "summary": f"Done — added {len(cleaned)} photo(s) to listing #{lid} (now {len(existing)} total).",
+            }
+        except Exception:
+            logger.exception("attach_photos_to_listing failed")
+            db.rollback()
+            return {"error": "Could not attach photos. Please try again."}
+        finally:
+            db.close()
+
+    return await _run(_sync)
+
+
+async def _bulk_import_listings(
+    user_id: str,
+    csv_text: str,
+    default_address: Optional[str] = None,
+) -> dict:
+    """Create many listings from a CSV blob in one shot.
+
+    Header row is required. Recognized columns (case-insensitive, extras
+    ignored): title, qty, unit, category, perishability, address,
+    description, expiration_date, pickup_window_start, pickup_window_end.
+    Returns per-row results so the AI can summarize what worked / what
+    didn't.
+    """
+    import csv
+    from io import StringIO
+
+    if not (csv_text or "").strip():
+        return {"error": "csv_text is empty"}
+
+    try:
+        reader = csv.DictReader(StringIO(csv_text))
+    except Exception as exc:
+        return {"error": f"Could not parse CSV: {exc}"}
+
+    if not reader.fieldnames:
+        return {"error": "CSV must have a header row (e.g. title,qty,unit,...)"}
+
+    # Lowercase + BOM-strip the field map for tolerant lookups.
+    # ------------------------------------------------------------------
+    # Header normalization with aliases.
+    # Real-world CSVs (especially ones the AI itself generates from a
+    # donor's verbal description) use natural-language headers like
+    # "Food Name", "Quantity", "Pickup Location", "Pickup Time" or
+    # "Best By". Without aliases, every such row would be flagged as
+    # missing title+address and the bulk import would refuse before
+    # posting anything — which is the failure mode reported by donors.
+    # We map known synonyms to the canonical column names. Unknown
+    # headers are kept as-is (lowercased) so explicit canonical names
+    # ("title", "qty", ...) still work unchanged.
+    # ------------------------------------------------------------------
+    HEADER_ALIASES = {
+        "title": ("title", "name", "item", "food", "food name", "food item",
+                  "product", "item name"),
+        "qty": ("qty", "quantity", "amount", "count", "number", "servings",
+                "portions", "weight"),
+        "unit": ("unit", "units", "uom", "measure"),
+        "category": ("category", "type", "food type", "kind"),
+        "perishability": ("perishability", "perishable", "shelf life"),
+        "address": ("address", "pickup address", "pickup location",
+                    "location", "pickup_address", "pickup_location",
+                    "pickup spot", "pickup point"),
+        "description": ("description", "desc", "notes", "details", "info"),
+        "expiration_date": ("expiration_date", "expiration date", "expiry",
+                            "expires", "expires on", "best before", "best by",
+                            "use by", "good until"),
+        "pickup_window_start": ("pickup_window_start", "pickup start",
+                                "pickup_start", "start time"),
+        "pickup_window_end": ("pickup_window_end", "pickup end", "pickup_end",
+                              "end time"),
+        # Soft alias: a single "pickup time" column with a range like
+        # "9:00 AM - 12:00 PM" is split into start/end downstream.
+        "pickup_time": ("pickup_time", "pickup time", "pickup window",
+                        "window", "time", "hours"),
+    }
+    # Build header -> canonical name map.
+    canonical_for: dict[str, str] = {}
+    for canonical, aliases in HEADER_ALIASES.items():
+        for a in aliases:
+            canonical_for[a] = canonical
+    norm_headers: dict[str, str] = {}
+    for h in reader.fieldnames:
+        clean = h.lstrip("\ufeff").strip().lower()
+        norm_headers[h] = canonical_for.get(clean, clean)
+    rows = list(reader)
+    if not rows:
+        return {"error": "CSV has no data rows"}
+
+    # ------------------------------------------------------------------
+    # Pre-flight: scan rows for missing required fields (title, qty,
+    # address) BEFORE we start posting anything. This lets the AI ask the
+    # donor one focused question ("what address should I use for the 7
+    # rows that don't have one?") instead of partial-posting and reporting
+    # half-failures. Required-field policy:
+    #   - title: per-row, no defaulting
+    #   - qty:   per-row (defaults to 1 only if the donor explicitly says
+    #            "qty 1 each" — here we just report it as missing)
+    #   - address: row -> default_address arg -> donor profile address
+    # ------------------------------------------------------------------
+    rows_normalized: list[dict] = []
+    for idx, raw_row in enumerate(rows, start=2):
+        row = {norm_headers.get(k, k): (v or "").strip() for k, v in raw_row.items()}
+        if not any(row.values()):
+            continue
+        rows_normalized.append((idx, row))
+
+    if not rows_normalized:
+        return {"error": "CSV has no non-empty data rows"}
+
+    # Resolve the donor's profile address as the second-tier fallback.
+    profile_address: Optional[str] = None
+    try:
+        from backend.app import SessionLocal
+        from backend.models import User
+        uid_int = _to_int(user_id)
+        if uid_int is not None:
+            db = SessionLocal()
+            try:
+                u = db.query(User).filter(User.id == uid_int).first()
+                if u and u.address and str(u.address).strip():
+                    profile_address = str(u.address).strip()
+            finally:
+                db.close()
+    except Exception:
+        profile_address = None
+
+    fallback_address = (default_address or profile_address or "").strip() or None
+
+    missing_title_rows: list[int] = []
+    missing_qty_rows: list[int] = []
+    missing_address_rows: list[int] = []
+    for idx, row in rows_normalized:
+        if not row.get("title"):
+            missing_title_rows.append(idx)
+        if not row.get("qty"):
+            missing_qty_rows.append(idx)
+        if not row.get("address") and not fallback_address:
+            missing_address_rows.append(idx)
+
+    # If structural problems exist, refuse to post and report what's
+    # missing so the AI can ask the donor to fix it conversationally.
+    if missing_title_rows or missing_address_rows:
+        needs: list[str] = []
+        if missing_title_rows:
+            needs.append("title")
+        if missing_address_rows:
+            needs.append("address")
+        return {
+            "success": False,
+            "posted": 0,
+            "total": len(rows_normalized),
+            "needs": needs,
+            "missing_title_rows": missing_title_rows,
+            "missing_qty_rows": missing_qty_rows,
+            "missing_address_rows": missing_address_rows,
+            "fallback_address": fallback_address,
+            "summary": (
+                "Bulk import paused — "
+                + (
+                    f"{len(missing_title_rows)} row(s) missing a title"
+                    if missing_title_rows
+                    else ""
+                )
+                + (
+                    (
+                        ("; " if missing_title_rows else "")
+                        + f"{len(missing_address_rows)} row(s) missing an address "
+                        "(no default_address provided and donor profile has no address)"
+                    )
+                    if missing_address_rows
+                    else ""
+                )
+                + ". Ask the donor to supply the missing info, then call "
+                "bulk_import_listings again with default_address (or fix the rows)."
+            ),
+        }
+
+    results: list[dict] = []
+    successes = 0
+    attempted = 0
+
+    # Helpers used inside the row loop. Defined here (closures) so
+    # they're scoped to bulk import without polluting module globals.
+    import re as _re
+
+    def _extract_qty_and_unit(raw_qty: str, raw_unit: Optional[str]) -> tuple[float, Optional[str]]:
+        """Parse '25 lbs' / '100 cans' / '15 trays' / '3.5kg' into
+        (qty, unit). When the qty cell is just a number, fall back to
+        the explicit `unit` column (or None). Raises ValueError on
+        unparseable input."""
+        s = (raw_qty or "").strip()
+        if not s:
+            raise ValueError("empty qty")
+        # First try a clean float (covers "25", "3.5", "100").
+        try:
+            return float(s), (raw_unit or None)
+        except ValueError:
+            pass
+        # Otherwise extract a leading number and treat the rest as unit.
+        m = _re.match(r"\s*([0-9]+(?:\.[0-9]+)?)\s*(.*)$", s)
+        if not m:
+            raise ValueError(f"could not parse qty {raw_qty!r}")
+        n = float(m.group(1))
+        tail = (m.group(2) or "").strip() or None
+        # Prefer an explicitly-supplied unit column over the inline tail.
+        return n, (raw_unit or tail)
+
+    def _split_pickup_time_range(raw: str) -> tuple[Optional[str], Optional[str]]:
+        """Split 'pickup_time' ranges like '9:00 AM - 12:00 PM' or
+        '09:00-13:00' into ISO start/end strings anchored to the next
+        upcoming occurrence of that window.
+
+        Real-world donor CSVs describe a recurring window ("9 AM - 12 PM"
+        every day). If we naively anchor to today's UTC date, every row
+        whose end-of-window is already past in UTC gets rejected by
+        post_food_listing's "pickup_window_end is in the past" guard —
+        which means a 10 AM PT donor running an import after 5 PM UTC
+        sees only the few rows whose windows happen to span the current
+        moment in UTC succeed. The fix: if the computed window has
+        already ended, roll the entire window forward by full days
+        until end > now. This preserves the donor's stated time-of-day
+        and gives them the *next* available window, which is what they
+        actually mean by listing recurring hours.
+
+        Returns (None, None) if the range can't be parsed; the caller
+        falls back to post_food_listing's defaults (now -> +48h).
+        """
+        s = (raw or "").strip()
+        if not s or "-" not in s:
+            return (None, None)
+        # Allow en-dash and em-dash too.
+        for sep in (" - ", " – ", " — ", "-", "–", "—"):
+            if sep in s:
+                left, _, right = s.partition(sep)
+                left = left.strip()
+                right = right.strip()
+                if left and right:
+                    now = datetime.utcnow()
+                    base = now.date()
+                    fmts = ("%I:%M %p", "%I %p", "%H:%M", "%H")
+                    def _parse_clock(piece: str) -> Optional[datetime]:
+                        p = piece.replace(".", "").upper().strip()
+                        for fmt in fmts:
+                            try:
+                                t = datetime.strptime(p, fmt).time()
+                                return datetime.combine(base, t)
+                            except ValueError:
+                                continue
+                        return None
+                    s_dt = _parse_clock(left)
+                    e_dt = _parse_clock(right)
+                    if s_dt and e_dt:
+                        # If end <= start (e.g. crosses midnight or PM/AM
+                        # ambiguity), bump end by a day.
+                        if e_dt <= s_dt:
+                            e_dt = e_dt + timedelta(days=1)
+                        # Roll forward whole days until the window ends
+                        # in the future. Cap at 7 days as a sanity limit
+                        # so a malformed time can't infinite-loop.
+                        rolls = 0
+                        while e_dt <= now and rolls < 7:
+                            s_dt = s_dt + timedelta(days=1)
+                            e_dt = e_dt + timedelta(days=1)
+                            rolls += 1
+                        return (s_dt.isoformat(), e_dt.isoformat())
+        return (None, None)
+
+    for idx, row in rows_normalized:
+        # Skip blank rows (e.g. trailing newline) silently.
+        if not any(row.values()):
+            continue
+        attempted += 1
+        title = row.get("title")
+        if not title:
+            results.append({"row": idx, "ok": False, "error": "missing title"})
+            continue
+        # Parse qty + (optional inline unit). Real CSVs commonly write
+        # things like "25 lbs" or "100 cans" in a single Quantity cell;
+        # fall through to unit extraction when a bare float() fails.
+        try:
+            qty, derived_unit = _extract_qty_and_unit(row.get("qty"), row.get("unit"))
+        except ValueError:
+            results.append({"row": idx, "ok": False, "error": f"invalid qty {row.get('qty')!r}"})
+            continue
+        # Pickup-time range support: when the donor supplied a single
+        # "pickup_time" column instead of separate start/end columns,
+        # try to split it. If parsing fails we leave start/end unset
+        # and post_food_listing will apply its default window.
+        pw_start = row.get("pickup_window_start")
+        pw_end = row.get("pickup_window_end")
+        if (not pw_start or not pw_end) and row.get("pickup_time"):
+            split_start, split_end = _split_pickup_time_range(row.get("pickup_time"))
+            pw_start = pw_start or split_start
+            pw_end = pw_end or split_end
+        args = {
+            "user_id": str(user_id),
+            "title": title,
+            "qty": qty,
+            "unit": derived_unit or "units",
+            "category": row.get("category") or _guess_category_from_title(title),
+            "perishability": row.get("perishability") or "medium",
+            "description": row.get("description") or None,
+            "address": row.get("address") or fallback_address,
+            "expiration_date": row.get("expiration_date") or None,
+            "pickup_window_start": pw_start or None,
+            "pickup_window_end": pw_end or None,
+        }
+        # Drop None so post_food_listing's defaults kick in.
+        args = {k: v for k, v in args.items() if v not in (None, "")}
+        try:
+            res = await _post_food_listing(**args)
+        except Exception as exc:
+            results.append({"row": idx, "ok": False, "error": str(exc)})
+            continue
+        if isinstance(res, dict) and res.get("success"):
+            successes += 1
+            results.append({
+                "row": idx,
+                "ok": True,
+                "listing_id": res.get("listing_id"),
+                "title": title,
+                "verified": bool(res.get("verified")),
+                "verify_issues": res.get("verify_issues") or [],
+            })
+        else:
+            err = (res or {}).get("error") if isinstance(res, dict) else "unknown error"
+            results.append({"row": idx, "ok": False, "error": err, "title": title})
+
+    verified_count = sum(1 for r in results if r.get("ok") and r.get("verified"))
+    unverified = [r for r in results if r.get("ok") and not r.get("verified")]
+    if successes:
+        summary = (
+            f"Bulk import complete: {successes}/{attempted} listings posted; "
+            f"{verified_count}/{successes} verified live on the map."
+        )
+        if unverified:
+            first = unverified[0]
+            issues = "; ".join(first.get("verify_issues") or []) or "verification check failed"
+            summary += (
+                f" {len(unverified)} listing(s) posted but failed the post-check "
+                f"(e.g. row {first.get('row')}: {issues})."
+            )
+    else:
+        summary = f"Bulk import: 0/{attempted} succeeded — see per-row errors."
+    if attempted == 0:
+        return {"error": "CSV has no non-empty data rows"}
+    return {
+        "success": successes > 0,
+        "posted": successes,
+        "verified": verified_count,
+        "total": attempted,
+        "results": results,
+        "summary": summary,
+    }
 
 
 async def _send_user_message(
@@ -2633,7 +3902,7 @@ async def _send_user_message(
                 "success": True,
                 "message_id": msg.id,
                 "conversation_id": conv,
-                "summary": "Message sent.",
+                "summary": "Sent! Your message is delivered — they'll see it in their inbox.",
             }
         except Exception as exc:
             db.rollback()
@@ -2642,3 +3911,341 @@ async def _send_user_message(
             db.close()
 
     return await _run(_sync)
+
+
+async def _show_map(user_id: str, focus: Optional[str] = None) -> dict:
+    """UI-control tool: tells the frontend to switch to the map view.
+
+    Server-side this is a no-op — it just returns a success payload that
+    the chat UI broadcasts as a `foodmaps:show_map` event so app.js can
+    flip the active view to the map. We never fail this call.
+    """
+    focus_norm = (focus or "").strip().lower() or None
+    if focus_norm == "me":
+        summary = "Showing the map centered on you."
+    elif focus_norm == "all":
+        summary = "Showing the map with all available listings."
+    elif focus_norm:
+        summary = f"Showing the map focused on {focus}."
+    else:
+        summary = "Showing the map."
+    return {
+        "success": True,
+        "summary": summary,
+        "view": "map",
+        "focus": focus_norm,
+    }
+
+
+async def _show_route_to_listing(
+    user_id: str,
+    listing_id: int,
+    mode: Optional[str] = None,
+) -> dict:
+    """Build a driving route from the user's saved address to a listing.
+
+    Returns an envelope the frontend turns into a blue line on the map:
+
+        {
+            "success": True,
+            "view": "map",
+            "route": {
+                "origin": {"lat": .., "lng": .., "address": ..},
+                "destination": {"lat": .., "lng": .., "address": ..,
+                                 "listing_id": .., "title": ..},
+                "mode": "driving",
+                "distance_m": float, "duration_s": float,
+                "geometry": {"type": "LineString", "coordinates": [...]},
+                "fallback": bool,
+            },
+            "summary": "Route to '<title>' — N miles, ~M min",
+        }
+
+    When the Mapbox Directions API is unreachable we still return a
+    success envelope with a straight-line (fallback=true) so the user
+    at least sees the two endpoints connected on the map.
+    """
+    from backend.app import SessionLocal
+    from backend.models import User, FoodResource
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    try:
+        lid = int(listing_id)
+    except (TypeError, ValueError):
+        return {"error": "Invalid listing_id"}
+
+    profile = (mode or "driving").strip().lower()
+    if profile not in {"driving", "walking", "cycling"}:
+        profile = "driving"
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {"error": "User not found"}
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found"}
+
+            # Origin: prefer the user's coords, else geocode their address.
+            o_lat = user.coords_lat
+            o_lng = user.coords_lng
+            o_addr = (user.address or "").strip() or None
+            if (o_lat is None or o_lng is None) and o_addr:
+                geo = _geocode_address(o_addr)
+                if geo is not None:
+                    o_lat, o_lng = geo
+            if o_lat is None or o_lng is None:
+                return {
+                    "error": (
+                        "I can't draw a route without your address. Please "
+                        "add a pickup/home address to your profile first."
+                    ),
+                    "reason": "missing_origin",
+                }
+
+            # Destination: the listing's pin.
+            d_lat = listing.coords_lat
+            d_lng = listing.coords_lng
+            d_addr = (listing.address or "").strip() or None
+            if (d_lat is None or d_lng is None) and d_addr:
+                geo = _geocode_address(d_addr)
+                if geo is not None:
+                    d_lat, d_lng = geo
+            if d_lat is None or d_lng is None:
+                return {
+                    "error": (
+                        f"Listing #{lid} doesn't have a map location, so I "
+                        "can't draw directions to it."
+                    ),
+                    "reason": "missing_destination",
+                }
+
+            return {
+                "_origin": (float(o_lat), float(o_lng), o_addr),
+                "_destination": (float(d_lat), float(d_lng), d_addr, listing.id, getattr(listing, "title", None)),
+            }
+        finally:
+            db.close()
+
+    pre = await asyncio.to_thread(_sync)
+    if "error" in pre:
+        return pre
+
+    o_lat, o_lng, o_addr = pre["_origin"]
+    d_lat, d_lng, d_addr, l_id, l_title = pre["_destination"]
+
+    # Call Mapbox Directions. Best-effort: if anything goes wrong we fall
+    # back to a straight-line geometry so the UI can still show the path.
+    geometry: dict = {
+        "type": "LineString",
+        "coordinates": [[o_lng, o_lat], [d_lng, d_lat]],
+    }
+    distance_m: Optional[float] = None
+    duration_s: Optional[float] = None
+    steps: list = []
+    fallback = True
+
+    if MAPBOX_TOKEN:
+        url = (
+            f"{MAPBOX_DIRECTIONS_URL}/{profile}/"
+            f"{o_lng},{o_lat};{d_lng},{d_lat}"
+        )
+        params = {
+            "access_token": MAPBOX_TOKEN,
+            "geometries": "geojson",
+            "overview": "full",
+            # Request per-maneuver instructions so we can surface a
+            # short turn-by-turn list ("Head north on Main St for
+            # 0.4 mi, then turn right onto Elm Ave"). Without
+            # steps=true the route only includes total distance/time.
+            "steps": "true",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(url, params=params)
+            if resp.status_code == 200:
+                data = resp.json() or {}
+                routes = data.get("routes") or []
+                if routes:
+                    r0 = routes[0]
+                    geom = r0.get("geometry")
+                    if isinstance(geom, dict) and isinstance(geom.get("coordinates"), list):
+                        geometry = geom
+                        fallback = False
+                        # Only trust Mapbox's distance/duration when we
+                        # actually accepted its geometry. Otherwise we'd
+                        # report road-network mileage while drawing a
+                        # straight line, which confuses the user.
+                        distance_m = (
+                            float(r0.get("distance")) if r0.get("distance") is not None else None
+                        )
+                        duration_s = (
+                            float(r0.get("duration")) if r0.get("duration") is not None else None
+                        )
+                        # Flatten step instructions out of legs[*].steps.
+                        # We keep distance per step so the frontend (and
+                        # the assistant's text reply) can say "Head
+                        # north on Main St for 0.4 mi".
+                        for leg in (r0.get("legs") or []):
+                            for step in (leg.get("steps") or []):
+                                man = step.get("maneuver") or {}
+                                instr = (man.get("instruction") or "").strip()
+                                if not instr:
+                                    continue
+                                step_dist = step.get("distance")
+                                steps.append({
+                                    "instruction": instr,
+                                    "distance_m": (
+                                        float(step_dist) if step_dist is not None else None
+                                    ),
+                                })
+            else:
+                logger.warning(
+                    "Mapbox Directions returned %s for listing %s",
+                    resp.status_code, l_id,
+                )
+        except Exception as exc:
+            logger.warning("Mapbox Directions failed for listing %s: %s", l_id, exc)
+
+    def _fmt_step(step: dict) -> str:
+        """One human line, e.g. 'Turn right onto Elm Ave (0.4 mi)'."""
+        instr = step.get("instruction") or ""
+        dm = step.get("distance_m")
+        if dm is None or dm <= 0:
+            return instr
+        miles = dm / 1609.344
+        # Sub-tenth-mile turns read better in feet.
+        if miles < 0.1:
+            feet = int(round(dm * 3.28084 / 10.0)) * 10
+            return f"{instr} ({feet} ft)"
+        return f"{instr} ({miles:.1f} mi)"
+
+    # Build a human summary in the same language the AI will reply in.
+    def _fmt_summary() -> str:
+        head = f"Route to '{l_title or f'listing #{l_id}'}'"
+        metrics: list = []
+        if distance_m is not None:
+            miles = distance_m / 1609.344
+            metrics.append(f"{miles:.1f} mi")
+        if duration_s is not None:
+            mins = int(round(duration_s / 60.0))
+            metrics.append(f"~{mins} min")
+        parts = [head]
+        if metrics:
+            parts.append(", ".join(metrics))
+        if fallback:
+            parts.append("(approximate)")
+        first_line = " — ".join(parts)
+        # Append the first few turn instructions so the assistant has
+        # actual directions to read back, not just total mileage. Cap
+        # at 6 turns to keep the chat reply readable; the frontend can
+        # render the full list from route.steps if it wants.
+        if steps:
+            shown = [_fmt_step(s) for s in steps[:6] if s.get("instruction")]
+            shown = [s for s in shown if s]
+            if shown:
+                turn_block = "\n".join(f"{i + 1}. {line}" for i, line in enumerate(shown))
+                more = f"\n…and {len(steps) - len(shown)} more turn(s)" if len(steps) > len(shown) else ""
+                return f"{first_line}\n\n{turn_block}{more}"
+        return first_line
+
+    return {
+        "success": True,
+        "view": "map",
+        "summary": _fmt_summary(),
+        "route": {
+            "origin": {"lat": o_lat, "lng": o_lng, "address": o_addr},
+            "destination": {
+                "lat": d_lat,
+                "lng": d_lng,
+                "address": d_addr,
+                "listing_id": l_id,
+                "title": l_title,
+            },
+            "mode": profile,
+            "distance_m": distance_m,
+            "duration_s": duration_s,
+            "geometry": geometry,
+            "steps": steps,
+            "fallback": fallback,
+        },
+    }
+
+
+# Display labels for navigate_ui targets, used to build a friendly summary.
+_NAV_TARGET_LABELS = {
+    "map": "the map",
+    "list": "the list view",
+    "create": "the new-listing form",
+    "bulk-create": "the bulk listing form",
+    "dashboard": "your dashboard",
+    "dispatch": "the dispatch console",
+    "admin": "the admin panel",
+    "driver": "the driver interface",
+    "schedule": "the schedule manager",
+    "partners": "community partners",
+    "food-rescue": "the food-rescue network",
+    "meal-planning": "meal planning",
+    "ai-matching": "AI matching",
+    "routes": "volunteer routes",
+    "emergency": "emergency response",
+    "nutrition": "nutrition tracker",
+    "consumption": "the consumption tracker",
+    "filters": "the filters panel",
+    "favorites": "your favorites",
+    "chat": "the chat assistant",
+    "voice": "the voice assistant",
+    # Recipient-facing AI features (mounted modals invoked via
+    # window.openXXX() on the frontend).
+    "meal-suggestions": "AI meal suggestions",
+    "spoilage-alerts": "spoilage risk alerts",
+    "storage-coach": "the AI storage coach",
+    "smart-notifications": "smart notifications",
+    "pickup-reminders": "pickup reminders",
+    "sms-consent": "SMS text notifications",
+}
+
+_NAV_VALID_ACTIONS = {"open", "close", "toggle"}
+
+
+async def _navigate_ui(
+    user_id: str,
+    action: str,
+    target: Optional[str] = None,
+) -> dict:
+    """UI-control tool: instructs the frontend to open/close a UI surface.
+
+    Server-side this is a no-op — the frontend listens for the
+    `foodmaps:navigate_ui` event broadcast from the chatbot and handles
+    the actual navigation. We only validate inputs and shape a friendly
+    summary string for the action chip.
+    """
+    act = (action or "").strip().lower()
+    if act not in _NAV_VALID_ACTIONS:
+        return {"error": f"Invalid action '{action}'. Use open, close, or toggle."}
+
+    tgt = (target or "").strip().lower() or None
+    # 'close' may omit a target — defaults to returning to the map.
+    if tgt is not None and tgt not in _NAV_TARGET_LABELS:
+        return {"error": f"Unknown target '{target}'."}
+    if act in {"open", "toggle"} and tgt is None:
+        return {"error": f"target is required for action '{act}'."}
+
+    if act == "close":
+        label = _NAV_TARGET_LABELS.get(tgt, "the map") if tgt else "the current view"
+        summary = f"Closed {label}."
+    elif act == "toggle":
+        summary = f"Toggled {_NAV_TARGET_LABELS[tgt]}."
+    else:  # open
+        summary = f"Opened {_NAV_TARGET_LABELS[tgt]}."
+
+    return {
+        "success": True,
+        "summary": summary,
+        "action": act,
+        "target": tgt,
+    }

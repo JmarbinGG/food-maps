@@ -398,14 +398,176 @@ function App() {
         }
       } catch (_) { /* ignore */ }
 
+      // If the AI just posted a new listing, switch to the map view and
+      // fly to that listing so the user gets unmistakable visual proof
+      // that their post is on the map. This addresses the very common
+      // complaint "I posted but I don't see it on the map" — the listing
+      // was always there, but the user wasn't centered on it.
+      let postedListingId = null;
+      let postedCoords = null;
+      try {
+        const detail = ev && ev.detail;
+        const acts = (detail && Array.isArray(detail.actions)) ? detail.actions : [];
+        for (const a of acts) {
+          if (a && a.ok && a.tool === 'post_food_listing' && a.listing_id != null) {
+            postedListingId = String(a.listing_id);
+            // Capture the coords directly from the tool result so we can
+            // fly the map even if the follow-up refreshForUser() call
+            // fails (network blip, expired token, etc.).
+            if (a.coords_lat != null && a.coords_lng != null) {
+              const lat = parseFloat(a.coords_lat);
+              const lng = parseFloat(a.coords_lng);
+              if (Number.isFinite(lat) && Number.isFinite(lng)) {
+                postedCoords = { lat, lng };
+              }
+            }
+            break;
+          }
+        }
+      } catch (_) { /* ignore */ }
+      if (postedListingId) {
+        try {
+          setCurrentView('map');
+          setViewMode('map');
+        } catch (_) { /* ignore */ }
+      }
+
       try {
         const token = localStorage.getItem('auth_token');
-        if (user || token) refreshForUser();
+        if (user || token) {
+          const flyToPostedListing = () => {
+            if (!postedListingId) return;
+            try {
+              // Prefer coords from the cache (the listing has been refetched
+              // by now), but fall back to the coords the AI tool returned
+              // directly. This guarantees the fly-to works even when the
+              // refetch failed.
+              let lat = null, lng = null;
+              const arr = (window.databaseService && Array.isArray(window.databaseService.listings))
+                ? window.databaseService.listings : [];
+              const found = arr.find(l => l && String(l.id) === postedListingId);
+              if (found && found.coords_lat != null && found.coords_lng != null) {
+                lat = parseFloat(found.coords_lat);
+                lng = parseFloat(found.coords_lng);
+              } else if (postedCoords) {
+                lat = postedCoords.lat;
+                lng = postedCoords.lng;
+              }
+              if (lat != null && lng != null && Number.isFinite(lat) && Number.isFinite(lng)) {
+                window.dispatchEvent(new CustomEvent('foodmaps:fly_to', {
+                  detail: { lat, lng, listing_id: postedListingId },
+                }));
+              }
+            } catch (_) { /* ignore */ }
+          };
+          (async () => {
+            try { await refreshForUser(); } catch (_) { /* ignore */ }
+            flyToPostedListing();
+          })();
+          // Second refetch ~800ms later: gives the backend time to flush
+          // any post-commit work (e.g. SMS Timer, audit row) and protects
+          // against the case where the first refetch races the commit and
+          // returns stale data, leaving the listing showing as available.
+          setTimeout(() => {
+            (async () => {
+              try { await refreshForUser(); } catch (_) { /* ignore */ }
+              flyToPostedListing();
+            })();
+          }, 800);
+        }
       } catch (_) { /* ignore */ }
     };
     window.addEventListener('foodmaps:listings_changed', handler);
     return () => window.removeEventListener('foodmaps:listings_changed', handler);
   }, [user]);
+
+  // The AI chatbot dispatches `foodmaps:show_map` when its show_map tool
+  // succeeds. Flip the active view back to the interactive map so the user
+  // sees what they asked for.
+  React.useEffect(() => {
+    const handler = () => {
+      try {
+        setCurrentView('map');
+        setViewMode('map');
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:show_map', handler);
+    return () => window.removeEventListener('foodmaps:show_map', handler);
+  }, []);
+
+  // Generic UI navigation driven by the AI's navigate_ui tool. Lets the
+  // assistant open and close pages, panels and modals on the user's
+  // behalf (dashboard, dispatch, admin, favorites, …).
+  React.useEffect(() => {
+    const VIEW_TARGETS = new Set([
+      'create', 'bulk-create', 'dashboard', 'dispatch', 'admin', 'driver',
+      'schedule', 'partners', 'food-rescue', 'meal-planning', 'ai-matching',
+      'routes', 'emergency', 'nutrition', 'consumption',
+    ]);
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail || {};
+        const action = (detail.action || '').toLowerCase();
+        const target = (detail.target || '').toLowerCase();
+
+        if (action === 'close') {
+          // Close anything → back to map.
+          if (target === 'favorites') {
+            setShowFavoritesPanel(false);
+          } else {
+            setCurrentView('map');
+            setShowFavoritesPanel(false);
+          }
+          return;
+        }
+
+        if (target === 'map') {
+          setCurrentView('map');
+          setViewMode('map');
+          return;
+        }
+        if (target === 'list') {
+          setCurrentView('map');
+          setViewMode('list');
+          return;
+        }
+        if (target === 'favorites') {
+          if (action === 'toggle') {
+            setShowFavoritesPanel(prev => !prev);
+          } else {
+            setShowFavoritesPanel(true);
+          }
+          return;
+        }
+        // Recipient-facing AI feature modals. Each is mounted at the app
+        // root and triggered by a window.openXXX() callback registered
+        // earlier in this file. We honor open/toggle by invoking the
+        // callback; close is handled by the modal's own onClose handler
+        // (or the fallback above which sends the user back to the map).
+        const AI_FEATURE_OPENERS = {
+          'meal-suggestions':   () => window.openMealSuggestions && window.openMealSuggestions(),
+          'spoilage-alerts':    () => window.openSpoilageAlerts && window.openSpoilageAlerts(),
+          'storage-coach':      () => window.openStorageCoach && window.openStorageCoach(),
+          'smart-notifications':() => window.openSmartNotifications && window.openSmartNotifications(),
+          'pickup-reminders':   () => window.openPickupReminders && window.openPickupReminders(),
+          'sms-consent':        () => window.openSMSConsent && window.openSMSConsent(),
+        };
+        if (AI_FEATURE_OPENERS[target]) {
+          if (action === 'open' || action === 'toggle') {
+            try { AI_FEATURE_OPENERS[target](); } catch (_) { /* ignore */ }
+          }
+          return;
+        }
+        if (VIEW_TARGETS.has(target)) {
+          setCurrentView(target);
+          return;
+        }
+        // chat / voice / filters are handled by the chatbot itself.
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:navigate_ui', handler);
+    return () => window.removeEventListener('foodmaps:navigate_ui', handler);
+  }, []);
 
   // Expose phone request helper globally
   React.useEffect(() => {
@@ -740,7 +902,12 @@ function App() {
         // Union in relevant claimed items based on role
         let extras = [];
         if (role === 'donor') {
-          extras = base.filter(l => isClaimedStatus(statusOf(l)) && isOwnedByDonor(l));
+          // A donor should always see every listing they posted, regardless
+          // of status — including expired ones — so they can manage them
+          // from the map. Otherwise a freshly-created listing whose pickup
+          // window slipped past `Date.now()` (timezone drift, slow render,
+          // etc.) silently disappears from the donor's own map.
+          extras = base.filter(l => isOwnedByDonor(l));
         } else if (role === 'recipient') {
           extras = base.filter(l => isClaimedStatus(statusOf(l)) && isClaimedByMe(l));
         }
@@ -753,6 +920,8 @@ function App() {
         // statusFilter === 'all' — hide irrelevant claimed based on role
         base = base.filter(l => {
           const s = statusOf(l);
+          // Donors keep full visibility into everything they posted.
+          if (role === 'donor' && isOwnedByDonor(l)) return true;
           if (!isClaimedStatus(s)) return true;
           if (role === 'donor') return isOwnedByDonor(l);
           if (role === 'recipient') return isClaimedByMe(l);
@@ -1899,11 +2068,27 @@ function App() {
         {showMealSuggestions && user && window.SmartMealSuggestions && (
           <window.SmartMealSuggestions
             user={user}
-            claimedListings={listings.filter(l =>
-              l.status === 'claimed' &&
-              l.claimed_by === user.id
-            )}
+            claimedListings={listings.filter(l => {
+              const status = String(l.status || '').toLowerCase();
+              if (!['claimed', 'pending_confirmation', 'confirmed'].includes(status)) return false;
+              const recipientId = l.recipient_id ?? l.recipientId ?? l.recipient?.id;
+              return recipientId != null && String(recipientId) === String(user.id);
+            })}
             onClose={() => setShowMealSuggestions(false)}
+          />
+        )}
+
+        {/* Spoilage Risk Alerts */}
+        {showSpoilageAlerts && user && window.SpoilageRiskAlerts && (
+          <window.SpoilageRiskAlerts
+            user={user}
+            claimedListings={listings.filter(l => {
+              const status = String(l.status || '').toLowerCase();
+              if (!['claimed', 'pending_confirmation', 'confirmed'].includes(status)) return false;
+              const recipientId = l.recipient_id ?? l.recipientId ?? l.recipient?.id;
+              return recipientId != null && String(recipientId) === String(user.id);
+            })}
+            onClose={() => setShowSpoilageAlerts(false)}
           />
         )}
 

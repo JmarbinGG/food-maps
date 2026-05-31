@@ -264,6 +264,195 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     };
   }, []);
 
+  // Listen for AI-driven flyTo requests (e.g. after the user posts a new
+  // listing through the chatbot). This gives unmistakable visual proof
+  // that the post is on the map by centering on it and zooming in.
+  React.useEffect(() => {
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail;
+        if (!detail) return;
+        const lat = parseFloat(detail.lat);
+        const lng = parseFloat(detail.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+        if (!map.current) return;
+        // Defer slightly so the marker effect (keyed on safeListings) has
+        // a chance to render the newly-fetched marker before we fly to it.
+        setTimeout(() => {
+          try {
+            map.current && map.current.flyTo({
+              center: [lng, lat],
+              zoom: 15,
+              duration: 1200,
+              essential: true,
+            });
+          } catch (_) { /* ignore */ }
+        }, 150);
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:fly_to', handler);
+    return () => window.removeEventListener('foodmaps:fly_to', handler);
+  }, []);
+
+  // Listen for AI-driven route-drawing requests. The chat assistant
+  // dispatches `foodmaps:show_route` after calling the
+  // show_route_to_listing tool. We render the route as a blue line on
+  // a dedicated GeoJSON source so re-issuing the event simply replaces
+  // the previous path. Two helper markers (origin = green, destination
+  // = red) make the endpoints obvious, and we fit both into view.
+  React.useEffect(() => {
+    const SOURCE_ID = 'ai-route-source';
+    const LAYER_ID = 'ai-route-layer';
+    const LAYER_CASING_ID = 'ai-route-casing-layer';
+    let originMarker = null;
+    let destMarker = null;
+
+    const clearRoute = () => {
+      try {
+        const m = map.current;
+        if (!m) return;
+        if (m.getLayer(LAYER_ID)) m.removeLayer(LAYER_ID);
+        if (m.getLayer(LAYER_CASING_ID)) m.removeLayer(LAYER_CASING_ID);
+        if (m.getSource(SOURCE_ID)) m.removeSource(SOURCE_ID);
+      } catch (_) { /* ignore */ }
+      try { if (originMarker) originMarker.remove(); } catch (_) {}
+      try { if (destMarker) destMarker.remove(); } catch (_) {}
+      originMarker = null;
+      destMarker = null;
+    };
+
+    const drawRoute = (route) => {
+      const m = map.current;
+      if (!m || !route || !route.geometry) return;
+      const origin = route.origin || {};
+      const dest = route.destination || {};
+      const oLng = parseFloat(origin.lng);
+      const oLat = parseFloat(origin.lat);
+      const dLng = parseFloat(dest.lng);
+      const dLat = parseFloat(dest.lat);
+      if (!Number.isFinite(oLng) || !Number.isFinite(oLat) ||
+          !Number.isFinite(dLng) || !Number.isFinite(dLat)) return;
+
+      const apply = () => {
+        clearRoute();
+        try {
+          m.addSource(SOURCE_ID, {
+            type: 'geojson',
+            data: {
+              type: 'Feature',
+              properties: {},
+              geometry: route.geometry,
+            },
+          });
+          // Casing (white outline) for contrast against any basemap.
+          m.addLayer({
+            id: LAYER_CASING_ID,
+            type: 'line',
+            source: SOURCE_ID,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 8,
+              'line-opacity': 0.9,
+            },
+          });
+          m.addLayer({
+            id: LAYER_ID,
+            type: 'line',
+            source: SOURCE_ID,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: Object.assign(
+              {
+                'line-color': route.fallback ? '#6b7280' : '#2563eb',
+                'line-width': 5,
+                'line-opacity': 0.95,
+              },
+              route.fallback ? { 'line-dasharray': [2, 1.5] } : {},
+            ),
+          });
+        } catch (err) {
+          console.warn('Failed to draw AI route:', err);
+        }
+        try {
+          if (typeof window !== 'undefined' && window.mapboxgl) {
+            originMarker = new window.mapboxgl.Marker({ color: '#16a34a' })
+              .setLngLat([oLng, oLat])
+              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText('You'))
+              .addTo(m);
+            const destLabel = dest.title
+              || (dest.listing_id != null ? `Listing #${dest.listing_id}` : 'Pickup');
+            destMarker = new window.mapboxgl.Marker({ color: '#dc2626' })
+              .setLngLat([dLng, dLat])
+              .setPopup(new window.mapboxgl.Popup({ offset: 18 }).setText(destLabel))
+              .addTo(m);
+          }
+        } catch (_) { /* ignore */ }
+        try {
+          const bounds = new window.mapboxgl.LngLatBounds([oLng, oLat], [oLng, oLat]);
+          (route.geometry.coordinates || []).forEach((c) => {
+            if (Array.isArray(c) && c.length >= 2) bounds.extend([c[0], c[1]]);
+          });
+          bounds.extend([dLng, dLat]);
+          m.fitBounds(bounds, { padding: 80, duration: 1200, maxZoom: 15 });
+        } catch (_) { /* ignore */ }
+      };
+
+      // Robust readiness check: 'load' only fires once during init, so
+      // a route dispatched AFTER load (e.g. the user requests a second
+      // route) must run apply() right away if the style is already up.
+      const styleReady = (typeof m.isStyleLoaded === 'function' && m.isStyleLoaded())
+        || (typeof m.loaded === 'function' && m.loaded());
+      if (styleReady) {
+        apply();
+      } else {
+        // Run apply once on the next 'load' OR 'idle' (whichever fires
+        // first); a guard makes sure we don't draw twice.
+        let applied = false;
+        const once = () => { if (applied) return; applied = true; apply(); };
+        m.once('load', once);
+        try { m.once('idle', once); } catch (_) { /* older mapbox-gl */ }
+      }
+    };
+
+    const handler = (event) => {
+      try {
+        const detail = event && event.detail;
+        if (!detail || !detail.route) return;
+        drawRoute(detail.route);
+      } catch (err) {
+        console.warn('foodmaps:show_route handler failed:', err);
+      }
+    };
+    const clearHandler = () => clearRoute();
+
+    window.addEventListener('foodmaps:show_route', handler);
+    window.addEventListener('foodmaps:clear_route', clearHandler);
+
+    // If a route was queued while the Map was unmounted (e.g. the AI
+    // asked for show_map + show_route in the same tick, before the
+    // view-switch finished), drain it now. Use a small delay so the
+    // map style has time to load on a fresh mount.
+    let pendingTimer = null;
+    try {
+      const pending = (typeof window !== 'undefined') ? window.__foodmapsPendingRoute : null;
+      if (pending && pending.route && (Date.now() - (pending.at || 0)) < 15000) {
+        pendingTimer = setTimeout(() => {
+          try {
+            drawRoute(pending.route);
+            window.__foodmapsPendingRoute = null;
+          } catch (_) { /* ignore */ }
+        }, 300);
+      }
+    } catch (_) { /* ignore */ }
+
+    return () => {
+      window.removeEventListener('foodmaps:show_route', handler);
+      window.removeEventListener('foodmaps:clear_route', clearHandler);
+      if (pendingTimer) { try { clearTimeout(pendingTimer); } catch (_) {} }
+      clearRoute();
+    };
+  }, []);
+
   // Update markers when listings or centers change
   React.useEffect(() => {
     if (!map.current || !mapLoaded) {

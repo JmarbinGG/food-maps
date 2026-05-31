@@ -12,6 +12,7 @@ from functools import lru_cache
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
+import hmac
 import jwt
 import json
 import os
@@ -47,7 +48,6 @@ from backend.ai import models as ai_models  # noqa: F401
 from threading import Timer, Lock
 from twilio.rest import Client
 from backend.db import engine, SessionLocal, get_db
-
 
 pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
 
@@ -99,7 +99,11 @@ async def add_cache_control_headers(request: Request, call_next):
     """Avoid stale frontend assets requiring hard refreshes in development and production."""
     path = request.url.path
     relative_path = path.lstrip("/")
-    if relative_path and (
+    # /uploads serves user-generated content (chat photos, listing images).
+    # The directory is gitignored on purpose, but it MUST still be reachable
+    # over HTTP — otherwise listing photos and AI chat attachments 404.
+    is_uploads_asset = relative_path.startswith("uploads/") or relative_path == "uploads"
+    if relative_path and not is_uploads_asset and (
         any(part.startswith(".") for part in relative_path.split("/") if part)
         or _is_gitignored_path(relative_path)
     ):
@@ -123,7 +127,15 @@ async def add_cache_control_headers(request: Request, call_next):
 
 # NOTE: Use Base imported from models; do not re-declare another Base here
 # JWT settings
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET or len(JWT_SECRET) < 16:
+    # Fail closed: refuse to start with a weak/missing JWT secret rather
+    # than fall back to a known literal that anyone reading the source
+    # could use to forge tokens.
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required and must be at least "
+        "16 characters long."
+    )
 JWT_ALGORITHM = "HS256"
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")
 if not PUBLIC_BASE_URL:
@@ -150,6 +162,19 @@ def _is_gitignored_path(relative_path: str) -> bool:
 
 # Global request input constraints for API routes.
 MAX_API_BODY_BYTES = 64 * 1024
+# Per-path overrides for multipart upload endpoints whose handlers enforce
+# their own size caps. Keep these slightly above the handler cap so we don't
+# pre-empt the handler's friendlier error message.
+UPLOAD_PATH_LIMITS = {
+    "/api/ai/voice": 26 * 1024 * 1024,        # handler caps at 25MB
+    "/api/ai/upload_image": 9 * 1024 * 1024,  # handler caps at 8MB
+}
+
+
+def _max_body_bytes_for(path: str) -> int:
+    return UPLOAD_PATH_LIMITS.get(path.rstrip("/"), MAX_API_BODY_BYTES)
+
+
 MAX_QUERY_STRING_BYTES = 2048
 MAX_QUERY_PARAM_NAME_CHARS = 64
 MAX_QUERY_PARAM_VALUE_CHARS = 512
@@ -230,17 +255,19 @@ async def sanitize_api_input(request: Request, call_next):
     if path.startswith("/api"):
         _validate_query_params(request)
 
+        max_body_bytes = _max_body_bytes_for(path)
+
         content_length = request.headers.get("content-length")
         if content_length:
             try:
-                if int(content_length) > MAX_API_BODY_BYTES:
+                if int(content_length) > max_body_bytes:
                     raise HTTPException(status_code=413, detail="Request body is too large")
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid Content-Length header")
 
         if request.method.upper() in {"POST", "PUT", "PATCH", "DELETE"}:
             body = await request.body()
-            if len(body) > MAX_API_BODY_BYTES:
+            if len(body) > max_body_bytes:
                 raise HTTPException(status_code=413, detail="Request body is too large")
 
             if body:
@@ -262,6 +289,14 @@ async def sanitize_api_input(request: Request, call_next):
                         body.decode("utf-8")
                     except UnicodeDecodeError:
                         raise HTTPException(status_code=400, detail="Request body must be valid UTF-8")
+                    # We consumed the body via request.body(); put it back so
+                    # downstream form parsers can read it.
+                    await _set_request_body(request, body)
+                else:
+                    # multipart/form-data, application/octet-stream, etc.
+                    # We've already consumed the body; re-inject it so the
+                    # endpoint's UploadFile / Form parsers can read it.
+                    await _set_request_body(request, body)
 
     return await call_next(request)
 
@@ -464,6 +499,20 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
             # Already a string or unexpected type
             return v
 
+    # Parse images JSON column to a Python list (best effort)
+    images_list = []
+    raw_images = getattr(item, "images", None)
+    if raw_images:
+        if isinstance(raw_images, list):
+            images_list = [str(x) for x in raw_images if isinstance(x, (str, bytes))]
+        else:
+            try:
+                parsed_imgs = json.loads(raw_images)
+                if isinstance(parsed_imgs, list):
+                    images_list = [str(x) for x in parsed_imgs if isinstance(x, str)]
+            except Exception:
+                images_list = []
+
     return {
         "id": item.id,
         "donor_id": getattr(item, "donor_id", None),
@@ -495,6 +544,7 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "contamination_warning": getattr(item, "contamination_warning", None),
         "dietary_tags": getattr(item, "dietary_tags", None),
         "ingredients_list": getattr(item, "ingredients_list", None),
+        "images": images_list,
         "donor": donor_payload,
     }
 
@@ -770,9 +820,18 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
         body = await request.json()
         email = body.get('email')
         secret = body.get('secret')
-        
-        # Simple secret check - in production use proper admin authentication
-        if secret != os.getenv('ADMIN_SECRET', 'change-me-in-production'):
+
+        # Fail-closed: if ADMIN_SECRET is not configured, the endpoint is
+        # disabled. Previously this fell back to a hardcoded literal which,
+        # in any environment that hadn't set the env var, allowed anyone
+        # who read the source to escalate to admin.
+        admin_secret = os.getenv('ADMIN_SECRET')
+        if not admin_secret or len(admin_secret) < 16:
+            raise HTTPException(
+                status_code=503,
+                detail="Admin bootstrap endpoint disabled (ADMIN_SECRET not configured).",
+            )
+        if not secret or not hmac.compare_digest(str(secret), admin_secret):
             raise HTTPException(status_code=403, detail="Invalid secret")
         
         if not email:
@@ -794,7 +853,7 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Mount AI router (DoGoods AI assistant)
+# Mount AI router (FoodMaps AI assistant)
 from backend.ai.routes import router as ai_router, start_background_jobs as ai_start_jobs, stop_background_jobs as ai_stop_jobs
 app.include_router(ai_router)
 
@@ -803,6 +862,33 @@ app.include_router(ai_router)
 async def startup_event():
     # Ensure tables exist
     Base.metadata.create_all(bind=engine)
+    # Recover any listings stuck in 'pending_confirmation' from a previous
+    # process. The confirmation code lives only in the in-memory
+    # pending_confirmations dict, which is wiped on restart, so those
+    # listings would otherwise be unclaimable AND unreleasable until the
+    # donor manually deletes them. Reset them so other recipients can claim.
+    try:
+        recovery_db = SessionLocal()
+        try:
+            recovered = (
+                recovery_db.query(FoodResource)
+                .filter(FoodResource.status == "pending_confirmation")
+                .update(
+                    {
+                        FoodResource.status: "available",
+                        FoodResource.recipient_id: None,
+                        FoodResource.claimed_at: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            recovery_db.commit()
+            if recovered:
+                print(f"\u23f0 Released {recovered} stale 'pending_confirmation' listings on startup")
+        finally:
+            recovery_db.close()
+    except Exception as _recover_exc:
+        print(f"Stale-claim recovery skipped: {_recover_exc}")
     # Start AI background reminder loop
     try:
         await ai_start_jobs()
@@ -1007,6 +1093,28 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
         except Exception:
             raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
 
+        # Clear dependent rows that reference this listing to avoid MySQL
+        # FK integrity errors. Use raw SQL so this is independent of which
+        # ORM models happen to be imported. Nullable FKs are nulled out;
+        # non-nullable FKs (pickup_reminders.listing_id) require deleting.
+        from sqlalchemy import text as _sql_text
+        try:
+            db.execute(_sql_text("UPDATE consumption_logs SET food_resource_id = NULL WHERE food_resource_id = :lid"), {"lid": listing_id})
+        except Exception as dep_err:
+            print(f"delete_listing: failed to null consumption_logs for {listing_id}: {dep_err}")
+        try:
+            db.execute(_sql_text("UPDATE safety_reports SET listing_id = NULL WHERE listing_id = :lid"), {"lid": listing_id})
+        except Exception as dep_err:
+            print(f"delete_listing: failed to null safety_reports for {listing_id}: {dep_err}")
+        try:
+            db.execute(_sql_text("UPDATE ai_broadcasts SET food_resource_id = NULL WHERE food_resource_id = :lid"), {"lid": listing_id})
+        except Exception as dep_err:
+            print(f"delete_listing: failed to null ai_broadcasts for {listing_id}: {dep_err}")
+        try:
+            db.execute(_sql_text("DELETE FROM pickup_reminders WHERE listing_id = :lid"), {"lid": listing_id})
+        except Exception as dep_err:
+            print(f"delete_listing: failed to delete pickup_reminders for {listing_id}: {dep_err}")
+
         db.delete(item)
         db.commit()
 
@@ -1014,6 +1122,13 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        print(f"DELETE /api/listings/get/{listing_id} error: {e}")
+        traceback.print_exc()
+        try:
+            db.rollback()
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -1283,6 +1398,32 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         if address is not None and address != item.address:
             item.address = address
             address_changed = True
+
+        # Optional images update: accept a list of URL strings or a JSON
+        # string. Apply the same validation as create.
+        if 'images' in body:
+            raw_imgs = body.get('images')
+            try:
+                if isinstance(raw_imgs, str):
+                    raw_imgs = json.loads(raw_imgs)
+            except Exception:
+                raw_imgs = None
+            if isinstance(raw_imgs, list):
+                cleaned = []
+                for u in raw_imgs:
+                    if not isinstance(u, str):
+                        continue
+                    s = u.strip()
+                    if not s or len(s) > 1024:
+                        continue
+                    if not (s.startswith("/uploads/") or s.startswith("http://") or s.startswith("https://")):
+                        continue
+                    cleaned.append(s)
+                    if len(cleaned) >= 8:
+                        break
+                item.images = json.dumps(cleaned) if cleaned else None
+            elif raw_imgs is None or raw_imgs == [] or raw_imgs == "":
+                item.images = None
 
         # If coords missing or address changed, attempt geocoding
         try:
@@ -1706,6 +1847,7 @@ def send_sms(phone: str, message: str) -> bool:
 
 def auto_release_claim(listing_id: int):
     """Auto-release a claim if not confirmed within time limit"""
+    db = None
     try:
         db = SessionLocal()
         if listing_id in pending_confirmations:
@@ -1715,11 +1857,21 @@ def auto_release_claim(listing_id: int):
                 item.recipient_id = None
                 item.claimed_at = None
                 db.commit()
-                print(f"⏰ Auto-released listing {listing_id} due to timeout")
+                print(f"\u23f0 Auto-released listing {listing_id} due to timeout")
             del pending_confirmations[listing_id]
-        db.close()
     except Exception as e:
         print(f"Error in auto_release_claim: {e}")
+        if db is not None:
+            try:
+                db.rollback()
+            except Exception:
+                pass
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception:
+                pass
 
 # ============================================
 # DISTRIBUTION CENTER ENDPOINTS
@@ -1861,13 +2013,7 @@ async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
 async def claim_listing(listing_id: int, db: Session = Depends(get_db), credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Claim a listing with SMS confirmation requirement."""
     try:
-        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
-        if not item:
-            raise HTTPException(status_code=404, detail="Listing not found")
-        if item.status != 'available':
-            raise HTTPException(status_code=400, detail="Listing is not available")
-
-        # Authorization
+        # Authorization first — no point hitting the DB without a valid user.
         try:
             payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             user_id = str(payload.get("sub")) if payload else None
@@ -1876,26 +2022,69 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
         except Exception:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        # Get user details
-        claimant = db.query(User).filter(User.id == int(user_id)).first()
+        uid_int = int(user_id)
+        now = datetime.utcnow()
+
+        # Atomic claim: only one concurrent caller can transition
+        # 'available' -> 'pending_confirmation'. Prevents the read-then-
+        # update race that previously let two users both win the same
+        # listing.
+        updated = (
+            db.query(FoodResource)
+            .filter(
+                FoodResource.id == listing_id,
+                FoodResource.status == "available",
+                FoodResource.donor_id != uid_int,
+            )
+            .update(
+                {
+                    FoodResource.status: "pending_confirmation",
+                    FoodResource.recipient_id: uid_int,
+                    FoodResource.claimed_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+        if not updated:
+            item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+            db.rollback()
+            if not item:
+                raise HTTPException(status_code=404, detail="Listing not found")
+            if item.donor_id == uid_int:
+                raise HTTPException(status_code=400, detail="You cannot claim your own listing")
+            raise HTTPException(status_code=400, detail="Listing is not available")
+
+        item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+
+        # Get user details (claimant must have a phone for SMS confirmation).
+        claimant = db.query(User).filter(User.id == uid_int).first()
         if not claimant or not claimant.phone:
+            # Roll back the claim so the listing goes back to 'available'.
+            (
+                db.query(FoodResource)
+                .filter(FoodResource.id == listing_id, FoodResource.recipient_id == uid_int)
+                .update(
+                    {
+                        FoodResource.status: "available",
+                        FoodResource.recipient_id: None,
+                        FoodResource.claimed_at: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
+            db.commit()
             raise HTTPException(status_code=400, detail="Phone number required")
 
         donor = db.query(User).filter(User.id == item.donor_id).first()
         
         # Generate confirmation code
         confirmation_code = generate_reset_code(4)
-        
-        # Set status to pending confirmation
-        item.recipient_id = int(user_id)
-        item.status = "pending_confirmation"
-        item.claimed_at = datetime.utcnow()
-        db.commit()
-        
-        # Store confirmation code
+
+        # Store confirmation code (the listing was already moved to
+        # pending_confirmation by the atomic update above).
         pending_confirmations[listing_id] = {
             'code': confirmation_code,
-            'recipient_id': int(user_id),
+            'recipient_id': uid_int,
             'expires_at': datetime.utcnow() + timedelta(minutes=5)
         }
         
@@ -2470,18 +2659,77 @@ async def update_trust_score(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/listings/create")
-async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: int, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: int = 0, db: Session = Depends(get_db)):
+async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db), credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)):
     """
     Create a FoodResource and attempt server-side geocoding using Mapbox when an address is provided
     and coords are not supplied. Returns the created listing as JSON.
+
+    `images` may be a JSON-encoded array of URL strings (e.g. paths returned by
+    /api/ai/upload_image) to attach as listing photos.
+
+    SECURITY: the authoritative donor_id is taken from the JWT (Authorization
+    header). The legacy `donor_id` URL parameter is kept for backward
+    compatibility but is IGNORED when a valid token is present — otherwise a
+    stale `localStorage.current_user` on the client could cause a listing to
+    be attributed to the wrong user (and surface that user's profile address
+    on the listing card).
     """
     try:
+        # Resolve the authenticated donor from the JWT. Fall back to the URL
+        # parameter only if no token was supplied (legacy callers); never
+        # silently trust a client-supplied id when auth context disagrees.
+        authed_donor_id: Optional[int] = None
+        if credentials and getattr(credentials, "credentials", None):
+            try:
+                payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+                sub = payload.get("sub") if isinstance(payload, dict) else None
+                if sub is not None:
+                    authed_donor_id = int(sub)
+            except Exception:
+                raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
+
+        if authed_donor_id is not None:
+            if int(donor_id) != authed_donor_id:
+                try:
+                    print(f"[create_listing] overriding client donor_id={donor_id} with authenticated id={authed_donor_id}")
+                except Exception:
+                    pass
+            donor_id = authed_donor_id
+
         # Enforce that donor has a phone number on file
         donor = db.query(User).filter(User.id == int(donor_id)).first()
         if not donor:
             raise HTTPException(status_code=404, detail="Donor not found")
         if not donor.phone or len(str(donor.phone).strip()) < 7:
             raise HTTPException(status_code=400, detail="A valid phone number is required to create a listing")
+
+        # Validate and normalize the optional images parameter. We store a
+        # JSON-encoded array of URL strings; reject anything else to avoid
+        # storing arbitrary blobs (or huge data URLs) on the listing row.
+        images_json = None
+        if images:
+            try:
+                parsed = json.loads(images) if isinstance(images, str) else images
+            except Exception:
+                raise HTTPException(status_code=400, detail="images must be a JSON array of URL strings")
+            if not isinstance(parsed, list):
+                raise HTTPException(status_code=400, detail="images must be a JSON array of URL strings")
+            cleaned = []
+            for u in parsed:
+                if not isinstance(u, str):
+                    continue
+                s = u.strip()
+                if not s:
+                    continue
+                # Only accept relative /uploads/... paths or http(s) URLs.
+                if not (s.startswith("/uploads/") or s.startswith("http://") or s.startswith("https://")):
+                    continue
+                if len(s) > 1024:
+                    continue
+                cleaned.append(s)
+                if len(cleaned) >= 8:
+                    break
+            images_json = json.dumps(cleaned) if cleaned else None
 
         item = FoodResource(
             donor_id=donor_id,
@@ -2494,6 +2742,7 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             pickup_window_start=pickup_start,
             pickup_window_end=pickup_end,
             address=address,
+            images=images_json,
             created_at=datetime.utcnow()
         )
 
@@ -4849,6 +5098,11 @@ async def shutdown_event():
         print(f"AI shutdown error: {_ai_exc}")
 
 # Mount static files at the end to allow API routes to take precedence
+# /uploads serves user-uploaded photos (chat attachments, listing images)
+# from a writable directory outside the source tree.
+_UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")
+os.makedirs(_UPLOADS_DIR, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_UPLOADS_DIR), name="uploads")
 app.mount("/", StaticFiles(directory=PROJECT_ROOT, html=True), name="root")
 
 

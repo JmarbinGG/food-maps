@@ -1,6 +1,12 @@
 function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const role = String(user?.role || '').toLowerCase();
+  const { t, language } = (typeof window !== 'undefined' && window.useTranslation)
+    ? window.useTranslation()
+    : { t: (k, fb) => fb || k, language: 'en' };
+  const toggleLanguage = () => {
+    if (window.i18n) window.i18n.toggle();
+  };
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -30,7 +36,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
               title="Message Support"
             >
               <span>💬</span>
-              <span className="hidden sm:inline">Support</span>
+              <span className="hidden sm:inline">{t('header.support', 'Support')}</span>
             </button>
           )}
           <button
@@ -38,7 +44,18 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm transition-colors flex items-center gap-2"
             title="Send Feedback or Report an Issue"
           >
-            <span className="hidden sm:inline">Feedback</span>
+            <span className="hidden sm:inline">{t('header.feedback', 'Feedback')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleLanguage}
+            aria-label={t('header.language', 'Language')}
+            title={t('header.language', 'Language')}
+            className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1"
+          >
+            <span className={language === 'en' ? 'text-green-700' : 'text-gray-500'}>EN</span>
+            <span className="text-gray-300">|</span>
+            <span className={language === 'es' ? 'text-green-700' : 'text-gray-500'}>ES</span>
           </button>
           <button
             onClick={() => {
@@ -59,7 +76,11 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
             }
             className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
           >
-            {user && role === 'donor' ? 'Share Food' : user && role === 'admin' ? 'Admin Panel' : 'Find Food'}
+            {user && role === 'donor'
+              ? t('header.share_food', 'Share Food')
+              : user && role === 'admin'
+              ? t('header.admin_panel', 'Admin Panel')
+              : t('header.find_food', 'Find Food')}
           </button>
           {user ? (
             <div className="relative dropdown-container">
@@ -81,7 +102,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
                   >
-                    Profile Settings
+                    {t('header.profile_settings', 'Profile Settings')}
                   </button>
                     {/* BUTTONS EXIST ELSEWHERE, REMOVED FROM DROPDOWN TO REDUCE CLUTTER */}
                   {/* <button
@@ -174,47 +195,51 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                      Voice Search
                   </a> */}
-                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
-                  {/* <button
-                    onClick={() => {
-                      window.openSmartNotifications?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
-                  >
-                     Smart Notifications
-                  </button> */}
-                  {/* <button
-                    onClick={() => {
-                      window.openStorageCoach?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
-                  >
-                     Storage Coach
-                  </button> */}
-                  {/* {role === 'recipient' && (
-                    <button
-                      onClick={() => {
-                        window.openSpoilageAlerts?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
-                    >
-                       Spoilage Alerts
-                    </button>
-                  )} */}
-                  {/* {role === 'recipient' && (
-                    <button
-                      onClick={() => {
-                        window.openMealSuggestions?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
-                    >
-                       Meal Suggestions
-                    </button>
-                  )} */}
+                  {/* AI Assistant section — surfaced to individual recipients */}
+                  {role === 'recipient' && (
+                    <div className="border-t-2 border-purple-200 mt-1">
+                      <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-purple-700 bg-gradient-to-r from-purple-50 via-blue-50 to-green-50 flex items-center gap-2">
+                        <span aria-hidden="true">✨</span>
+                        <span>{t('ai.assistant', 'Your AI Assistant')}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          window.openMealSuggestions?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-gradient-to-r from-green-50 to-blue-50 font-semibold"
+                      >
+                        🍽️ {t('ai.meal_suggestions', 'AI Meal Suggestions')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openSpoilageAlerts?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-red-50"
+                      >
+                        ⚠️ {t('ai.spoilage_alerts', 'Spoilage Risk Alerts')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openStorageCoach?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
+                      >
+                        🧊 {t('ai.storage_coach', 'AI Storage Coach')}
+                      </button>
+                      <button
+                        onClick={() => {
+                          window.openSmartNotifications?.();
+                          setShowDropdown(false);
+                        }}
+                        className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
+                      >
+                        🔔 {t('ai.smart_notifications', 'Smart Notifications')}
+                      </button>
+                    </div>
+                  )}
                   {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
                   {/* <button
                     onClick={() => {
@@ -288,7 +313,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                   >
-                    Logout
+                    {t('header.logout', 'Logout')}
                   </button>
                 </div>
               )}
@@ -298,7 +323,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
               onClick={onAuthClick}
               className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium text-sm transition-colors"
             >
-              Sign in
+              {t('header.login', 'Sign in')}
             </button>
           )}
         </div>

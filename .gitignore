@@ -4,4 +4,7 @@ backend/scripts/batch_geocode.py
 dont-publish
 __pycache__/
 *.pyc
+uploads/
+backend/foodmaps.db
+
 .DS_Store
