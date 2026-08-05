@@ -169,16 +169,35 @@
     </style>
 
     <script>
-        // Smooth scroll function
+        // Smooth scroll past sticky header (h-24 ≈ 96px)
         function scrollToSection(sectionId) {
             try {
                 const element = document.getElementById(sectionId);
-                if (element) {
-                    element.scrollIntoView({ behavior: 'smooth' });
-                }
+                if (!element) return false;
+                const header = document.querySelector('nav.sticky') || document.querySelector('nav');
+                const headerH = header ? header.getBoundingClientRect().height : 96;
+                const top = element.getBoundingClientRect().top + window.pageYOffset - headerH - 12;
+                window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+                try {
+                    history.replaceState(null, '', '#' + sectionId);
+                } catch (_) { /* ignore */ }
             } catch (error) {
                 console.error('Scroll to section error:', error);
             }
+            return false;
+        }
+
+        function scrollToHashTarget() {
+            try {
+                const hash = (window.location.hash || '').replace(/^#/, '');
+                if (!hash) return;
+                const el = document.getElementById(hash);
+                if (!el) return;
+                // Wait a tick for layout/images so we land on the real position
+                requestAnimationFrame(function () {
+                    setTimeout(function () { scrollToSection(hash); }, 50);
+                });
+            } catch (_) { /* ignore */ }
         }
 
         // Close mobile menu function
@@ -197,6 +216,8 @@
 
         // Mobile menu functionality
         document.addEventListener('DOMContentLoaded', function () {
+            scrollToHashTarget();
+            window.addEventListener('hashchange', scrollToHashTarget);
             try {
                 // Initialize animations
                 const elements = document.querySelectorAll('.floating, .floating-delayed, .slide-in-up, .fade-in');
@@ -290,36 +311,32 @@
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-24">
                 <div class="flex items-center">
-                    <img src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
+                    <img src="/logos/foodmaps-logo.png"
                         alt="Food Maps"
-                        class="w-24 h-24 rounded-2xl hover:scale-105 transition-transform">
+                        class="w-20 h-20 rounded-full object-cover hover:scale-105 transition-transform">
                 </div>
 
                 <!-- Desktop Menu -->
-                <div class="hidden md:flex items-center space-x-8">
-                    <a href="#features" onclick="scrollToSection('features')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Features</a>
-                    <a href="#how-it-works" onclick="scrollToSection('how-it-works')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">How It
-                        Works</a>
-                    <a href="#impact" onclick="scrollToSection('impact')"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact</a>
+                <div class="hidden lg:flex items-center gap-5 xl:gap-7">
+                    <a href="index.html?tutorial=1"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">How It Works</a>
                     <a href="impactStory.html"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Impact
-                        Story</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Impact Story</a>
+                    <a href="partners.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Partners</a>
+                    <a href="providers.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Providers</a>
+                    <a href="nutrition.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Nutrition</a>
 
-                    <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg">
-                        Donate
-                    </button>
                     <button onclick="window.location.href='index.html'"
-                        class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg">
+                        class="bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg whitespace-nowrap">
                         Get Started
                     </button>
                 </div>
 
-                <!-- Mobile Menu Button -->
-                <div class="md:hidden">
+                <!-- Mobile / tablet Menu Button -->
+                <div class="lg:hidden">
                     <button id="mobile-menu-btn"
                         class="text-gray-600 hover:text-green-600 p-2 rounded-lg hover:bg-gray-100 transition-colors">
                         <div class="icon-menu text-2xl"></div>
@@ -328,23 +345,19 @@
             </div>
 
             <!-- Mobile Menu -->
-            <div id="mobile-menu" class="md:hidden hidden bg-white border-t border-gray-200 pb-4">
+            <div id="mobile-menu" class="lg:hidden hidden bg-white border-t border-gray-200 pb-4">
                 <div class="flex flex-col space-y-4 pt-4">
-                    <a href="#features" onclick="scrollToSection('features'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Features</a>
-                    <a href="#how-it-works" onclick="scrollToSection('how-it-works'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">How
-                        It Works</a>
-                    <a href="#impact" onclick="scrollToSection('impact'); closeMobileMenu();"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact</a>
+                    <a href="index.html?tutorial=1"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">How It Works</a>
                     <a href="impactStory.html"
-                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact
-                        Story</a>
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact Story</a>
+                    <a href="partners.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Partners</a>
+                    <a href="providers.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Providers</a>
+                    <a href="nutrition.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Nutrition</a>
 
-                    <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
-                        class="bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
-                        Donate
-                    </button>
                     <button onclick="window.location.href='index.html'"
                         class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
                         Get Started
@@ -461,8 +474,8 @@
                 <!-- Logo as Main Hero Element -->
                 <div class="slide-in-up mb-12">
                     <div class="flex justify-center mb-8">
-                        <img src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
-                            alt="Food Maps" class="w-40 h-40 md:w-56 md:h-56 rounded-3xl" />
+                        <img src="/logos/foodmaps-logo.png"
+                            alt="Food Maps" class="w-40 h-40 md:w-56 md:h-56 rounded-full object-cover" />
                     </div>
                 </div>
 
@@ -507,7 +520,7 @@
     </section>
 
     <!-- How It Works -->
-    <section id="how-it-works" class="py-20 bg-white">
+    <section id="how-it-works" class="py-20 bg-white scroll-mt-32">
         <div class="max-w-7xl mx-auto px-4">
             <div class="text-center mb-16">
                 <h2 class="text-4xl font-bold text-gray-900 mb-4">How Food Maps Works</h2>
@@ -545,9 +558,7 @@
     <!-- Impact Section -->
     <section id="impact" class="py-24 bg-green-900 text-white relative overflow-hidden">
         <!-- Background Pattern -->
-        <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 80" height="80" viewBox="0 0 80 80"
-            xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
-            fill-opacity="0.02" %3E%3Ccircle cx="40" cy="40" r="20" /%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-30"></div>
+        <div class="absolute inset-0 bg-white/5 opacity-30" aria-hidden="true"></div>
 
         <div class="max-w-7xl mx-auto px-4 text-center relative z-10">
             <div class="mb-16">
@@ -816,9 +827,7 @@
     <!-- Footer -->
     <footer class="bg-gray-900 text-gray-300 py-16 relative overflow-hidden">
         <!-- Background Pattern -->
-        <div class="absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=" 60" height="60" viewBox="0 0 60 60"
-            xmlns="http://www.w3.org/2000/svg" %3E%3Cg fill="none" fill-rule="evenodd" %3E%3Cg fill="%23ffffff"
-            fill-opacity="0.02" %3E%3Ccircle cx="30" cy="30" r="15" /%3E%3C/g%3E%3C/g%3E%3C/svg%3E')] opacity-30"></div>
+        <div class="absolute inset-0 bg-white/5 opacity-30" aria-hidden="true"></div>
 
         <div class="max-w-7xl mx-auto px-4 relative z-10">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
@@ -836,7 +845,7 @@
                         communities. Programs include school-based closets, food access support, and youth services.
                         The goal is simple: provide practical help when families need it.
                     </p>
-                    <div class="flex space-x-4">
+                    <div class="flex space-x-4 mb-6">
                         <a href="https://www.instagram.com/aglfoundation/" target="_blank"
                             class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors">
                             <div class="icon-instagram text-emerald-400 hover:text-white"></div>
@@ -846,6 +855,11 @@
                             <div class="icon-facebook text-emerald-400 hover:text-white"></div>
                         </a>
                     </div>
+                    <a href="https://allgoodlivingfoundation.org/donate"
+                        target="_blank" rel="noopener noreferrer"
+                        class="inline-flex items-center justify-center bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg">
+                        Donate
+                    </a>
                 </div>
 
                 <div>
@@ -867,6 +881,24 @@
                                 class="hover:text-emerald-400 transition-colors flex items-center group">
                                 <div class="icon-users mr-2 group-hover:scale-110 transition-transform"></div>
                                 Volunteer
+                            </a></li>
+
+                        <li><a href="partners.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-handshake mr-2 group-hover:scale-110 transition-transform"></div>
+                                Partners
+                            </a></li>
+
+                        <li><a href="providers.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-map-pin mr-2 group-hover:scale-110 transition-transform"></div>
+                                Providers
+                            </a></li>
+
+                        <li><a href="nutrition.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-heart mr-2 group-hover:scale-110 transition-transform"></div>
+                                Nutrition
                             </a></li>
 
                         <li><a href="#faqs" class="hover:text-emerald-400 transition-colors flex items-center group">

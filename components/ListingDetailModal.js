@@ -556,6 +556,11 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
         }
       } catch (e) { /* ignore */ }
 
+      // Notify the app so React state (and the map) refresh without a full reload.
+      try {
+        window.dispatchEvent(new CustomEvent('listingDeleted', { detail: { id: listing.id } }));
+      } catch (e) { /* ignore */ }
+
       try { if (window.recenterMap) window.recenterMap(); } catch (e) { }
       setShowDeleteConfirm(false);
       setIsDeleting(false);
@@ -565,7 +570,6 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
       if (typeof window.showAlert === 'function') window.showAlert('Failed to delete listing.', { title: 'Error', variant: 'error' });
       setIsDeleting(false);
     }
-    window.location.reload();
   };
 
 

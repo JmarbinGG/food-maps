@@ -124,8 +124,20 @@ function UserProfile({ user, onClose, onUserUpdate }) {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
         const updatedUser = { ...user, ...accountData };
+        const prevRole = (user && user.role) ? String(user.role).toLowerCase() : '';
+        const nextRole = accountData.role ? String(accountData.role).toLowerCase() : '';
         localStorage.setItem('current_user', JSON.stringify(updatedUser));
         onUserUpdate(updatedUser);
+        // Notify the rest of the app (AI chat, dashboards, etc.) that
+        // the active role changed so role-aware UIs can refresh without
+        // a page reload.
+        if (prevRole !== nextRole && typeof window !== 'undefined') {
+          try {
+            window.dispatchEvent(new CustomEvent('roleChanged', {
+              detail: { previousRole: prevRole, role: nextRole, user: updatedUser },
+            }));
+          } catch (_) { /* ignore */ }
+        }
       } else {
         setMessage({ type: 'error', text: data.detail || 'Failed to update profile' });
       }
@@ -456,8 +468,42 @@ function UserProfile({ user, onClose, onUserUpdate }) {
           )}
 
           {activeTab === 'favorites' && (
-            <div>
-              <window.FavoritesPanel onClose={() => setActiveTab('account')} />
+            <div className="space-y-4">
+              <div className="bg-gradient-to-r from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
+                  My Favorites
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  View and manage your saved favorite locations for quick access.
+                </p>
+                <button
+                  onClick={() => {
+                    onClose();
+                    window.openFavoritesPanel?.();
+                  }}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-yellow-500 to-amber-600 text-white rounded-lg hover:from-yellow-600 hover:to-amber-700 transition font-medium"
+                >
+                  Open Favorites
+                </button>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-semibold text-blue-900 mb-2">Tips:</h4>
+                <ul className="text-sm text-blue-800 space-y-2">
+                  <li className="flex items-start gap-2">
+                    <span className="text-yellow-600 font-bold">Tip</span>
+                    <span>Star listings and map pins to save trusted spots</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-yellow-600 font-bold">Tip</span>
+                    <span>Get directions to any saved favorite location</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-yellow-600 font-bold">Tip</span>
+                    <span>Keep notes and tags on places you visit often</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           )}
           {activeTab === 'referral' && (

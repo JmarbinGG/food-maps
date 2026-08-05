@@ -88,6 +88,12 @@ function App() {
   const [currentView, setCurrentView] = React.useState('map');
   const [viewMode, setViewMode] = React.useState('map'); // 'map' or 'list'
   const [userLocation, setUserLocation] = React.useState(null);
+  // When set, listings are filtered to filters.distance miles of this origin.
+  const [areaSearch, setAreaSearch] = React.useState(null); // { lat, lng, label, zip? }
+  const [zipInput, setZipInput] = React.useState('');
+  const [zipSearching, setZipSearching] = React.useState(false);
+  const [zipError, setZipError] = React.useState('');
+  const [showZipPopup, setShowZipPopup] = React.useState(false);
   const [schedules, setSchedules] = React.useState([]);
   const [activeTasks, setActiveTasks] = React.useState([]);
   const [databaseConnected, setDatabaseConnected] = React.useState(false);
@@ -102,6 +108,7 @@ function App() {
   const [pendingClaimListing, setPendingClaimListing] = React.useState(null);
   const [showUserProfile, setShowUserProfile] = React.useState(false);
   const [showDistributionMap, setShowDistributionMap] = React.useState(false);
+  const [pendingSharedCenterId, setPendingSharedCenterId] = React.useState(null);
   const [showStoreOwnerDashboard, setShowStoreOwnerDashboard] = React.useState(false);
   const [showMessageSupport, setShowMessageSupport] = React.useState(false);
   const [showDonationScheduler, setShowDonationScheduler] = React.useState(false);
@@ -216,6 +223,13 @@ function App() {
         const nextQuery = params.toString();
         const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
         window.history.replaceState(null, null, nextUrl);
+      }
+
+      // Public share links: /?center=<id> works for guests and signed-in users.
+      const sharedCenterId = params.get('center');
+      if (sharedCenterId) {
+        setPendingSharedCenterId(sharedCenterId);
+        setShowDistributionMap(true);
       }
 
       // Ensure DOM is ready before manipulating elements
@@ -813,24 +827,74 @@ function App() {
         }
       }
 
-      // Get user location for distance calculations
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            setUserLocation({
-              lat: position.coords.latitude,
-              lng: position.coords.longitude
-            });
-          },
-          (error) => {
-            console.log('Geolocation error:', error);
-            // Default to San Francisco if geolocation fails
-            setUserLocation({ lat: 37.7749, lng: -122.4194 });
+      // Restore saved ZIP, else detect from geolocation, else use Bay Area default.
+      const DEFAULT_ZIP = '94103';
+      const applyZipResult = (result, persist) => {
+        if (!result) return false;
+        setZipInput(result.zip);
+        setUserLocation({ lat: result.lat, lng: result.lng });
+        setAreaSearch({
+          lat: result.lat,
+          lng: result.lng,
+          zip: result.zip,
+          label: result.place_name || result.zip
+        });
+        if (persist) {
+          try { localStorage.setItem('search_area_zip', result.zip); } catch (_) { /* ignore */ }
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('foodmaps:fly_to', {
+            detail: { lat: result.lat, lng: result.lng, zoom: 11 }
+          }));
+        } catch (_) { /* ignore */ }
+        return true;
+      };
+
+      const initSearchArea = async () => {
+        try {
+          const savedZip = localStorage.getItem('search_area_zip');
+          if (savedZip && typeof window.geocodeZip === 'function') {
+            const result = await window.geocodeZip(savedZip);
+            if (applyZipResult(result, false)) return;
           }
-        );
-      } else {
-        setUserLocation({ lat: 37.7749, lng: -122.4194 });
-      }
+        } catch (_) { /* ignore */ }
+
+        const applyDefault = async () => {
+          if (typeof window.geocodeZip === 'function') {
+            const result = await window.geocodeZip(DEFAULT_ZIP);
+            if (applyZipResult(result, true)) return;
+          }
+          setZipInput(DEFAULT_ZIP);
+          setUserLocation({ lat: 37.7749, lng: -122.4194 });
+          setAreaSearch({
+            lat: 37.7749,
+            lng: -122.4194,
+            zip: DEFAULT_ZIP,
+            label: DEFAULT_ZIP
+          });
+        };
+
+        if (navigator.geolocation && typeof window.reverseGeocodeZip === 'function') {
+          navigator.geolocation.getCurrentPosition(
+            async (position) => {
+              try {
+                const result = await window.reverseGeocodeZip(
+                  position.coords.latitude,
+                  position.coords.longitude
+                );
+                if (applyZipResult(result, true)) return;
+              } catch (_) { /* ignore */ }
+              await applyDefault();
+            },
+            async () => { await applyDefault(); },
+            { timeout: 8000 }
+          );
+        } else {
+          await applyDefault();
+        }
+      };
+
+      initSearchArea();
 
       // Start agent orchestrator with guaranteed data
       setTimeout(() => {
@@ -972,12 +1036,42 @@ function App() {
         return scoreA - scoreB;
       });
 
+      // Refine to a ZIP / "near me" search radius when the user has set one.
+      if (areaSearch && Number.isFinite(Number(filters.distance))) {
+        const maxMiles = Number(filters.distance);
+        const originLat = Number(areaSearch.lat);
+        const originLng = Number(areaSearch.lng);
+        if (Number.isFinite(originLat) && Number.isFinite(originLng) && maxMiles > 0) {
+          const R = 3959;
+          const distMiles = (lat, lng) => {
+            const dLat = (lat - originLat) * Math.PI / 180;
+            const dLng = (lng - originLng) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos(originLat * Math.PI / 180) * Math.cos(lat * Math.PI / 180) *
+              Math.sin(dLng / 2) * Math.sin(dLng / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          };
+          base = base.filter((l) => {
+            let lat; let lng;
+            if (l?.coords && l.coords.lat != null && l.coords.lng != null) {
+              lat = Number(l.coords.lat); lng = Number(l.coords.lng);
+            } else if (Array.isArray(l?.coordinates) && l.coordinates.length >= 2) {
+              lng = Number(l.coordinates[0]); lat = Number(l.coordinates[1]);
+            } else if (l?.lat != null && l?.lng != null) {
+              lat = Number(l.lat); lng = Number(l.lng);
+            }
+            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+            return distMiles(lat, lng) <= maxMiles;
+          });
+        }
+      }
+
       setFilteredListings(base);
     } catch (error) {
       console.error('Error in filtering effect:', error);
       setFilteredListings([]);
     }
-  }, [listings, filters, user]);
+  }, [listings, filters, user, areaSearch]);
 
   const handleClaimListing = async (listingId) => {
     // Require auth
@@ -1219,6 +1313,104 @@ function App() {
     return R * c; // Distance in miles
   };
 
+  const flyMapTo = React.useCallback((lat, lng, zoom = 11) => {
+    try {
+      window.dispatchEvent(new CustomEvent('foodmaps:fly_to', {
+        detail: { lat, lng, zoom }
+      }));
+    } catch (_) { /* ignore */ }
+  }, []);
+
+  const handleApplyZip = React.useCallback(async () => {
+    const raw = String(zipInput || '').trim();
+    setZipError('');
+    if (!raw) {
+      setZipError('Enter a ZIP code');
+      return;
+    }
+    if (!/^\d{5}(-\d{4})?$/.test(raw.replace(/\s+/g, ''))) {
+      setZipError('Enter a valid 5-digit ZIP');
+      return;
+    }
+    if (typeof window.geocodeZip !== 'function') {
+      setZipError('Location lookup unavailable');
+      return;
+    }
+    setZipSearching(true);
+    try {
+      const result = await window.geocodeZip(raw);
+      if (!result) {
+        setZipError('ZIP not found. Try another code.');
+        return;
+      }
+      setZipInput(result.zip);
+      setUserLocation({ lat: result.lat, lng: result.lng });
+      setAreaSearch({
+        lat: result.lat,
+        lng: result.lng,
+        zip: result.zip,
+        label: result.place_name || result.zip
+      });
+      try { localStorage.setItem('search_area_zip', result.zip); } catch (_) { /* ignore */ }
+      flyMapTo(result.lat, result.lng, 11);
+      setShowZipPopup(false);
+    } catch (err) {
+      console.error('ZIP lookup failed:', err);
+      setZipError('Could not look up that ZIP');
+    } finally {
+      setZipSearching(false);
+    }
+  }, [zipInput, flyMapTo]);
+
+  const handleUseMyLocation = React.useCallback(() => {
+    setZipError('');
+    if (!navigator.geolocation) {
+      setZipError('Location not available in this browser');
+      return;
+    }
+    setZipSearching(true);
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const lat = position.coords.latitude;
+        const lng = position.coords.longitude;
+        setUserLocation({ lat, lng });
+        setAreaSearch({ lat, lng, label: 'your location' });
+        setZipInput('');
+        try { localStorage.removeItem('search_area_zip'); } catch (_) { /* ignore */ }
+        flyMapTo(lat, lng, 12);
+        setZipSearching(false);
+        setShowZipPopup(false);
+      },
+      (error) => {
+        console.log('Geolocation error:', error);
+        setZipError('Could not get your location');
+        setZipSearching(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [flyMapTo]);
+
+  const handleClearZip = React.useCallback(() => {
+    setAreaSearch(null);
+    setZipInput('');
+    setZipError('');
+    try { localStorage.removeItem('search_area_zip'); } catch (_) { /* ignore */ }
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setUserLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+        },
+        () => setUserLocation({ lat: 37.7749, lng: -122.4194 })
+      );
+    } else {
+      setUserLocation({ lat: 37.7749, lng: -122.4194 });
+    }
+    flyMapTo(37.7749, -122.4194, 10);
+  }, [flyMapTo]);
+
   const getLocationsWithDistance = () => {
     if (!userLocation) return filteredListings;
 
@@ -1447,6 +1639,57 @@ function App() {
       delete window.triggerListingDetailModal;
     };
   }, [handleClaimListing, handleShowDetails, user]);
+
+  // Listen for listingDeleted events from any delete site (modal, admin, etc.)
+  // and remove the listing from React state so the map and lists refresh
+  // immediately without a full page reload.
+  React.useEffect(() => {
+    const onListingDeleted = (e) => {
+      try {
+        const id = e && e.detail && (e.detail.id != null ? e.detail.id : e.detail.listingId);
+        if (id == null) return;
+        setListings(prev => Array.isArray(prev)
+          ? prev.filter(l => String(l && l.id) !== String(id))
+          : prev);
+        // Keep the global snapshot in sync for non-React consumers.
+        try {
+          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+            window.databaseService.listings = window.databaseService.listings.filter(
+              l => String(l && l.id) !== String(id)
+            );
+          }
+        } catch (_) { /* ignore */ }
+        // Nudge the map to redraw markers/bounds.
+        try { if (window.recenterMap) window.recenterMap(); } catch (_) { /* ignore */ }
+      } catch (err) {
+        console.error('listingDeleted handler failed', err);
+      }
+    };
+    const onListingUpdated = (e) => {
+      try {
+        const updated = e && e.detail;
+        if (!updated || updated.id == null) return;
+        setListings((prev) => Array.isArray(prev)
+          ? prev.map((l) => (String(l && l.id) === String(updated.id) ? { ...l, ...updated } : l))
+          : prev);
+        try {
+          if (window.databaseService && Array.isArray(window.databaseService.listings)) {
+            window.databaseService.listings = window.databaseService.listings.map((l) => (
+              String(l && l.id) === String(updated.id) ? { ...l, ...updated } : l
+            ));
+          }
+        } catch (_) { /* ignore */ }
+      } catch (err) {
+        console.error('listingUpdated handler failed', err);
+      }
+    };
+    window.addEventListener('listingDeleted', onListingDeleted);
+    window.addEventListener('listingUpdated', onListingUpdated);
+    return () => {
+      window.removeEventListener('listingDeleted', onListingDeleted);
+      window.removeEventListener('listingUpdated', onListingUpdated);
+    };
+  }, []);
 
   const handleCloseDetailedModal = () => {
     setShowDetailedModal(false);
@@ -1728,8 +1971,6 @@ function App() {
                 </button>
               </div>
 
-
-
               {viewMode === 'map' ? (
                 <MapComponent
                   listings={filteredListings}
@@ -1764,7 +2005,25 @@ function App() {
           }}
           currentView={currentView}
           onViewChange={setCurrentView}
+          currentZip={areaSearch?.zip || zipInput || '94103'}
+          onZipClick={() => {
+            setZipError('');
+            setZipInput(areaSearch?.zip || zipInput || '94103');
+            setShowZipPopup(true);
+          }}
         />
+
+        {typeof ZipLookupPopup !== 'undefined' && (
+          <ZipLookupPopup
+            isOpen={showZipPopup}
+            onClose={() => setShowZipPopup(false)}
+            zipInput={zipInput}
+            onZipInputChange={(v) => { setZipInput(v); setZipError(''); }}
+            searching={zipSearching}
+            error={zipError}
+            onApplyZip={handleApplyZip}
+          />
+        )}
 
         {renderView()}
 
@@ -1943,14 +2202,34 @@ function App() {
               <div className="bg-white border-b px-4 py-3 flex justify-between items-center">
                 <h1 className="text-xl font-bold text-gray-900">Distribution Centers</h1>
                 <button
-                  onClick={() => setShowDistributionMap(false)}
+                  onClick={() => {
+                    setShowDistributionMap(false);
+                    setPendingSharedCenterId(null);
+                    // Drop ?center= from the URL after closing so a refresh
+                    // doesn't reopen the shared center unexpectedly.
+                    try {
+                      const params = new URLSearchParams(window.location.search || '');
+                      if (params.has('center')) {
+                        params.delete('center');
+                        const nextQuery = params.toString();
+                        const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+                        window.history.replaceState(null, null, nextUrl);
+                      }
+                    } catch (_) { /* ignore */ }
+                  }}
                   className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"
                 >
                   Close
                 </button>
               </div>
               <div className="flex-1">
-                <DistributionCenterMap user={user} />
+                <DistributionCenterMap
+                  user={user}
+                  initialCenterId={pendingSharedCenterId}
+                  onInitialCenterOpened={() => {
+                    // Keep pending id so remounts still work until Close.
+                  }}
+                />
               </div>
             </div>
           </div>

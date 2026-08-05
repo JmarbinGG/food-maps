@@ -225,7 +225,18 @@ class DistributionCenter(Base):
     hours = Column(Text, nullable=True)  # JSON object with operating hours
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
+    # Extended location details (optional — shown via center info dropdown)
+    eligibility = Column(Text, nullable=True)          # Who can receive food
+    languages = Column(Text, nullable=True)            # Languages spoken on-site
+    availability = Column(String(100), nullable=True)  # open / limited / appointment / etc.
+    website = Column(String(512), nullable=True)
+    social_media = Column(Text, nullable=True)         # Links or handles (free text / JSON)
+    coverage_areas = Column(Text, nullable=True)       # Neighborhoods / areas served
+    # Providers page: JSON array of type tags + optional logo path/URL
+    provider_types = Column(Text, nullable=True)       # JSON: ["Food pantry", "Community Closet", ...]
+    logo_url = Column(String(512), nullable=True)
+
     # Community Trust Signals
     verified_by_aglf = Column(Boolean, default=False)  # Verified by All Good Living Foundation
     school_partner = Column(Boolean, default=False)  # Official school partner
@@ -514,3 +525,16 @@ class ReminderSettings(Base):
     
     # Relationships
     user = relationship("User", foreign_keys=[user_id])
+
+
+class ListingCategory(Base):
+    """Configurable listing categories shown in the main-page left sidebar filters."""
+    __tablename__ = "listing_categories"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    value = Column(String(50), unique=True, nullable=False, index=True)  # slug e.g. produce
+    label = Column(String(100), nullable=False)  # display e.g. Fresh Produce
+    is_active = Column(Boolean, default=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -52,12 +52,34 @@ function CreateListing({ user, onCancel, onSuccess }) {
     }
   }, []);
 
-  const categories = [
+  const [categories, setCategories] = React.useState([
     { value: 'produce', label: 'Fresh Produce' },
     { value: 'prepared', label: 'Prepared Meals' },
     { value: 'packaged', label: 'Packaged Foods' },
     { value: 'bakery', label: 'Bakery Items' }
-  ];
+  ]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        if (Array.isArray(window.LISTING_CATEGORIES) && window.LISTING_CATEGORIES.length) {
+          if (!cancelled) setCategories(window.LISTING_CATEGORIES);
+        }
+        const res = await fetch('/api/categories');
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = Array.isArray(data)
+          ? data.map((c) => ({ value: c.value, label: c.label || c.value }))
+          : [];
+        if (!cancelled && list.length) {
+          setCategories(list);
+          window.LISTING_CATEGORIES = list;
+        }
+      } catch (_) { /* keep defaults */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const perishabilityLevels = [
     { value: 'high', label: 'High (consume within hours)' },

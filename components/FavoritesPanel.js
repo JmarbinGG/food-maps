@@ -83,8 +83,10 @@ function FavoritesPanel({ onClose }) {
   };
 
   const filteredFavorites = favorites.filter(fav => {
-    const matchesSearch = fav.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      fav.address.toLowerCase().includes(searchQuery.toLowerCase());
+    const name = (fav && fav.name) ? String(fav.name) : '';
+    const address = (fav && fav.address) ? String(fav.address) : '';
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = name.toLowerCase().includes(q) || address.toLowerCase().includes(q);
     const matchesType = filterType === 'all' || fav.location_type === filterType;
     return matchesSearch && matchesType;
   });
@@ -208,15 +210,23 @@ function FavoritesPanel({ onClose }) {
                     </p>
                   )}
 
-                  {fav.tags && (
-                    <div className="flex flex-wrap gap-1 mb-3">
-                      {JSON.parse(fav.tags).map((tag, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {fav.tags && (() => {
+                    let tagList = [];
+                    try {
+                      const parsed = typeof fav.tags === 'string' ? JSON.parse(fav.tags) : fav.tags;
+                      if (Array.isArray(parsed)) tagList = parsed;
+                    } catch (_) { /* ignore bad tags */ }
+                    if (!tagList.length) return null;
+                    return (
+                      <div className="flex flex-wrap gap-1 mb-3">
+                        {tagList.map((tag, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full text-xs">
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    );
+                  })()}
 
                   <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
                     <span className="flex items-center gap-1">
@@ -447,316 +457,6 @@ function EditFavoriteModal({ favorite, onClose, onSave }) {
       </div>
     </div>
   );
-}
-
-return;
-      }
-
-// Fetch all listings
-const response = await fetch('/api/listings/get', {
-  headers: { 'Authorization': `Bearer ${token}` }
-});
-if (!response.ok) throw new Error('Failed to load listings');
-const allListings = await response.json();
-
-// Filter to only favorited ones
-const favorited = allListings.filter(l => favIds.includes(l.id));
-setFavoritedListings(favorited);
-    } catch (error) {
-  console.error('Error loading favorited listings:', error);
-}
-  };
-
-const removeFavorite = async (favoriteId) => {
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`/api/favorites/${favoriteId}`, {
-      method: 'DELETE',
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    if (!response.ok) throw new Error('Failed to remove favorite');
-    setSuccess('Removed from favorites');
-    setTimeout(() => setSuccess(''), 3000);
-    loadFavorites();
-  } catch (error) {
-    console.error('Error removing favorite:', error);
-    setError(error.message);
-  }
-};
-
-const handleAdd = async (e) => {
-  e.preventDefault();
-  setError('');
-  if (!form.address) {
-    setError('Address is required');
-    return;
-  }
-  try {
-    const token = localStorage.getItem('token');
-    const response = await fetch('/api/favorites', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        name: form.name || null,
-        address: form.address,
-        coords_lat: form.coords_lat ? parseFloat(form.coords_lat) : null,
-        coords_lng: form.coords_lng ? parseFloat(form.coords_lng) : null,
-        notes: form.notes || null
-      })
-    });
-    if (!response.ok) throw new Error('Failed to add favorite');
-    setForm({ name: '', address: '', coords_lat: '', coords_lng: '', notes: '' });
-    setShowAdd(false);
-    setSuccess('Added to favorites!');
-    setTimeout(() => setSuccess(''), 3000);
-    loadFavorites();
-  } catch (e) {
-    setError(e.message || 'Failed to add favorite');
-  }
-};
-
-return (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-900">⭐ My Favorites</h2>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">
-          
-        </button>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4 border-b border-gray-200">
-        <button
-          onClick={() => setActiveTab('locations')}
-          className={`px-4 py-2 font-medium transition-colors ${activeTab === 'locations'
-              ? 'text-yellow-600 border-b-2 border-yellow-600'
-              : 'text-gray-600 hover:text-gray-900'
-            }`}
-        >
-           Locations ({favorites.length})
-        </button>
-        <button
-          onClick={() => setActiveTab('listings')}
-          className={`px-4 py-2 font-medium transition-colors ${activeTab === 'listings'
-              ? 'text-yellow-600 border-b-2 border-yellow-600'
-              : 'text-gray-600 hover:text-gray-900'
-            }`}
-        >
-           Food Listings ({favoritedListings.length})
-        </button>
-      </div>
-
-      {success && (
-        <div className="mb-4 p-3 bg-green-50 border border-green-200 text-green-800 rounded-lg">
-           {success}
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 text-red-800 rounded-lg">
-           {error}
-        </div>
-      )}
-
-      {/* Locations Tab */}
-      {activeTab === 'locations' && (
-        <>
-          <button
-            className="w-full mb-4 px-4 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
-            onClick={() => setShowAdd((v) => !v)}
-          >
-            {showAdd ? ' Cancel' : '+ Add New Favorite Location'}
-          </button>
-
-          {showAdd && (
-            <form className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200" onSubmit={handleAdd}>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name (Optional)</label>
-                  <input
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                    placeholder="e.g., My Local Food Bank"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
-                  <input
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                    placeholder="123 Main St, City, State"
-                    value={form.address}
-                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Latitude (Optional)</label>
-                    <input
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                      placeholder="40.7128"
-                      value={form.coords_lat}
-                      onChange={e => setForm(f => ({ ...f, coords_lat: e.target.value }))}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Longitude (Optional)</label>
-                    <input
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                      placeholder="-74.0060"
-                      value={form.coords_lng}
-                      onChange={e => setForm(f => ({ ...f, coords_lng: e.target.value }))}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-                  <textarea
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                    placeholder="e.g., Open Tuesdays 9-5, parking in back"
-                    rows="2"
-                    value={form.notes}
-                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  />
-                </div>
-                <button className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors" type="submit">
-                   Save Favorite
-                </button>
-              </div>
-            </form>
-          )}
-
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
-              <p className="mt-2 text-gray-600">Loading favorites...</p>
-            </div>
-          ) : favorites.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-6xl mb-4">⭐</div>
-              <h3 className="text-xl font-semibold mb-2">No favorite locations yet</h3>
-              <p className="text-sm">Bookmark trusted spots for quick access</p>
-              <p className="text-xs mt-2 text-gray-400">Perfect for families with regular routines!</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="text-sm text-gray-600 mb-2">
-                {favorites.length} saved location{favorites.length !== 1 ? 's' : ''}
-              </div>
-              {favorites.map(fav => (
-                <div key={fav.id} className="border border-gray-200 rounded-lg p-4 hover:bg-yellow-50 hover:border-yellow-300 transition-all">
-                  <div className="flex justify-between items-start">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="text-2xl"></span>
-                        <h3 className="font-semibold text-lg text-gray-900">{fav.name || fav.address}</h3>
-                      </div>
-                      {fav.name && fav.address && (
-                        <p className="text-gray-600 text-sm mb-1 ml-8"> {fav.address}</p>
-                      )}
-                      {fav.notes && (
-                        <p className="text-gray-500 text-sm italic mt-2 ml-8 bg-gray-50 p-2 rounded"> {fav.notes}</p>
-                      )}
-                      <div className="flex items-center gap-4 mt-3 ml-8 text-xs text-gray-400">
-                        <span>Added {new Date(fav.created_at).toLocaleDateString()}</span>
-                        {fav.coords_lat && fav.coords_lng && (
-                          <span className="text-green-600"> GPS Saved</span>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => {
-                        if (confirm('Remove this location from favorites?')) {
-                          removeFavorite(fav.id);
-                        }
-                      }}
-                      className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4"
-                      title="Remove from favorites"
-                    >
-                      
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Listings Tab */}
-      {activeTab === 'listings' && (
-        <div className="space-y-3">
-          {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
-              <p className="mt-2 text-gray-600">Loading favorites...</p>
-            </div>
-          ) : favoritedListings.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
-              <div className="text-6xl mb-4"></div>
-              <h3 className="text-xl font-semibold mb-2">No favorited food listings yet</h3>
-              <p className="text-sm">Click the  star on any listing to save it here</p>
-            </div>
-          ) : (
-            favoritedListings.map(listing => (
-              <div key={listing.id} className="border border-gray-200 rounded-lg p-4 hover:bg-yellow-50 hover:border-yellow-300 transition-all">
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="text-2xl"></span>
-                      <h3 className="font-semibold text-lg text-gray-900">{listing.title}</h3>
-                      <span className={`text-xs px-2 py-1 rounded-full ${listing.status === 'available' ? 'bg-green-100 text-green-800' :
-                          listing.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
-                            'bg-gray-100 text-gray-800'
-                        }`}>
-                        {listing.status}
-                      </span>
-                    </div>
-                    <p className="text-gray-600 text-sm mb-2">{listing.description}</p>
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
-                      <span> {listing.address}</span>
-                      <span> {listing.qty} {listing.unit}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      const userStr = localStorage.getItem('user');
-                      if (userStr) {
-                        const user = JSON.parse(userStr);
-                        const key = `favorites:${user.id}`;
-                        const favs = JSON.parse(localStorage.getItem(key) || '[]');
-                        const newFavs = favs.filter(id => id !== listing.id);
-                        localStorage.setItem(key, JSON.stringify(newFavs));
-                        loadFavoritedListings();
-                        setSuccess('Removed from favorites');
-                        setTimeout(() => setSuccess(''), 3000);
-                      }
-                    }}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition-colors ml-4"
-                    title="Remove from favorites"
-                  >
-                    
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      <div className="mt-6 pt-4 border-t border-gray-200">
-        <p className="text-xs text-gray-500 text-center">
-           Tip: Save locations you visit regularly for quick access. Perfect for families with routines!
-        </p>
-      </div>
-    </div>
-  </div>
-);
 }
 
 window.FavoritesPanel = FavoritesPanel;

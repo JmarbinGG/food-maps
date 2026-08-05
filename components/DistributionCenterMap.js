@@ -1,13 +1,26 @@
-function DistributionCenterMap({ user, onCenterSelect }) {
+function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, onInitialCenterOpened = null }) {
   const mapContainer = React.useRef(null);
   const map = React.useRef(null);
   const markers = React.useRef([]);
+  const openedSharedCenterRef = React.useRef(null);
   const [centers, setCenters] = React.useState([]);
   const [mapReady, setMapReady] = React.useState(false);
   const [selectedCenter, setSelectedCenter] = React.useState(null);
   const [centerInventory, setCenterInventory] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [showInventoryModal, setShowInventoryModal] = React.useState(false);
+
+  // Keep this map on the SF Bay Area service region. Placeholder /
+  // Null-Island coords (0,0) previously yanked fitBounds across oceans.
+  const BAY_AREA_CENTER = [-122.2711, 37.8044];
+  const BAY_AREA_DEFAULT_ZOOM = 10;
+  const isInBayArea = (lat, lng) => (
+    Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    !(Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01) &&
+    lat >= 36.8 && lat <= 38.6 &&
+    lng >= -123.2 && lng <= -121.4
+  );
 
   React.useEffect(() => {
     loadCenters();
@@ -47,8 +60,8 @@ function DistributionCenterMap({ user, onCenterSelect }) {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/streets-v12',
-        center: [-119.4179, 36.7783], // California center
-        zoom: 6,
+        center: BAY_AREA_CENTER.slice(),
+        zoom: BAY_AREA_DEFAULT_ZOOM,
         minZoom: 3,
         maxZoom: 18
       });
@@ -70,6 +83,15 @@ function DistributionCenterMap({ user, onCenterSelect }) {
   React.useEffect(() => {
     if (map.current && mapReady && centers.length > 0) {
       updateMarkers();
+    } else if (map.current && mapReady && centers.length === 0) {
+      try {
+        map.current.flyTo({
+          center: BAY_AREA_CENTER.slice(),
+          zoom: BAY_AREA_DEFAULT_ZOOM,
+          duration: 0,
+          essential: true,
+        });
+      } catch (_) { /* ignore */ }
     }
   }, [centers, mapReady]);
 
@@ -92,7 +114,7 @@ function DistributionCenterMap({ user, onCenterSelect }) {
     markers.current.forEach(marker => marker.remove());
     markers.current = [];
     const bounds = new mapboxgl.LngLatBounds();
-    let validMarkerCount = 0;
+    let bayAreaMarkerCount = 0;
 
     // Add new markers for each center
     centers.forEach(center => {
@@ -100,6 +122,11 @@ function DistributionCenterMap({ user, onCenterSelect }) {
         const lat = parseFloat(center?.coords_lat);
         const lng = parseFloat(center?.coords_lng);
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+          return;
+        }
+        // Skip Null Island / missing geocodes so they never affect the camera.
+        if (Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01) {
+          console.warn('Skipping center with missing coordinates:', center.name);
           return;
         }
 
@@ -159,19 +186,36 @@ function DistributionCenterMap({ user, onCenterSelect }) {
 
       marker.setPopup(popup);
       markers.current.push(marker);
-      bounds.extend([lng, lat]);
-      validMarkerCount += 1;
+      if (isInBayArea(lat, lng)) {
+        bounds.extend([lng, lat]);
+        bayAreaMarkerCount += 1;
+      }
       } catch (error) {
         console.error('Failed to render center marker:', center, error);
       }
     });
 
-    if (validMarkerCount > 0) {
-      try {
+    try {
+      if (bayAreaMarkerCount > 0 && !bounds.isEmpty()) {
         map.current.fitBounds(bounds, { padding: 60, maxZoom: 13 });
-      } catch (error) {
-        console.warn('Could not fit map bounds to center markers:', error);
+      } else {
+        map.current.flyTo({
+          center: BAY_AREA_CENTER.slice(),
+          zoom: BAY_AREA_DEFAULT_ZOOM,
+          duration: 800,
+          essential: true,
+        });
       }
+    } catch (error) {
+      console.warn('Could not fit map bounds to center markers:', error);
+      try {
+        map.current.flyTo({
+          center: BAY_AREA_CENTER.slice(),
+          zoom: BAY_AREA_DEFAULT_ZOOM,
+          duration: 0,
+          essential: true,
+        });
+      } catch (_) { /* ignore */ }
     }
   };
 
@@ -205,6 +249,45 @@ function DistributionCenterMap({ user, onCenterSelect }) {
     };
   }, [centers]);
 
+  // Open a center from a public share link (?center=ID), with or without login.
+  React.useEffect(() => {
+    if (!mapReady || !centers.length) return;
+
+    let targetId = initialCenterId;
+    if (targetId == null) {
+      try {
+        const params = new URLSearchParams(window.location.search || '');
+        targetId = params.get('center');
+      } catch (_) {
+        targetId = null;
+      }
+    }
+    if (targetId == null || targetId === '') return;
+
+    const key = String(targetId);
+    if (openedSharedCenterRef.current === key) return;
+
+    const center = centers.find((c) => String(c.id) === key);
+    if (!center) return;
+
+    openedSharedCenterRef.current = key;
+    handleCenterClick(center);
+
+    try {
+      if (map.current && center.coords_lng != null && center.coords_lat != null) {
+        const lat = parseFloat(center.coords_lat);
+        const lng = parseFloat(center.coords_lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && !(Math.abs(lat) < 0.01 && Math.abs(lng) < 0.01)) {
+          map.current.flyTo({ center: [lng, lat], zoom: 14, duration: 900 });
+        }
+      }
+    } catch (_) { /* ignore */ }
+
+    if (typeof onInitialCenterOpened === 'function') {
+      try { onInitialCenterOpened(center); } catch (_) { /* ignore */ }
+    }
+  }, [mapReady, centers, initialCenterId]);
+
   return (
     <div className="w-full h-full relative">
       <div ref={mapContainer} className="w-full h-full" />
@@ -229,12 +312,32 @@ function DistributionCenterMap({ user, onCenterSelect }) {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-between items-center p-6 border-b bg-green-50">
-              <div>
+              <div className="flex-1 pr-4">
                 <h2 className="text-2xl font-bold text-gray-900">{selectedCenter.name}</h2>
                 <p className="text-sm text-gray-600 mt-1">{selectedCenter.address}</p>
                 {selectedCenter.phone && (
                   <p className="text-sm text-gray-600">Phone: {selectedCenter.phone}</p>
                 )}
+                {selectedCenter.hours && (
+                  <p className="text-sm text-gray-600">Hours: {selectedCenter.hours}</p>
+                )}
+                {(() => {
+                  const Details = window.DistributionCenterDetails;
+                  const isAdmin = String(user?.role || '').toLowerCase() === 'admin';
+                  return typeof Details === 'function'
+                    ? (
+                      <Details
+                        center={selectedCenter}
+                        user={user}
+                        canEditCategories={isAdmin}
+                        onCenterUpdated={(updated) => {
+                          setSelectedCenter((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+                          setCenters((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+                        }}
+                      />
+                    )
+                    : null;
+                })()}
               </div>
               <button
                 onClick={() => setShowInventoryModal(false)}
@@ -294,7 +397,13 @@ function DistributionCenterMap({ user, onCenterSelect }) {
               )}
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
+            <div className="p-4 border-t bg-gray-50 flex flex-wrap gap-2 justify-between items-start">
+              {(() => {
+                const ShareBtn = window.DistributionCenterShareButton;
+                return typeof ShareBtn === 'function'
+                  ? <ShareBtn center={selectedCenter} />
+                  : null;
+              })()}
               <button
                 onClick={() => setShowInventoryModal(false)}
                 className="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"

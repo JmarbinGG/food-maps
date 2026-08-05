@@ -169,6 +169,14 @@ class DistributionCenterCreate(BaseModel):
     coords_lng: float
     phone: Optional[str] = None
     hours: Optional[str] = None
+    eligibility: Optional[str] = None
+    languages: Optional[str] = None
+    availability: Optional[str] = None
+    website: Optional[str] = None
+    social_media: Optional[str] = None
+    coverage_areas: Optional[str] = None
+    provider_types: Optional[str] = None  # JSON array string
+    logo_url: Optional[str] = None
 
 class DistributionCenterResponse(BaseModel):
     id: int
@@ -180,6 +188,14 @@ class DistributionCenterResponse(BaseModel):
     coords_lng: float
     phone: Optional[str] = None
     hours: Optional[str] = None
+    eligibility: Optional[str] = None
+    languages: Optional[str] = None
+    availability: Optional[str] = None
+    website: Optional[str] = None
+    social_media: Optional[str] = None
+    coverage_areas: Optional[str] = None
+    provider_types: Optional[str] = None
+    logo_url: Optional[str] = None
     is_active: bool
     created_at: datetime
 

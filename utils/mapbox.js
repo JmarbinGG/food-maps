@@ -78,6 +78,64 @@ window.searchAddress = async function(query, { types = 'address,poi,place', limi
   }
 };
 
+// ZIP / postal code lookup (US). Returns { lat, lng, zip, place_name } or null.
+window.geocodeZip = async function(zip) {
+  try {
+    const cleaned = String(zip || '').trim().replace(/\s+/g, '');
+    if (!/^\d{5}(-\d{4})?$/.test(cleaned)) return null;
+    const zip5 = cleaned.slice(0, 5);
+    const url =
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(zip5)}.json` +
+      `?access_token=${window.MAPBOX_ACCESS_TOKEN}` +
+      `&types=postcode&country=US&limit=1` +
+      `&proximity=-122.4194,37.7749`; // bias toward Bay Area
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const feature = Array.isArray(data?.features) && data.features[0];
+    if (!feature || !Array.isArray(feature.center) || feature.center.length < 2) return null;
+    return {
+      lat: feature.center[1],
+      lng: feature.center[0],
+      zip: zip5,
+      place_name: feature.place_name || zip5
+    };
+  } catch (err) {
+    console.error('geocodeZip error:', err);
+    return null;
+  }
+};
+
+// Reverse-geocode lat/lng to a US ZIP. Returns { lat, lng, zip, place_name } or null.
+window.reverseGeocodeZip = async function(lat, lng) {
+  try {
+    const la = Number(lat);
+    const ln = Number(lng);
+    if (!Number.isFinite(la) || !Number.isFinite(ln)) return null;
+    const url =
+      `https://api.mapbox.com/geocoding/v5/mapbox.places/${ln},${la}.json` +
+      `?access_token=${window.MAPBOX_ACCESS_TOKEN}` +
+      `&types=postcode&country=US&limit=1`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    const feature = Array.isArray(data?.features) && data.features[0];
+    if (!feature) return null;
+    const zip = String(feature.text || feature.properties?.postcode || '')
+      .replace(/\D/g, '')
+      .slice(0, 5);
+    if (!/^\d{5}$/.test(zip)) return null;
+    const center = Array.isArray(feature.center) ? feature.center : [ln, la];
+    return {
+      lat: center[1],
+      lng: center[0],
+      zip,
+      place_name: feature.place_name || zip
+    };
+  } catch (err) {
+    console.error('reverseGeocodeZip error:', err);
+    return null;
+  }
+};
+
 // Cached geocoding with simple in-memory cache and basic rate-limiting guard
 window._geocodeCache = window._geocodeCache || new Map();
 window._geocodeQueue = window._geocodeQueue || Promise.resolve();

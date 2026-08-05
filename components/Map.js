@@ -25,6 +25,56 @@ function getEffectiveStatusFromListing(listing) {
   return rawStatus || 'available';
 }
 
+// Food Maps operates in the SF Bay Area. Far-away / placeholder coords
+// (0,0 or out-of-region pins) must not yank the default camera away.
+const BAY_AREA_CENTER = Object.freeze([-122.2711, 37.8044]); // Oakland / inner East Bay
+const BAY_AREA_DEFAULT_ZOOM = 10;
+const BAY_AREA_BOUNDS = Object.freeze({
+  minLat: 36.8,
+  maxLat: 38.6,
+  minLng: -123.2,
+  maxLng: -121.4,
+});
+
+function parseMapCoord(value) {
+  const n = typeof value === 'number' ? value : parseFloat(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isValidMapCoords(lat, lng) {
+  const latitude = parseMapCoord(lat);
+  const longitude = parseMapCoord(lng);
+  if (latitude == null || longitude == null) return false;
+  // Reject Null Island / missing geocodes stored as 0,0.
+  if (Math.abs(latitude) < 0.01 && Math.abs(longitude) < 0.01) return false;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return false;
+  return true;
+}
+
+function isInBayArea(lat, lng) {
+  if (!isValidMapCoords(lat, lng)) return false;
+  const latitude = parseMapCoord(lat);
+  const longitude = parseMapCoord(lng);
+  return (
+    latitude >= BAY_AREA_BOUNDS.minLat &&
+    latitude <= BAY_AREA_BOUNDS.maxLat &&
+    longitude >= BAY_AREA_BOUNDS.minLng &&
+    longitude <= BAY_AREA_BOUNDS.maxLng
+  );
+}
+
+function flyToBayArea(mapInstance, duration = 0) {
+  if (!mapInstance) return;
+  try {
+    mapInstance.flyTo({
+      center: BAY_AREA_CENTER.slice(),
+      zoom: BAY_AREA_DEFAULT_ZOOM,
+      duration,
+      essential: true,
+    });
+  } catch (_) { /* ignore */ }
+}
+
 function MapComponent({ listings = [], selectedListing, onListingSelect, user }) {
   const mapContainer = React.useRef(null);
   const map = React.useRef(null);
@@ -188,8 +238,8 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         map.current = new mapboxgl.Map({
           container: mapContainer.current,
           style: 'mapbox://styles/mapbox/streets-v12',
-          center: [-119.4179, 36.7783], // California center
-          zoom: 6,
+          center: BAY_AREA_CENTER.slice(),
+          zoom: BAY_AREA_DEFAULT_ZOOM,
           minZoom: 3,
           maxZoom: 18,
           attributionControl: true, // Keep attribution but we'll style it smaller
@@ -274,6 +324,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         if (!detail) return;
         const lat = parseFloat(detail.lat);
         const lng = parseFloat(detail.lng);
+        const zoom = Number.isFinite(parseFloat(detail.zoom)) ? parseFloat(detail.zoom) : 15;
         if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
         if (!map.current) return;
         // Defer slightly so the marker effect (keyed on safeListings) has
@@ -282,7 +333,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           try {
             map.current && map.current.flyTo({
               center: [lng, lat],
-              zoom: 15,
+              zoom,
               duration: 1200,
               essential: true,
             });
@@ -758,6 +809,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                 <h3 style="font-weight: bold; margin-bottom: 4px; color: ${color};">🏪 ${center.name}</h3>
                 <p style="font-size: 12px; color: #666; margin-bottom: 4px;">${center.address}</p>
                 ${center.phone ? `<p style="font-size: 11px; color: #666;">Phone: ${center.phone}</p>` : ''}
+                ${center.availability ? `<p style="font-size: 11px; color: #065f46; margin-bottom: 4px;">${(window.formatCenterAvailability && window.formatCenterAvailability(center.availability)) || center.availability}</p>` : ''}
                 <div style="display: flex; gap: 4px; margin-top: 6px;">
                   <button 
                     onclick="window.viewCenterDetails(${center.id})"
@@ -801,39 +853,45 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       markersRef.current.push(marker);
     });
 
-    // Fit bounds to show all markers (both listings and distribution centers)
+    // Fit bounds to Bay Area markers only. Out-of-region / Null-Island
+    // coords used to yank the camera across the Pacific and force users
+    // to spin the map back to find distribution centers and local listings.
     if (markersRef.current.length > 0) {
       const bounds = new mapboxgl.LngLatBounds();
+      let hasBayAreaPoint = false;
 
-      // Add all food listings to bounds
       safeListings.forEach(listing => {
-        if (listing.coords_lat && listing.coords_lng) {
+        if (isInBayArea(listing.coords_lat, listing.coords_lng)) {
           bounds.extend([listing.coords_lng, listing.coords_lat]);
+          hasBayAreaPoint = true;
         }
       });
 
-      // Add all distribution centers to bounds
       visibleCenters.forEach(center => {
-        if (center.coords_lat && center.coords_lng) {
+        if (isInBayArea(center.coords_lat, center.coords_lng)) {
           bounds.extend([center.coords_lng, center.coords_lat]);
+          hasBayAreaPoint = true;
         }
       });
 
-      // Fit map to show all markers with appropriate padding
       try {
-        map.current.fitBounds(bounds, {
-          padding: { top: 80, bottom: 80, left: 80, right: 80 },
-          maxZoom: 14, // Prevent zooming in too close
-          duration: 1000
-        });
+        if (hasBayAreaPoint && !bounds.isEmpty()) {
+          map.current.fitBounds(bounds, {
+            padding: { top: 80, bottom: 80, left: 80, right: 80 },
+            maxZoom: 14, // Prevent zooming in too close
+            duration: 1000
+          });
+        } else {
+          flyToBayArea(map.current, 800);
+        }
       } catch (error) {
         console.error('Error fitting bounds:', error);
-        // Fallback to California center if bounds fail
-        map.current.flyTo({ center: [-119.4179, 36.7783], zoom: 6 });
+        flyToBayArea(map.current, 800);
       }
     } else {
-      // No markers yet - show California by default
-      console.log('No markers to display, showing default California view');
+      // No markers yet - stay focused on the Bay Area service region
+      console.log('No markers to display, showing default Bay Area view');
+      flyToBayArea(map.current, 0);
     }
   }, [mapLoaded, safeListings, visibleCenters, showDistributionCenters, user]);
 
@@ -963,6 +1021,22 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                 {selectedCenter.hours && (
                   <p className="text-sm text-gray-600">Hours: {selectedCenter.hours}</p>
                 )}
+                {(() => {
+                  const Details = window.DistributionCenterDetails;
+                  return typeof Details === 'function'
+                    ? (
+                      <Details
+                        center={selectedCenter}
+                        user={user}
+                        canEditCategories={userRole === 'admin'}
+                        onCenterUpdated={(updated) => {
+                          setSelectedCenter((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
+                          setCenters((prev) => prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)));
+                        }}
+                      />
+                    )
+                    : null;
+                })()}
               </div>
               <button
                 onClick={() => setShowCenterModal(false)}
@@ -1022,23 +1096,31 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
               )}
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-between">
-              <button
-                onClick={() => {
-                  setShowCenterModal(false);
-                  // Navigate to center on map
-                  if (map.current) {
-                    map.current.flyTo({
-                      center: [selectedCenter.coords_lng, selectedCenter.coords_lat],
-                      zoom: 15,
-                      duration: 1000
-                    });
-                  }
-                }}
-                className="px-4 py-2 bg-green-100 text-green-800 hover:bg-green-200 rounded-lg transition-colors text-sm"
-              >
-                Show on Map
-              </button>
+            <div className="p-4 border-t bg-gray-50 flex flex-wrap gap-2 justify-between items-start">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => {
+                    setShowCenterModal(false);
+                    // Navigate to center on map
+                    if (map.current) {
+                      map.current.flyTo({
+                        center: [selectedCenter.coords_lng, selectedCenter.coords_lat],
+                        zoom: 15,
+                        duration: 1000
+                      });
+                    }
+                  }}
+                  className="px-4 py-2 bg-green-100 text-green-800 hover:bg-green-200 rounded-lg transition-colors text-sm"
+                >
+                  Show on Map
+                </button>
+                {(() => {
+                  const ShareBtn = window.DistributionCenterShareButton;
+                  return typeof ShareBtn === 'function'
+                    ? <ShareBtn center={selectedCenter} />
+                    : null;
+                })()}
+              </div>
               <button
                 onClick={() => setShowCenterModal(false)}
                 className="px-6 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors"

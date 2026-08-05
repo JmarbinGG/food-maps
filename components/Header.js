@@ -1,4 +1,4 @@
-function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
+function Header({ user, onAuthClick, onLogout, currentView, onViewChange, currentZip, onZipClick }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const role = String(user?.role || '').toLowerCase();
   const { t, language } = (typeof window !== 'undefined' && window.useTranslation)
@@ -7,6 +7,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
   const toggleLanguage = () => {
     if (window.i18n) window.i18n.toggle();
   };
+  const zipLabel = currentZip || 'ZIP';
 
   React.useEffect(() => {
     const handleClickOutside = (event) => {
@@ -19,15 +20,26 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
   }, [showDropdown]);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-4 py-3 shadow-sm">
-      <div className="flex justify-between items-center">
-        <a href="/" className="flex items-center gap-2 cursor-pointer">
-          <img
-            src="https://app.trickle.so/storage/public/images/usr_0b8d952560000001/6d7a1e40-1a21-418a-9d29-070bb27350cf.png"
-            alt="Food Maps"
-            className="w-10 h-10 rounded-lg"
-          />
-        </a>
+    <header className="bg-white border-b border-gray-200 px-4 py-2 shadow-sm">
+      <div className="flex justify-between items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <a href="/" className="flex items-center gap-2 cursor-pointer shrink-0">
+            <img
+              src="/logos/foodmaps-logo.png"
+              alt="Food Maps"
+              className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover"
+            />
+          </a>
+          <button
+            type="button"
+            onClick={onZipClick}
+            title="Update search area"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-50 hover:bg-green-100 border border-green-600 text-green-800 rounded-md text-sm transition-colors shrink-0"
+          >
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-green-700">ZIP</span>
+            <span className="font-semibold tabular-nums">{zipLabel}</span>
+          </button>
+        </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           {user && (
             <button
@@ -104,35 +116,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                   >
                     {t('header.profile_settings', 'Profile Settings')}
                   </button>
-                    {/* BUTTONS EXIST ELSEWHERE, REMOVED FROM DROPDOWN TO REDUCE CLUTTER */}
-                  {/* <button
-                    onClick={() => {
-                      window.openMessageSupport?.();
-                      setShowDropdown(false);
-                    }}
-                    data-tutorial="message-support-button"
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                     Message Support
-                  </button> */}
-                  {/* <button
-                    onClick={() => {
-                      window.openFeedbackModal?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                     Report Issue
-                  </button> */}
-                  {/* <button
-                    onClick={() => {
-                      window.openFavoritesPanel?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-yellow-50"
-                  >
-                    ⭐ My Favorites
-                  </button> */}
                   {role === 'donor' && (
                     <button
                       onClick={() => {
@@ -144,30 +127,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                        My Impact
                     </button>
                   )}
-                  {/* REDUNDANT, already in header */}
-                  {/* {role === 'donor' && (
-                    <button
-                      onClick={() => {
-                        onViewChange?.('create');
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                    >
-                      Share Food
-                    </button>
-                  )} */}
-                  {/* taken out for now as it is not clear what it does and not needed currently*/}
-                  {/* {role === 'donor' && (
-                    <button
-                      onClick={() => {
-                        window.openDonationScheduler?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                    >
-                       Donation Scheduler
-                    </button>
-                  )} */}
                   {role === 'recipient' && (
                     <button
                       onClick={() => {
@@ -185,17 +144,8 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 border-t border-gray-200"
                   >
-                    How to Use
+                    How It Works
                   </button>
-                  {/*voice search not implemented correctly, hiding it for now*/}
-                  {/* <a
-                    href="/voice-search.html"
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-purple-50"
-                    onClick={() => setShowDropdown(false)}
-                  >
-                     Voice Search
-                  </a> */}
-                  {/* AI Assistant section — surfaced to individual recipients */}
                   {role === 'recipient' && (
                     <div className="border-t-2 border-purple-200 mt-1">
                       <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-purple-700 bg-gradient-to-r from-purple-50 via-blue-50 to-green-50 flex items-center gap-2">
@@ -240,16 +190,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       </button>
                     </div>
                   )}
-                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
-                  {/* <button
-                    onClick={() => {
-                      window.openSafetyCenter?.();
-                      setShowDropdown(false);
-                    }}
-                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
-                  >
-                     Safety & Trust
-                  </button> */}
                   <button
                     onClick={() => {
                       window.openSMSConsent?.();
@@ -270,42 +210,6 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
                       Pickup Reminders
                     </button>
                   )}
-                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
-                  {/* {role === 'recipient' && (
-                    <button
-                      onClick={() => {
-                        window.openDietaryPreferences?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
-                    >
-                       Dietary Preferences
-                    </button>
-                  )} */}
-                  {/* NOT LAUNCH CRITICALLY NEEDED FEATURES - CAN ADD BACK LATER IF TIME PERMITS */}
-                  {/* {role === 'donor' && (
-                    <button
-                      onClick={() => {
-                        window.openStoreOwnerDashboard?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-green-50"
-                    >
-                       Manage My Store
-                    </button>
-                  )}
-                  {/* commented out admin panel in sidebar as it is in top right corner */}
-                  {/* {user.role === 'admin' && (
-                    <button
-                      onClick={() => {
-                        window.openAdminPanel?.();
-                        setShowDropdown(false);
-                      }}
-                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 bg-blue-50"
-                    >
-                       Admin Panel
-                    </button>
-                  )} */}
                   <button
                     onClick={() => {
                       onLogout?.();
@@ -331,3 +235,5 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange }) {
     </header>
   );
 }
+
+window.Header = Header;

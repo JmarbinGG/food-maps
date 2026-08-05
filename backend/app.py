@@ -37,7 +37,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
-    FavoriteLocation
+    FavoriteLocation, ListingCategory
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -608,6 +608,10 @@ async def serve_terms():
 async def serve_impact_story():
     return get_html_content("impactStory.html")
 
+@app.get("/nutrition.html", response_class=HTMLResponse)
+async def serve_nutrition():
+    return get_html_content("nutrition.html")
+
 @app.get("/admin-referrals.html", response_class=HTMLResponse)
 async def serve_admin_referrals():
     return get_html_content("admin-referrals.html")
@@ -939,7 +943,123 @@ async def startup_event():
             except Exception as e:
                 print(f"Note: favorite_locations table migration: {e}")
                 pass  # Table likely already exists
-            
+
+            # Extended distribution-center detail columns
+            for col_name, col_def in (
+                ("eligibility", "TEXT NULL"),
+                ("languages", "TEXT NULL"),
+                ("availability", "VARCHAR(100) NULL"),
+                ("website", "VARCHAR(512) NULL"),
+                ("social_media", "TEXT NULL"),
+                ("coverage_areas", "TEXT NULL"),
+                ("provider_types", "TEXT NULL"),
+                ("logo_url", "VARCHAR(512) NULL"),
+            ):
+                try:
+                    conn.execute(text(
+                        f"ALTER TABLE distribution_centers ADD COLUMN {col_name} {col_def}"
+                    ))
+                    print(f"✅ distribution_centers.{col_name} added")
+                except Exception:
+                    pass  # Column already exists
+
+            # Seed provider_types / logo_url for existing centers when empty
+            try:
+                import json as _json
+                rows = conn.execute(text(
+                    "SELECT id, name, description, provider_types, logo_url FROM distribution_centers"
+                )).fetchall()
+                for row in rows:
+                    cid, cname, cdesc, ctypes, clogo = row[0], row[1] or "", row[2] or "", row[3], row[4]
+                    updates = {}
+                    if not ctypes:
+                        text_blob = f"{cname} {cdesc}".lower()
+                        inferred = []
+                        if "community closet" in text_blob or "closet" in text_blob:
+                            inferred.append("Community Closet")
+                        if "warehouse" in text_blob:
+                            inferred.extend(["Food pantry", "Food box distribution", "Grocery assistance"])
+                        if "garden" in text_blob:
+                            inferred.append("Produce distribution")
+                        if "school" in text_blob and "Community Closet" not in inferred:
+                            inferred.append("School food distribution")
+                        if "meal" in text_blob and "hot" in text_blob:
+                            inferred.append("Community meal / hot meals")
+                        # de-dupe preserving order
+                        seen = set()
+                        inferred = [t for t in inferred if not (t in seen or seen.add(t))]
+                        if inferred:
+                            updates["provider_types"] = _json.dumps(inferred)
+                    if not clogo:
+                        updates["logo_url"] = "/logos/AGLfoundationLOGO.png"
+                    if updates:
+                        sets = ", ".join(f"{k} = :{k}" for k in updates)
+                        params = dict(updates)
+                        params["id"] = cid
+                        conn.execute(text(
+                            f"UPDATE distribution_centers SET {sets} WHERE id = :id"
+                        ), params)
+                conn.commit()
+                print("✅ distribution_centers provider_types/logo_url seeded where missing")
+            except Exception as seed_exc:
+                print(f"Note: provider_types seed skipped: {seed_exc}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+            # Listing categories (main-page left sidebar filters)
+            try:
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS listing_categories (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        value VARCHAR(50) NOT NULL UNIQUE,
+                        label VARCHAR(100) NOT NULL,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        sort_order INT DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_listing_cat_value (value),
+                        INDEX idx_listing_cat_active (is_active),
+                        INDEX idx_listing_cat_sort (sort_order)
+                    )
+                """))
+                print("✅ listing_categories table created/verified")
+            except Exception as e:
+                print(f"Note: listing_categories table migration: {e}")
+
+            try:
+                defaults = [
+                    ("produce", "Produce", 1),
+                    ("prepared", "Prepared", 2),
+                    ("packaged", "Packaged", 3),
+                    ("bakery", "Bakery", 4),
+                    ("water", "Water", 5),
+                    ("fruit", "Fruit", 6),
+                    ("leftovers", "Leftovers", 7),
+                ]
+                for value, label, sort_order in defaults:
+                    existing = conn.execute(
+                        text("SELECT id FROM listing_categories WHERE value = :v"),
+                        {"v": value},
+                    ).fetchone()
+                    if not existing:
+                        conn.execute(
+                            text(
+                                "INSERT INTO listing_categories (value, label, is_active, sort_order) "
+                                "VALUES (:value, :label, 1, :sort_order)"
+                            ),
+                            {"value": value, "label": label, "sort_order": sort_order},
+                        )
+                conn.commit()
+                print("✅ listing_categories seeded")
+            except Exception as e:
+                print(f"Note: listing_categories seed: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
             conn.commit()
     except Exception as e:
         try:
@@ -961,6 +1081,173 @@ async def db_test():
         # so a flapping DB doesn't leak connections from health-check
         # traffic and exhaust the pool.
         db.close()
+
+
+DEFAULT_LISTING_CATEGORIES = [
+    {"value": "produce", "label": "Produce", "sort_order": 1},
+    {"value": "prepared", "label": "Prepared", "sort_order": 2},
+    {"value": "packaged", "label": "Packaged", "sort_order": 3},
+    {"value": "bakery", "label": "Bakery", "sort_order": 4},
+    {"value": "water", "label": "Water", "sort_order": 5},
+    {"value": "fruit", "label": "Fruit", "sort_order": 6},
+    {"value": "leftovers", "label": "Leftovers", "sort_order": 7},
+]
+
+
+def _serialize_listing_category(row: ListingCategory) -> dict:
+    return {
+        "id": row.id,
+        "value": row.value,
+        "label": row.label,
+        "is_active": bool(row.is_active),
+        "sort_order": int(row.sort_order or 0),
+    }
+
+
+def _ensure_listing_categories(db: Session) -> None:
+    """Seed defaults when the table is empty (e.g. fresh DB before startup seed ran)."""
+    try:
+        count = db.query(ListingCategory).count()
+    except Exception:
+        return
+    if count > 0:
+        return
+    for i, item in enumerate(DEFAULT_LISTING_CATEGORIES):
+        db.add(ListingCategory(
+            value=item["value"],
+            label=item["label"],
+            is_active=True,
+            sort_order=item.get("sort_order", i + 1),
+        ))
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+@app.get("/api/categories")
+async def get_listing_categories(db: Session = Depends(get_db)):
+    """Public: active listing categories for the main-page left sidebar filters."""
+    try:
+        _ensure_listing_categories(db)
+        rows = (
+            db.query(ListingCategory)
+            .filter(ListingCategory.is_active == True)  # noqa: E712
+            .order_by(ListingCategory.sort_order.asc(), ListingCategory.label.asc())
+            .all()
+        )
+        return [_serialize_listing_category(r) for r in rows]
+    except Exception as e:
+        # Fallback so the UI still works if the table is mid-migration
+        print(f"/api/categories error: {e}")
+        return [
+            {"id": i + 1, "value": c["value"], "label": c["label"], "is_active": True, "sort_order": c["sort_order"]}
+            for i, c in enumerate(DEFAULT_LISTING_CATEGORIES[:3])
+        ]
+
+
+@app.get("/api/admin/categories")
+async def admin_get_listing_categories(admin_user: User = Depends(verify_admin), db: Session = Depends(get_db)):
+    """Admin: all listing categories including inactive."""
+    try:
+        _ensure_listing_categories(db)
+        rows = (
+            db.query(ListingCategory)
+            .order_by(ListingCategory.sort_order.asc(), ListingCategory.label.asc())
+            .all()
+        )
+        return {"success": True, "categories": [_serialize_listing_category(r) for r in rows]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/categories/{category_id}")
+async def admin_update_listing_category(
+    category_id: int,
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: update label, active flag, or sort order for a listing category."""
+    try:
+        row = db.query(ListingCategory).filter(ListingCategory.id == category_id).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Category not found")
+        body = await request.json()
+        if "label" in body:
+            label = str(body.get("label") or "").strip()
+            if not label:
+                raise HTTPException(status_code=400, detail="Label is required")
+            if len(label) > 100:
+                raise HTTPException(status_code=400, detail="Label is too long")
+            row.label = label
+        if "is_active" in body:
+            row.is_active = bool(body.get("is_active"))
+        if "sort_order" in body:
+            try:
+                row.sort_order = int(body.get("sort_order"))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Invalid sort_order")
+        row.updated_at = datetime.utcnow()
+        db.commit()
+        db.refresh(row)
+        return {"success": True, "category": _serialize_listing_category(row)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/admin/categories")
+async def admin_bulk_update_listing_categories(
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin: bulk-save label / active / sort_order for sidebar categories."""
+    try:
+        body = await request.json()
+        items = body.get("categories") if isinstance(body, dict) else None
+        if not isinstance(items, list):
+            raise HTTPException(status_code=400, detail="Expected { categories: [...] }")
+
+        updated = []
+        for item in items:
+            if not isinstance(item, dict) or item.get("id") is None:
+                continue
+            row = db.query(ListingCategory).filter(ListingCategory.id == int(item["id"])).first()
+            if not row:
+                continue
+            if "label" in item:
+                label = str(item.get("label") or "").strip()
+                if label:
+                    row.label = label[:100]
+            if "is_active" in item:
+                row.is_active = bool(item.get("is_active"))
+            if "sort_order" in item:
+                try:
+                    row.sort_order = int(item.get("sort_order"))
+                except (TypeError, ValueError):
+                    pass
+            row.updated_at = datetime.utcnow()
+            updated.append(row)
+
+        db.commit()
+        for row in updated:
+            db.refresh(row)
+
+        rows = (
+            db.query(ListingCategory)
+            .order_by(ListingCategory.sort_order.asc(), ListingCategory.label.asc())
+            .all()
+        )
+        return {"success": True, "categories": [_serialize_listing_category(r) for r in rows]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/listings/get")
@@ -1335,11 +1622,22 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
         if not item:
             raise HTTPException(status_code=404, detail="Listing not found")
 
-        # Authorization: only the donor who created the listing can edit
+        # Authorization: donor who created the listing, or an admin
         try:
             payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
             user_id = str(payload.get("sub")) if payload else None
-            if not user_id or str(item.donor_id) != user_id:
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Your session is missing or expired. Please sign in to continue.")
+
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="User not found")
+
+            is_owner = str(item.donor_id) == user_id
+            role_value = user.role.value if hasattr(user.role, "value") else str(user.role or "")
+            is_admin = role_value.lower() == UserRole.ADMIN.value
+
+            if not (is_owner or is_admin):
                 raise HTTPException(status_code=403, detail="Not authorized to edit this listing")
         except HTTPException:
             raise
@@ -1377,9 +1675,13 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
             item.description = desc
         if category_val is not None:
             try:
-                item.category = category_val
+                key = str(category_val).strip().lower()
+                item.category = FoodCategory(key)
             except Exception:
-                pass
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid category. Allowed: {[c.value for c in FoodCategory]}"
+                )
         if qty is not None:
             try:
                 item.qty = float(qty)
@@ -1389,7 +1691,8 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
             item.unit = unit
         if perishability_val is not None:
             try:
-                item.perishability = perishability_val
+                pkey = str(perishability_val).strip().lower()
+                item.perishability = PerishabilityLevel(pkey)
             except Exception:
                 pass
         if pickup_start_provided:
@@ -1763,6 +2066,75 @@ async def get_referral_analytics(admin_user: User = Depends(verify_admin), db: S
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/admin/users")
+async def get_admin_users(
+    role: Optional[str] = None,
+    q: Optional[str] = None,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """List all users for admin (donors, recipients, and other roles)."""
+    try:
+        query = db.query(User)
+        if role and str(role).strip().lower() not in ("", "all"):
+            role_key = str(role).strip().lower()
+            try:
+                role_enum = UserRole(role_key)
+                query = query.filter(User.role == role_enum)
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+
+        users = query.order_by(User.created_at.desc()).all()
+        needle = (q or "").strip().lower()
+        results = []
+        for user in users:
+            role_val = user.role.value if hasattr(user.role, "value") else str(user.role or "")
+            row = {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "role": role_val,
+                "phone": user.phone,
+                "address": user.address,
+                "referral_code": user.referral_code,
+                "referred_by_code": user.referred_by_code,
+                "household_size": user.household_size,
+                "email_verified": bool(user.email_verified),
+                "phone_verified": bool(user.phone_verified),
+                "trust_score": user.trust_score,
+                "created_at": user.created_at.isoformat() if user.created_at else None,
+            }
+            if needle:
+                hay = " ".join([
+                    str(row.get("name") or ""),
+                    str(row.get("email") or ""),
+                    str(row.get("phone") or ""),
+                    str(row.get("role") or ""),
+                    str(row.get("referral_code") or ""),
+                    str(row.get("address") or ""),
+                ]).lower()
+                if needle not in hay:
+                    continue
+            results.append(row)
+
+        return {
+            "total": len(results),
+            "users": results,
+            "counts": {
+                "all": db.query(User).count(),
+                "donor": db.query(User).filter(User.role == UserRole.DONOR).count(),
+                "recipient": db.query(User).filter(User.role == UserRole.RECIPIENT).count(),
+                "admin": db.query(User).filter(User.role == UserRole.ADMIN).count(),
+                "driver": db.query(User).filter(User.role == UserRole.DRIVER).count(),
+                "volunteer": db.query(User).filter(User.role == UserRole.VOLUNTEER).count(),
+            },
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/admin/stats")
 async def get_admin_stats(admin_user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     """Get admin dashboard aggregate stats from the primary database."""
@@ -1938,6 +2310,14 @@ async def create_distribution_center(request: Request, admin_user: User = Depend
             coords_lng=body.get('coords_lng'),
             phone=body.get('phone'),
             hours=body.get('hours'),
+            eligibility=body.get('eligibility'),
+            languages=body.get('languages'),
+            availability=body.get('availability'),
+            website=body.get('website'),
+            social_media=body.get('social_media'),
+            coverage_areas=body.get('coverage_areas'),
+            provider_types=body.get('provider_types'),
+            logo_url=body.get('logo_url'),
             created_at=datetime.utcnow()
         )
         db.add(center)
@@ -1972,6 +2352,22 @@ async def update_distribution_center(center_id: int, request: Request, admin_use
             center.phone = body['phone']
         if 'hours' in body:
             center.hours = body['hours']
+        if 'eligibility' in body:
+            center.eligibility = body['eligibility']
+        if 'languages' in body:
+            center.languages = body['languages']
+        if 'availability' in body:
+            center.availability = body['availability']
+        if 'website' in body:
+            center.website = body['website']
+        if 'social_media' in body:
+            center.social_media = body['social_media']
+        if 'coverage_areas' in body:
+            center.coverage_areas = body['coverage_areas']
+        if 'provider_types' in body:
+            center.provider_types = body['provider_types']
+        if 'logo_url' in body:
+            center.logo_url = body['logo_url']
         if 'is_active' in body:
             center.is_active = body['is_active']
         
