@@ -1,10 +1,44 @@
+# Secrets and local configuration
 .env
+.env.*
+!.env.example
 backend/.env.example
+
+# Local-only scripts
 backend/scripts/batch_geocode.py
 dont-publish
-__pycache__/
-*.pyc
-uploads/
-backend/foodmaps.db
 
+# Runtime data
+uploads/
+backend/server.log
+*.log
+logs/
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+venv/
+.venv/
+
+# Node (frontend tooling)
+node_modules/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
 .DS_Store
+Thumbs.db
