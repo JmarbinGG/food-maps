@@ -7,6 +7,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from dotenv import load_dotenv
 
 # Load .env from project root
@@ -17,7 +18,7 @@ if not DATABASE_URL:
     print("ERROR: DATABASE_URL not found in .env file")
     sys.exit(1)
 
-print(f"Using database: {DATABASE_URL[:30]}...")
+print(f"Using database: {make_url(DATABASE_URL).render_as_string(hide_password=True)}")
 engine = create_engine(DATABASE_URL)
 
 # SQL to create distribution_centers table

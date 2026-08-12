@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.engine import make_url
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
@@ -19,8 +20,10 @@ from models import Base, User, DistributionCenter, CenterInventory, UserRole, Fo
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '../..', '.env'))
 DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
-print(f"Using database: {DATABASE_URL[:30]}...")
+print(f"Using database: {make_url(DATABASE_URL).render_as_string(hide_password=True)}")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
