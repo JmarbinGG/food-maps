@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
@@ -608,9 +608,9 @@ async def serve_terms():
 async def serve_impact_story():
     return get_html_content("impactStory.html")
 
-@app.get("/nutrition.html", response_class=HTMLResponse)
+@app.get("/nutrition.html")
 async def serve_nutrition():
-    return get_html_content("nutrition.html")
+    return RedirectResponse(url="/landing.html", status_code=302)
 
 @app.get("/admin-referrals.html", response_class=HTMLResponse)
 async def serve_admin_referrals():
