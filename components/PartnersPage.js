@@ -26,12 +26,6 @@ const localPartners = [
     description: "Founded in 1977, helping the Alameda community with nourishing food for neighbors in need.",
   },
   {
-    name: "Feel Good Bakery",
-    img: "/logos/partners/feel_good.svg",
-    website: "https://www.feelgoodbakery.com/",
-    description: "Alameda bakery known for fresh breads and community-minded baking.",
-  },
-  {
     name: "Community Kitchen",
     img: "/logos/partners/community_kitchen.png",
     website: "https://www.ckoakland.org/",

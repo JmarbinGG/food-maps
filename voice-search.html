@@ -18,17 +18,22 @@
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     }
   </style>
+    <link rel="stylesheet" href="utils/i18n_platform.css?v=20260812d">
+    <script src="utils/i18n_platform.js?v=20260812d"></script>
 </head>
 
 <body class="bg-gray-50">
   <!-- Header -->
   <header class="hero-gradient text-white shadow-lg">
     <div class="container mx-auto px-4 py-6">
-      <div class="flex justify-between items-center">
+      <div class="flex justify-between items-center gap-4">
         <h1 class="text-3xl font-bold">Smart Search</h1>
-        <a href="/" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
-          ← Back to Home
-        </a>
+        <div class="flex items-center gap-3">
+          <div data-language-picker></div>
+          <a href="/" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
+            ← Back to Home
+          </a>
+        </div>
       </div>
       <p class="mt-2 text-purple-100">Speak or type to find food near you</p>
     </div>

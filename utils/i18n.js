@@ -15,16 +15,16 @@
   // used when we hand off to the widget. `static` marks languages we
   // ship a complete offline dictionary + auto-translator for.
   const LANGUAGES = {
-    en:  { name: 'English',    nativeName: 'English',       dir: 'ltr', google: 'en',    static: true  },
-    es:  { name: 'Spanish',    nativeName: 'Español',       dir: 'ltr', google: 'es',    static: true  },
-    ar:  { name: 'Arabic',     nativeName: 'العربية',       dir: 'rtl', google: 'ar',    static: false },
-    fa:  { name: 'Persian',    nativeName: 'فارسی',         dir: 'rtl', google: 'fa',    static: false },
-    zh:  { name: 'Mandarin',   nativeName: '中文 (简体)',    dir: 'ltr', google: 'zh-CN', static: false },
-    yue: { name: 'Cantonese',  nativeName: '廣東話 (繁體)',   dir: 'ltr', google: 'zh-TW', static: false },
-    tl:  { name: 'Tagalog',    nativeName: 'Tagalog',       dir: 'ltr', google: 'tl',    static: false },
-    vi:  { name: 'Vietnamese', nativeName: 'Tiếng Việt',    dir: 'ltr', google: 'vi',    static: false },
-    hi:  { name: 'Hindi',      nativeName: 'हिन्दी',         dir: 'ltr', google: 'hi',    static: false },
-    pa:  { name: 'Punjabi',    nativeName: 'ਪੰਜਾਬੀ',         dir: 'ltr', google: 'pa',    static: false },
+    en:  { name: 'English',    nativeName: 'English',       label: 'English',       dir: 'ltr', google: 'en',    static: true  },
+    es:  { name: 'Spanish',    nativeName: 'Español',       label: 'Español',       dir: 'ltr', google: 'es',    static: true  },
+    ar:  { name: 'Arabic',     nativeName: 'العربية',       label: 'العربية',       dir: 'rtl', google: 'ar',    static: false },
+    fa:  { name: 'Persian',    nativeName: 'فارسی',         label: 'فارسی',         dir: 'rtl', google: 'fa',    static: false },
+    zh:  { name: 'Mandarin',   nativeName: '中文 (简体)',    label: '中文 (Mandarin)', dir: 'ltr', google: 'zh-CN', static: false },
+    yue: { name: 'Cantonese',  nativeName: '廣東話 (繁體)',   label: '廣東話 (Cantonese)', dir: 'ltr', google: 'zh-TW', static: false },
+    tl:  { name: 'Tagalog',    nativeName: 'Tagalog',       label: 'Tagalog',       dir: 'ltr', google: 'tl',    static: false },
+    vi:  { name: 'Vietnamese', nativeName: 'Tiếng Việt',    label: 'Tiếng Việt',    dir: 'ltr', google: 'vi',    static: false },
+    hi:  { name: 'Hindi',      nativeName: 'हिन्दी',         label: 'हिन्दी',         dir: 'ltr', google: 'hi',    static: false },
+    pa:  { name: 'Punjabi',    nativeName: 'ਪੰਜਾਬੀ',         label: 'ਪੰਜਾਬੀ',         dir: 'ltr', google: 'pa',    static: false },
   };
 
   const SUPPORTED = Object.keys(LANGUAGES);
@@ -454,7 +454,6 @@
       // Google-translated languages. Switches that cross this boundary
       // are cleanest with a reload so we start from a clean English
       // baseline before applying the target translation.
-      const crossesStaticBoundary = prevMeta.static !== nextMeta.static;
       const bothStatic = prevMeta.static && nextMeta.static;
 
       if (nextMeta.static) {
@@ -474,22 +473,9 @@
         return next;
       }
 
-      // Target requires Google Translate.
+      // Target requires Google Translate — reload for a clean baseline.
       setGoogleTranslateCookie(nextMeta.google);
-      if (crossesStaticBoundary) {
-        // Reload so the page starts in English before Google translates.
-        try { location.reload(); return next; } catch (_) {}
-      }
-      // Google → Google switch: try to drive the combo live; fall back
-      // to a reload if the widget hasn't mounted yet.
-      if (!driveGoogleCombo(nextMeta.google)) {
-        try { location.reload(); return next; } catch (_) {}
-      }
-      try {
-        window.dispatchEvent(
-          new CustomEvent('languageChanged', { detail: { language: next } })
-        );
-      } catch (_) {}
+      try { location.reload(); return next; } catch (_) {}
       return next;
     },
     toggle() {

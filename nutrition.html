@@ -21,6 +21,8 @@
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    <link rel="stylesheet" href="utils/i18n_platform.css?v=20260812d">
+    <script src="utils/i18n_platform.js?v=20260812d"></script>
 
     <style>
         :root {
@@ -177,6 +179,8 @@
                     <a href="nutrition.html"
                         class="text-green-800 font-semibold transition-colors">Nutrition</a>
 
+                    <div data-language-picker></div>
+
                     <button onclick="window.location.href='index.html'"
                         class="bg-[#1a6b45] text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-[#0f3d2e] transition-colors">
                         Get Started
@@ -204,6 +208,7 @@
                         class="text-gray-600 hover:text-green-700 font-medium px-2 py-2">Providers</a>
                     <a href="nutrition.html"
                         class="text-green-800 font-semibold px-2 py-2">Nutrition</a>
+                    <div data-language-picker="mobile" class="px-2"></div>
                     <button onclick="window.location.href='index.html'"
                         class="bg-[#1a6b45] text-white px-6 py-3 rounded-xl font-semibold mx-2 mt-1">
                         Get Started

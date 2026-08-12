@@ -58,6 +58,7 @@ function DispatchHeaderComponent({ currentView, onViewChange }) {
         </nav>
         
         <div className="flex items-center space-x-4">
+          {window.LanguagePicker ? <LanguagePicker /> : <div data-language-picker></div>}
           <div className="text-right">
             <div className="text-sm text-gray-900 font-medium">System Status</div>
             <div className="text-xs text-green-600">● All Systems Online</div>

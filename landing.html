@@ -26,6 +26,8 @@
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    <link rel="stylesheet" href="utils/i18n_platform.css?v=20260812d">
+    <script src="utils/i18n_platform.js?v=20260812d"></script>
 
     <style type="text/tailwindcss">
         @layer theme {
@@ -329,6 +331,8 @@
                     <a href="nutrition.html"
                         class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Nutrition</a>
 
+                    <div data-language-picker></div>
+
                     <button onclick="window.location.href='index.html'"
                         class="bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg whitespace-nowrap">
                         Get Started
@@ -357,6 +361,8 @@
                         class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Providers</a>
                     <a href="nutrition.html"
                         class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Nutrition</a>
+
+                    <div data-language-picker="mobile" class="px-2"></div>
 
                     <button onclick="window.location.href='index.html'"
                         class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">

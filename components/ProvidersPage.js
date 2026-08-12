@@ -58,9 +58,28 @@ function webUrl(website) {
   return s.startsWith("http") ? s : `https://${s}`;
 }
 
+const SCHOOL_ELIGIBILITY_NOTE =
+  "Schools only serve their students and families.";
+
+const SCHOOL_PROVIDER_TYPES = new Set([
+  "School meal program",
+  "School food distribution",
+]);
+
+function isSchoolProvider(center) {
+  if (!center) return false;
+  if (center.school_partner) return true;
+  if (String(center.partner_badge || "").toLowerCase() === "school") return true;
+  const types = parseProviderTypes(center.provider_types);
+  if (types.some((t) => SCHOOL_PROVIDER_TYPES.has(t))) return true;
+  const text = `${center.name || ""} ${center.description || ""}`.toLowerCase();
+  return /\bschool\b/.test(text);
+}
+
 function ProviderCard({ center }) {
   const [expanded, setExpanded] = React.useState(false);
   const types = parseProviderTypes(center.provider_types);
+  const isSchool = isSchoolProvider(center);
   const availability =
     center.availability && (AVAILABILITY_LABELS[center.availability] || center.availability);
   const phoneHref = telUrl(center.phone);
@@ -119,6 +138,12 @@ function ProviderCard({ center }) {
               </span>
             )}
           </div>
+        )}
+
+        {isSchool && (
+          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-950 leading-relaxed">
+            <span className="font-semibold">Eligibility:</span> {SCHOOL_ELIGIBILITY_NOTE}
+          </p>
         )}
 
         <div className="space-y-2.5 text-sm text-gray-700 mb-5">
@@ -344,6 +369,9 @@ function ProvidersPage() {
           </h1>
           <p className="text-green-100 text-base sm:text-lg max-w-xl leading-relaxed">
             Pantries, community closets, school sites, and meal programs — filter by type, then call or get directions.
+          </p>
+          <p className="mt-4 max-w-2xl rounded-lg border border-amber-300/40 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 leading-relaxed">
+            <span className="font-semibold">School sites:</span> {SCHOOL_ELIGIBILITY_NOTE}
           </p>
 
           <div className="mt-6 relative max-w-xl">

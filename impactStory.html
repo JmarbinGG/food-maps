@@ -12,6 +12,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+  <link rel="stylesheet" href="utils/i18n_platform.css?v=20260812d">
+  <script src="utils/i18n_platform.js?v=20260812d"></script>
 
   <style>
     body {
@@ -243,6 +245,8 @@
           <a href="nutrition.html"
             class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer">Nutrition</a>
 
+          <div data-language-picker></div>
+
           <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
             class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg">
             Donate
@@ -277,6 +281,7 @@
             class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Nutrition</a>
 
           <!-- Language Switcher for Mobile -->
+          <div data-language-picker="mobile" class="px-2"></div>
 
           <button onclick="window.location.href='https://allgoodlivingfoundation.org/donate'"
             class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">

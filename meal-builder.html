@@ -9,9 +9,15 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link rel="stylesheet" href="utils/i18n_platform.css?v=20260812d">
+    <script src="utils/i18n_platform.js?v=20260812d"></script>
 </head>
 
 <body class="bg-gray-50">
+  <div class="bg-white border-b px-4 py-3 flex items-center justify-between gap-3">
+    <a href="index.html" class="text-green-700 font-semibold hover:text-green-800">← Food Maps</a>
+    <div data-language-picker></div>
+  </div>
   <div id="root"></div>
 
   <script type="text/babel" src="components/MealBuilder.js"></script>
