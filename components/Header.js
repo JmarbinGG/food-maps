@@ -1,11 +1,20 @@
 function Header({ user, onAuthClick, onLogout, currentView, onViewChange, currentZip, onZipClick }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
+  const [showLangMenu, setShowLangMenu] = React.useState(false);
   const role = String(user?.role || '').toLowerCase();
   const { t, language } = (typeof window !== 'undefined' && window.useTranslation)
     ? window.useTranslation()
     : { t: (k, fb) => fb || k, language: 'en' };
-  const toggleLanguage = () => {
-    if (window.i18n) window.i18n.toggle();
+  const languages = (typeof window !== 'undefined' && window.i18n && typeof window.i18n.getLanguages === 'function')
+    ? window.i18n.getLanguages()
+    : [
+        { code: 'en', name: 'English', nativeName: 'English' },
+        { code: 'es', name: 'Spanish', nativeName: 'Español' },
+      ];
+  const activeLangMeta = languages.find(l => l.code === language) || languages[0];
+  const chooseLanguage = (code) => {
+    if (window.i18n) window.i18n.setLanguage(code);
+    setShowLangMenu(false);
   };
   const zipLabel = currentZip || 'ZIP';
 
@@ -14,10 +23,13 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
       if (showDropdown && !event.target.closest('.dropdown-container')) {
         setShowDropdown(false);
       }
+      if (showLangMenu && !event.target.closest('.language-menu-container')) {
+        setShowLangMenu(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showDropdown]);
+  }, [showDropdown, showLangMenu]);
 
   return (
     <header className="bg-white border-b border-gray-200 px-4 py-2 shadow-sm">
@@ -58,17 +70,62 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
           >
             <span className="hidden sm:inline">{t('header.feedback', 'Feedback')}</span>
           </button>
-          <button
-            type="button"
-            onClick={toggleLanguage}
-            aria-label={t('header.language', 'Language')}
-            title={t('header.language', 'Language')}
-            className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-semibold text-xs transition-colors flex items-center gap-1"
-          >
-            <span className={language === 'en' ? 'text-green-700' : 'text-gray-500'}>EN</span>
-            <span className="text-gray-300">|</span>
-            <span className={language === 'es' ? 'text-green-700' : 'text-gray-500'}>ES</span>
-          </button>
+          <div className="relative language-menu-container">
+            <button
+              type="button"
+              onClick={() => setShowLangMenu(v => !v)}
+              aria-label={t('header.language', 'Language')}
+              aria-haspopup="menu"
+              aria-expanded={showLangMenu}
+              title={`${t('header.language', 'Language')}: ${activeLangMeta?.nativeName || 'English'}`}
+              className="px-3 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors flex items-center gap-1.5 notranslate"
+            >
+              {/* Globe icon (inline SVG so we don't depend on the Lucide font being loaded yet) */}
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M2 12h20"></path>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+              </svg>
+              <span className="hidden sm:inline uppercase text-xs font-semibold tracking-wide">
+                {(activeLangMeta && activeLangMeta.code) ? activeLangMeta.code.toUpperCase() : 'EN'}
+              </span>
+            </button>
+            {showLangMenu && (
+              <div
+                role="menu"
+                className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 max-h-[70vh] overflow-y-auto notranslate"
+              >
+                <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+                  {t('header.language', 'Language')}
+                </div>
+                {languages.map(lng => {
+                  const isActive = lng.code === language;
+                  return (
+                    <button
+                      key={lng.code}
+                      role="menuitemradio"
+                      aria-checked={isActive}
+                      onClick={() => chooseLanguage(lng.code)}
+                      className={`w-full text-left px-4 py-2 text-sm flex items-center justify-between gap-2 hover:bg-gray-100 ${isActive ? 'bg-green-50 text-green-800 font-semibold' : 'text-gray-700'}`}
+                      dir={lng.dir || 'ltr'}
+                    >
+                      <span className="flex flex-col leading-tight">
+                        <span>{lng.nativeName}</span>
+                        {lng.nativeName !== lng.name && (
+                          <span className="text-[11px] text-gray-400">{lng.name}</span>
+                        )}
+                      </span>
+                      {isActive && (
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="20 6 9 17 4 12"></polyline>
+                        </svg>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => {
                 if(user){

@@ -14,6 +14,21 @@
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
   if (window.i18nAuto) return; // idempotent
 
+  // Static EN ⇄ ES only. When the app is set to any other language
+  // (Arabic, Farsi, Mandarin, Cantonese, Tagalog, Vietnamese, Hindi,
+  // Punjabi) the Google Website Translator widget loaded in index.html
+  // owns page translation. Running our TreeWalker on top of Google's
+  // DOM mutations causes both to fight over the same text nodes and
+  // triggers React reconciliation errors, so we bail out early.
+  function currentIsStatic() {
+    try {
+      if (window.i18n && typeof window.i18n.isStatic === 'function') {
+        return window.i18n.isStatic();
+      }
+    } catch (_) {}
+    return true;
+  }
+
   // ---------------------------------------------------------------
   // Phrase dictionary (English -> Spanish). Keys must match the EXACT
   // trimmed text that appears in the rendered DOM. Whitespace around
@@ -1565,6 +1580,10 @@
   function flush() {
     scheduled = false;
     const lang = (window.i18n && window.i18n.getCurrentLanguage()) || 'en';
+    if (!currentIsStatic()) {
+      pendingRoots.clear();
+      return;
+    }
     const { primary, patterns } = getTargetMap(lang);
     const roots = Array.from(pendingRoots);
     pendingRoots.clear();
@@ -1594,6 +1613,7 @@
   }
 
   function translateAll() {
+    if (!currentIsStatic()) return;
     pendingRoots.add(document.body || document.documentElement);
     if (!scheduled) {
       scheduled = true;
@@ -1664,13 +1684,21 @@
   }
 
   function init() {
-    // Initial sweep based on current language.
+    // Initial sweep based on current language. Only starts observing
+    // when the app is in a statically-supported language so we don't
+    // interfere with the Google Translate widget for other languages.
+    if (!currentIsStatic()) return;
     translateAll();
     startObserving();
   }
 
   // React to language toggle.
   window.addEventListener('languageChanged', function () {
+    if (!currentIsStatic()) {
+      stopObserving();
+      return;
+    }
+    if (!observer) startObserving();
     translateAllDeferred();
   });
 
