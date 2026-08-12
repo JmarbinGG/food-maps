@@ -9,8 +9,10 @@ import string
 from dotenv import load_dotenv
 
 # Load environment
-load_dotenv('../.env')
-DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://root:password@localhost/foodmaps')
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 # Create database connection
 engine = create_engine(DATABASE_URL)

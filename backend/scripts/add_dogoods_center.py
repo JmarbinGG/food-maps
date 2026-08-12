@@ -7,10 +7,14 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 from backend.models import DistributionCenter
 
 # Database connection
-DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://admin:foodmaps2024@database-1.c9um4qfazhpa.us-east-2.rds.amazonaws.com:3306/foodmaps')
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 
 engine = create_engine(DATABASE_URL)
 Session = sessionmaker(bind=engine)

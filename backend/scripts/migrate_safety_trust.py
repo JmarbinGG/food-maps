@@ -7,15 +7,22 @@ Adds trust scores, verification fields, and safety report tables
 import pymysql
 import os
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
-# Database connection settings
-DB_HOST = os.getenv('DB_HOST', 'database-1.c9um4qfazhpa.us-east-2.rds.amazonaws.com')
-DB_PORT = int(os.getenv('DB_PORT', 3306))
-DB_USER = os.getenv('DB_USER', 'admin')
-DB_PASSWORD = os.getenv('DB_PASSWORD', 'foodmaps2024')
-DB_NAME = os.getenv('DB_NAME', 'foodmaps')
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
+
+# This script talks to MySQL through pymysql rather than SQLAlchemy, so the
+# single DATABASE_URL the rest of the project uses is split into parts here.
+_url = make_url(DATABASE_URL.strip().strip('"'))
+DB_HOST = _url.host
+DB_PORT = _url.port or 3306
+DB_USER = _url.username
+DB_PASSWORD = _url.password
+DB_NAME = _url.database
 
 def run_migration():
     print("🛡️ Starting Safety and Trust Features Migration...")

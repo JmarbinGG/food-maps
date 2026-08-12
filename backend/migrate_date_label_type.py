@@ -6,10 +6,14 @@ This supports the expiration education feature
 
 from sqlalchemy import create_engine, Column, String, text
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
 import os
 
 # Database connection
-DATABASE_URL = os.getenv('DATABASE_URL', 'mysql+pymysql://admin:rtp6HQD8emudbf5bdw@foodapitest.cj8ia4gu0tvd.us-west-1.rds.amazonaws.com:3306/foodapitest')
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+DATABASE_URL = os.getenv('DATABASE_URL')
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required")
 engine = create_engine(DATABASE_URL.strip('"'))  # Strip quotes if present
 Session = sessionmaker(bind=engine)
 
