@@ -1,0 +1,25 @@
+# Secrets must never be baked into an image layer. The build context is the
+# repo root (see docker-compose.yml), so a developer's real .env sits right
+# next to the Dockerfile's COPY.
+.env
+.env.*
+
+# History and local state
+.git
+.venv
+venv
+node_modules
+
+# Build and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data, provided by volumes rather than the image
+uploads/
+*.db
+*.log
+
+.DS_Store
