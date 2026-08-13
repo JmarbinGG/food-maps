@@ -38,7 +38,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
-    FavoriteLocation, ListingCategory, PageContent
+    FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -4640,6 +4640,120 @@ def create_reminder_for_schedule(db: Session, schedule: DonationSchedule):
     
     db.add(reminder)
     db.commit()
+
+
+# -----------------------------
+# Newsletter Subscriptions
+# -----------------------------
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+@app.post("/api/newsletter/subscribe")
+async def newsletter_subscribe(request: Request, db: Session = Depends(get_db)):
+    """Public newsletter signup. Dedupes by email (case-insensitive)."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    email = str(data.get("email") or "").strip().lower()
+    if not email or not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+
+    first_name = (str(data.get("first_name") or data.get("firstName") or "").strip() or None)
+    last_name = (str(data.get("last_name") or data.get("lastName") or "").strip() or None)
+    source = (str(data.get("source") or "website").strip() or "website")[:100]
+    if first_name:
+        first_name = first_name[:100]
+    if last_name:
+        last_name = last_name[:100]
+
+    existing = db.query(NewsletterSubscription).filter(
+        NewsletterSubscription.email == email
+    ).first()
+
+    if existing:
+        existing.is_active = True
+        if first_name:
+            existing.first_name = first_name
+        if last_name:
+            existing.last_name = last_name
+        if source:
+            existing.source = source
+        existing.updated_at = datetime.utcnow()
+        db.commit()
+        return {
+            "success": True,
+            "message": "You're already on the list — we've kept your subscription active.",
+            "already_subscribed": True,
+        }
+
+    row = NewsletterSubscription(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        source=source,
+        is_active=True,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return {
+        "success": True,
+        "message": "Thanks for subscribing! You'll hear from us soon.",
+        "already_subscribed": False,
+        "id": row.id,
+    }
+
+
+@app.get("/api/newsletter/subscribers")
+async def list_newsletter_subscribers(
+    active_only: bool = True,
+    limit: int = 500,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """List newsletter subscribers (admin only)."""
+    limit = max(1, min(int(limit or 500), 2000))
+    query = db.query(NewsletterSubscription)
+    if active_only:
+        query = query.filter(NewsletterSubscription.is_active == True)  # noqa: E712
+    total = query.count()
+    rows = query.order_by(NewsletterSubscription.created_at.desc()).limit(limit).all()
+    return {
+        "total": total,
+        "subscribers": [
+            {
+                "id": r.id,
+                "email": r.email,
+                "first_name": r.first_name,
+                "last_name": r.last_name,
+                "source": r.source,
+                "is_active": bool(r.is_active),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.delete("/api/newsletter/subscribers/{subscriber_id}")
+async def deactivate_newsletter_subscriber(
+    subscriber_id: int,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Soft-unsubscribe a newsletter email (admin only)."""
+    row = db.query(NewsletterSubscription).filter(
+        NewsletterSubscription.id == subscriber_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    row.is_active = False
+    row.updated_at = datetime.utcnow()
+    db.commit()
+    return {"success": True, "message": "Subscriber deactivated"}
 
 
 # -----------------------------

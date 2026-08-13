@@ -31,7 +31,7 @@ function AdminPanel({ onClose }) {
           'Food pantry', 'Mobile food pantry', 'Home delivery', 'Community fridge',
           'Community meal / hot meals', 'Senior meal program', 'School meal program',
           'Food box distribution', 'Grocery assistance', 'Farmers market',
-          'Produce distribution', 'Food rescue', 'Community Closet',
+          'Produce distribution', 'Food rescue', 'Community Closet', 'Community Garden',
           'School food distribution', 'Meal preparation program'
         ];
     const parseCenterTypes = (raw) => {
@@ -77,6 +77,10 @@ function AdminPanel({ onClose }) {
     const [listingCategoriesLoading, setListingCategoriesLoading] = React.useState(false);
     const [listingCategoriesError, setListingCategoriesError] = React.useState('');
     const [listingCategoriesSaving, setListingCategoriesSaving] = React.useState(false);
+    const [newsletterSubscribers, setNewsletterSubscribers] = React.useState([]);
+    const [newsletterTotal, setNewsletterTotal] = React.useState(0);
+    const [newsletterLoading, setNewsletterLoading] = React.useState(false);
+    const [newsletterError, setNewsletterError] = React.useState('');
 
     const listingCategoryOptions = listingCategories.length
       ? listingCategories.filter((c) => c.is_active !== false).map((c) => ({ value: c.value, label: c.label }))
@@ -115,6 +119,8 @@ function AdminPanel({ onClose }) {
         loadListings();
       } else if (activeTab === 'categories') {
         loadListingCategories();
+      } else if (activeTab === 'newsletter') {
+        loadNewsletterSubscribers();
       }
     }, [activeTab]);
 
@@ -449,6 +455,73 @@ function AdminPanel({ onClose }) {
       }
     };
 
+    const loadNewsletterSubscribers = async () => {
+      setNewsletterLoading(true);
+      setNewsletterError('');
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/newsletter/subscribers?active_only=true&limit=500', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setNewsletterSubscribers(Array.isArray(data.subscribers) ? data.subscribers : []);
+          setNewsletterTotal(Number(data.total) || 0);
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setNewsletterError(error.detail || 'Failed to load subscribers');
+        }
+      } catch (error) {
+        console.error('Error loading newsletter subscribers:', error);
+        setNewsletterError('Failed to load subscribers');
+      } finally {
+        setNewsletterLoading(false);
+      }
+    };
+
+    const deactivateNewsletterSubscriber = async (id) => {
+      if (!window.confirm('Remove this email from the active newsletter list?')) return;
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/newsletter/subscribers/${id}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          await loadNewsletterSubscribers();
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setNewsletterError(error.detail || 'Failed to remove subscriber');
+        }
+      } catch (error) {
+        console.error('Error deactivating subscriber:', error);
+        setNewsletterError('Failed to remove subscriber');
+      }
+    };
+
+    const exportNewsletterCsv = () => {
+      const rows = [
+        ['email', 'first_name', 'last_name', 'source', 'subscribed_at'],
+        ...newsletterSubscribers.map((s) => [
+          s.email || '',
+          s.first_name || '',
+          s.last_name || '',
+          s.source || '',
+          s.created_at || '',
+        ]),
+      ];
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `foodmaps-newsletter-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    };
+
     const updateListingCategoryField = (id, patch) => {
       setListingCategories((prev) =>
         prev.map((c) => (c.id === id ? { ...c, ...patch } : c))
@@ -618,6 +691,7 @@ function AdminPanel({ onClose }) {
                 { id: 'categories', label: 'Categories', icon: 'tags' },
                 { id: 'referrals', label: 'Referrals', icon: 'user-plus' },
                 { id: 'feedback', label: 'Feedback', icon: 'message-square' },
+                { id: 'newsletter', label: 'Newsletter', icon: 'mail' },
                 { id: 'messages', label: 'Messages', icon: 'message-circle' },
                 { id: 'ai_broadcasts', label: 'AI Broadcasts', icon: 'megaphone' },
                 { id: 'database', label: 'Database', icon: 'database' },
@@ -813,8 +887,12 @@ function AdminPanel({ onClose }) {
                               onClick={() => toggleProviderType(tag)}
                               className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
                                 on
-                                  ? 'bg-green-700 text-white border-green-700'
-                                  : 'bg-white text-gray-700 border-gray-300 hover:border-green-600'
+                                  ? (typeof window.getProviderTypeClasses === 'function'
+                                      ? window.getProviderTypeClasses(tag, 'selected')
+                                      : 'bg-green-700 text-white border-green-700')
+                                  : (typeof window.getProviderTypeClasses === 'function'
+                                      ? window.getProviderTypeClasses(tag, 'idle')
+                                      : 'bg-white text-gray-700 border-gray-300 hover:border-green-600')
                               }`}
                             >
                               {tag}
@@ -972,8 +1050,12 @@ function AdminPanel({ onClose }) {
                                   }}
                                   className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors ${
                                     on
-                                      ? 'bg-green-700 text-white border-green-700'
-                                      : 'bg-white text-gray-600 border-gray-300 hover:border-green-600'
+                                      ? (typeof window.getProviderTypeClasses === 'function'
+                                          ? window.getProviderTypeClasses(tag, 'selected')
+                                          : 'bg-green-700 text-white border-green-700')
+                                      : (typeof window.getProviderTypeClasses === 'function'
+                                          ? window.getProviderTypeClasses(tag, 'idle')
+                                          : 'bg-white text-gray-600 border-gray-300 hover:border-green-600')
                                   }`}
                                 >
                                   {tag}
@@ -1621,6 +1703,80 @@ function AdminPanel({ onClose }) {
                   View All Feedback
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'newsletter' && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-lg font-semibold">Newsletter Subscribers</h3>
+                  <p className="text-sm text-gray-500">{newsletterTotal} active subscriber{newsletterTotal === 1 ? '' : 's'}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={loadNewsletterSubscribers}
+                    className="px-4 py-2 rounded-lg border border-gray-300 text-sm hover:bg-gray-50"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={exportNewsletterCsv}
+                    disabled={!newsletterSubscribers.length}
+                    className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    Export CSV
+                  </button>
+                </div>
+              </div>
+
+              {newsletterError && (
+                <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm">{newsletterError}</div>
+              )}
+              {newsletterLoading ? (
+                <p className="text-gray-500 text-sm">Loading subscribers…</p>
+              ) : newsletterSubscribers.length === 0 ? (
+                <p className="text-gray-500 text-sm">No subscribers yet. Signups from the landing and Impact Story pages will appear here.</p>
+              ) : (
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 text-left text-gray-600">
+                      <tr>
+                        <th className="px-3 py-2 font-medium">Email</th>
+                        <th className="px-3 py-2 font-medium">Name</th>
+                        <th className="px-3 py-2 font-medium">Source</th>
+                        <th className="px-3 py-2 font-medium">Subscribed</th>
+                        <th className="px-3 py-2 font-medium"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {newsletterSubscribers.map((s) => (
+                        <tr key={s.id} className="border-t">
+                          <td className="px-3 py-2">{s.email}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {[s.first_name, s.last_name].filter(Boolean).join(' ') || '—'}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600">{s.source || '—'}</td>
+                          <td className="px-3 py-2 text-gray-600">
+                            {s.created_at ? new Date(s.created_at).toLocaleString() : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              type="button"
+                              onClick={() => deactivateNewsletterSubscriber(s.id)}
+                              className="text-red-600 hover:text-red-800 text-xs font-medium"
+                            >
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

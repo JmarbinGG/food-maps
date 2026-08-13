@@ -696,7 +696,7 @@
           </p>
         </div>
 
-        <form id="newsletterForm" class="max-w-2xl mx-auto">
+        <form id="newsletterForm" data-newsletter-form data-source="impact-story" class="max-w-2xl mx-auto">
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
@@ -729,19 +729,12 @@
             </label>
           </div>
 
-          <div id="newsletterSuccess"
+          <div id="newsletterSuccess" data-newsletter-success
             class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4 text-center">
-            <svg class="inline-block w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
-              <path fill-rule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                clip-rule="evenodd" />
-            </svg>
-            <strong>Success!</strong> You've been subscribed to our newsletter.
           </div>
 
-          <div id="newsletterError"
+          <div id="newsletterError" data-newsletter-error
             class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">
-            <strong>Error!</strong> Something went wrong. Please try again.
           </div>
 
           <button type="submit"
@@ -872,6 +865,7 @@
     <div class="fm-status" data-fm-status></div>
   </div>
 
+  <script src="utils/newsletterSignup.js?v=20260814-newsletter"></script>
   <script src="utils/pageEditor.js"></script>
   <script>
     window.FoodMapsPageEditor.init({
@@ -880,87 +874,6 @@
       migrateLocalStorageKey: 'impactStoryContent',
       excludeSelectors: ['#newsletterForm', '#storiesModal input', '#storiesModal button']
     });
-
-    // Newsletter form submission
-    document.addEventListener('DOMContentLoaded', function () {
-      const newsletterForm = document.getElementById('newsletterForm');
-
-      if (newsletterForm) {
-        newsletterForm.addEventListener('submit', async function (e) {
-          e.preventDefault();
-
-          const formData = {
-            firstName: this.querySelector('[name="firstName"]').value.trim(),
-            lastName: this.querySelector('[name="lastName"]').value.trim(),
-            email: this.querySelector('[name="email"]').value.trim(),
-            consent: this.querySelector('[name="consent"]').checked,
-            timestamp: new Date().toISOString(),
-            source: 'impact-story-page'
-          };
-
-          // Validate email
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (!emailRegex.test(formData.email)) {
-            showNewsletterError('Please enter a valid email address.');
-            return;
-          }
-
-          try {
-            // Store in localStorage
-            const subscriptions = JSON.parse(localStorage.getItem('newsletterSubscriptions') || '[]');
-
-            // Check if already subscribed
-            const alreadySubscribed = subscriptions.some(sub => sub.email === formData.email);
-            if (alreadySubscribed) {
-              showNewsletterError('This email is already subscribed!');
-              return;
-            }
-
-            subscriptions.push(formData);
-            localStorage.setItem('newsletterSubscriptions', JSON.stringify(subscriptions));
-
-            // Show success message
-            showNewsletterSuccess();
-
-            // Reset form
-            this.reset();
-
-            console.log('Newsletter subscription:', formData);
-          } catch (error) {
-            console.error('Error submitting newsletter:', error);
-            showNewsletterError('Something went wrong. Please try again.');
-          }
-        });
-      }
-    });
-
-    function showNewsletterSuccess() {
-      const successMsg = document.getElementById('newsletterSuccess');
-      const errorMsg = document.getElementById('newsletterError');
-
-      errorMsg.classList.add('hidden');
-      successMsg.classList.remove('hidden');
-
-      setTimeout(() => {
-        successMsg.classList.add('hidden');
-      }, 5000);
-    }
-
-    function showNewsletterError(message) {
-      const successMsg = document.getElementById('newsletterSuccess');
-      const errorMsg = document.getElementById('newsletterError');
-
-      successMsg.classList.add('hidden');
-      errorMsg.classList.remove('hidden');
-
-      if (message) {
-        errorMsg.innerHTML = `<strong>Error!</strong> ${message}`;
-      }
-
-      setTimeout(() => {
-        errorMsg.classList.add('hidden');
-      }, 5000);
-    }
   </script>
 
   <!-- Stories Modal -->

@@ -709,6 +709,62 @@
         </div>
     </section>
 
+    <!-- Newsletter signup — after primary CTAs, before footer -->
+    <section class="py-20 bg-white border-t border-emerald-100" id="newsletter">
+        <div class="max-w-4xl mx-auto px-4">
+            <div class="rounded-3xl bg-gradient-to-br from-emerald-50 via-white to-orange-50 border border-emerald-100 shadow-xl p-8 md:p-12">
+                <div class="text-center mb-8">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700 mb-3 editable" data-editable="newsletter-eyebrow" contenteditable="false">Stay in the loop</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 editable" data-editable="newsletter-title" contenteditable="false">
+                        Get Food Maps updates
+                    </h2>
+                    <p class="text-lg text-gray-600 max-w-2xl mx-auto editable" data-editable="newsletter-description" contenteditable="false">
+                        Occasional notes on new providers, community programs, and ways to help — no spam.
+                    </p>
+                </div>
+
+                <form id="newsletterForm" data-newsletter-form data-source="landing" class="max-w-xl mx-auto">
+                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                        <label class="sr-only" for="landing-newsletter-email">Email address</label>
+                        <input
+                            id="landing-newsletter-email"
+                            type="email"
+                            name="email"
+                            required
+                            autocomplete="email"
+                            placeholder="you@example.com"
+                            class="flex-1 px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        >
+                        <button
+                            type="submit"
+                            class="shrink-0 px-8 py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl transition-colors shadow-lg"
+                        >
+                            Subscribe
+                        </button>
+                    </div>
+
+                    <label class="flex items-start gap-2 text-sm text-gray-600 mb-4">
+                        <input type="checkbox" name="consent" required
+                            class="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                        <span>I agree to receive email updates from Food Maps. Unsubscribe anytime.</span>
+                    </label>
+
+                    <div id="newsletterSuccess" data-newsletter-success
+                        class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl mb-3 text-center text-sm">
+                    </div>
+                    <div id="newsletterError" data-newsletter-error
+                        class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl mb-3 text-center text-sm">
+                    </div>
+
+                    <p class="text-xs text-gray-500 text-center">
+                        We respect your privacy. Read our
+                        <a href="privacy.html" class="text-emerald-700 hover:underline">Privacy Policy</a>.
+                    </p>
+                </form>
+            </div>
+        </div>
+    </section>
+
     <!-- AI Search Scripts -->
     <script type="text/babel" src="utils/agentAPI.js"></script>
     <script type="text/babel" src="utils/database.js"></script>
@@ -1235,6 +1291,7 @@
             });
         });
     </script>
+    <script src="utils/newsletterSignup.js?v=20260814-newsletter"></script>
     <script src="utils/pageEditor.js"></script>
     <script>
         window.FoodMapsPageEditor.init({
@@ -1248,7 +1305,8 @@
                 '#impact-pounds-value',
                 '#impact-families-value',
                 '#auth-modal-root',
-                '#ai-search-root'
+                '#ai-search-root',
+                '#newsletterForm'
             ]
         });
     </script>

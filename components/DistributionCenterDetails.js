@@ -15,9 +15,139 @@ const PROVIDER_TYPE_TAGS = [
   'Produce distribution',
   'Food rescue',
   'Community Closet',
+  'Community Garden',
   'School food distribution',
   'Meal preparation program',
 ];
+
+/** Distinct color classes per provider category (selected / idle / chip display). */
+const PROVIDER_TYPE_COLOR_MAP = {
+  'Food pantry': {
+    selected: 'bg-amber-600 text-white border-amber-600',
+    idle: 'bg-amber-50 text-amber-900 border-amber-300 hover:border-amber-500',
+    chip: 'bg-amber-100 text-amber-900 border-amber-300',
+    filterActive: 'bg-amber-600 text-white border-amber-600',
+    filterIdle: 'bg-white text-amber-800 border-amber-400 hover:bg-amber-600 hover:text-white',
+  },
+  'Mobile food pantry': {
+    selected: 'bg-orange-600 text-white border-orange-600',
+    idle: 'bg-orange-50 text-orange-900 border-orange-300 hover:border-orange-500',
+    chip: 'bg-orange-100 text-orange-900 border-orange-300',
+    filterActive: 'bg-orange-600 text-white border-orange-600',
+    filterIdle: 'bg-white text-orange-800 border-orange-400 hover:bg-orange-600 hover:text-white',
+  },
+  'Home delivery': {
+    selected: 'bg-sky-600 text-white border-sky-600',
+    idle: 'bg-sky-50 text-sky-900 border-sky-300 hover:border-sky-500',
+    chip: 'bg-sky-100 text-sky-900 border-sky-300',
+    filterActive: 'bg-sky-600 text-white border-sky-600',
+    filterIdle: 'bg-white text-sky-800 border-sky-400 hover:bg-sky-600 hover:text-white',
+  },
+  'Community fridge': {
+    selected: 'bg-cyan-600 text-white border-cyan-600',
+    idle: 'bg-cyan-50 text-cyan-900 border-cyan-300 hover:border-cyan-500',
+    chip: 'bg-cyan-100 text-cyan-900 border-cyan-300',
+    filterActive: 'bg-cyan-600 text-white border-cyan-600',
+    filterIdle: 'bg-white text-cyan-800 border-cyan-400 hover:bg-cyan-600 hover:text-white',
+  },
+  'Community meal / hot meals': {
+    selected: 'bg-rose-600 text-white border-rose-600',
+    idle: 'bg-rose-50 text-rose-900 border-rose-300 hover:border-rose-500',
+    chip: 'bg-rose-100 text-rose-900 border-rose-300',
+    filterActive: 'bg-rose-600 text-white border-rose-600',
+    filterIdle: 'bg-white text-rose-800 border-rose-400 hover:bg-rose-600 hover:text-white',
+  },
+  'Senior meal program': {
+    selected: 'bg-purple-600 text-white border-purple-600',
+    idle: 'bg-purple-50 text-purple-900 border-purple-300 hover:border-purple-500',
+    chip: 'bg-purple-100 text-purple-900 border-purple-300',
+    filterActive: 'bg-purple-600 text-white border-purple-600',
+    filterIdle: 'bg-white text-purple-800 border-purple-400 hover:bg-purple-600 hover:text-white',
+  },
+  'School meal program': {
+    selected: 'bg-indigo-600 text-white border-indigo-600',
+    idle: 'bg-indigo-50 text-indigo-900 border-indigo-300 hover:border-indigo-500',
+    chip: 'bg-indigo-100 text-indigo-900 border-indigo-300',
+    filterActive: 'bg-indigo-600 text-white border-indigo-600',
+    filterIdle: 'bg-white text-indigo-800 border-indigo-400 hover:bg-indigo-600 hover:text-white',
+  },
+  'Food box distribution': {
+    selected: 'bg-yellow-500 text-yellow-950 border-yellow-500',
+    idle: 'bg-yellow-50 text-yellow-900 border-yellow-300 hover:border-yellow-500',
+    chip: 'bg-yellow-100 text-yellow-900 border-yellow-300',
+    filterActive: 'bg-yellow-500 text-yellow-950 border-yellow-500',
+    filterIdle: 'bg-white text-yellow-800 border-yellow-400 hover:bg-yellow-500 hover:text-yellow-950',
+  },
+  'Grocery assistance': {
+    selected: 'bg-lime-600 text-white border-lime-600',
+    idle: 'bg-lime-50 text-lime-900 border-lime-300 hover:border-lime-500',
+    chip: 'bg-lime-100 text-lime-900 border-lime-300',
+    filterActive: 'bg-lime-600 text-white border-lime-600',
+    filterIdle: 'bg-white text-lime-800 border-lime-400 hover:bg-lime-600 hover:text-white',
+  },
+  'Farmers market': {
+    selected: 'bg-emerald-600 text-white border-emerald-600',
+    idle: 'bg-emerald-50 text-emerald-900 border-emerald-300 hover:border-emerald-500',
+    chip: 'bg-emerald-100 text-emerald-900 border-emerald-300',
+    filterActive: 'bg-emerald-600 text-white border-emerald-600',
+    filterIdle: 'bg-white text-emerald-800 border-emerald-400 hover:bg-emerald-600 hover:text-white',
+  },
+  'Produce distribution': {
+    selected: 'bg-green-600 text-white border-green-600',
+    idle: 'bg-green-50 text-green-900 border-green-300 hover:border-green-500',
+    chip: 'bg-green-100 text-green-900 border-green-300',
+    filterActive: 'bg-green-600 text-white border-green-600',
+    filterIdle: 'bg-white text-green-800 border-green-400 hover:bg-green-600 hover:text-white',
+  },
+  'Food rescue': {
+    selected: 'bg-teal-600 text-white border-teal-600',
+    idle: 'bg-teal-50 text-teal-900 border-teal-300 hover:border-teal-500',
+    chip: 'bg-teal-100 text-teal-900 border-teal-300',
+    filterActive: 'bg-teal-600 text-white border-teal-600',
+    filterIdle: 'bg-white text-teal-800 border-teal-400 hover:bg-teal-600 hover:text-white',
+  },
+  'Community Closet': {
+    selected: 'bg-fuchsia-600 text-white border-fuchsia-600',
+    idle: 'bg-fuchsia-50 text-fuchsia-900 border-fuchsia-300 hover:border-fuchsia-500',
+    chip: 'bg-fuchsia-100 text-fuchsia-900 border-fuchsia-300',
+    filterActive: 'bg-fuchsia-600 text-white border-fuchsia-600',
+    filterIdle: 'bg-white text-fuchsia-800 border-fuchsia-400 hover:bg-fuchsia-600 hover:text-white',
+  },
+  'Community Garden': {
+    selected: 'bg-green-700 text-white border-green-700',
+    idle: 'bg-green-50 text-green-900 border-green-400 hover:border-green-600',
+    chip: 'bg-green-200 text-green-950 border-green-500',
+    filterActive: 'bg-green-700 text-white border-green-700',
+    filterIdle: 'bg-white text-green-800 border-green-500 hover:bg-green-700 hover:text-white',
+  },
+  'School food distribution': {
+    selected: 'bg-blue-600 text-white border-blue-600',
+    idle: 'bg-blue-50 text-blue-900 border-blue-300 hover:border-blue-500',
+    chip: 'bg-blue-100 text-blue-900 border-blue-300',
+    filterActive: 'bg-blue-600 text-white border-blue-600',
+    filterIdle: 'bg-white text-blue-800 border-blue-400 hover:bg-blue-600 hover:text-white',
+  },
+  'Meal preparation program': {
+    selected: 'bg-pink-600 text-white border-pink-600',
+    idle: 'bg-pink-50 text-pink-900 border-pink-300 hover:border-pink-500',
+    chip: 'bg-pink-100 text-pink-900 border-pink-300',
+    filterActive: 'bg-pink-600 text-white border-pink-600',
+    filterIdle: 'bg-white text-pink-800 border-pink-400 hover:bg-pink-600 hover:text-white',
+  },
+};
+
+const PROVIDER_TYPE_COLOR_FALLBACK = {
+  selected: 'bg-slate-700 text-white border-slate-700',
+  idle: 'bg-white text-gray-700 border-gray-300 hover:border-slate-500',
+  chip: 'bg-slate-100 text-slate-800 border-slate-300',
+  filterActive: 'bg-slate-700 text-white border-slate-700',
+  filterIdle: 'bg-white text-slate-800 border-slate-400 hover:bg-slate-700 hover:text-white',
+};
+
+function getProviderTypeClasses(tag, variant = 'chip') {
+  const colors = PROVIDER_TYPE_COLOR_MAP[tag] || PROVIDER_TYPE_COLOR_FALLBACK;
+  return colors[variant] || colors.chip;
+}
 
 const CENTER_AVAILABILITY_LABELS = {
   open: 'Open / Walk-in welcome',
@@ -243,8 +373,8 @@ function DistributionCenterCategories({
                   onClick={() => toggleTag(tag)}
                   className={`px-2 py-0.5 rounded-full text-[11px] font-medium border transition-colors disabled:opacity-60 ${
                     on
-                      ? 'bg-green-700 text-white border-green-700'
-                      : 'bg-white text-gray-600 border-gray-300 hover:border-green-600'
+                      ? getProviderTypeClasses(tag, 'selected')
+                      : getProviderTypeClasses(tag, 'idle')
                   }`}
                 >
                   {tag}
@@ -257,7 +387,7 @@ function DistributionCenterCategories({
             {localTypes.map((tag) => (
               <span
                 key={tag}
-                className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-700 text-white"
+                className={`px-2 py-0.5 rounded-full text-[11px] font-medium border ${getProviderTypeClasses(tag, 'chip')}`}
               >
                 {tag}
               </span>
@@ -408,6 +538,8 @@ window.DistributionCenterDetails = DistributionCenterDetails;
 window.DistributionCenterCategories = DistributionCenterCategories;
 window.DistributionCenterShareButton = DistributionCenterShareButton;
 window.PROVIDER_TYPE_TAGS = window.PROVIDER_TYPE_TAGS || PROVIDER_TYPE_TAGS;
+window.PROVIDER_TYPE_COLOR_MAP = window.PROVIDER_TYPE_COLOR_MAP || PROVIDER_TYPE_COLOR_MAP;
+window.getProviderTypeClasses = window.getProviderTypeClasses || getProviderTypeClasses;
 window.CENTER_AVAILABILITY_LABELS = CENTER_AVAILABILITY_LABELS;
 window.formatCenterAvailability = formatCenterAvailability;
 window.parseProviderTypes = parseProviderTypes;
