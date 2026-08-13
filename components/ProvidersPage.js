@@ -61,6 +61,74 @@ function webUrl(website) {
 const SCHOOL_ELIGIBILITY_NOTE =
   "Schools only serve their students and families.";
 
+const PROVIDERS_COPY_DEFAULTS = {
+  "hero-badge": "Providers",
+  "hero-title": "Find food nearby",
+  "hero-subtitle":
+    "Pantries, community closets, school sites, and meal programs — filter by type, then call or get directions.",
+  "school-note": "<span class=\"font-semibold\">School sites:</span> Schools only serve their students and families.",
+};
+
+const ProvidersHero = React.memo(function ProvidersHero({ fields, search, setSearch, searchRef }) {
+  return (
+    <section className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-8">
+        <p
+          className="text-sm font-semibold uppercase tracking-wide text-green-200 mb-2 editable"
+          data-editable="hero-badge"
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: fields["hero-badge"] }}
+        />
+        <h1
+          className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 editable"
+          data-editable="hero-title"
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: fields["hero-title"] }}
+        />
+        <p
+          className="text-green-100 text-base sm:text-lg max-w-xl leading-relaxed editable"
+          data-editable="hero-subtitle"
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: fields["hero-subtitle"] }}
+        />
+        <p
+          className="mt-4 max-w-2xl rounded-lg border border-amber-300/40 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 leading-relaxed editable"
+          data-editable="school-note"
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: fields["school-note"] }}
+        />
+
+        <div className="mt-6 relative max-w-xl">
+          <label htmlFor="provider-search" className="sr-only">Search providers</label>
+          <input
+            ref={searchRef}
+            id="provider-search"
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, street, or neighborhood…"
+            className="w-full pl-4 pr-11 py-3 border-2 border-green-600 rounded-xl text-base text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-green-800 text-sm font-medium"
+              aria-label="Clear search"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+});
+
 const SCHOOL_PROVIDER_TYPES = new Set([
   "School meal program",
   "School food distribution",
@@ -272,6 +340,7 @@ function ProvidersPage() {
   const [selectedTags, setSelectedTags] = React.useState([]);
   const [search, setSearch] = React.useState("");
   const searchRef = React.useRef(null);
+  const [fields, setFields] = React.useState(PROVIDERS_COPY_DEFAULTS);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -295,6 +364,29 @@ function ProvidersPage() {
       }
     })();
     return () => { cancelled = true; };
+  }, []);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/pages/providers/content");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data || !data.content) return;
+        setFields((prev) => ({ ...prev, ...data.content }));
+      } catch (_) { /* keep defaults */ }
+    })();
+    const onSaved = (e) => {
+      if (e.detail && e.detail.pageId === "providers" && e.detail.content) {
+        setFields((prev) => ({ ...prev, ...e.detail.content }));
+      }
+    };
+    window.addEventListener("foodmaps:pagecontent-saved", onSaved);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("foodmaps:pagecontent-saved", onSaved);
+    };
   }, []);
 
   const tagCounts = React.useMemo(() => {
@@ -361,43 +453,12 @@ function ProvidersPage() {
 
   return (
     <div className="bg-white min-h-[60vh]">
-      <section className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-8">
-          <p className="text-sm font-semibold uppercase tracking-wide text-green-200 mb-2">Providers</p>
-          <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
-            Find food nearby
-          </h1>
-          <p className="text-green-100 text-base sm:text-lg max-w-xl leading-relaxed">
-            Pantries, community closets, school sites, and meal programs — filter by type, then call or get directions.
-          </p>
-          <p className="mt-4 max-w-2xl rounded-lg border border-amber-300/40 bg-amber-50/95 px-4 py-3 text-sm text-amber-950 leading-relaxed">
-            <span className="font-semibold">School sites:</span> {SCHOOL_ELIGIBILITY_NOTE}
-          </p>
-
-          <div className="mt-6 relative max-w-xl">
-            <label htmlFor="provider-search" className="sr-only">Search providers</label>
-            <input
-              ref={searchRef}
-              id="provider-search"
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, street, or neighborhood…"
-              className="w-full pl-4 pr-11 py-3 border-2 border-green-600 rounded-xl text-base text-gray-900 placeholder:text-gray-400 bg-white focus:outline-none focus:ring-2 focus:ring-green-300 focus:border-green-500"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-green-800 text-sm font-medium"
-                aria-label="Clear search"
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-      </section>
+      <ProvidersHero
+        fields={fields}
+        search={search}
+        setSearch={setSearch}
+        searchRef={searchRef}
+      />
 
       <section className="sticky top-24 z-30 bg-white/95 backdrop-blur-md border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">

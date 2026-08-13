@@ -180,7 +180,8 @@
         })();
     </script>
 
-    <script type="text/babel" src="components/ProvidersPage.js?v=20260812-school-eligibility"></script>
+    <script src="utils/pageEditor.js"></script>
+    <script type="text/babel" src="components/ProvidersPage.js?v=20260813-page-edit"></script>
     <script type="text/babel">
         (function mountProvidersPage(attempt) {
             const rootEl = document.getElementById('providers-root');
@@ -195,6 +196,22 @@
             }
             const root = ReactDOM.createRoot(rootEl);
             root.render(React.createElement(window.ProvidersPage));
+            setTimeout(function () {
+                if (window.FoodMapsPageEditor) {
+                    window.FoodMapsPageEditor.init({
+                        pageId: 'providers',
+                        fullPage: true,
+                        root: '#providers-root',
+                        excludeSelectors: [
+                            'input',
+                            'button',
+                            'article',
+                            '[role="group"]',
+                            '#provider-search'
+                        ]
+                    });
+                }
+            }, 200);
         })(0);
     </script>
 </body>

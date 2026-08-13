@@ -74,6 +74,64 @@ function inferCategory(partner) {
   return "Partner";
 }
 
+const PARTNERS_COPY_DEFAULTS = {
+  "hero-badge": "Community Partners",
+  "hero-title": 'Together we rescue food, <span class="text-green-200">not just plates</span>',
+  "hero-subtitle":
+    "Local businesses, food banks, and nonprofits power Food Maps every day. Their impact is your community's impact.",
+  "cta-badge": "Now welcoming new partners",
+  "cta-title": "Put your brand behind real community impact",
+  "cta-subtitle":
+    "Join Bay Area leaders fighting hunger and food waste. We'll help tell and amplify your impact.",
+};
+
+const PartnersHero = React.memo(function PartnersHero({ fields, partnerCount, loading }) {
+  return (
+    <header className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10 sm:pt-16 sm:pb-14">
+        <div className="text-center">
+          <span
+            className="inline-flex items-center px-3 py-1 rounded-md bg-green-950/40 text-green-100 text-xs font-semibold mb-5 border border-green-600 editable"
+            data-editable="hero-badge"
+            contentEditable={false}
+            suppressContentEditableWarning
+            dangerouslySetInnerHTML={{ __html: fields["hero-badge"] }}
+          />
+          <h1
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-5 tracking-tight editable"
+            data-editable="hero-title"
+            contentEditable={false}
+            suppressContentEditableWarning
+            dangerouslySetInnerHTML={{ __html: fields["hero-title"] }}
+          />
+          <p
+            className="text-base sm:text-lg text-green-100 max-w-2xl mx-auto leading-relaxed editable"
+            data-editable="hero-subtitle"
+            contentEditable={false}
+            suppressContentEditableWarning
+            dangerouslySetInnerHTML={{ __html: fields["hero-subtitle"] }}
+          />
+
+          {!loading && partnerCount > 0 && (
+            <div className="mt-7 flex flex-wrap items-center justify-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white text-green-800 font-medium border-2 border-white">
+                <strong className="tabular-nums">{partnerCount}</strong>
+                <span>partners</span>
+              </span>
+              <a
+                href="#become-partner"
+                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-green-950 text-white font-semibold border-2 border-green-950 hover:bg-black transition-colors"
+              >
+                Become a partner
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+});
+
 function SkeletonCard() {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -89,16 +147,48 @@ function SkeletonCard() {
   );
 }
 
+function partnerSlug(name) {
+  return String(name || "partner")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 48) || "partner";
+}
+
+function stripTags(html) {
+  return String(html || "").replace(/<[^>]*>/g, "").trim();
+}
+
+function mergePartnersWithContent(list, content) {
+  const c = content || {};
+  return (list || []).map((p) => {
+    const slug = partnerSlug(p.name);
+    const nameHtml = c[`partner-${slug}-name`];
+    const descHtml = c[`partner-${slug}-desc`];
+    const img = c[`img_partner-${slug}-img`] || c[`img_partner-${slug}`];
+    return {
+      ...p,
+      _slug: slug,
+      name: nameHtml != null ? stripTags(nameHtml) || p.name : p.name,
+      nameHtml: nameHtml != null ? nameHtml : p.name,
+      description: descHtml != null ? stripTags(descHtml) || p.description : p.description,
+      descriptionHtml: descHtml != null ? descHtml : p.description,
+      img: img || p.img,
+    };
+  });
+}
+
 function PartnerCard({ partner }) {
   const [imgFailed, setImgFailed] = React.useState(false);
   const category = inferCategory(partner);
-  const initials = (partner.name || "?")
+  const displayName = partner.name || "?";
+  const initials = displayName
     .split(/[\s&]+/)
     .filter(Boolean)
     .slice(0, 2)
     .map((s) => s[0] && s[0].toUpperCase())
     .join("");
-
+  const slug = partner._slug || partnerSlug(partner.name);
   const showImg = partner.img && !imgFailed;
 
   return (
@@ -108,18 +198,19 @@ function PartnerCard({ partner }) {
         {showImg ? (
           <img
             src={partner.img}
-            alt={`${partner.name} logo`}
+            alt={`${displayName} logo`}
             loading="lazy"
             referrerPolicy="no-referrer"
             onError={() => setImgFailed(true)}
-            className="max-h-28 max-w-full object-contain transition-transform duration-500 group-hover:scale-105"
+            data-editable-img={`partner-${slug}-img`}
+            className="editable-img max-h-28 max-w-full object-contain transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
           <div className="flex flex-col items-center justify-center">
             <div className="w-16 h-16 rounded-xl bg-green-800 flex items-center justify-center text-white font-bold text-xl mb-2">
               {initials || "P"}
             </div>
-            <span className="text-xs font-medium text-gray-500 text-center px-2">{partner.name}</span>
+            <span className="text-xs font-medium text-gray-500 text-center px-2">{displayName}</span>
           </div>
         )}
 
@@ -129,19 +220,29 @@ function PartnerCard({ partner }) {
       </div>
 
       <div className="p-6 flex flex-col flex-1">
-        <h3 className="text-lg font-semibold text-gray-900 mb-2 leading-tight group-hover:text-green-800 transition-colors">
-          {partner.name}
-        </h3>
-        <p className="text-gray-600 text-sm mb-4 line-clamp-3 flex-1">{partner.description}</p>
+        <h3
+          className="text-lg font-semibold text-gray-900 mb-2 leading-tight group-hover:text-green-800 transition-colors editable"
+          data-editable={`partner-${slug}-name`}
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: partner.nameHtml || partner.name }}
+        />
+        <p
+          className="text-gray-600 text-sm mb-4 line-clamp-3 flex-1 editable"
+          data-editable={`partner-${slug}-desc`}
+          contentEditable={false}
+          suppressContentEditableWarning
+          dangerouslySetInnerHTML={{ __html: partner.descriptionHtml || partner.description }}
+        />
 
-        <div className="mt-auto">
+        <div className="mt-auto" data-no-edit="true">
           {partner.website && partner.website !== "#" ? (
             <a
               href={partner.website}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center w-full px-4 py-2.5 rounded-lg bg-green-700 text-white hover:bg-green-800 font-semibold text-sm transition-colors"
-              aria-label={`Visit ${partner.name} website (opens in new tab)`}
+              aria-label={`Visit ${displayName} website (opens in new tab)`}
             >
               Visit website
             </a>
@@ -160,13 +261,45 @@ function PartnersPage() {
   const [search, setSearch] = React.useState("");
   const [sortBy, setSortBy] = React.useState("name");
   const [activeCategory, setActiveCategory] = React.useState("All");
+  const [fields, setFields] = React.useState(PARTNERS_COPY_DEFAULTS);
 
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      setPartners(localPartners);
+      setPartners(mergePartnersWithContent(localPartners, fields));
       setLoading(false);
     }, 120);
     return () => clearTimeout(timer);
+  }, []);
+
+  React.useEffect(() => {
+    setPartners((prev) => {
+      if (!prev.length) return prev;
+      // Remerge from original local list so overrides stay consistent
+      return mergePartnersWithContent(localPartners, fields);
+    });
+  }, [fields]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/pages/partners/content");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (cancelled || !data || !data.content) return;
+        setFields((prev) => ({ ...prev, ...data.content }));
+      } catch (_) { /* keep defaults */ }
+    })();
+    const onSaved = (e) => {
+      if (e.detail && e.detail.pageId === "partners" && e.detail.content) {
+        setFields((prev) => ({ ...prev, ...e.detail.content }));
+      }
+    };
+    window.addEventListener("foodmaps:pagecontent-saved", onSaved);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("foodmaps:pagecontent-saved", onSaved);
+    };
   }, []);
 
   const categories = React.useMemo(() => {
@@ -196,38 +329,7 @@ function PartnersPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      <header className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10 sm:pt-16 sm:pb-14">
-          <div className="text-center">
-            <span className="inline-flex items-center px-3 py-1 rounded-md bg-green-950/40 text-green-100 text-xs font-semibold mb-5 border border-green-600">
-              Community Partners
-            </span>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-5 tracking-tight">
-              Together we rescue food,{" "}
-              <span className="text-green-200">not just plates</span>
-            </h1>
-            <p className="text-base sm:text-lg text-green-100 max-w-2xl mx-auto leading-relaxed">
-              Local businesses, food banks, and nonprofits power Food Maps every day.
-              Their impact is your community&apos;s impact.
-            </p>
-
-            {!loading && partners.length > 0 && (
-              <div className="mt-7 flex flex-wrap items-center justify-center gap-2 text-sm">
-                <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white text-green-800 font-medium border-2 border-white">
-                  <strong className="tabular-nums">{partners.length}</strong>
-                  <span>partners</span>
-                </span>
-                <a
-                  href="#become-partner"
-                  className="inline-flex items-center gap-2 px-4 py-1.5 rounded-lg bg-green-950 text-white font-semibold border-2 border-green-950 hover:bg-black transition-colors"
-                >
-                  Become a partner
-                </a>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+      <PartnersHero fields={fields} partnerCount={partners.length} loading={loading} />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20 bg-gray-50">
         {!loading && partners.length > 0 && (
@@ -356,16 +458,9 @@ function PartnersPage() {
             <div className="relative p-8 sm:p-12 text-white">
               <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
                 <div>
-                  <span className="inline-flex items-center px-3 py-1 rounded-md bg-green-950/50 text-green-100 text-[11px] font-semibold mb-4 border border-green-600">
-                    Now welcoming new partners
-                  </span>
-                  <h2 id="become-partner-heading" className="text-3xl sm:text-4xl font-bold mb-4 leading-tight">
-                    Put your brand behind real community impact
-                  </h2>
-                  <p className="text-green-100 text-base sm:text-lg mb-6 leading-relaxed">
-                    Join Bay Area leaders fighting hunger and food waste.
-                    We&apos;ll help tell and amplify your impact.
-                  </p>
+                  <span className="inline-flex items-center px-3 py-1 rounded-md bg-green-950/50 text-green-100 text-[11px] font-semibold mb-4 border border-green-600 editable" data-editable="cta-badge" contentEditable={false} suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: fields["cta-badge"] }} />
+                  <h2 id="become-partner-heading" className="text-3xl sm:text-4xl font-bold mb-4 leading-tight editable" data-editable="cta-title" contentEditable={false} suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: fields["cta-title"] }} />
+                  <p className="text-green-100 text-base sm:text-lg mb-6 leading-relaxed editable" data-editable="cta-subtitle" contentEditable={false} suppressContentEditableWarning dangerouslySetInnerHTML={{ __html: fields["cta-subtitle"] }} />
                   <div className="flex flex-wrap items-center gap-3">
                     <a
                       href="mailto:info@allgoodlivingfoundation.org?subject=Food%20Maps%20Partnership"
@@ -384,14 +479,26 @@ function PartnersPage() {
 
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3" aria-label="Partner benefits">
                   {[
-                    { title: "Community reach", body: "Connect with families and neighbors across the Bay Area." },
-                    { title: "Brand visibility", body: "Logo placement here and across community communications." },
-                    { title: "Volunteer programs", body: "Engage your team with hands-on food-rescue events." },
-                    { title: "Tax-deductible", body: "Donations routed through our 501(c)(3) partner network." },
+                    { key: "benefit-reach", title: "Community reach", body: "Connect with families and neighbors across the Bay Area." },
+                    { key: "benefit-visibility", title: "Brand visibility", body: "Logo placement here and across community communications." },
+                    { key: "benefit-volunteer", title: "Volunteer programs", body: "Engage your team with hands-on food-rescue events." },
+                    { key: "benefit-tax", title: "Tax-deductible", body: "Donations routed through our 501(c)(3) partner network." },
                   ].map((b) => (
-                    <li key={b.title} className="bg-green-950/40 rounded-xl p-4 border border-green-600/50">
-                      <div className="font-semibold text-sm mb-1.5">{b.title}</div>
-                      <p className="text-[12px] text-green-100 leading-relaxed">{b.body}</p>
+                    <li key={b.key} className="bg-green-950/40 rounded-xl p-4 border border-green-600/50">
+                      <div
+                        className="font-semibold text-sm mb-1.5 editable"
+                        data-editable={`${b.key}-title`}
+                        contentEditable={false}
+                        suppressContentEditableWarning
+                        dangerouslySetInnerHTML={{ __html: fields[`${b.key}-title`] || b.title }}
+                      />
+                      <p
+                        className="text-[12px] text-green-100 leading-relaxed editable"
+                        data-editable={`${b.key}-body`}
+                        contentEditable={false}
+                        suppressContentEditableWarning
+                        dangerouslySetInnerHTML={{ __html: fields[`${b.key}-body`] || b.body }}
+                      />
                     </li>
                   ))}
                 </ul>

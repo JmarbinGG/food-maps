@@ -184,7 +184,8 @@
         })();
     </script>
 
-    <script type="text/babel" src="components/PartnersPage.js?v=20260731-darkgreen"></script>
+    <script src="utils/pageEditor.js"></script>
+    <script type="text/babel" src="components/PartnersPage.js?v=20260813-page-edit"></script>
     <script type="text/babel">
         (function mountPartnersPage(attempt) {
             const rootEl = document.getElementById('partners-root');
@@ -199,6 +200,23 @@
             }
             const root = ReactDOM.createRoot(rootEl);
             root.render(React.createElement(window.PartnersPage));
+            setTimeout(function () {
+                if (window.FoodMapsPageEditor) {
+                    window.FoodMapsPageEditor.init({
+                        pageId: 'partners',
+                        fullPage: true,
+                        root: '#partners-root',
+                        excludeSelectors: [
+                            'input',
+                            'select',
+                            'button',
+                            '[role="tablist"]',
+                            '[role="tab"]',
+                            'a[href^="mailto:"]'
+                        ]
+                    });
+                }
+            }, 200);
         })(0);
     </script>
 </body>

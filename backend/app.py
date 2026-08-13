@@ -14,6 +14,7 @@ import hmac
 import jwt
 import json
 import os
+import re
 import secrets
 import string
 import subprocess
@@ -37,7 +38,7 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
-    FavoriteLocation, ListingCategory
+    FavoriteLocation, ListingCategory, PageContent
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -619,6 +620,127 @@ async def serve_admin_referrals():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now()}
+
+# -----------------------------
+# Admin-editable page content
+# -----------------------------
+
+ALLOWED_PAGE_IDS = frozenset({
+    "impactStory",
+    "landing",
+    "partners",
+    "providers",
+    "privacy",
+    "terms",
+    "cookies",
+    "nutrition",
+})
+MAX_PAGE_CONTENT_BYTES = 500_000
+
+
+def _sanitize_page_field_value(value: Any) -> str:
+    """Coerce to string and strip executable markup from admin HTML fields."""
+    if value is None:
+        return ""
+    text = str(value)
+    # Remove script/iframe/object/embed tags and javascript: URLs in attributes
+    text = re.sub(r"(?is)<\s*(script|iframe|object|embed|link|meta)[^>]*>.*?<\s*/\s*\1\s*>", "", text)
+    text = re.sub(r"(?is)<\s*(script|iframe|object|embed|link|meta)[^>]*/?\s*>", "", text)
+    text = re.sub(r"(?i)\s+on[a-z]+\s*=\s*([\"']).*?\1", "", text)
+    text = re.sub(r"(?i)\s+on[a-z]+\s*=\s*[^\s>]+", "", text)
+    text = re.sub(r"(?i)javascript\s*:", "", text)
+    return text
+
+
+def _normalize_page_content_payload(raw: Any) -> Dict[str, str]:
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail="content must be an object")
+    cleaned: Dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not key.strip():
+            continue
+        if len(key) > 120:
+            raise HTTPException(status_code=400, detail=f"field key too long: {key[:40]}...")
+        cleaned[key.strip()] = _sanitize_page_field_value(value)
+    encoded = json.dumps(cleaned, ensure_ascii=False)
+    if len(encoded.encode("utf-8")) > MAX_PAGE_CONTENT_BYTES:
+        raise HTTPException(status_code=400, detail="content payload too large")
+    return cleaned
+
+
+@app.get("/api/pages/{page_id}/content")
+async def get_page_content(page_id: str, db: Session = Depends(get_db)):
+    """Public read of saved editable fields for a marketing/content page."""
+    if page_id not in ALLOWED_PAGE_IDS:
+        raise HTTPException(status_code=404, detail="Unknown page")
+    row = db.query(PageContent).filter(PageContent.page_id == page_id).first()
+    if not row or not row.content:
+        return {"page_id": page_id, "content": {}, "updated_at": None}
+    try:
+        content = json.loads(row.content)
+        if not isinstance(content, dict):
+            content = {}
+    except Exception:
+        content = {}
+    return {
+        "page_id": page_id,
+        "content": content,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+@app.put("/api/pages/{page_id}/content")
+async def put_page_content(
+    page_id: str,
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Admin-only upsert of editable page fields. Merges into existing content."""
+    if page_id not in ALLOWED_PAGE_IDS:
+        raise HTTPException(status_code=404, detail="Unknown page")
+    body = await request.json()
+    incoming = _normalize_page_content_payload(body.get("content", body))
+
+    row = db.query(PageContent).filter(PageContent.page_id == page_id).first()
+    existing: Dict[str, str] = {}
+    if row and row.content:
+        try:
+            parsed = json.loads(row.content)
+            if isinstance(parsed, dict):
+                existing = {str(k): _sanitize_page_field_value(v) for k, v in parsed.items()}
+        except Exception:
+            existing = {}
+
+    # Merge: empty string deletes a key so admins can clear overrides
+    merged = dict(existing)
+    for key, value in incoming.items():
+        if value == "":
+            merged.pop(key, None)
+        else:
+            merged[key] = value
+
+    payload = json.dumps(merged, ensure_ascii=False)
+    if len(payload.encode("utf-8")) > MAX_PAGE_CONTENT_BYTES:
+        raise HTTPException(status_code=400, detail="content payload too large")
+
+    if row is None:
+        row = PageContent(page_id=page_id, content=payload, updated_by=admin_user.id)
+        db.add(row)
+    else:
+        row.content = payload
+        row.updated_by = admin_user.id
+        row.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(row)
+    return {
+        "page_id": page_id,
+        "content": merged,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "updated_by": admin_user.id,
+    }
+
 
 # -----------------------------
 # User profile helper endpoints
@@ -1876,7 +1998,7 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
             "exp": now + timedelta(hours=24)
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-        print(f"✅ Generated token for user {user.id} ({user.email}), expires in 24 hours")
+        print(f"Generated token for user {user.id} ({user.email}), expires in 24 hours")
         return {"success": True, "token": token}
     except HTTPException:
         raise

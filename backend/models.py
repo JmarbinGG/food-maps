@@ -538,3 +538,15 @@ class ListingCategory(Base):
     sort_order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PageContent(Base):
+    """Admin-editable page field content keyed by page_id (e.g. landing, impactStory)."""
+    __tablename__ = "page_contents"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    page_id = Column(String(100), unique=True, nullable=False, index=True)
+    content = Column(Text, nullable=False, default="{}")  # JSON: field_key -> html/url string
+    updated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

@@ -145,74 +145,42 @@
       position: fixed;
       bottom: 2rem;
       right: 2rem;
-      z-index: 1000;
-      background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+      z-index: 1200;
+      background: #15803d;
       color: white;
       border: none;
       border-radius: 50%;
-      width: 60px;
-      height: 60px;
+      width: 56px;
+      height: 56px;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      box-shadow: 0 10px 25px rgba(59, 130, 246, 0.5);
+      box-shadow: 0 10px 25px rgba(21, 128, 61, 0.45);
       transition: all 0.3s ease;
     }
 
     .admin-edit-btn:hover {
-      transform: scale(1.1) rotate(90deg);
-      box-shadow: 0 15px 35px rgba(59, 130, 246, 0.7);
+      transform: scale(1.06);
+      background: #166534;
+      box-shadow: 0 12px 28px rgba(21, 128, 61, 0.55);
     }
 
-    .edit-mode .editable {
-      outline: 2px dashed #3b82f6;
-      outline-offset: 4px;
-      cursor: text;
-      position: relative;
-    }
-
-    .edit-mode .editable:hover {
-      outline-color: #1d4ed8;
-      background: rgba(59, 130, 246, 0.05);
-    }
-
-    .edit-mode .editable-img {
-      cursor: pointer;
-      border: 3px dashed #3b82f6;
-      transition: all 0.3s;
-    }
-
-    .edit-mode .editable-img:hover {
-      border-color: #1d4ed8;
-      opacity: 0.8;
-    }
-
-    .edit-mode .editable-bg {
-      cursor: pointer;
-      outline: 3px dashed #3b82f6;
-      outline-offset: -3px;
-    }
-
+    .edit-mode .editable,
+    .edit-mode .editable:hover,
+    .edit-mode .editable-img,
+    .edit-mode .editable-img:hover,
+    .edit-mode .editable-bg,
     .edit-mode .editable-bg:hover {
-      outline-color: #1d4ed8;
-      opacity: 0.9;
+      outline: none !important;
+      border: none !important;
+      cursor: inherit !important;
+      background: transparent;
+      opacity: 1;
     }
 
     .edit-toolbar {
-      position: fixed;
-      top: 100px;
-      right: 2rem;
-      z-index: 1000;
-      background: white;
-      border-radius: 12px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
-      padding: 1rem;
-      display: none;
-    }
-
-    .edit-mode .edit-toolbar {
-      display: block;
+      display: none !important;
     }
   </style>
 </head>
@@ -887,7 +855,7 @@
   </footer>
 
   <!-- Admin Edit Button -->
-  <button class="admin-edit-btn" id="adminEditBtn" onclick="toggleEditMode()" title="Admin Edit Mode">
+  <button class="admin-edit-btn" id="adminEditBtn" onclick="toggleEditMode()" title="Admin Edit Mode" type="button" style="display:none">
     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor"
       stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -896,239 +864,21 @@
   </button>
 
   <!-- Edit Toolbar -->
-  <div class="edit-toolbar" id="editToolbar">
-    <h3 class="font-bold text-gray-900 mb-3">Edit Mode Active</h3>
-    <p class="text-sm text-gray-600 mb-4">Click on any highlighted section to edit</p>
-    <button onclick="saveChanges()"
-      class="w-full bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 transition-colors mb-2">
-      Save Changes
-    </button>
-    <button onclick="cancelEdit()"
-      class="w-full bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
-      Cancel
-    </button>
+  <div class="edit-toolbar fm-edit-toolbar" id="editToolbar">
+    <h3>Edit Mode Active</h3>
+    <p>Click on any highlighted section to edit</p>
+    <button type="button" class="fm-save" data-fm-save>Save Changes</button>
+    <button type="button" class="fm-cancel" data-fm-cancel>Cancel</button>
+    <div class="fm-status" data-fm-status></div>
   </div>
 
+  <script src="utils/pageEditor.js"></script>
   <script>
-    let isEditMode = false;
-    let originalContent = {};
-    let originalImages = {};
-    let originalBackgrounds = {};
-
-    function toggleEditMode() {
-      isEditMode = !isEditMode;
-      const body = document.body;
-      const btn = document.getElementById('adminEditBtn');
-
-      if (isEditMode) {
-        // Enter edit mode
-        body.classList.add('edit-mode');
-        btn.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-
-        // Store original content
-        document.querySelectorAll('[data-editable]').forEach(el => {
-          const key = el.getAttribute('data-editable');
-          originalContent[key] = el.innerHTML;
-          el.setAttribute('contenteditable', 'true');
-        });
-
-        // Store original images
-        document.querySelectorAll('[data-editable-img]').forEach(el => {
-          const key = el.getAttribute('data-editable-img');
-          originalImages[key] = el.src;
-          // Add click handler for image editing
-          el.style.cursor = 'pointer';
-          el.style.border = '3px dashed #3b82f6';
-          el.onclick = () => editImage(key, el);
-        });
-
-        // Store original background images
-        document.querySelectorAll('[data-editable-bg]').forEach(el => {
-          const key = el.getAttribute('data-editable-bg');
-          const bgImage = el.style.backgroundImage;
-          originalBackgrounds[key] = bgImage;
-          // Add click handler for background editing
-          el.style.cursor = 'pointer';
-          el.style.outline = '3px dashed #3b82f6';
-          el.onclick = () => editBackgroundImage(key, el);
-        });
-      } else {
-        // Exit edit mode
-        body.classList.remove('edit-mode');
-        btn.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
-
-        document.querySelectorAll('[data-editable]').forEach(el => {
-          el.setAttribute('contenteditable', 'false');
-        });
-
-        document.querySelectorAll('[data-editable-img]').forEach(el => {
-          el.style.cursor = '';
-          el.style.border = '';
-          el.onclick = null;
-        });
-
-        document.querySelectorAll('[data-editable-bg]').forEach(el => {
-          el.style.cursor = '';
-          el.style.outline = '';
-          el.onclick = null;
-        });
-      }
-    }
-
-    function editImage(key, imgElement) {
-      const newUrl = prompt('Enter new image URL:', imgElement.src);
-      if (newUrl && newUrl.trim()) {
-        imgElement.src = newUrl.trim();
-      }
-    }
-
-    function editBackgroundImage(key, element) {
-      const currentBg = element.style.backgroundImage;
-      const currentUrl = currentBg.match(/url\(['"]?(.*?)['"]?\)/)?.[1] || '';
-      const newUrl = prompt('Enter new background image URL:', currentUrl);
-      if (newUrl && newUrl.trim()) {
-        element.style.backgroundImage = `url('${newUrl.trim()}')`;
-      }
-    }
-
-    function saveChanges() {
-      const changes = {};
-      let hasChanges = false;
-
-      // Save text content changes
-      document.querySelectorAll('[data-editable]').forEach(el => {
-        const key = el.getAttribute('data-editable');
-        const newContent = el.innerHTML;
-
-        if (originalContent[key] !== newContent) {
-          changes[key] = newContent;
-          hasChanges = true;
-        }
-      });
-
-      // Save image changes
-      document.querySelectorAll('[data-editable-img]').forEach(el => {
-        const key = el.getAttribute('data-editable-img');
-        const newSrc = el.src;
-
-        if (originalImages[key] !== newSrc) {
-          changes[`img_${key}`] = newSrc;
-          hasChanges = true;
-        }
-      });
-
-      // Save background image changes
-      document.querySelectorAll('[data-editable-bg]').forEach(el => {
-        const key = el.getAttribute('data-editable-bg');
-        const newBg = el.style.backgroundImage;
-
-        if (originalBackgrounds[key] !== newBg) {
-          changes[`bg_${key}`] = newBg;
-          hasChanges = true;
-        }
-      });
-
-      if (hasChanges) {
-        // Save to localStorage
-        const savedContent = JSON.parse(localStorage.getItem('impactStoryContent') || '{}');
-        Object.assign(savedContent, changes);
-        localStorage.setItem('impactStoryContent', JSON.stringify(savedContent));
-
-        alert('Changes saved successfully!');
-        console.log('Saved changes:', changes);
-      } else {
-        alert('No changes to save.');
-      }
-
-      toggleEditMode();
-    }
-
-    function cancelEdit() {
-      // Restore original content
-      document.querySelectorAll('[data-editable]').forEach(el => {
-        const key = el.getAttribute('data-editable');
-        if (originalContent[key]) {
-          el.innerHTML = originalContent[key];
-        }
-      });
-
-      // Restore original images
-      document.querySelectorAll('[data-editable-img]').forEach(el => {
-        const key = el.getAttribute('data-editable-img');
-        if (originalImages[key]) {
-          el.src = originalImages[key];
-        }
-      });
-
-      // Restore original background images
-      document.querySelectorAll('[data-editable-bg]').forEach(el => {
-        const key = el.getAttribute('data-editable-bg');
-        if (originalBackgrounds[key]) {
-          el.style.backgroundImage = originalBackgrounds[key];
-        }
-      });
-
-      toggleEditMode();
-    }
-
-    // Load saved content on page load
-    document.addEventListener('DOMContentLoaded', function () {
-      const savedContent = JSON.parse(localStorage.getItem('impactStoryContent') || '{}');
-
-      Object.keys(savedContent).forEach(key => {
-        // Handle text content
-        if (!key.startsWith('img_') && !key.startsWith('bg_')) {
-          const el = document.querySelector(`[data-editable="${key}"]`);
-          if (el) {
-            el.innerHTML = savedContent[key];
-          }
-        }
-        // Handle images
-        else if (key.startsWith('img_')) {
-          const actualKey = key.substring(4); // Remove 'img_' prefix
-          const el = document.querySelector(`[data-editable-img="${actualKey}"]`);
-          if (el) {
-            el.src = savedContent[key];
-          }
-        }
-        // Handle background images
-        else if (key.startsWith('bg_')) {
-          const actualKey = key.substring(3); // Remove 'bg_' prefix
-          const el = document.querySelector(`[data-editable-bg="${actualKey}"]`);
-          if (el) {
-            el.style.backgroundImage = savedContent[key];
-          }
-        }
-      });
-    });
-
-    // Check for admin access from current_user
-    function checkAdminAccess() {
-      try {
-        const currentUser = JSON.parse(localStorage.getItem('current_user') || 'null');
-        const isAdmin = currentUser && currentUser.role && currentUser.role.toLowerCase() === 'admin';
-        const adminBtn = document.getElementById('adminEditBtn');
-
-        if (!isAdmin) {
-          adminBtn.style.display = 'none';
-        } else {
-          console.log('Admin access granted for user:', currentUser.email || currentUser.username);
-        }
-      } catch (error) {
-        console.error('Error checking admin access:', error);
-        const adminBtn = document.getElementById('adminEditBtn');
-        adminBtn.style.display = 'none';
-      }
-    }
-
-    // Run admin check
-    checkAdminAccess();
-
-    // Re-check admin access when user logs in/out
-    window.addEventListener('storage', function (e) {
-      if (e.key === 'current_user') {
-        checkAdminAccess();
-      }
+    window.FoodMapsPageEditor.init({
+      pageId: 'impactStory',
+      fullPage: true,
+      migrateLocalStorageKey: 'impactStoryContent',
+      excludeSelectors: ['#newsletterForm', '#storiesModal input', '#storiesModal button']
     });
 
     // Newsletter form submission

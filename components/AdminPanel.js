@@ -941,9 +941,6 @@ function AdminPanel({ onClose }) {
                         <p className="text-gray-600 mb-2">{center.description}</p>
                         <div className="text-sm text-gray-500 space-y-1">
                           <p><strong>Address:</strong> {center.address}</p>
-                          {center.coords_lat && center.coords_lng && (
-                            <p><strong>Coordinates:</strong> {center.coords_lat}, {center.coords_lng}</p>
-                          )}
                           <p><strong>Phone:</strong> {center.phone || '—'}</p>
                           <p><strong>Hours:</strong> {center.hours || '—'}</p>
                           <p><strong>Status:</strong>
