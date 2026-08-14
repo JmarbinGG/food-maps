@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, case
 from datetime import datetime, timedelta, timezone
-from functools import lru_cache
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
 from dotenv import load_dotenv
@@ -17,7 +16,6 @@ import os
 import re
 import secrets
 import string
-import subprocess
 from urllib.parse import quote
 from passlib.context import CryptContext
 from backend.email_service import (
@@ -98,14 +96,10 @@ async def add_cache_control_headers(request: Request, call_next):
     """Avoid stale frontend assets requiring hard refreshes in development and production."""
     path = request.url.path
     relative_path = path.lstrip("/")
-    # /uploads serves user-generated content (chat photos, listing images).
-    # The directory is gitignored on purpose, but it MUST still be reachable
-    # over HTTP — otherwise listing photos and AI chat attachments 404.
-    is_uploads_asset = relative_path.startswith("uploads/") or relative_path == "uploads"
-    if relative_path and not is_uploads_asset and (
-        any(part.startswith(".") for part in relative_path.split("/") if part)
-        or _is_gitignored_path(relative_path)
-    ):
+    # Only frontend/ and uploads/ are mounted, so repository internals are out
+    # of reach by construction. This stays as cheap defense in depth for
+    # dotfile paths; it no longer needs to consult gitignore.
+    if relative_path and any(part.startswith(".") for part in relative_path.split("/") if part):
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
     response = await call_next(request)
@@ -144,19 +138,6 @@ if not PUBLIC_BASE_URL:
 def get_public_base_url() -> str:
     """Return the user-facing base URL configured in environment."""
     return PUBLIC_BASE_URL.rstrip("/")
-
-
-@lru_cache(maxsize=4096)
-def _is_gitignored_path(relative_path: str) -> bool:
-    try:
-        completed = subprocess.run(
-            ["git", "-C", PROJECT_ROOT, "check-ignore", "-q", "--", relative_path],
-            capture_output=True,
-            check=False,
-        )
-        return completed.returncode == 0
-    except OSError:
-        return False
 
 
 # Global request input constraints for API routes.
