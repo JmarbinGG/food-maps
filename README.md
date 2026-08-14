@@ -78,19 +78,38 @@ Data and Services
 
 ## Project Structure
 
+`frontend/` is the document root: it is the only directory the server exposes
+over HTTP, which is what keeps `.env`, `backend/` and the guides unreachable.
+
 ```text
 food-maps/
-  index.html                # Main web app shell
-  app.js                    # Frontend app composition and view state
-  components/               # React components (map, listings, modals, etc.)
-  utils/                    # Frontend utilities and API helpers
+  frontend/                 # Everything served to the browser
+    index.html              # Main web app shell
+    landing.html            # Public marketing page
+    dispatch.html           # Logistics and driver coordination
+    assets/
+      css/                  # style.css, i18n_platform.css
+      logos/                # Brand and partner images
+    js/
+      app.js                # Main app composition and view state
+      landing-app.js        # Landing page entry
+      dispatch-app.js       # Dispatch entry
+      lib/                  # API clients, i18n, Mapbox, helpers
+      components/           # React components, grouped by feature:
+                            #   common, auth, onboarding, map, listings,
+                            #   dispatch, admin, ai, nutrition, safety,
+                            #   profile, partners
   backend/
     app.py                  # FastAPI entry module
     models.py               # SQLAlchemy models
     schemas.py              # Pydantic schemas
-    auth.py                 # Auth and JWT helpers
-    requirements.txt        # Backend dependencies
+  dev-pages/                # Manual component harnesses, never served
+  uploads/                  # User-uploaded photos (gitignored, runtime only)
+  requirements.txt          # Python dependencies
 ```
+
+Entry pages sit at the top of `frontend/` rather than in a subfolder so that
+public URLs stay `/index.html`, `/landing.html` and so on.
 
 ## Getting Started
 
@@ -102,8 +121,9 @@ food-maps/
 
 ### 1) Install backend dependencies
 
+From the repository root:
+
 ```bash
-cd backend
 pip install -r requirements.txt
 ```
 
@@ -138,9 +158,11 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 ### 4) Open the frontend
 
-Open index.html in your browser.
+Visit http://localhost:8000 — the API server also serves the frontend from
+`frontend/`, so no separate static server is needed.
 
-If needed, serve static files with any local static server instead of opening directly.
+Opening the HTML files directly from disk will not work: pages reference assets
+by absolute URL and the app needs the API on the same origin.
 
 ## Environment Variables
 
@@ -184,7 +206,9 @@ Centers
 
 ## Development Notes
 
-- Frontend currently uses script-based React component loading.
+- Frontend currently uses script-based React component loading. There is no
+  build step, so components are globals loaded by ordered `<script>` tags:
+  when adding one, place its tag after anything it depends on.
 - Map rendering depends on Mapbox JS and token availability.
 - App behavior is role-sensitive; test with multiple user roles.
 - Keep user-facing status transitions consistent between backend and UI labels.
@@ -199,7 +223,7 @@ Map not loading
 
 Backend import errors
 
-- Ensure dependencies are installed from backend/requirements.txt.
+- Ensure dependencies are installed from requirements.txt in the repo root.
 - Confirm you run uvicorn from the expected working directory.
 
 Database issues

@@ -22,4 +22,11 @@ uploads/
 *.db
 *.log
 
+# Not needed at runtime: docs and the manual component harnesses in dev-pages/,
+# which are deliberately outside the served frontend/ directory.
+dev-pages/
+guides/
+docs/
+README.md
+
 .DS_Store

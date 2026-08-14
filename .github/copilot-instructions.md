@@ -8,20 +8,34 @@ Food Maps is a food distribution platform connecting donors, recipients, volunte
 ## Architecture & File Structure
 
 ### Frontend: Multi-App HTML Pages (No Build Step)
+- **All frontend source lives in `frontend/`**, which is the only directory the
+  server exposes over HTTP. Nothing outside it is web-reachable.
+  - `frontend/*.html` — entry pages (URLs are `/index.html`, `/landing.html`, ...)
+  - `frontend/js/` — `app.js`, `landing-app.js`, `dispatch-app.js`
+  - `frontend/js/lib/` — API clients, i18n, Mapbox helpers (formerly `utils/`)
+  - `frontend/js/components/<feature>/` — React components grouped by feature:
+    `common`, `auth`, `onboarding`, `map`, `listings`, `dispatch`, `admin`,
+    `ai`, `nutrition`, `safety`, `profile`, `partners`
+  - `frontend/assets/css/`, `frontend/assets/logos/` — styles and images
+  - `dev-pages/` — manual component harnesses, deliberately NOT served
+
 - **Three independent React applications**:
-  - `landing.html` → `landing-app.js` (public marketing page)
-  - `index.html` → `app.js` (main authenticated app: map, listings, profiles, claims)
-  - `dispatch.html` → `dispatch-app.js` (logistics/driver coordination)
-  
+  - `landing.html` → `js/landing-app.js` (public marketing page)
+  - `index.html` → `js/app.js` (main authenticated app: map, listings, profiles, claims)
+  - `dispatch.html` → `js/dispatch-app.js` (logistics/driver coordination)
+
 - **React via Babel Standalone**: Uses `<script src="babel.min.js">` + `<script type="text/babel">` tags - no webpack/vite
-- **Component loading order matters**: In HTML, load utilities (`utils/*.js`) FIRST, then components (`components/*.js`), then main app script last
-  - Example from `index.html`: `utils/mapbox.js` → `components/Header.js` → `app.js`
+- **Component loading order matters**: In HTML, load utilities (`js/lib/*.js`) FIRST, then components (`js/components/<feature>/*.js`), then main app script last
+  - Example from `index.html`: `js/lib/mapbox.js` → `js/components/common/Header.js` → `js/app.js`
 - **Styling**: TailwindCSS via CDN (`<script src="https://cdn.tailwindcss.com">`) - no build step
-- **Map integration**: Mapbox GL JS v2.15.0 via CDN, token set in `utils/mapbox.js` as `window.MAPBOX_ACCESS_TOKEN`
+- **Map integration**: Mapbox GL JS v2.15.0 via CDN, token set in `js/lib/mapbox.js` as `window.MAPBOX_ACCESS_TOKEN`
 
 ### Backend: FastAPI Monolith (`/backend/app.py`, 3565 lines)
 - **Dual-purpose server**: Serves HTML files via `HTMLResponse` AND provides REST API
-  - `@app.get("/")` reads `landing.html` from project root
+  - `@app.get("/")` reads `landing.html` from `FRONTEND_DIR`
+  - Static mounts: `/uploads` for user content, `/` for `frontend/`. Assets moved
+    to `/assets/...`, with 301 redirects from the legacy `/logos/` and
+    `/style.css` URLs that existing database rows still reference.
   - `@app.get("/api/listings/get")` returns JSON listings
   
 - **Database-first design**: SQLAlchemy models (`models.py`) define schema, Pydantic schemas (`schemas.py`) validate API requests
@@ -210,7 +224,7 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 
 1. **React component not rendering**:
    - **Cause**: `<script type="text/babel" src="...">` loading order in HTML
-   - **Fix**: Load dependencies BEFORE components (e.g., `Header.js` needs `window.MAPBOX_ACCESS_TOKEN` from `utils/mapbox.js`)
+   - **Fix**: Load dependencies BEFORE components (e.g., `Header.js` needs `window.MAPBOX_ACCESS_TOKEN` from `js/lib/mapbox.js`)
 
 2. **JWT 401 errors after 24h**:
    - **Cause**: Tokens expire, frontend doesn't refresh
@@ -224,7 +238,7 @@ SQLAlchemy enums must use `.value` when converting to JSON:
    - **Fix**: Backend has `allow_origins=["*"]`, ensure client sends `Content-Type: application/json`
 
 5. **Mapbox map not loading**:
-   - **Check**: `window.MAPBOX_ACCESS_TOKEN` set in `utils/mapbox.js`, valid `pk.` or `sk.` token
+   - **Check**: `window.MAPBOX_ACCESS_TOKEN` set in `js/lib/mapbox.js`, valid `pk.` or `sk.` token
    - **Check**: Mapbox GL JS loaded via CDN before components that use it
 
 6. **SMS not sending**:
@@ -233,9 +247,10 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 ## Testing & Debugging
 
 - **No automated tests**: Manual testing via browser, Postman, curl
-- **Debug pages**: `test_profile.html`, `debug_profile.html`, `feedback_test.html` for isolated component testing
+- **Debug pages**: `dev-pages/*.html` for isolated component testing. These are
+  outside `frontend/`, so they are not served — open them from disk.
 - **Health checks**:
-  - `GET /api/health` → `{"status": "healthy"}`
+  - `GET /health` → `{"status": "healthy"}`
   - `GET /api/dbtest` → Tests database connection
 - **Error boundaries**: `ErrorBoundary` component in `app.js` catches React errors
 - **Server logs**: `sudo journalctl -u foodmaps -f` (systemd) or check `backend/server.log`
@@ -256,11 +271,12 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 2. Add SQLAlchemy model to `models.py` if new table needed
 3. Create endpoint in `app.py` using `@app.post/get/put/delete` decorators
 4. Use `serialize_listing()` / `serialize_user()` helpers for responses
-5. Add to API client in `utils/api.js` for frontend consumption
+5. Add to API client in `frontend/js/lib/api.js` for frontend consumption
 
 **New React components**:
-1. Create file in `/components/ComponentName.js`
-2. Add `<script type="text/babel" src="components/ComponentName.js">` to HTML BEFORE app script
+1. Create file in `frontend/js/components/<feature>/ComponentName.js`, picking the
+   feature folder that matches (see the frontend layout above)
+2. Add `<script type="text/babel" src="js/components/<feature>/ComponentName.js">` to HTML BEFORE app script
 3. Use component in parent via `<ComponentName prop={value} />`
 
 **Database schema changes**:
@@ -284,9 +300,9 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 - **Server**: Runs via systemd service (`foodmaps.service`) with 4 Uvicorn workers
 - **Auto-restart**: Service configured with `Restart=always`, `RestartSec=5s`
 - **Database**: Currently MySQL in production (check `DATABASE_URL` env var)
-- **Static assets**: Served directly by FastAPI (no nginx/CDN), includes HTML/JS/CSS/images
+- **Static assets**: Served directly by FastAPI from `frontend/` (no nginx/CDN), includes HTML/JS/CSS/images
 - **Logs**: `sudo journalctl -u foodmaps -f` for systemd, or `backend/server.log` for script-based runs
-- **Monitoring**: Check `GET /api/health` endpoint for uptime checks
+- **Monitoring**: Check `GET /health` endpoint for uptime checks
 
 
 UI:

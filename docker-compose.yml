@@ -30,9 +30,12 @@ services:
       postgres:
         condition: service_healthy
     volumes:
-      # The app serves the frontend HTML/JS from the repo root, so the whole
-      # project is mounted rather than just backend/.
-      - .:/app
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      # User-uploaded photos. uploads/ is gitignored and excluded from the
+      # image, so it needs its own volume or listing photos and chat
+      # attachments disappear on every rebuild.
+      - ./uploads:/app/uploads
     command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
 
 volumes:
