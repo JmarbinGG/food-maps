@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Maps - Share and Find Food</title>
+    <meta name="description"
+        content="A simple way to connect food donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
+    <meta name="keywords"
+        content="food distribution, AI routing, automated dispatch, food rescue, smart logistics, community support">
+    <meta property="og:title" content="Food Maps - Share and Find Food">
+    <meta property="og:description"
+        content="A simple way to connect food donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
+    <meta name="twitter:title" content="Food Maps - Share and Find Food">
+    <meta name="twitter:description"
+        content="A simple way to connect food donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script crossorigin
+        src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
+    <script src="js/lib/i18n_platform.js?v=20260812d"></script>
+
+    <style type="text/tailwindcss">
+        @layer theme {
+        :root {
+            --primary-color: #10b981;
+            --secondary-color: #f0fdf4;
+            --accent-color: #059669;
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --background: #ffffff;
+            --surface: #f9fafb;
+            --border-color: #e5e7eb;
+        }
+    }
+
+    @layer base {
+        body {
+            font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            line-height: 1.65;
+            letter-spacing: 0.01em;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            line-height: 1.2;
+            letter-spacing: -0.01em;
+        }
+
+        p {
+            line-height: 1.72;
+        }
+    }
+
+    @layer utilities {
+        .hero-band {
+            background: #15803d;
+        }
+        
+        .hero-pattern {
+            background-image: 
+                url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2310b981' fill-opacity='0.05'%3E%3Ccircle cx='30' cy='30' r='4'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        }
+        
+        .floating {
+            animation: float 6s ease-in-out infinite;
+        }
+        
+        .floating-delayed {
+            animation: float 6s ease-in-out infinite 2s;
+        }
+        
+        .slide-in-up {
+            animation: slideInUp 0.8s ease-out;
+        }
+        
+        .fade-in {
+            animation: fadeIn 1s ease-out forwards;
+        }
+        
+        .fade-in-delayed-1 {
+            animation: fadeIn 1s ease-out 0.3s forwards;
+            opacity: 0;
+        }
+        
+        .fade-in-delayed-2 {
+            animation: fadeIn 1s ease-out 0.6s forwards;
+            opacity: 0;
+        }
+        
+        .fade-in-delayed-3 {
+            animation: fadeIn 1s ease-out 0.9s forwards;
+            opacity: 0;
+        }
+        
+        .pulse-glow {
+            animation: pulseGlow 3s ease-in-out infinite;
+        }
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0px); }
+        50% { transform: translateY(-20px); }
+    }
+    
+    @keyframes slideInUp {
+        from { transform: translateY(50px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes pulseGlow {
+        0%, 100% { box-shadow: 0 0 20px rgba(16, 185, 129, 0.3); }
+        50% { box-shadow: 0 0 40px rgba(16, 185, 129, 0.6); }
+    }
+
+    /* Slideshow Styles */
+    .slide {
+        display: none;
+        position: absolute;
+        inset: 0;
+        animation: slideIn 0.8s ease-in-out;
+    }
+
+    .slide.active {
+        display: block;
+    }
+
+    .slide img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    .slide-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.5);
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .slide-indicator.active {
+        background-color: white;
+        width: 32px;
+        border-radius: 6px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    </style>
+
+    <script>
+        // Smooth scroll past sticky header (h-24 ≈ 96px)
+        function scrollToSection(sectionId) {
+            try {
+                const element = document.getElementById(sectionId);
+                if (!element) return false;
+                const header = document.querySelector('nav.sticky') || document.querySelector('nav');
+                const headerH = header ? header.getBoundingClientRect().height : 96;
+                const top = element.getBoundingClientRect().top + window.pageYOffset - headerH - 12;
+                window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+                try {
+                    history.replaceState(null, '', '#' + sectionId);
+                } catch (_) { /* ignore */ }
+            } catch (error) {
+                console.error('Scroll to section error:', error);
+            }
+            return false;
+        }
+
+        function scrollToHashTarget() {
+            try {
+                const hash = (window.location.hash || '').replace(/^#/, '');
+                if (!hash) return;
+                const el = document.getElementById(hash);
+                if (!el) return;
+                // Wait a tick for layout/images so we land on the real position
+                requestAnimationFrame(function () {
+                    setTimeout(function () { scrollToSection(hash); }, 50);
+                });
+            } catch (_) { /* ignore */ }
+        }
+
+        // Close mobile menu function
+        function closeMobileMenu() {
+            try {
+                const mobileMenu = document.getElementById('mobile-menu');
+                const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+                if (mobileMenu && mobileMenuBtn) {
+                    mobileMenu.classList.add('hidden');
+                    mobileMenuBtn.innerHTML = '<div class="icon-menu text-2xl"></div>';
+                }
+            } catch (error) {
+                console.error('Close mobile menu error:', error);
+            }
+        }
+
+        // Mobile menu functionality
+        document.addEventListener('DOMContentLoaded', function () {
+            scrollToHashTarget();
+            window.addEventListener('hashchange', scrollToHashTarget);
+            try {
+                // Initialize animations
+                const elements = document.querySelectorAll('.floating, .floating-delayed, .slide-in-up, .fade-in');
+                elements.forEach(el => {
+                    if (el && el.style !== undefined && el.style !== null) {
+                        el.style.willChange = 'transform, opacity';
+                    }
+                });
+
+                // Mobile menu toggle functionality
+                const mobileMenuBtn = document.getElementById('mobile-menu-btn');
+                const mobileMenu = document.getElementById('mobile-menu');
+
+                if (mobileMenuBtn && mobileMenu) {
+                    mobileMenuBtn.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const isHidden = mobileMenu.classList.contains('hidden');
+
+                        if (isHidden) {
+                            mobileMenu.classList.remove('hidden');
+                            mobileMenuBtn.innerHTML = '<div class="icon-x text-2xl"></div>';
+                        } else {
+                            mobileMenu.classList.add('hidden');
+                            mobileMenuBtn.innerHTML = '<div class="icon-menu text-2xl"></div>';
+                        }
+                    });
+
+                    // Close menu when clicking outside
+                    document.addEventListener('click', function (e) {
+                        if (!mobileMenu.contains(e.target) && !mobileMenuBtn.contains(e.target)) {
+                            mobileMenu.classList.add('hidden');
+                            mobileMenuBtn.innerHTML = '<div class="icon-menu text-2xl"></div>';
+                        }
+                    });
+                }
+
+            } catch (error) {
+                console.error('Landing page initialization error:', error);
+            }
+        });
+
+        // AI Search function
+        function openAISearch() {
+            try {
+                // Check if AIFoodSearch component is available
+                if (window.AIFoodSearch && window.React && window.ReactDOM) {
+                    const container = document.getElementById('ai-search-modal');
+                    if (container) {
+                        const root = ReactDOM.createRoot(container);
+                        root.render(React.createElement(window.AIFoodSearch, {
+                            isOpen: true,
+                            onClose: () => {
+                                root.unmount();
+                            }
+                        }));
+                    }
+                } else {
+                    // Fallback - redirect to main app
+                    window.location.href = 'index.html';
+                }
+            } catch (error) {
+                console.error('AI Search error:', error);
+                // Fallback - redirect to main app
+                window.location.href = 'index.html';
+            }
+        }
+
+        // Additional safety check for late-loading elements
+        window.addEventListener('load', function () {
+            try {
+                const elements = document.querySelectorAll('.floating, .floating-delayed');
+                elements.forEach(el => {
+                    if (el && el.style) {
+                        el.style.transform = el.style.transform || 'translateY(0px)';
+                    }
+                });
+            } catch (error) {
+                console.error('Late animation check error:', error);
+            }
+        });
+    </script>
+</head>
+
+<body class="min-h-screen bg-white">
+    <!-- AI Search Modal Container -->
+    <div id="ai-search-modal"></div>
+    <!-- Navigation -->
+    <nav class="bg-white shadow-lg border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-24">
+                <div class="flex items-center">
+                    <img src="/assets/logos/foodmaps-logo.png"
+                        alt="Food Maps"
+                        class="w-20 h-20 rounded-full object-cover hover:scale-105 transition-transform">
+                </div>
+
+                <!-- Desktop Menu -->
+                <div class="hidden lg:flex items-center gap-5 xl:gap-7">
+                    <a href="index.html?tutorial=1"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">How It Works</a>
+                    <a href="impactStory.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Impact Story</a>
+                    <a href="partners.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Partners</a>
+                    <a href="providers.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Providers</a>
+                    <a href="nutrition.html"
+                        class="hidden text-gray-600 hover:text-green-600 font-medium transition-colors cursor-pointer whitespace-nowrap">Nutrition</a>
+
+                    <div data-language-picker></div>
+
+                    <button onclick="window.location.href='index.html'"
+                        class="bg-green-600 text-white px-5 py-2.5 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg whitespace-nowrap">
+                        Get Started
+                    </button>
+                </div>
+
+                <!-- Mobile / tablet Menu Button -->
+                <div class="lg:hidden">
+                    <button id="mobile-menu-btn"
+                        class="text-gray-600 hover:text-green-600 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                        <div class="icon-menu text-2xl"></div>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mobile Menu -->
+            <div id="mobile-menu" class="lg:hidden hidden bg-white border-t border-gray-200 pb-4">
+                <div class="flex flex-col space-y-4 pt-4">
+                    <a href="index.html?tutorial=1"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">How It Works</a>
+                    <a href="impactStory.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Impact Story</a>
+                    <a href="partners.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Partners</a>
+                    <a href="providers.html"
+                        class="text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Providers</a>
+                    <a href="nutrition.html"
+                        class="hidden text-gray-600 hover:text-green-600 font-medium transition-colors px-2 py-2 rounded-lg hover:bg-gray-50 cursor-pointer">Nutrition</a>
+
+                    <div data-language-picker="mobile" class="px-2"></div>
+
+                    <button onclick="window.location.href='index.html'"
+                        class="bg-green-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-green-700 transform hover:scale-105 transition-all shadow-lg mx-2 mt-2">
+                        Get Started
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Admin Edit Button for Slideshow -->
+    <button id="slideshow-admin-btn"
+        class="hidden fixed top-32 right-6 z-50 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-orange-600 transition-all">
+        <div class="flex items-center gap-2">
+            <div class="icon-edit text-xl"></div>
+            <span>Edit Slideshow</span>
+        </div>
+    </button>
+
+    <!-- Slideshow Admin Modal -->
+    <div id="slideshow-admin-modal" class="hidden fixed inset-0 bg-black/70 z-50 overflow-y-auto">
+        <div class="min-h-screen px-4 flex items-center justify-center">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-4xl w-full p-8">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-3xl font-bold text-gray-900">Manage Slideshow Photos</h2>
+                    <button id="close-slideshow-modal" class="text-gray-500 hover:text-gray-700">
+                        <div class="icon-x text-3xl"></div>
+                    </button>
+                </div>
+
+                <!-- Add New Photo -->
+                <div class="mb-8 p-6 bg-emerald-50 rounded-xl border border-emerald-200">
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Add New Photo</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Photo URL</label>
+                            <input type="text" id="new-photo-url" placeholder="https://example.com/image.jpg"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Caption (Optional)</label>
+                            <input type="text" id="new-photo-caption" placeholder="Enter a caption for this photo"
+                                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500">
+                        </div>
+                        <button id="add-photo-btn"
+                            class="w-full bg-emerald-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-emerald-700 transition-all">
+                            <div class="flex items-center justify-center gap-2">
+                                <div class="icon-plus text-xl"></div>
+                                <span>Add Photo</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Current Photos -->
+                <div>
+                    <h3 class="text-xl font-bold text-gray-900 mb-4">Current Photos</h3>
+                    <div id="admin-photo-list" class="space-y-4 max-h-96 overflow-y-auto">
+                        <!-- Photo items will be dynamically inserted here -->
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-4">
+                    <button id="cancel-slideshow-edit"
+                        class="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-semibold hover:bg-gray-300 transition-all">
+                        Cancel
+                    </button>
+                    <button id="save-slideshow-changes"
+                        class="px-6 py-3 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700 transition-all">
+                        Save Changes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen overflow-hidden">
+        <!-- Slideshow Background -->
+        <div id="slideshow-container" class="absolute inset-0">
+            <!-- Slides will be dynamically inserted here -->
+        </div>
+
+        <!-- Dark Overlay for readability -->
+        <div class="absolute inset-0 bg-black/40"></div>
+
+        <!-- Slideshow Controls -->
+        <button id="prev-slide"
+            class="absolute left-4 top-1/2 -translate-y-1/2 bg-white/25 hover:bg-white/40 text-white p-3 rounded-full transition-all z-10">
+            <div class="icon-chevron-left text-2xl"></div>
+        </button>
+        <button id="next-slide"
+            class="absolute right-4 top-1/2 -translate-y-1/2 bg-white/25 hover:bg-white/40 text-white p-3 rounded-full transition-all z-10">
+            <div class="icon-chevron-right text-2xl"></div>
+        </button>
+
+        <!-- Slide Indicators -->
+        <div id="slide-indicators" class="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+            <!-- Indicators will be dynamically inserted here -->
+        </div>
+
+        <!-- Floating Food Icons -->
+        <div class="absolute inset-0 pointer-events-none overflow-hidden">
+            <div class="floating absolute top-20 left-10 w-16 h-16 rounded-full bg-emerald-200/20"></div>
+            <div class="floating-delayed absolute top-40 right-20 w-14 h-14 rounded-full bg-green-200/20"></div>
+            <div class="floating absolute bottom-40 left-20 w-12 h-12 rounded-full bg-teal-200/20"></div>
+            <div class="floating-delayed absolute top-60 left-1/3 w-20 h-20 rounded-full bg-lime-200/15"></div>
+            <div class="floating absolute bottom-60 right-10 w-14 h-14 rounded-full bg-cyan-200/20"></div>
+            <div class="floating-delayed absolute top-1/3 right-1/3 w-12 h-12 rounded-full bg-emerald-100/20"></div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="relative z-10 flex items-center justify-center min-h-screen px-4">
+            <div class="max-w-6xl mx-auto text-center">
+                <!-- Logo as Main Hero Element -->
+                <div class="slide-in-up mb-12">
+                    <div class="flex justify-center mb-8">
+                        <img src="/assets/logos/foodmaps-logo.png"
+                            alt="Food Maps" class="w-40 h-40 md:w-56 md:h-56 rounded-full object-cover" />
+                    </div>
+                </div>
+
+                <!-- Main Headline -->
+                <div class="fade-in-delayed-1 mb-8">
+                    <h1 class="text-5xl md:text-7xl font-bold text-white mb-6 leading-tight editable" data-editable="hero-title" contenteditable="false">
+                        Connecting Communities<br>
+                        <span class="text-orange-200">
+                            Through Food
+                        </span>
+                    </h1>
+                    <p class="text-xl md:text-2xl text-emerald-100 mb-10 max-w-4xl mx-auto leading-relaxed editable" data-editable="hero-subtitle" contenteditable="false">
+                        Food Maps helps people share extra food and help neighbors. Post food in about a minute,
+                        match nearby, and set pickup fast.
+                    </p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="fade-in-delayed-2 flex flex-col sm:flex-row gap-6 justify-center mb-16">
+                    <button onclick="openAISearch()"
+                        class="group relative bg-white text-emerald-600 px-12 py-6 rounded-2xl font-bold text-xl hover:bg-emerald-50 transition-all transform hover:scale-105 shadow-2xl overflow-hidden">
+                        <div class="absolute inset-0 bg-emerald-500/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        </div>
+                        <div class="relative flex items-center">
+                            <div class="icon-search text-2xl mr-3 group-hover:scale-110 transition-transform"></div>
+                            Find Food Near You
+                        </div>
+                    </button>
+                    <button onclick="window.location.href='index.html#create'"
+                        class="group relative bg-green-600 text-white px-12 py-6 rounded-2xl font-bold text-xl hover:bg-green-700 transition-all transform hover:scale-105 shadow-2xl overflow-hidden">
+                        <div class="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        </div>
+                        <div class="relative flex items-center">
+                            <div class="icon-heart text-2xl mr-3 group-hover:scale-110 transition-transform"></div>
+                            Share Food Today
+                        </div>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works -->
+    <section id="how-it-works" class="py-20 bg-white scroll-mt-32">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="text-center mb-16">
+                <h2 class="text-4xl font-bold text-gray-900 mb-4 editable" data-editable="how-title" contenteditable="false">How Food Maps Works</h2>
+                <p class="text-xl text-gray-600 editable" data-editable="how-subtitle" contenteditable="false">Food sharing in three clear steps</p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="text-center">
+                    <div class="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div class="icon-heart text-3xl text-green-600"></div>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-4 editable" data-editable="how-step1-title" contenteditable="false">1. Donor Posts An Item</h3>
+                    <p class="text-gray-600 editable" data-editable="how-step1-desc" contenteditable="false">Verified donors create a listing with food details, pickup window, and location.</p>
+                </div>
+
+                <div class="text-center">
+                    <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div class="icon-hand-helping text-3xl text-orange-600" aria-hidden="true"></div>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-4 editable" data-editable="how-step2-title" contenteditable="false">2. Recipient Claims The Item</h3>
+                    <p class="text-gray-600 editable" data-editable="how-step2-desc" contenteditable="false">Recipients review nearby listings and claim items that meet their household needs.</p>
+                </div>
+
+                <div class="text-center">
+                    <div class="w-20 h-20 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                        <div class="icon-truck text-3xl text-orange-600"></div>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-4 editable" data-editable="how-step3-title" contenteditable="false">3. Recipient Completes Pickup</h3>
+                    <p class="text-gray-600 editable" data-editable="how-step3-desc" contenteditable="false">Pickup is completed at the scheduled time, closing the loop with a reliable handoff.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Impact Section -->
+    <section id="impact" class="py-24 bg-green-900 text-white relative overflow-hidden">
+        <!-- Background Pattern -->
+        <div class="absolute inset-0 bg-white/5 opacity-30" aria-hidden="true"></div>
+
+        <div class="max-w-7xl mx-auto px-4 text-center relative z-10">
+            <div class="mb-16">
+                <div
+                    class="inline-flex items-center bg-emerald-500/20 text-emerald-300 px-6 py-2 rounded-full font-semibold mb-6 border border-emerald-500/30 editable" data-editable="impact-badge" contenteditable="false">
+                    Results So Far
+                </div>
+                <h2 class="text-5xl md:text-6xl font-bold mb-6 text-white editable" data-editable="impact-title" contenteditable="false">
+                    What We Have Done Together
+                </h2>
+                <p class="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed editable" data-editable="impact-subtitle" contenteditable="false">
+                    A focused view of impact and live product access.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div
+                    class="bg-white/10 rounded-3xl p-8 border border-white/10 text-left">
+                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-orange-300 font-semibold editable" data-editable="impact-card1-label" contenteditable="false">Nutrition</div>
+                    <div id="impact-pounds-value" class="text-5xl font-bold text-orange-400 mb-3" data-no-edit="true">85K+
+                    </div>
+                    <div class="text-orange-200 text-lg font-medium mb-2 editable" data-editable="impact-card1-title" contenteditable="false">Lbs Donated</div>
+                    <div id="impact-pounds-note" class="text-gray-400 text-sm editable" data-editable="impact-card1-note" contenteditable="false">Updated regularly from completed and claimed listings</div>
+                </div>
+                <div
+                    class="bg-white/10 rounded-3xl p-8 border border-white/10 text-left">
+                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-pink-300 font-semibold editable" data-editable="impact-card2-label" contenteditable="false">Families</div>
+                    <div id="impact-families-value" class="text-5xl font-bold text-pink-400 mb-3" data-no-edit="true">2,500+
+                    </div>
+                    <div class="text-pink-200 text-lg font-medium mb-2 editable" data-editable="impact-card2-title" contenteditable="false">Families Helped</div>
+                    <div id="impact-families-note" class="text-gray-400 text-sm editable" data-editable="impact-card2-note" contenteditable="false">Community pickup support across active service areas</div>
+                </div>
+                <div
+                    class="bg-white/10 rounded-3xl p-8 border border-white/10 text-left">
+                    <div class="text-xs mb-4 uppercase tracking-[0.2em] text-emerald-300 font-semibold editable" data-editable="impact-card3-label" contenteditable="false">See For Yourself</div>
+                    <h3 class="text-2xl font-bold mb-4 text-white editable" data-editable="impact-card3-title" contenteditable="false">Open The Product</h3>
+                    <p class="text-gray-300 leading-relaxed mb-6 editable" data-editable="impact-card3-desc" contenteditable="false">These links open working parts of Food Maps so people can test the real app.</p>
+                    <div class="space-y-3">
+                        <a href="index.html" class="flex items-center justify-between bg-white/10 rounded-xl px-4 py-3 hover:bg-white/20 transition-colors">
+                            <span class="font-medium text-emerald-100">Main map and listings</span>
+                            <span class="text-emerald-300">Open</span>
+                        </a>
+                        <a href="index.html?tutorial=1" class="flex items-center justify-between bg-white/10 rounded-xl px-4 py-3 hover:bg-white/20 transition-colors">
+                            <span class="font-medium text-emerald-100">How to use Food Maps</span>
+                            <span class="text-emerald-300">Open</span>
+                        </a>
+                        <a href="impactStory.html" class="flex items-center justify-between bg-white/10 rounded-xl px-4 py-3 hover:bg-white/20 transition-colors">
+                            <span class="font-medium text-emerald-100">Program stories page</span>
+                            <span class="text-emerald-300">Open</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-16">
+                <div
+                    class="bg-green-800/40 rounded-3xl p-8 border border-emerald-400/30">
+                    <h3 class="text-2xl font-bold text-emerald-300 mb-4 editable" data-editable="impact-ripple-title" contenteditable="false">Every Action Creates Ripples</h3>
+                    <p class="text-gray-300 text-lg leading-relaxed max-w-3xl mx-auto editable" data-editable="impact-ripple-desc" contenteditable="false">
+                        Each food post helps someone nearby and keeps good food out of the trash.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- CTA Section -->
+    <section class="py-24 bg-green-700 text-white text-center relative overflow-hidden">
+        <!-- Animated Background Elements -->
+        <div class="absolute inset-0 pointer-events-none">
+            <div class="floating absolute top-10 left-10 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+            <div class="floating-delayed absolute bottom-10 right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl"></div>
+            <div class="floating absolute top-1/2 left-1/4 w-24 h-24 bg-white/10 rounded-full blur-xl"></div>
+        </div>
+
+        <div class="max-w-5xl mx-auto px-4 relative z-10">
+            <div class="mb-12">
+                <h2 class="text-5xl md:text-6xl font-bold mb-6 leading-tight editable" data-editable="cta-title" contenteditable="false">
+                    Ready to Help<br>
+                    <span class="text-orange-100">Your
+                        Community?</span>
+                </h2>
+                <p class="text-xl md:text-2xl text-emerald-100 mb-8 max-w-3xl mx-auto leading-relaxed editable" data-editable="cta-subtitle" contenteditable="false">
+                    Join local donors, volunteers, and families using Food Maps every day.
+                </p>
+            </div>
+
+            <div class="flex flex-col sm:flex-row gap-6 justify-center mb-12">
+                <button onclick="window.location.href='https://allgoodlivingfoundation.org/volunteer-form'"
+                    class="group bg-white text-emerald-600 px-10 py-5 rounded-2xl font-bold text-lg hover:bg-emerald-50 transition-all transform hover:scale-105 shadow-2xl">
+                    <div class="flex items-center justify-center">
+                        <div class="icon-users text-xl mr-3 group-hover:scale-110 transition-transform"></div>
+                        Become a Volunteer
+                    </div>
+                </button>
+                <button onclick="window.location.href='index.html#create'"
+                    class="group border-3 border-white text-white px-10 py-5 rounded-2xl font-bold text-lg hover:bg-white hover:text-emerald-600 transition-all transform hover:scale-105 shadow-2xl">
+                    <div class="flex items-center justify-center">
+                        <div class="icon-heart text-xl mr-3 group-hover:scale-110 transition-transform"></div>
+                        Share Food Today
+                    </div>
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto text-sm">
+                <div class="flex items-center justify-center space-x-2 text-emerald-100">
+                    <div class="icon-check-circle text-lg"></div>
+                    <span>Free to use forever</span>
+                </div>
+                <div class="flex items-center justify-center space-x-2 text-emerald-100">
+                    <div class="icon-shield text-lg"></div>
+                    <span>Safe & secure platform</span>
+                </div>
+                <div class="flex items-center justify-center space-x-2 text-emerald-100">
+                    <div class="icon-users text-lg"></div>
+                    <span>Growing community</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Features Coming Soon -->
+    <section class="py-14 bg-emerald-50 border-y border-emerald-100">
+        <div class="max-w-6xl mx-auto px-4">
+            <div class="rounded-3xl bg-gradient-to-r from-emerald-700 to-green-700 text-white p-8 md:p-10 shadow-xl">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                    <div>
+                        <div class="inline-flex items-center bg-white/15 text-emerald-100 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-[0.2em] mb-4 editable" data-editable="ai-badge" contenteditable="false">
+                            AI Features Coming Soon
+                        </div>
+                        <h3 class="text-3xl md:text-4xl font-bold mb-3 editable" data-editable="ai-title" contenteditable="false">Smarter Discovery Is On The Way</h3>
+                        <p class="text-emerald-100 text-lg max-w-3xl editable" data-editable="ai-subtitle" contenteditable="false">
+                            We are preparing AI tools to make finding and sharing food faster and easier for everyone.
+                        </p>
+                    </div>
+                    <div class="flex flex-wrap gap-3 md:justify-end">
+                        <span class="px-4 py-2 rounded-full bg-white/15 border border-white/20 font-medium editable" data-editable="ai-tag-voice" contenteditable="false">Voice Search</span>
+                        <span class="px-4 py-2 rounded-full bg-white/15 border border-white/20 font-medium editable" data-editable="ai-tag-smart" contenteditable="false">Smart Recommendations</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter signup — after primary CTAs, before footer -->
+    <section class="py-20 bg-white border-t border-emerald-100" id="newsletter">
+        <div class="max-w-4xl mx-auto px-4">
+            <div class="rounded-3xl bg-gradient-to-br from-emerald-50 via-white to-orange-50 border border-emerald-100 shadow-xl p-8 md:p-12">
+                <div class="text-center mb-8">
+                    <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700 mb-3 editable" data-editable="newsletter-eyebrow" contenteditable="false">Stay in the loop</p>
+                    <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 editable" data-editable="newsletter-title" contenteditable="false">
+                        Get Food Maps updates
+                    </h2>
+                    <p class="text-lg text-gray-600 max-w-2xl mx-auto editable" data-editable="newsletter-description" contenteditable="false">
+                        Occasional notes on new providers, community programs, and ways to help — no spam.
+                    </p>
+                </div>
+
+                <form id="newsletterForm" data-newsletter-form data-source="landing" class="max-w-xl mx-auto">
+                    <div class="flex flex-col sm:flex-row gap-3 mb-4">
+                        <label class="sr-only" for="landing-newsletter-email">Email address</label>
+                        <input
+                            id="landing-newsletter-email"
+                            type="email"
+                            name="email"
+                            required
+                            autocomplete="email"
+                            placeholder="you@example.com"
+                            class="flex-1 px-4 py-3.5 border border-gray-200 rounded-xl text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                        >
+                        <button
+                            type="submit"
+                            class="shrink-0 px-8 py-3.5 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-xl transition-colors shadow-lg"
+                        >
+                            Subscribe
+                        </button>
+                    </div>
+
+                    <label class="flex items-start gap-2 text-sm text-gray-600 mb-4">
+                        <input type="checkbox" name="consent" required
+                            class="mt-1 w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+                        <span>I agree to receive email updates from Food Maps. Unsubscribe anytime.</span>
+                    </label>
+
+                    <div id="newsletterSuccess" data-newsletter-success
+                        class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl mb-3 text-center text-sm">
+                    </div>
+                    <div id="newsletterError" data-newsletter-error
+                        class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl mb-3 text-center text-sm">
+                    </div>
+
+                    <p class="text-xs text-gray-500 text-center">
+                        We respect your privacy. Read our
+                        <a href="privacy.html" class="text-emerald-700 hover:underline">Privacy Policy</a>.
+                    </p>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- AI Search Scripts -->
+    <script type="text/babel" src="js/lib/agentAPI.js"></script>
+    <script type="text/babel" src="js/lib/database.js"></script>
+    <script type="text/babel" src="js/components/auth/SimpleCaptcha.js"></script>
+    <script type="text/babel" src="js/components/auth/AuthModal.js"></script>
+    <script type="text/babel" src="js/components/ai/AIFoodSearch.js?v=20260514-autocomplete"></script>
+    <script type="text/babel" src="js/components/ai/LandingAISearch.js"></script>
+    <script type="text/babel" src="js/landing-app.js"></script>
+    <script>
+        (function loadImpactStats() {
+            const CACHE_KEY = 'landing_public_stats_v1';
+            const CACHE_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+            const fallbackStats = {
+                pounds_donated_lbs: 85000,
+                families_helped: 2500,
+                updated_at: null,
+            };
+
+            const poundsEl = document.getElementById('impact-pounds-value');
+            const familiesEl = document.getElementById('impact-families-value');
+            const poundsNoteEl = document.getElementById('impact-pounds-note');
+            const familiesNoteEl = document.getElementById('impact-families-note');
+
+            function formatPounds(value) {
+                const n = Number(value) || 0;
+                if (n >= 1000) {
+                    return `${Math.round(n / 1000)}K+`;
+                }
+                return `${n.toLocaleString()}+`;
+            }
+
+            function formatFamilies(value) {
+                const n = Number(value) || 0;
+                return `${n.toLocaleString()}+`;
+            }
+
+            function applyStats(stats) {
+                if (poundsEl) {
+                    poundsEl.textContent = formatPounds(stats.pounds_donated_lbs);
+                }
+                if (familiesEl && Number.isFinite(Number(stats.families_helped)) && Number(stats.families_helped) > 0) {
+                    familiesEl.textContent = formatFamilies(stats.families_helped);
+                }
+
+                if (stats.updated_at && poundsNoteEl) {
+                    const updated = new Date(stats.updated_at);
+                    if (!Number.isNaN(updated.getTime())) {
+                        poundsNoteEl.textContent = `Updated ${updated.toLocaleDateString()} from claimed and completed listings`;
+                    }
+                }
+
+                if (stats.updated_at && familiesNoteEl) {
+                    const updated = new Date(stats.updated_at);
+                    if (!Number.isNaN(updated.getTime())) {
+                        familiesNoteEl.textContent = `Updated ${updated.toLocaleDateString()} from recipient claim activity`;
+                    }
+                }
+            }
+
+            function readCachedStats() {
+                try {
+                    const raw = localStorage.getItem(CACHE_KEY);
+                    if (!raw) {
+                        return null;
+                    }
+
+                    const parsed = JSON.parse(raw);
+                    if (!parsed || !parsed.cachedAt || !parsed.data) {
+                        return null;
+                    }
+
+                    if (Date.now() - parsed.cachedAt > CACHE_TTL_MS) {
+                        return null;
+                    }
+
+                    return parsed.data;
+                } catch (err) {
+                    return null;
+                }
+            }
+
+            function writeCachedStats(data) {
+                try {
+                    localStorage.setItem(CACHE_KEY, JSON.stringify({
+                        cachedAt: Date.now(),
+                        data,
+                    }));
+                } catch (err) {
+                    // Ignore storage errors on privacy-restricted browsers.
+                }
+            }
+
+            applyStats(fallbackStats);
+
+            const cachedStats = readCachedStats();
+            if (cachedStats) {
+                applyStats(cachedStats);
+                return;
+            }
+
+            fetch('/api/public/stats', { credentials: 'omit' })
+                .then((response) => {
+                    if (!response.ok) {
+                        throw new Error(`stats request failed: ${response.status}`);
+                    }
+                    return response.json();
+                })
+                .then((stats) => {
+                    applyStats(stats);
+                    writeCachedStats(stats);
+                })
+                .catch(() => {
+                    // Keep safe fallback values if the public stats endpoint is unavailable.
+                });
+        })();
+    </script>
+
+    <!-- Anonymous AI chatbot (landing only) -->
+    <script>window.FOODMAPS_AI_ANONYMOUS = true;</script>
+    <script type="text/babel" src="js/components/ai/AIChatbot.js?v=20260514-ai-directions"></script>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 text-gray-300 py-16 relative overflow-hidden">
+        <!-- Background Pattern -->
+        <div class="absolute inset-0 bg-white/5 opacity-30" aria-hidden="true"></div>
+
+        <div class="max-w-7xl mx-auto px-4 relative z-10">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
+                <div class="md:col-span-2">
+                    <div class="flex flex-col items-start text-left mb-6">
+                        <a href="https://allgoodlivingfoundation.org/" target="_blank" rel="noopener noreferrer"
+                            class="transition-transform hover:scale-105">
+                            <img src="/assets/logos/AGLfoundationLOGO.png"
+                                onerror="this.onerror=null; this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2264%22 height=%2264%22%3E%3Crect width=%2264%22 height=%2264%22 rx=%228%22 fill=%22%2315803d%22/%3E%3Ctext x=%2232%22 y=%2244%22 font-size=%2220%22 font-family=%22Arial,sans-serif%22 fill=%22white%22 text-anchor=%22middle%22%3EFM%3C/text%3E%3C/svg%3E';"
+                                alt="All Good Living Foundation" class="w-16 h-16 rounded-xl shadow-lg cursor-pointer">
+                        </a>
+                    </div>
+                    <p class="text-gray-400 leading-relaxed max-w-md mb-6">
+                        All Good Living Foundation supports students and families in Alameda, Oakland, and nearby
+                        communities. Programs include school-based closets, food access support, and youth services.
+                        The goal is simple: provide practical help when families need it.
+                    </p>
+                    <div class="flex space-x-4 mb-6">
+                        <a href="https://www.instagram.com/aglfoundation/" target="_blank"
+                            class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors">
+                            <div class="icon-instagram text-emerald-400 hover:text-white"></div>
+                        </a>
+                        <a href="https://www.facebook.com/aglfoundation" target="_blank"
+                            class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors">
+                            <div class="icon-facebook text-emerald-400 hover:text-white"></div>
+                        </a>
+                    </div>
+                    <a href="https://allgoodlivingfoundation.org/donate"
+                        target="_blank" rel="noopener noreferrer"
+                        class="inline-flex items-center justify-center bg-orange-500 text-white px-6 py-3 rounded-xl font-semibold hover:bg-orange-600 transform hover:scale-105 transition-all shadow-lg">
+                        Donate
+                    </a>
+                </div>
+
+                <div>
+                    <h4 class="text-white font-bold mb-6 text-lg">Platform</h4>
+                    <ul class="space-y-3">
+                        <li><a href="index.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-search mr-2 group-hover:scale-110 transition-transform"></div>
+                                Find Food
+                            </a></li>
+
+                        <li><a href="index.html#create"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-heart mr-2 group-hover:scale-110 transition-transform"></div>
+                                Share Food
+                            </a></li>
+
+                        <li><a href="https://allgoodlivingfoundation.org/volunteer-form"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-users mr-2 group-hover:scale-110 transition-transform"></div>
+                                Volunteer
+                            </a></li>
+
+                        <li><a href="partners.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-handshake mr-2 group-hover:scale-110 transition-transform"></div>
+                                Partners
+                            </a></li>
+
+                        <li><a href="providers.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-map-pin mr-2 group-hover:scale-110 transition-transform"></div>
+                                Providers
+                            </a></li>
+
+                        <li class="hidden"><a href="nutrition.html"
+                                class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-heart mr-2 group-hover:scale-110 transition-transform"></div>
+                                Nutrition
+                            </a></li>
+
+                        <li><a href="#faqs" class="hover:text-emerald-400 transition-colors flex items-center group">
+                                <div class="icon-help-circle mr-2 group-hover:scale-110 transition-transform"></div>
+                                FAQs
+                            </a></li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h4 class="text-white font-bold mb-6 text-lg">Contact</h4>
+                    <ul class="space-y-3">
+                        <li class="flex items-center group">
+                            <div class="icon-mail mr-3 text-emerald-400 group-hover:scale-110 transition-transform">
+                            </div>
+                            <a href="mailto:info@allgoodlivingfoundation.org"
+                                class="hover:text-emerald-400 transition-colors">info@allgoodlivingfoundation.org</a>
+                        </li>
+                        <li class="flex items-center group">
+                            <div class="icon-phone mr-3 text-emerald-400 group-hover:scale-110 transition-transform">
+                            </div>
+                            <a href="tel:5105226288" class="hover:text-emerald-400 transition-colors">510-522-6288</a>
+                        </li>
+                        <li class="flex items-center group">
+                            <div class="icon-map-pin mr-3 text-emerald-400 group-hover:scale-110 transition-transform">
+                            </div>
+                            <a href="https://maps.google.com/?q=1900+Thau+Way,+Alameda,+CA+94501" target="_blank"
+                                class="hover:text-emerald-400 transition-colors">1900 Thau Way, Alameda, CA 94501</a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="border-t border-gray-800 pt-8">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <p class="text-gray-400 mb-4 md:mb-0">
+                        &copy; 2025 Food Maps. All rights reserved. Built to help communities share food.
+                    </p>
+                    <div class="flex space-x-6 text-sm">
+                        <a href="https://dogoods.store/" target="_blank" rel="noopener noreferrer"
+                            class="text-gray-400 hover:text-emerald-400 transition-colors">DoGoods Store</a>
+                        <a href="privacy.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Privacy
+                            Policy</a>
+                        <a href="terms.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Terms of
+                            Service</a>
+                        <a href="cookies.html" class="text-gray-400 hover:text-emerald-400 transition-colors">Cookie
+                            Policy</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Slideshow JavaScript -->
+    <script>
+        // Default slideshow photos
+        const defaultPhotos = [
+            {
+                url: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?w=1200',
+                caption: 'Fresh produce donated to local families'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?w=1200',
+                caption: 'Community volunteers preparing food packages'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1509099652299-30938b0aeb63?w=1200',
+                caption: 'Healthy meals ready for distribution'
+            },
+            {
+                url: 'https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?w=1200',
+                caption: 'Making a difference in our community'
+            }
+        ];
+
+        // Slideshow state
+        let slideshowPhotos = [];
+        let currentSlide = 0;
+        let slideInterval;
+
+        // Check admin access
+        function checkSlideshowAdminAccess() {
+            try {
+                // Verify admin access with backend instead of trusting localStorage
+                const token = localStorage.getItem('auth_token');
+                const adminBtn = document.getElementById('slideshow-admin-btn');
+
+                if (token && adminBtn) {
+                    // Fetch actual user data from backend to verify role
+                    fetch('/api/user/profile', {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                        .then(res => res.ok ? res.json() : null)
+                        .then(user => {
+                            if (user && user.role === 'admin') {
+                                adminBtn.classList.remove('hidden');
+                            }
+                        })
+                        .catch(err => console.error('Admin verification failed:', err));
+                }
+            } catch (error) {
+                console.error('Admin access check error:', error);
+            }
+        }
+
+        // Load slideshow photos
+        function loadSlideshowPhotos() {
+            try {
+                const saved = localStorage.getItem('slideshowPhotos');
+                slideshowPhotos = saved ? JSON.parse(saved) : [...defaultPhotos];
+                renderSlideshow();
+            } catch (error) {
+                console.error('Load slideshow error:', error);
+                slideshowPhotos = [...defaultPhotos];
+                renderSlideshow();
+            }
+        }
+
+        // Render slideshow
+        function renderSlideshow() {
+            const container = document.getElementById('slideshow-container');
+            const indicators = document.getElementById('slide-indicators');
+
+            if (!container || !indicators) return;
+
+            // Clear existing content
+            container.innerHTML = '';
+            indicators.innerHTML = '';
+
+            // Create slides
+            slideshowPhotos.forEach((photo, index) => {
+                const slide = document.createElement('div');
+                slide.className = `slide ${index === currentSlide ? 'active' : ''}`;
+                slide.innerHTML = `
+                    <img src="${photo.url}" alt="${photo.caption || 'Background image'}" loading="lazy">
+                `;
+                container.appendChild(slide);
+
+                // Create indicator
+                const indicator = document.createElement('div');
+                indicator.className = `slide-indicator ${index === currentSlide ? 'active' : ''}`;
+                indicator.onclick = () => goToSlide(index);
+                indicators.appendChild(indicator);
+            });
+        }
+
+        // Navigate slides
+        function nextSlide() {
+            currentSlide = (currentSlide + 1) % slideshowPhotos.length;
+            renderSlideshow();
+        }
+
+        function prevSlide() {
+            currentSlide = (currentSlide - 1 + slideshowPhotos.length) % slideshowPhotos.length;
+            renderSlideshow();
+        }
+
+        function goToSlide(index) {
+            currentSlide = index;
+            renderSlideshow();
+        }
+
+        // Auto-advance slideshow
+        function startSlideshow() {
+            stopSlideshow();
+            slideInterval = setInterval(nextSlide, 5000); // Change slide every 5 seconds
+        }
+
+        function stopSlideshow() {
+            if (slideInterval) {
+                clearInterval(slideInterval);
+            }
+        }
+
+        // Admin modal functions
+        function openSlideshowModal() {
+            const modal = document.getElementById('slideshow-admin-modal');
+            if (modal) {
+                modal.classList.remove('hidden');
+                renderAdminPhotoList();
+                stopSlideshow();
+            }
+        }
+
+        function closeSlideshowModal() {
+            const modal = document.getElementById('slideshow-admin-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+                startSlideshow();
+            }
+        }
+
+        // Render admin photo list
+        function renderAdminPhotoList() {
+            const list = document.getElementById('admin-photo-list');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            if (slideshowPhotos.length === 0) {
+                list.innerHTML = '<p class="text-gray-500 text-center py-8">No photos added yet</p>';
+                return;
+            }
+
+            slideshowPhotos.forEach((photo, index) => {
+                const item = document.createElement('div');
+                item.className = 'flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-gray-200';
+                item.innerHTML = `
+                    <img src="${photo.url}" alt="Photo ${index + 1}" class="w-24 h-24 object-cover rounded-lg">
+                    <div class="flex-1">
+                        <p class="font-medium text-gray-900 truncate">${photo.url}</p>
+                        <p class="text-sm text-gray-600">${photo.caption || 'No caption'}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="movePhotoUp(${index})" class="p-2 text-gray-600 hover:text-emerald-600 transition-colors" ${index === 0 ? 'disabled' : ''}>
+                            <div class="icon-chevron-up text-xl"></div>
+                        </button>
+                        <button onclick="movePhotoDown(${index})" class="p-2 text-gray-600 hover:text-emerald-600 transition-colors" ${index === slideshowPhotos.length - 1 ? 'disabled' : ''}>
+                            <div class="icon-chevron-down text-xl"></div>
+                        </button>
+                        <button onclick="removePhoto(${index})" class="p-2 text-red-600 hover:text-red-700 transition-colors">
+                            <div class="icon-trash-2 text-xl"></div>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        // Add new photo
+        function addNewPhoto() {
+            const urlInput = document.getElementById('new-photo-url');
+            const captionInput = document.getElementById('new-photo-caption');
+
+            if (!urlInput || !captionInput) return;
+
+            const url = urlInput.value.trim();
+            if (!url) {
+                alert('Please enter a photo URL');
+                return;
+            }
+
+            slideshowPhotos.push({
+                url: url,
+                caption: captionInput.value.trim()
+            });
+
+            urlInput.value = '';
+            captionInput.value = '';
+            renderAdminPhotoList();
+        }
+
+        // Remove photo
+        function removePhoto(index) {
+            if (confirm('Are you sure you want to remove this photo?')) {
+                slideshowPhotos.splice(index, 1);
+                renderAdminPhotoList();
+            }
+        }
+
+        // Move photo up
+        function movePhotoUp(index) {
+            if (index > 0) {
+                [slideshowPhotos[index], slideshowPhotos[index - 1]] = [slideshowPhotos[index - 1], slideshowPhotos[index]];
+                renderAdminPhotoList();
+            }
+        }
+
+        // Move photo down
+        function movePhotoDown(index) {
+            if (index < slideshowPhotos.length - 1) {
+                [slideshowPhotos[index], slideshowPhotos[index + 1]] = [slideshowPhotos[index + 1], slideshowPhotos[index]];
+                renderAdminPhotoList();
+            }
+        }
+
+        // Save slideshow changes
+        function saveSlideshowChanges() {
+            try {
+                localStorage.setItem('slideshowPhotos', JSON.stringify(slideshowPhotos));
+                currentSlide = 0;
+                renderSlideshow();
+                closeSlideshowModal();
+                alert('Slideshow updated successfully!');
+            } catch (error) {
+                console.error('Save slideshow error:', error);
+                alert('Failed to save slideshow changes');
+            }
+        }
+
+        // Initialize slideshow on page load
+        document.addEventListener('DOMContentLoaded', function () {
+            // Check admin access
+            checkSlideshowAdminAccess();
+
+            // Load and render slideshow
+            loadSlideshowPhotos();
+            startSlideshow();
+
+            // Event listeners
+            const prevBtn = document.getElementById('prev-slide');
+            const nextBtn = document.getElementById('next-slide');
+            const adminBtn = document.getElementById('slideshow-admin-btn');
+            const closeModalBtn = document.getElementById('close-slideshow-modal');
+            const cancelBtn = document.getElementById('cancel-slideshow-edit');
+            const saveBtn = document.getElementById('save-slideshow-changes');
+            const addPhotoBtn = document.getElementById('add-photo-btn');
+
+            if (prevBtn) prevBtn.onclick = prevSlide;
+            if (nextBtn) nextBtn.onclick = nextSlide;
+            if (adminBtn) adminBtn.onclick = openSlideshowModal;
+            if (closeModalBtn) closeModalBtn.onclick = closeSlideshowModal;
+            if (cancelBtn) cancelBtn.onclick = closeSlideshowModal;
+            if (saveBtn) saveBtn.onclick = saveSlideshowChanges;
+            if (addPhotoBtn) addPhotoBtn.onclick = addNewPhoto;
+
+            // Pause slideshow on hover
+            const slideshowContainer = document.getElementById('slideshow-container');
+            if (slideshowContainer) {
+                slideshowContainer.addEventListener('mouseenter', stopSlideshow);
+                slideshowContainer.addEventListener('mouseleave', startSlideshow);
+            }
+
+            // Keyboard navigation
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'ArrowLeft') prevSlide();
+                if (e.key === 'ArrowRight') nextSlide();
+            });
+        });
+    </script>
+    <script src="js/lib/newsletterSignup.js?v=20260814-newsletter"></script>
+    <script src="js/lib/pageEditor.js"></script>
+    <script>
+        window.FoodMapsPageEditor.init({
+            pageId: 'landing',
+            fullPage: true,
+            excludeSelectors: [
+                '#slideshow-container',
+                '#slide-indicators',
+                '#prev-slide',
+                '#next-slide',
+                '#impact-pounds-value',
+                '#impact-families-value',
+                '#auth-modal-root',
+                '#ai-search-root',
+                '#newsletterForm'
+            ]
+        });
+    </script>
+</body>
+
+</html>

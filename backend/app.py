@@ -58,8 +58,10 @@ app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
 load_aws_secrets()
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
-# Serve static files at root paths for legacy HTML compatibility
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# The document root. Only frontend/ is web-reachable; keeping it separate from
+# PROJECT_ROOT is what stops .env, backend/ and guides/ from being served.
+FRONTEND_DIR = os.path.join(PROJECT_ROOT, 'frontend')
 # Static files will be mounted at the end of the file, after all routes
 security = HTTPBearer()
 # Optional bearer for endpoints where auth is not required but can tailor results
@@ -574,7 +576,7 @@ def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security), 
 
 
 import os
-HTML_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+HTML_DIR = FRONTEND_DIR
 
 def get_html_content(filename):
     filepath = os.path.join(HTML_DIR, filename)
@@ -616,6 +618,18 @@ async def serve_nutrition():
 @app.get("/admin-referrals.html", response_class=HTMLResponse)
 async def serve_admin_referrals():
     return get_html_content("admin-referrals.html")
+
+# Frontend assets moved from the repo root into frontend/assets/. These
+# redirects are load-bearing, not just politeness: distribution_centers.logo_url
+# rows hold literal "/logos/..." strings, and admin page edits persist image
+# src values, so live data still points at the old URLs.
+@app.get("/logos/{asset_path:path}", include_in_schema=False)
+async def redirect_legacy_logo(asset_path: str):
+    return RedirectResponse(url=f"/assets/logos/{asset_path}", status_code=301)
+
+@app.get("/style.css", include_in_schema=False)
+async def redirect_legacy_stylesheet():
+    return RedirectResponse(url="/assets/css/style.css", status_code=301)
 
 @app.get("/health")
 async def health_check():
@@ -1113,7 +1127,7 @@ async def startup_event():
                         if inferred:
                             updates["provider_types"] = _json.dumps(inferred)
                     if not clogo:
-                        updates["logo_url"] = "/logos/AGLfoundationLOGO.png"
+                        updates["logo_url"] = "/assets/logos/AGLfoundationLOGO.png"
                     if updates:
                         sets = ", ".join(f"{k} = :{k}" for k in updates)
                         params = dict(updates)
@@ -5840,7 +5854,7 @@ async def shutdown_event():
 _UPLOADS_DIR = os.path.join(PROJECT_ROOT, "uploads")
 os.makedirs(_UPLOADS_DIR, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=_UPLOADS_DIR), name="uploads")
-app.mount("/", StaticFiles(directory=PROJECT_ROOT, html=True), name="root")
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="root")
 
 
 

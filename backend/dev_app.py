@@ -109,18 +109,18 @@ INVENTORY_DATA = {
 #Mock reservation storage
 reservations = []
 
-#Mount static files ---serve from the parent directory
-app.mount("/static", StaticFiles(directory=".."), name="static")
+#Mount static files ---serve from the frontend directory
+app.mount("/static", StaticFiles(directory="../frontend"), name="static")
 
 @app.get("/")
 async def read_root():
     """Serve the main HTML file"""
-    return FileResponse("../index.html")
+    return FileResponse("../frontend/index.html")
 
 @app.get("/{file.path:path}")
 async def serve_files(file_path: str):
-    """Serve static filed from the parent directory"""
-    full_path = os.path.join("..", file_path)
+    """Serve static filed from the frontend directory"""
+    full_path = os.path.join("../frontend", file_path)
     if os.path.existd(full_path) and os.path.isfile(full_path):
         return FileResponse(full_path)
     raise HTTPException(status_code=404, detail="File not found")
