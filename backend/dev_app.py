@@ -110,20 +110,13 @@ INVENTORY_DATA = {
 reservations = []
 
 #Mount static files ---serve from the frontend directory
-app.mount("/static", StaticFiles(directory="../frontend"), name="static")
+FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'frontend'))
+app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
 
 @app.get("/")
 async def read_root():
     """Serve the main HTML file"""
-    return FileResponse("../frontend/index.html")
-
-@app.get("/{file.path:path}")
-async def serve_files(file_path: str):
-    """Serve static filed from the frontend directory"""
-    full_path = os.path.join("../frontend", file_path)
-    if os.path.existd(full_path) and os.path.isfile(full_path):
-        return FileResponse(full_path)
-    raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
 @app.get("/api/health")
 async def health_check():
@@ -210,6 +203,19 @@ async def create_reservation(reservation_data: dict):
 async def get_reservations():
     """Get all reservation"""
     return {"reservations": reservations, "total": len(reservations)}
+
+# Registered last on purpose: this pattern matches every path, so declaring it
+# above the /api routes would shadow all of them.
+@app.get("/{file_path:path}")
+async def serve_files(file_path: str):
+    """Serve static files from the frontend directory"""
+    full_path = os.path.abspath(os.path.join(FRONTEND_DIR, file_path))
+    # Refuse paths that climb out of frontend/, e.g. ../.env
+    if os.path.commonpath([full_path, FRONTEND_DIR]) != FRONTEND_DIR:
+        raise HTTPException(status_code=404, detail="File not found")
+    if os.path.isfile(full_path):
+        return FileResponse(full_path)
+    raise HTTPException(status_code=404, detail="File not found")
 
 if __name__ == "__main__":
     import uvicorn
