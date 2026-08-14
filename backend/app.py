@@ -596,10 +596,6 @@ async def serve_impact_story():
 async def serve_nutrition():
     return RedirectResponse(url="/landing.html", status_code=302)
 
-@app.get("/admin-referrals.html", response_class=HTMLResponse)
-async def serve_admin_referrals():
-    return get_html_content("admin-referrals.html")
-
 # Frontend assets moved from the repo root into frontend/assets/. These
 # redirects are load-bearing, not just politeness: distribution_centers.logo_url
 # rows hold literal "/logos/..." strings, and admin page edits persist image
