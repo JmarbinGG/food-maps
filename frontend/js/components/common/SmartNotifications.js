@@ -201,7 +201,7 @@ const SmartNotifications = () => {
 
     const title = getNotificationTitle(listing);
     const body = getNotificationBody(listing);
-    const icon = '/assets/logos/food-icon.png';
+    const icon = '/assets/logos/foodmaps-logo.png';
 
     const notification = new Notification(title, {
       body,
