@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func, case
+from sqlalchemy import text, func, case, inspect as sa_inspect
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
@@ -970,7 +970,46 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
 from backend.ai.routes import router as ai_router, start_background_jobs as ai_start_jobs, stop_background_jobs as ai_stop_jobs
 app.include_router(ai_router)
 
-# Create tables
+def _add_missing_model_columns(*models):
+    """Add columns a model declares but its existing table is missing.
+
+    `create_all()` creates absent tables but never alters ones that already
+    exist, so a database predating a column needs it patched in. Column types
+    are compiled for the connected dialect rather than hardcoded, since dev
+    runs Postgres and production runs MySQL.
+
+    Each statement gets its own transaction. Postgres aborts an entire
+    transaction after any failed statement, so sharing one connection means a
+    single rejected ALTER silently discards every migration behind it.
+    """
+    inspector = sa_inspect(engine)
+    for model in models:
+        table = model.__table__
+        if not inspector.has_table(table.name):
+            continue  # create_all() just built it, columns included
+        present = {col["name"] for col in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in present:
+                continue
+            if not column.nullable:
+                # Adding NOT NULL to a populated table needs a default or a
+                # backfill; that is a decision, not something to guess at.
+                print(
+                    f"⚠️  Schema drift: {table.name}.{column.name} is missing and "
+                    "NOT NULL - add it manually with a backfill"
+                )
+                continue
+            col_type = column.type.compile(dialect=engine.dialect)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(
+                        f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type} NULL"
+                    ))
+                print(f"✅ Schema: added {table.name}.{column.name}")
+            except Exception as exc:
+                print(f"⚠️  Schema: could not add {table.name}.{column.name}: {exc}")
+
+
 @app.on_event("startup")
 async def startup_event():
     # Ensure tables exist
@@ -1007,75 +1046,17 @@ async def startup_event():
         await ai_start_jobs()
     except Exception as _ai_exc:
         print(f"AI background jobs failed to start: {_ai_exc}")
-    # MySQL column additions (best-effort, ignore if already exists)
+    # Patch columns onto tables that predate them. create_all() above creates
+    # any missing table for the connected dialect, so the raw MySQL CREATE
+    # TABLE statements that used to live here were redundant - and on Postgres
+    # they never did anything but raise a syntax error on AUTO_INCREMENT.
+    _add_missing_model_columns(
+        FoodResource, DistributionCenter, FavoriteLocation, ListingCategory
+    )
+
+    # Seed reference data
     try:
         with engine.connect() as conn:
-            # Add missing columns if they don't exist
-            try:
-                conn.execute(text("ALTER TABLE food_resources ADD COLUMN recipient_id INT NULL"))
-            except Exception:
-                pass  # Column already exists
-            try:
-                conn.execute(text("ALTER TABLE food_resources ADD COLUMN claimed_at DATETIME NULL"))
-            except Exception:
-                pass  # Column already exists
-            
-            # Create favorite_locations table if it doesn't exist
-            try:
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS favorite_locations (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        user_id INT NOT NULL,
-                        name VARCHAR(255) NOT NULL,
-                        address VARCHAR(500),
-                        coords_lat FLOAT,
-                        coords_lng FLOAT,
-                        location_type VARCHAR(50) DEFAULT 'general',
-                        donor_id INT NULL,
-                        center_id INT NULL,
-                        notes TEXT,
-                        tags TEXT,
-                        visit_count INT DEFAULT 0,
-                        last_visited DATETIME NULL,
-                        notify_new_listings BOOLEAN DEFAULT FALSE,
-                        notification_radius_km FLOAT DEFAULT 5.0,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        is_active BOOLEAN DEFAULT TRUE,
-                        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-                        FOREIGN KEY (donor_id) REFERENCES users(id) ON DELETE SET NULL,
-                        FOREIGN KEY (center_id) REFERENCES distribution_centers(id) ON DELETE SET NULL,
-                        INDEX idx_user_id (user_id),
-                        INDEX idx_donor_id (donor_id),
-                        INDEX idx_center_id (center_id),
-                        INDEX idx_location_type (location_type),
-                        INDEX idx_is_active (is_active)
-                    )
-                """))
-                print("✅ favorite_locations table created/verified")
-            except Exception as e:
-                print(f"Note: favorite_locations table migration: {e}")
-                pass  # Table likely already exists
-
-            # Extended distribution-center detail columns
-            for col_name, col_def in (
-                ("eligibility", "TEXT NULL"),
-                ("languages", "TEXT NULL"),
-                ("availability", "VARCHAR(100) NULL"),
-                ("website", "VARCHAR(512) NULL"),
-                ("social_media", "TEXT NULL"),
-                ("coverage_areas", "TEXT NULL"),
-                ("provider_types", "TEXT NULL"),
-                ("logo_url", "VARCHAR(512) NULL"),
-            ):
-                try:
-                    conn.execute(text(
-                        f"ALTER TABLE distribution_centers ADD COLUMN {col_name} {col_def}"
-                    ))
-                    print(f"✅ distribution_centers.{col_name} added")
-                except Exception:
-                    pass  # Column already exists
-
             # Seed provider_types / logo_url for existing centers when empty
             try:
                 import json as _json
@@ -1123,25 +1104,6 @@ async def startup_event():
 
             # Listing categories (main-page left sidebar filters)
             try:
-                conn.execute(text("""
-                    CREATE TABLE IF NOT EXISTS listing_categories (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        value VARCHAR(50) NOT NULL UNIQUE,
-                        label VARCHAR(100) NOT NULL,
-                        is_active BOOLEAN DEFAULT TRUE,
-                        sort_order INT DEFAULT 0,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                        INDEX idx_listing_cat_value (value),
-                        INDEX idx_listing_cat_active (is_active),
-                        INDEX idx_listing_cat_sort (sort_order)
-                    )
-                """))
-                print("✅ listing_categories table created/verified")
-            except Exception as e:
-                print(f"Note: listing_categories table migration: {e}")
-
-            try:
                 defaults = [
                     ("produce", "Produce", 1),
                     ("prepared", "Prepared", 2),
@@ -1160,9 +1122,16 @@ async def startup_event():
                         conn.execute(
                             text(
                                 "INSERT INTO listing_categories (value, label, is_active, sort_order) "
-                                "VALUES (:value, :label, 1, :sort_order)"
+                                "VALUES (:value, :label, :is_active, :sort_order)"
                             ),
-                            {"value": value, "label": label, "sort_order": sort_order},
+                            # Bind the boolean rather than a literal 1; Postgres
+                            # will not coerce an integer into a boolean column.
+                            {
+                                "value": value,
+                                "label": label,
+                                "is_active": True,
+                                "sort_order": sort_order,
+                            },
                         )
                 conn.commit()
                 print("✅ listing_categories seeded")
