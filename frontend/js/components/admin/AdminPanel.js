@@ -32,7 +32,7 @@ function AdminPanel({ onClose }) {
           'Community meal / hot meals', 'Senior meal program', 'School meal program',
           'Food box distribution', 'Grocery assistance', 'Farmers market',
           'Produce distribution', 'Food rescue', 'Community Closet', 'Community Garden',
-          'School food distribution', 'Meal preparation program'
+          'School food distribution', 'Meal preparation program', 'Foodbank'
         ];
     const parseCenterTypes = (raw) => {
       if (!raw) return [];

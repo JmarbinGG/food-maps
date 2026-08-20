@@ -18,6 +18,7 @@ const PROVIDER_TYPE_TAGS = [
   'Community Garden',
   'School food distribution',
   'Meal preparation program',
+  'Foodbank',
 ];
 
 /** Distinct color classes per provider category (selected / idle / chip display). */
@@ -133,6 +134,13 @@ const PROVIDER_TYPE_COLOR_MAP = {
     chip: 'bg-pink-100 text-pink-900 border-pink-300',
     filterActive: 'bg-pink-600 text-white border-pink-600',
     filterIdle: 'bg-white text-pink-800 border-pink-400 hover:bg-pink-600 hover:text-white',
+  },
+  'Foodbank': {
+    selected: 'bg-red-700 text-white border-red-700',
+    idle: 'bg-red-50 text-red-900 border-red-300 hover:border-red-500',
+    chip: 'bg-red-100 text-red-900 border-red-300',
+    filterActive: 'bg-red-700 text-white border-red-700',
+    filterIdle: 'bg-white text-red-800 border-red-400 hover:bg-red-700 hover:text-white',
   },
 };
 

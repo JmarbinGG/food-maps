@@ -131,11 +131,14 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
         }
 
       // Create custom marker element
+      const color = (typeof window.getCenterLegendColor === 'function')
+        ? window.getCenterLegendColor(center)
+        : '#10b981';
       const el = document.createElement('div');
       el.className = 'distribution-center-marker';
       el.innerHTML = `
         <div class="marker-pin" style="
-          background-color: #10b981;
+          background-color: ${color};
           width: 40px;
           height: 40px;
           border-radius: 50% 50% 50% 0;
@@ -164,12 +167,12 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
       const popup = new mapboxgl.Popup({ offset: 25 })
         .setHTML(`
           <div style="padding: 8px;">
-            <h3 style="font-weight: bold; margin-bottom: 4px;">${center.name}</h3>
+            <h3 style="font-weight: bold; margin-bottom: 4px; color: ${color};">${center.name}</h3>
             <p style="font-size: 12px; color: #666; margin-bottom: 4px;">${center.address}</p>
             <button 
               onclick="window.viewCenterInventory(${center.id})"
               style="
-                background-color: #10b981;
+                background-color: ${color};
                 color: white;
                 padding: 4px 12px;
                 border-radius: 4px;
@@ -416,15 +419,30 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
       )}
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4">
-        <h4 className="font-semibold mb-2">Legend</h4>
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center text-white text-xs">
-            🏪
+      <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-xs max-w-[200px] max-h-[42vh] overflow-y-auto">
+        <h4 className="font-semibold mb-2 text-sm">Legend</h4>
+        {(window.MAP_LEGEND_PROVIDER_TYPES || [
+          { label: 'Schools', color: '#4f46e5' },
+          { label: 'Food Pantry', color: '#d97706' },
+          { label: 'Food Rescue', color: '#0d9488' },
+          { label: 'Community Garden', color: '#15803d' },
+          { label: 'Foodbank', color: '#b91c1c' },
+          { label: 'Mobile Food Pantry', color: '#ea580c' },
+          { label: 'Food Delivery', color: '#0284c7' },
+        ]).map((entry) => (
+          <div key={entry.label} className="flex items-center gap-2 mb-1.5">
+            <div
+              className="w-3.5 h-3.5 shrink-0 border border-white shadow"
+              style={{
+                backgroundColor: entry.color,
+                borderRadius: '50% 50% 50% 0',
+                transform: 'rotate(-45deg)',
+              }}
+            />
+            <span>{entry.label}</span>
           </div>
-          <span className="text-sm">Distribution Centers</span>
-        </div>
-        <p className="text-xs text-gray-500 mt-2">Click on a pin to view inventory</p>
+        ))}
+        <p className="text-[10px] text-gray-500 mt-2">Click a pin to view inventory</p>
       </div>
     </div>
   );

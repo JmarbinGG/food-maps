@@ -63,6 +63,72 @@ function isInBayArea(lat, lng) {
   );
 }
 
+// Map legend categories for distribution centers (pin color + label).
+const MAP_LEGEND_PROVIDER_TYPES = Object.freeze([
+  {
+    label: 'Schools',
+    color: '#4f46e5',
+    match: ['schools', 'school meal program', 'school food distribution'],
+  },
+  {
+    label: 'Food Pantry',
+    color: '#d97706',
+    match: ['food pantry'],
+  },
+  {
+    label: 'Food Rescue',
+    color: '#0d9488',
+    match: ['food rescue'],
+  },
+  {
+    label: 'Community Garden',
+    color: '#15803d',
+    match: ['community garden'],
+  },
+  {
+    label: 'Foodbank',
+    color: '#b91c1c',
+    match: ['foodbank', 'food bank'],
+  },
+  {
+    label: 'Mobile Food Pantry',
+    color: '#ea580c',
+    match: ['mobile food pantry'],
+  },
+  {
+    label: 'Food Delivery',
+    color: '#0284c7',
+    match: ['food delivery', 'home delivery'],
+  },
+]);
+
+const MAP_LEGEND_DEFAULT_CENTER_COLOR = '#10b981';
+
+function parseCenterProviderTypes(raw) {
+  if (typeof window.parseProviderTypes === 'function') {
+    return window.parseProviderTypes(raw);
+  }
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+  } catch (_) { /* ignore */ }
+  return String(raw).split(',').map((s) => s.trim()).filter(Boolean);
+}
+
+function getCenterLegendColor(center) {
+  const types = parseCenterProviderTypes(center?.provider_types)
+    .map((t) => String(t).trim().toLowerCase())
+    .filter(Boolean);
+  if (!types.length) return MAP_LEGEND_DEFAULT_CENTER_COLOR;
+
+  for (const entry of MAP_LEGEND_PROVIDER_TYPES) {
+    if (entry.match.some((m) => types.includes(m))) return entry.color;
+  }
+  return MAP_LEGEND_DEFAULT_CENTER_COLOR;
+}
+
 function flyToBayArea(mapInstance, duration = 0) {
   if (!mapInstance) return;
   try {
@@ -754,28 +820,15 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       }
     });
 
-    // Color palette for distribution centers
-    const centerColors = [
-      '#10b981', // Green
-      '#3b82f6', // Blue
-      '#8b5cf6', // Purple
-      '#f59e0b', // Amber
-      '#ef4444', // Red
-      '#06b6d4', // Cyan
-      '#ec4899', // Pink
-      '#84cc16', // Lime
-    ];
-
-    // Add distribution center markers with unique colors
+    // Add distribution center markers colored by provider type (see legend)
     console.log('Adding', visibleCenters.length, 'distribution center markers');
-    visibleCenters.forEach((center, index) => {
+    visibleCenters.forEach((center) => {
       if (!center.coords_lat || !center.coords_lng) {
         console.warn('Skipping center with missing coordinates:', center.name);
         return;
       }
 
-      // Assign color based on index (wraps around if more centers than colors)
-      const color = centerColors[index % centerColors.length];
+      const color = getCenterLegendColor(center);
 
       console.log('Adding center marker:', center.name, 'at', center.coords_lat, center.coords_lng, 'with color:', color);
       const el = document.createElement('div');
@@ -948,39 +1001,56 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
       )}
 
       {/* Legend - Compact and semi-transparent */}
-      <div className="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg shadow-md p-2 text-xs max-w-[150px]">
-        <div className="font-semibold mb-1 text-gray-800">Legend</div>
-        <div className="flex items-center gap-1 mb-1">
+      <div className="absolute bottom-4 left-4 bg-white bg-opacity-90 rounded-lg shadow-md p-2.5 text-xs max-w-[200px] max-h-[42vh] overflow-y-auto">
+        <div className="font-semibold mb-1.5 text-gray-800">Legend</div>
+        <div className="flex items-center gap-1.5 mb-1.5">
           <div style={{
-            width: '16px',
-            height: '16px',
+            width: '14px',
+            height: '14px',
             borderRadius: '50% 50% 50% 0',
             transform: 'rotate(-45deg)',
             backgroundColor: '#f59e0b',
+            flexShrink: 0,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center'
           }}>
-            <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🍎</span>
+            <span style={{ transform: 'rotate(45deg)', fontSize: '8px' }}>🍎</span>
           </div>
-          <span>Food</span>
+          <span>Food listings</span>
         </div>
         {showDistributionCenters && (
-          <div className="flex items-center gap-1">
-            <div style={{
-              width: '16px',
-              height: '16px',
-              borderRadius: '50% 50% 50% 0',
-              transform: 'rotate(-45deg)',
-              backgroundColor: '#10b981',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <span style={{ transform: 'rotate(45deg)', fontSize: '10px' }}>🏪</span>
+          <>
+            <div className="text-[10px] uppercase tracking-wide text-gray-500 mb-1 mt-1">Providers</div>
+            {MAP_LEGEND_PROVIDER_TYPES.map((entry) => (
+              <div key={entry.label} className="flex items-center gap-1.5 mb-1">
+                <div style={{
+                  width: '14px',
+                  height: '14px',
+                  borderRadius: '50% 50% 50% 0',
+                  transform: 'rotate(-45deg)',
+                  backgroundColor: entry.color,
+                  flexShrink: 0,
+                  border: '1.5px solid white',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+                }} />
+                <span>{entry.label}</span>
+              </div>
+            ))}
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <div style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: '50% 50% 50% 0',
+                transform: 'rotate(-45deg)',
+                backgroundColor: MAP_LEGEND_DEFAULT_CENTER_COLOR,
+                flexShrink: 0,
+                border: '1.5px solid white',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
+              }} />
+              <span>Other centers</span>
             </div>
-            <span>Centers</span>
-          </div>
+          </>
         )}
       </div>
 
@@ -1134,3 +1204,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
     </div>
   );
 }
+
+window.MapComponent = MapComponent;
+window.MAP_LEGEND_PROVIDER_TYPES = MAP_LEGEND_PROVIDER_TYPES;
+window.getCenterLegendColor = getCenterLegendColor;
