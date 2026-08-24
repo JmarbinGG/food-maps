@@ -8,23 +8,50 @@ from typing import Optional
 from backend.aws_secrets import load_aws_secrets
 
 
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 587
+DEFAULT_SMTP_HOST = "smtp.gmail.com"
+DEFAULT_SMTP_PORT = 587
 DEFAULT_SENDER = "noreply.foodmaps@gmail.com"
 
 
-def _get_email_settings() -> tuple[str, str]:
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _smtp_config() -> tuple[str, int, bool, bool]:
+    """Resolve the relay to use.
+
+    Defaults reproduce the previous hardcoded Gmail behaviour exactly, so
+    production needs no new configuration. The overrides exist so staging can
+    point at a local capture relay: a staging environment restored from a
+    production snapshot still holds deliverable addresses, and relaying its
+    password-reset mail through the real Gmail account would put working reset
+    codes in real users' inboxes.
+    """
+    host = os.getenv("SMTP_HOST", DEFAULT_SMTP_HOST)
+    try:
+        port = int(os.getenv("SMTP_PORT", str(DEFAULT_SMTP_PORT)))
+    except ValueError:
+        raise RuntimeError("SMTP_PORT must be an integer")
+    return host, port, _env_flag("SMTP_STARTTLS", True), _env_flag("SMTP_AUTH", True)
+
+
+def _get_email_settings() -> tuple[str, Optional[str]]:
     """Resolve credentials from the existing EMAIL_* configuration."""
     load_aws_secrets()
     sender_email = os.getenv("EMAIL_USERNAME", DEFAULT_SENDER)
     sender_password = os.getenv("EMAIL_PASSWORD")
-    if not sender_password:
+    _, _, _, use_auth = _smtp_config()
+    if use_auth and not sender_password:
         raise RuntimeError("EMAIL_PASSWORD is not configured")
     return sender_email, sender_password
 
 
 def _send_email(to_email: str, subject: str, text_content: str, html_content: Optional[str] = None) -> None:
     sender_email, sender_password = _get_email_settings()
+    host, port, use_starttls, use_auth = _smtp_config()
 
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
@@ -34,9 +61,11 @@ def _send_email(to_email: str, subject: str, text_content: str, html_content: Op
     if html_content:
         message.attach(MIMEText(html_content, "html"))
 
-    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
-        server.starttls()
-        server.login(sender_email, sender_password)
+    with smtplib.SMTP(host, port) as server:
+        if use_starttls:
+            server.starttls()
+        if use_auth:
+            server.login(sender_email, sender_password)
         server.send_message(message)
 
 
