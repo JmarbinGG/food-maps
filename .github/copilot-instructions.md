@@ -297,12 +297,14 @@ SQLAlchemy enums must use `.value` when converting to JSON:
 
 ## Production Deployment Notes
 
-- **Server**: Runs via systemd service (`foodmaps.service`) with 4 Uvicorn workers
-- **Auto-restart**: Service configured with `Restart=always`, `RestartSec=5s`
-- **Database**: Currently MySQL in production (check `DATABASE_URL` env var)
-- **Static assets**: Served directly by FastAPI from `frontend/` (no nginx/CDN), includes HTML/JS/CSS/images
-- **Logs**: `sudo journalctl -u foodmaps -f` for systemd, or `backend/server.log` for script-based runs
-- **Monitoring**: Check `GET /health` endpoint for uptime checks
+- **Server**: Runs via systemd service (`foodmaps.service`) with a **single** Uvicorn worker. Not negotiable without refactoring: `pending_confirmations` in `app.py` is an in-process dict guarded by an in-process `threading.Timer`, so a second worker silently breaks claim confirmation.
+- **Module path**: start uvicorn as `backend.app:app`, never `app:app`. `backend/ai/tools.py` imports `from backend.app import ...`, so the top-level form loads `app.py` twice and gives the AI claim flow its own `pending_confirmations`.
+- **Auto-restart**: Service configured with `Restart=always`, `RestartSec=10s`, capped by `StartLimitBurst=5`
+- **Database**: MySQL on RDS in production (check `DATABASE_URL`). The unit's `After=mysql.service` is vestigial — nothing local to wait for.
+- **Static assets**: Served directly by FastAPI from `frontend/` via a `StaticFiles` mount at `/`, declared at the end of `app.py` so API routes match first. Any reverse proxy therefore forwards everything, rather than serving a document root of its own.
+- **Containers**: `deploy/` holds the production and staging stacks. The root `docker-compose.yml` is local development only.
+- **Logs**: `sudo journalctl -u foodmaps -f` for systemd, `docker compose logs -f api` for containers
+- **Monitoring**: `GET /health`. `/api/health` exists only in `backend/dev_app.py` and 404s in production.
 
 
 UI:

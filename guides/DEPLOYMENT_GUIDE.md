@@ -42,11 +42,19 @@ sudo journalctl -u foodmaps -f
 ```
 
 #### Service Features:
-- ✅ Auto-restarts on crashes (5 second delay)
+- ✅ Auto-restarts on crashes (10 second delay, capped at 5 restarts per minute)
 - ✅ Starts automatically on system boot
-- ✅ Runs 4 worker processes for better performance
 - ✅ Proper logging to system journal
-- ✅ Waits for database (MySQL) to be ready
+
+Deliberately runs a **single** worker, not four. Pending claim codes live in an
+in-process dictionary with a `threading.Timer`, so a second worker would hold a
+separate copy and break confirmation for any request routed to it. See the
+comment above the `exec` line in `backend/start_server.sh` before changing it.
+
+The unit's `After=mysql.service` is vestigial. The database is remote (RDS), so
+there is no local MySQL for systemd to wait on and the ordering has no effect.
+Startup resilience comes from `pool_pre_ping` in `backend/db.py` plus
+`Restart=always`.
 
 #### Managing the Service:
 ```bash
@@ -122,16 +130,21 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-### Method 4: Docker (Optional)
+### Method 4: Docker (preferred for new deployments)
 
-If you prefer containerization:
+Use the stack in `deploy/`, and see `deploy/RUNBOOK.md` for the full procedure:
 
 ```bash
-cd /home/ec2-user/project
-docker-compose up -d
+cd /home/ec2-user/project/deploy
+cp .env.example .env    # then edit
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-The docker-compose.yml is already configured with restart policies.
+Do **not** deploy the `docker-compose.yml` at the repository root. It is a
+local development stack: it bind-mounts source over the image, runs uvicorn
+with `--reload`, and starts a throwaway Postgres with a hardcoded password
+while production runs MySQL on RDS. It also declares no restart policy, so
+nothing comes back after a reboot.
 
 ---
 
@@ -160,8 +173,12 @@ tail -f /home/ec2-user/project/backend/server.log
 
 Test if the server is running:
 ```bash
-curl http://localhost:8000/api/health
+curl http://localhost:8000/health
 ```
+
+The path is `/health`. `/api/health` exists only in `backend/dev_app.py` and
+returns 404 against the production app, so do not point an uptime monitor or a
+load balancer target group at it.
 
 ---
 
@@ -169,8 +186,12 @@ curl http://localhost:8000/api/health
 
 ### Server won't start:
 1. Check logs: `sudo journalctl -u foodmaps -n 50`
-2. Verify .env file exists: `ls -la /home/ec2-user/project/.env`
-3. Check database connection: `mysql -u root -p`
+2. Verify config is reachable: either `/home/ec2-user/project/.env` exists, or
+   `AWS_SECRET_NAME` and `AWS_REGION` are set and the instance role can read
+   the secret. The app refuses to start without `JWT_SECRET` (minimum 16
+   characters) and `DATABASE_URL`, and both usually arrive that way.
+3. Check the database: the DB is remote, so test the RDS endpoint rather than a
+   local server — `mysql -h <rds-endpoint> -u <user> -p`
 4. Verify port 8000 is free: `sudo lsof -i :8000`
 
 ### Auto-restart not working:
