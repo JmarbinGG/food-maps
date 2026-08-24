@@ -2,6 +2,14 @@ alembic==1.12.1
 argon2-cffi==25.1.0
 boto3==1.34.162
 bcrypt==4.1.2
+# Required by PyMySQL to authenticate against MySQL 8's default
+# caching_sha2_password plugin. Without it, connecting raises
+# "'cryptography' package is required for sha256_password or
+# caching_sha2_password auth methods" and the app cannot reach the database.
+# Production has been surviving on an RDS user created with the legacy
+# mysql_native_password plugin; any newly provisioned user or instance
+# defaults to caching_sha2_password and fails without this.
+cryptography==50.0.0
 email-validator==2.3.0
 fastapi==0.121.3
 httpx==0.28.1
