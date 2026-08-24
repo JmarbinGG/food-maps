@@ -1,0 +1,73 @@
+# Topology B: an AWS load balancer or CloudFront already terminated TLS and is
+# forwarding plain HTTP to this instance.
+#
+# The instance security group must allow port 80 from the load balancer's
+# security group only. If it is open to the internet, requests reach this
+# server without ever passing the load balancer, and the X-Forwarded-* headers
+# below become attacker-controlled.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name ${FOODMAPS_DOMAIN};
+
+    # Rewrites $remote_addr to the real client, but only when the immediate
+    # peer is inside the trusted range — set FOODMAPS_TRUSTED_PROXY_CIDR to the
+    # load balancer's subnet CIDR, never to 0.0.0.0/0.
+    set_real_ip_from ${FOODMAPS_TRUSTED_PROXY_CIDR};
+    real_ip_header   X-Forwarded-For;
+    real_ip_recursive on;
+
+    # Bounce anything the load balancer received over plain HTTP. This is a
+    # server-level rewrite, so it runs before location matching and applies to
+    # every request. Matching on the literal value rather than `!= "https"` is
+    # what keeps target-group health checks working: they send no
+    # X-Forwarded-Proto at all, so the variable is empty and never matches.
+    if ($http_x_forwarded_proto = "http") {
+        return 301 https://$host$request_uri;
+    }
+
+    include /etc/nginx/snippets/security-headers.conf;
+
+    client_max_body_size 1m;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/json application/javascript
+               application/x-javascript text/xml application/xml image/svg+xml;
+
+    access_log /var/log/nginx/foodmaps.access.log;
+    error_log  /var/log/nginx/foodmaps.error.log warn;
+
+    location /api/ai/ {
+        client_max_body_size 32m;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location /uploads/ {
+        expires 30d;
+        # Re-included because nginx drops inherited add_header directives once
+        # a location declares its own.
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, immutable";
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    # Target group health checks land here. Point the target group at /health,
+    # not /api/health — the latter exists only in backend/dev_app.py and 404s
+    # in production, which would fail every instance out of the group.
+    location = /health {
+        access_log off;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location / {
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+}

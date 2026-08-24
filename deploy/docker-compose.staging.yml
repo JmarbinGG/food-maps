@@ -1,0 +1,58 @@
+# Staging overlay. Apply on top of the production stack so staging exercises
+# the same image and the same nginx path, differing only in configuration:
+#
+#   docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d
+#
+# The point of staging is that everything except the values below is identical
+# to production. Resist adding behavioural differences here.
+services:
+  api:
+    environment:
+      # Its own secret, read by an instance role scoped to this ARN only. The
+      # staging box must not be able to read prod/env.
+      AWS_SECRET_NAME: ${AWS_SECRET_NAME:-staging/env}
+
+      # Outbound email is captured by mailpit instead of relayed through
+      # Gmail. Without this, a restored production snapshot plus real SMTP
+      # credentials means staging emails land in real users' inboxes.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      SMTP_AUTH: "false"
+      SMTP_STARTTLS: "false"
+
+      # Blank credentials disable SMS at the source: send_sms() in app.py
+      # checks for them and falls back to logging, and the claim endpoint then
+      # returns the confirmation code in the response body so the flow stays
+      # testable. Set explicitly rather than omitted, because
+      # backend/aws_secrets.py uses setdefault and would otherwise let a real
+      # Twilio credential from the secret through.
+      TWILIO_ACCOUNT_SID: ""
+      TWILIO_AUTH_TOKEN: ""
+      TWILIO_PHONE_NUMBER: ""
+
+      # Keep the AI broadcast loop from pushing anything to users unattended.
+      AI_BROADCAST_AUTO_APPROVE: "0"
+
+  nginx:
+    volumes:
+      # Only addition over the production stack. Which config gets rendered is
+      # decided by NGINX_CONF in deploy/.env, which staging points at
+      # ./nginx/foodmaps-staging.conf.template.
+      - ./nginx/htpasswd:/etc/nginx/htpasswd:ro
+
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      # Bound to loopback: reach the inbox over an SSH tunnel
+      #   ssh -L 8025:localhost:8025 ec2-user@<staging-host>
+      # then open http://localhost:8025. Publishing this publicly would expose
+      # every password reset code staging generates.
+      - "127.0.0.1:8025:8025"
+    networks:
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"

@@ -1,0 +1,111 @@
+# Production / staging stack. This file replaces the repository-root
+# docker-compose.yml, which is a local development stack only (it bind-mounts
+# source over the image, runs uvicorn with --reload, and starts a throwaway
+# Postgres with a hardcoded password). Do not deploy that one.
+#
+# Compose reads deploy/.env automatically for the ${...} values below.
+# Start with: docker compose -f docker-compose.prod.yml up -d
+name: foodmaps
+
+services:
+  api:
+    image: ${FOODMAPS_IMAGE:-foodmaps-api:local}
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    # Deliberately no `ports:`. The API is reachable only over the internal
+    # network, from nginx. Publishing 8000 would expose an untrusted-header,
+    # plaintext listener to the internet regardless of firewall intent.
+    environment:
+      # Secrets are pulled from AWS Secrets Manager at import time by
+      # backend/aws_secrets.py. Note that it uses os.environ.setdefault, so
+      # anything set here WINS over the corresponding key in the secret.
+      AWS_REGION: ${AWS_REGION:-us-west-1}
+      AWS_SECRET_NAME: ${AWS_SECRET_NAME:?set AWS_SECRET_NAME in deploy/.env}
+      # Password reset and verification emails are built from this. Getting it
+      # wrong on staging mails production links to real users.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in deploy/.env}
+      # Lets uvicorn rewrite request.client.host from X-Forwarded-For. "*" is
+      # acceptable only because the port above is unpublished, so nginx is the
+      # sole possible peer. This does not by itself fix _client_ip() in
+      # app.py, which still reads the raw header — see RUNBOOK.md.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-*}
+    volumes:
+      # User-uploaded listing photos and chat attachments. app.py serves these
+      # from /app/uploads; without a volume they vanish on every deploy.
+      - uploads:/app/uploads
+    networks:
+      - edge
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        # Containers have no equivalent of the logrotate config in
+        # guides/DEPLOYMENT_GUIDE.md. Without these the JSON log grows until
+        # the root volume fills.
+        max-size: "10m"
+        max-file: "5"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      FOODMAPS_DOMAIN: ${FOODMAPS_DOMAIN:?set FOODMAPS_DOMAIN in deploy/.env}
+      # Only consulted by the behind-a-load-balancer config. The default is a
+      # placeholder: set it to your actual load balancer subnet CIDR, because
+      # trusting too wide a range hands X-Forwarded-For back to the client.
+      FOODMAPS_TRUSTED_PROXY_CIDR: ${FOODMAPS_TRUSTED_PROXY_CIDR:-10.0.0.0/8}
+      # Confines envsubst to our own FOODMAPS_* names. Without the filter it
+      # substitutes every variable present in the environment, and an
+      # unluckily-named one would blank out an nginx runtime variable.
+      NGINX_ENVSUBST_FILTER: "^FOODMAPS_"
+    volumes:
+      # Pick the topology by setting NGINX_CONF in deploy/.env:
+      #   foodmaps-tls.conf.template        TLS terminates on this box
+      #   foodmaps-behind-lb.conf.template  an ALB or CloudFront terminated it
+      #   foodmaps-staging.conf.template    as TLS, plus noindex and basic auth
+      # The image's entrypoint renders /etc/nginx/templates/*.template into
+      # /etc/nginx/conf.d/ at startup, dropping the .template suffix.
+      - ${NGINX_CONF:-./nginx/foodmaps-tls.conf.template}:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - letsencrypt:/etc/letsencrypt:ro
+      - certbot-webroot:/var/www/certbot:ro
+    depends_on:
+      api:
+        # Waits for the container healthcheck, so nginx never starts in front
+        # of an app that failed on a missing JWT_SECRET or an unreachable DB.
+        condition: service_healthy
+    networks:
+      - edge
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  # Only runs when explicitly requested, so the stack still comes up on a box
+  # that terminates TLS at a load balancer:
+  #   docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot
+  certbot:
+    image: certbot/certbot:latest
+    profiles: ["certbot"]
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - certbot-webroot:/var/www/certbot
+    entrypoint: >
+      certbot certonly --webroot --webroot-path=/var/www/certbot
+      --email ${CERTBOT_EMAIL:-} --agree-tos --no-eff-email
+      -d ${CERTBOT_DOMAIN:-}
+
+networks:
+  edge:
+    driver: bridge
+
+volumes:
+  uploads:
+  letsencrypt:
+  certbot-webroot:

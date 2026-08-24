@@ -1,0 +1,80 @@
+# Staging: identical proxying to the production TLS config, plus two things
+# staging needs and production must not have — a search-engine block and a
+# basic-auth gate.
+#
+# Generate the password file before first start:
+#   htpasswd -Bc deploy/nginx/htpasswd staging
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${FOODMAPS_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name ${FOODMAPS_DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${FOODMAPS_DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${FOODMAPS_DOMAIN}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+
+    include /etc/nginx/snippets/security-headers.conf;
+    # No HSTS on staging. A max-age pin set from a staging hostname is awkward
+    # to unwind if that hostname is ever reused for something without TLS.
+
+    auth_basic           "Food Maps staging";
+    auth_basic_user_file /etc/nginx/htpasswd;
+
+    client_max_body_size 1m;
+
+    access_log /var/log/nginx/foodmaps.access.log;
+    error_log  /var/log/nginx/foodmaps.error.log warn;
+
+    location /api/ai/ {
+        client_max_body_size 32m;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location /uploads/ {
+        expires 30d;
+        # Re-included because this block declares its own add_header, and nginx
+        # drops every inherited add_header the moment a child block adds one.
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, immutable";
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location = /health {
+        # Exempt from basic auth so uptime checks and the deploy script's smoke
+        # test do not need credentials.
+        auth_basic off;
+        access_log off;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+}

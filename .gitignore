@@ -4,6 +4,9 @@
 !.env.example
 backend/.env.example
 
+# Basic-auth hashes for the staging gate, generated per host by htpasswd
+deploy/nginx/htpasswd
+
 # Local-only scripts
 backend/scripts/batch_geocode.py
 dont-publish
