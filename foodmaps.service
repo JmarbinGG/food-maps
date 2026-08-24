@@ -1,7 +1,22 @@
 [Unit]
 Description=Food Maps API Server
-After=network.target mysql.service
-Wants=mysql.service
+# network-online, not just network.target: the database is remote (RDS), so
+# the unit needs routable networking rather than merely a configured stack.
+# The former mysql.service ordering was vestigial — there is no local MySQL on
+# this host for systemd to wait on. Reconnect resilience comes from
+# pool_pre_ping in backend/db.py plus Restart=always below.
+After=network-online.target
+Wants=network-online.target
+
+# Bound restart attempts to avoid a thundering-herd or CPU spin when the
+# process dies immediately on boot, for example on a config error. Allow up to
+# 5 restarts per 60s before giving up.
+#
+# These belong in [Unit]. systemd moved them out of [Service] in v229, and
+# left there they are parsed as unknown directives and silently ignored, which
+# means the rate limit was never actually in force.
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -17,14 +32,10 @@ EnvironmentFile=/home/ec2-user/project/.env
 # Start script
 ExecStart=/bin/bash /home/ec2-user/project/backend/start_server.sh
 
-# Auto-restart configuration
+# Auto-restart configuration. The rate limit that bounds these lives in
+# [Unit] above.
 Restart=always
 RestartSec=10
-# Bound restart attempts to avoid thundering-herd / CPU spin if the
-# process crashes immediately on boot (e.g. config error). Allow up to
-# 5 restarts per 60s before giving up.
-StartLimitIntervalSec=60
-StartLimitBurst=5
 
 # Resource limits
 LimitNOFILE=65536

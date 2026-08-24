@@ -14,14 +14,17 @@ fi
 
 echo ""
 
-# Check worker processes
-WORKERS=$(ps aux | grep "uvicorn app:app" | grep -v grep | wc -l)
+# Check worker processes. Matches the module path rather than a bare
+# "uvicorn", so a stray process started as `app:app` from inside backend/
+# shows up as zero here instead of masquerading as a healthy server.
+WORKERS=$(pgrep -fc "uvicorn backend.app:app" || echo 0)
 echo "⚙️  Worker Processes: $WORKERS"
 
 echo ""
 
-# Test API endpoint
-if curl -s -f http://localhost:8000/api/listings/get > /dev/null 2>&1; then
+# Test the health endpoint. It is /health — /api/health exists only in
+# backend/dev_app.py and returns 404 against the production app.
+if curl -s -f http://localhost:8000/health > /dev/null 2>&1; then
     echo "✅ API Status: RESPONDING"
 else
     echo "⚠️  API Status: NOT RESPONDING"
