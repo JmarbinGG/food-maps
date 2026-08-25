@@ -3,7 +3,7 @@
 **Date:** 2026-08-11
 **Reviewed commit:** `6df7612`
 **Reviewer:** internal code review (AI-assisted)
-**Open critical item:** [S-0](#s-0-live-database-credentials-committed-to-a-public-repository) — exposed RDS credentials require rotation
+**Open critical item:** [S-0](#s-0-live-database-credentials-committed-to-a-public-repository) — `foodapitest` rotated and closed to the public internet as of 2026-08-24; RDS connection-log review and the git-history scrub decision are still open
 
 Companion to [ENGINEERING_ROADMAP.md](./ENGINEERING_ROADMAP.md). Findings and
 remediation tasks live here; general process work lives there.
@@ -87,7 +87,10 @@ theoretical worst case.
 ### S-0. Live database credentials committed to a public repository
 
 **Severity:** Critical
-**Status:** Removed from the working tree; **still present in git history**
+**Status:** `foodapitest` rotated and no longer publicly reachable (2026-08-24, see
+[Resolution](#resolution-2026-08-24) below). `database-1` confirmed gone from
+the AWS account entirely. Leaked strings are **still present in git history**
+for both.
 **Location:** six files, as `os.getenv` fallback defaults
 
 Two sets of AWS RDS credentials were hardcoded as default arguments and
@@ -96,7 +99,7 @@ committed to a public repository:
 | Credential | Host | First committed | Files |
 |---|---|---|---|
 | `admin` / `rtp6HQD8emudbf5bdw` | `foodapitest.cj8ia4gu0tvd.us-west-1.rds.amazonaws.com:3306` | 2025-11-18 (`7ed91ec`) | `backend/fix_verification_status.py`, `backend/migrate_allergen_dietary.py`, `backend/migrate_date_label_type.py` |
-| `admin` / `foodmaps2024` | `database-1.c9um4qfazhpa.us-east-2.rds.amazonaws.com:3306` | 2025-12-01 (`4e3415c`) | `backend/scripts/add_dogoods_center.py`, `backend/scripts/delete_dogood_market.py`, `backend/scripts/migrate_safety_trust.py` |
+| `admin` / `foodmaps2024` | `database-1.c9um4qfazhpa.us-east-2.rds.amazonaws.com:3306` | 2025-12-01 (`4e3415c`) | `backend/scripts/add_dogoods_center.py`, `backend/scripts/delete_dogood_market.py`, `backend/scripts/migrate_safety_trust.py` — **instance confirmed gone, see below** |
 
 Both are the `admin` account. Both include the full RDS hostname, so no
 discovery work is required. They have been publicly readable for roughly eight
@@ -114,21 +117,150 @@ Making the repository private now would not undo this either — see
 [S-11](#s-11-public-repository-and-no-branch-protection).
 
 **Actions**
-- [ ] **Rotate both RDS passwords immediately.** This is the only action that
-      actually closes the exposure.
-- [ ] Check whether either RDS instance is publicly accessible. If so, treat
-      this as a live incident rather than a cleanup task.
+- [x] **Rotate both RDS passwords immediately.** Done for `foodapitest`
+      (2026-08-24) by creating a new application user first so the running
+      server never lost its connection — see
+      [Rotating without an outage](#rotating-s-0-without-breaking-the-rds-connection)
+      and [Resolution](#resolution-2026-08-24) below. `database-1` has no
+      instance left to rotate; see below.
+- [x] Check whether either RDS instance is publicly accessible. `foodapitest`
+      was — treated as a live incident and closed same-day. See
+      [Resolution](#resolution-2026-08-24).
 - [ ] Review RDS logs for connections from unrecognized source addresses over
-      the exposure window.
-- [ ] Confirm whether `foodapitest` and `database-1` still exist. If they are
-      retired, say so explicitly in this document so the finding can be closed;
-      if either holds real user data, the review needs to extend to what was
-      reachable.
-- [ ] Once rotated, decide whether to scrub history. Rotation makes the exposed
-      values worthless, which is usually enough; a rewrite invalidates every
-      existing clone and is rarely worth it after the fact.
+      the exposure window. **Not done yet** — still need to confirm whether
+      `foodapitest` has CloudWatch Logs export enabled for the general/audit
+      log before this is even possible to check.
+- [x] Confirm whether `foodapitest` and `database-1` still exist. `foodapitest`
+      is live and in use. `database-1` does **not** exist anywhere in the AWS
+      account (`062315167468`) — checked `us-east-2` plus all 15 other enabled
+      regions for both a live instance and a leftover snapshot under that name,
+      found neither. Either it was fully deleted (instance and snapshot both
+      purged) or it lived in a different AWS account than the one used for this
+      remediation; either way the leaked `foodmaps2024` credential has nothing
+      left in this account to authenticate against.
+- [ ] Decide whether to scrub history. Rotation makes the exposed values
+      worthless, which is usually enough; a rewrite invalidates every existing
+      clone and is rarely worth it after the fact. **Still undecided.**
 - [ ] Add secret scanning with push protection so the next one is caught before
       it lands ([S-6](#s-6-no-dependency-or-secret-scanning)).
+- [x] Stop storing `DATABASE_URL` in the server's `.env`. Confirmed already
+      true for `foodapitest`'s host before this rotation started — only
+      `AWS_SECRET_NAME` and `AWS_REGION` were present, so there was no shadowing
+      to fix, just the cutover itself.
+
+### Resolution — 2026-08-24
+
+`foodapitest` was rotated and closed to the public internet. Findings and
+actions, in the order they were discovered:
+
+- **The RDS instance was genuinely publicly reachable**, not just flagged as
+  such: `aws rds describe-db-instances` showed `PubliclyAccessible: true`, and
+  its `default` security group (`sg-02f5f428ac83d5abc`) allowed inbound TCP
+  3306 from `0.0.0.0/0`. This was confirmed live — a direct TCP connection to
+  the instance succeeded from a machine outside the VPC.
+- **The security group that looked correctly scoped was not.** A second SG,
+  `rds-ec2-1` (`sg-0bd437ce9a007ecf3`), restricted 3306 to a specific SG,
+  `sg-0f6ef4189b5d500dc` — but zero EC2 instances used that SG. The actual app
+  host (`i-094f928eb2af130b6`, security group `sg-0a600186699cbb59e` /
+  `foodmapgroup`) was only ever reaching the database through the open
+  `0.0.0.0/0` rule. Removing that rule without first authorizing the real app
+  SG would have taken the app down.
+- **Rotation order:** created `'foodmaps'@'%'` on `foodapitest` with grants
+  scoped to `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX` on the
+  `foodapitest` schema (the live database name matches the instance
+  identifier, not `food_maps` as originally assumed); updated `DATABASE_URL`
+  inside the existing `prod/env` Secrets Manager secret to point at the new
+  user; restarted the service; confirmed via
+  `information_schema.processlist` that live connections switched from
+  `admin` to `foodmaps`; confirmed `/health` and a DB-backed endpoint
+  (`/api/listings/get`) both worked.
+- **Closed the exposure**, in order: authorized TCP 3306 on `rds-ec2-1` from
+  `sg-0a600186699cbb59e` (the real app SG), verified the app still worked,
+  then revoked the `0.0.0.0/0:3306` rule on the `default` SG, verified again.
+- **Rotated `admin`'s password** to an unused, unsaved random value via
+  `ALTER USER`, after confirming `'admin'@'%'` was the only variant of that
+  account. It was not deleted, in case a future migration needs elevated
+  privileges beyond what `foodmaps` was granted — but a fresh password should
+  be generated at that time rather than reusing today's throwaway value.
+  Confirmed the old leaked password (`rtp6HQD8emudbf5bdw`) no longer
+  authenticates.
+- **`prod/env` already existed** before this rotation (created 2026-04-25,
+  last changed 2026-05-20) with a full set of app secrets, and the EC2
+  instance role already had `SecretsManagerReadWrite` attached — so no new
+  Secrets Manager secret or IAM policy work was needed, only updating the one
+  `DATABASE_URL` key.
+
+Not done as part of this pass: CloudWatch Logs / audit-log review for
+historical connections during the exposure window, the git-history scrub
+decision, and secret scanning (S-6). All three remain open above.
+
+### Rotating S-0 without breaking the RDS connection
+
+Rotating the master password does **not** detach the RDS instance from AWS.
+AWS manages the instance over IAM and the control plane; the leaked string is
+only a MySQL login. What *does* break is any client still authenticating as
+that user — including this app.
+
+The app does not read SSM Parameter Store. It already reads **AWS Secrets
+Manager** (`backend/aws_secrets.py`) when `AWS_SECRET_NAME` is set. SSM is the
+wrong store for a database password: it has no rotation integration with RDS.
+Secrets Manager does.
+
+`DATABASE_URL` is baked into the SQLAlchemy engine at import time
+(`backend/db.py`). Updating a secret or `.env` has no effect until the process
+restarts. Current production almost certainly has `DATABASE_URL` in
+`/home/ec2-user/project/.env`, which systemd loads via `EnvironmentFile`. That
+value **wins** over Secrets Manager. Rotating the secret alone will not change
+what the running server uses.
+
+**Do not** `ALTER USER admin` first. That is the outage. Create a new user,
+point the app at it, confirm it works, *then* burn the leaked admin password.
+
+1. Confirm which instance the live `DATABASE_URL` actually points at (host
+   only — do not paste the password into tickets). The leaked hosts were
+   `foodapitest` (us-west-1) and `database-1` (us-east-2); production today
+   may be a third instance.
+2. Create a Secrets Manager secret, for example `prod/env`, in the same region
+   as the instance. Either a dotenv blob with `DATABASE_URL=` and `JWT_SECRET=`
+   or the RDS JSON shape (`username`, `password`, `host`, `port`, `dbname`,
+   `engine`) both work. The loader turns the JSON shape into `DATABASE_URL`.
+3. On that instance, as the current admin, create a **new** application user
+   with a new password, and grant it only what the app needs:
+
+   ```sql
+   CREATE USER 'foodmaps'@'%' IDENTIFIED BY '<new password>';
+   GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+     ON food_maps.* TO 'foodmaps'@'%';
+   FLUSH PRIVILEGES;
+   ```
+
+   Do not keep using `admin` as the app login.
+4. Put the new user's URL (or JSON fields) in the secret. Give the EC2 instance
+   role `secretsmanager:GetSecretValue` on that ARN only.
+5. Set `AWS_SECRET_NAME=prod/env` and `AWS_REGION=...` in the systemd unit (or
+   in compose). **Remove `DATABASE_URL` from `.env`.** If it stays, the secret
+   is ignored and the next rotation will look like it worked while the process
+   still has the old password.
+6. Restart: `sudo systemctl restart foodmaps` (or `docker compose up -d`).
+   `GET /health` should be 200. Logs should show `Loaded AWS secret prod/env`
+   and must not warn that `DATABASE_URL` was already set.
+7. Only then burn the leaked accounts:
+
+   ```sql
+   ALTER USER 'admin'@'%' IDENTIFIED BY '<long random unused password>';
+   ```
+
+   Repeat for `'admin'@'localhost'` if it exists. If `foodapitest` or
+   `database-1` is retired, delete the instance rather than rotating it.
+8. Confirm the app is still healthy after step 7. It should be: it is no longer
+   logging in as `admin`.
+
+After this, a later password change is: update the secret, restart. Optional
+RDS-managed rotation can write the new password into the same secret; the app
+still needs a restart, because the engine is created once at import.
+
+Local development is unchanged: leave `AWS_SECRET_NAME` unset and keep using
+`.env`.
 
 ---
 
@@ -524,8 +656,10 @@ harmless right up until it is not.
 
 **Do now** — this one is not a "this week" item:
 
-- [ ] **Rotate both exposed RDS passwords** (S-0), and confirm whether either
-      instance is publicly reachable.
+- [x] **Rotate both exposed RDS passwords** (S-0), and confirm whether either
+      instance is publicly reachable. Done 2026-08-24 for `foodapitest`;
+      `database-1` no longer exists. See
+      [Resolution](#resolution-2026-08-24).
 
 **Do this week** — cheap, and each closes a real gap:
 
@@ -535,7 +669,8 @@ harmless right up until it is not.
 - [ ] Enable branch protection on `main` (S-11)
 - [ ] Enable Dependabot and GitHub secret scanning with push protection (S-6)
 - [ ] Verify Mapbox token URL restrictions and set a billing alert (S-10)
-- [ ] Confirm RDS is not publicly accessible (S-7)
+- [x] Confirm RDS is not publicly accessible (S-7). `foodapitest` was;
+      closed 2026-08-24 — see [Resolution](#resolution-2026-08-24).
 - [ ] Untrack the committed `.pyc` files (S-13)
 
 **Next** — small code changes with clear security value:
