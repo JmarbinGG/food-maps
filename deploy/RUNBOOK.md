@@ -81,10 +81,17 @@ own security group: 80 and 443 as needed, 22 from your address, and **never**
 8000 from anywhere but the proxy.
 
 ```bash
-sudo dnf install -y docker git
-sudo systemctl enable --now docker
-sudo usermod -aG docker ec2-user   # log out and back in
+sudo bash deploy/scripts/bootstrap-instance.sh
+# log out and back in for the ec2-user docker group membership to take effect
 ```
+
+That script installs Docker plus the Compose and Buildx CLI plugins.
+Amazon Linux's `docker` package is bare Engine only — without both plugins,
+`docker compose ...` fails with `unknown shorthand flag: 'f' in -f`, and
+`docker compose build` fails separately with `requires buildx 0.17.0 or
+later` once compose itself is present. Pass the same script as `--user-data`
+at launch instead to get a box that is ready immediately, with no manual SSH
+step at all.
 
 If the containers must read the instance role, raise the IMDS hop limit.
 Container traffic to the metadata endpoint takes one extra network hop, and
