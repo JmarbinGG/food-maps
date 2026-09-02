@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import User
+from models import User, UserRole
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,7 +37,12 @@ def make_admin(email):
         print(f"Found user: {user.name} ({user.email})")
         print(f"Current role: {user.role}")
         
-        user.role = 'admin'
+        # Must be the enum member, not the raw string 'admin'. SQLAlchemy's
+        # Enum(UserRole) column doesn't validate on write, so a bare string
+        # commits silently but isn't among the enum's names (DONOR, ADMIN,
+        # ...) — the next read of this row then raises LookupError, which
+        # surfaces as a generic 500 on login and on every admin-gated route.
+        user.role = UserRole.ADMIN
         db.commit()
         
         print(f"✅ Successfully updated {user.name} to admin role")
