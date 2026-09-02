@@ -143,8 +143,17 @@ python3 deploy/scripts/scrub_staging_db.py
 
 It refuses to run unless `STAGING_SCRUB_CONFIRM` repeats the host from
 `DATABASE_URL`, and refuses outright on a host containing `prod`. Roles, ids
-and foreign keys survive; emails become `user<id>@staging.invalid`, and every
+and foreign keys survive; emails become `user<id>@staging.example`, and every
 account gets one shared password printed at the end.
+
+`.example`, not `.invalid`: both are RFC 2606 reserved TLDs that have never
+been delegated in the real DNS root, so both are equally guaranteed
+non-resolvable. `.invalid` is rejected outright by this app's own login,
+forgot-password and reset-password validation (Pydantic's `EmailStr`, backed
+by `email-validator`, treats it as a disallowed special-use domain) — a
+scrubbed account could never log in. `.example` isn't on that package's
+reserved-domain list, so it passes validation while keeping the same
+never-resolves guarantee.
 
 ---
 

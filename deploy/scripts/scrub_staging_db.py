@@ -129,7 +129,7 @@ def main() -> int:
         # UI stays testable. Referral codes are preserved because they carry a
         # unique constraint and are not personal data.
         scrub_table(conn, meta, inspector, "users", {
-            "email": lambda t: func.concat("user", t.c.id, "@staging.invalid"),
+            "email": lambda t: func.concat("user", t.c.id, "@staging.example"),
             "name": lambda t: func.concat("Test User ", t.c.id),
             "phone": lambda t: None,
             "address": lambda t: func.concat(t.c.id, " Test Street, Staging"),
@@ -195,7 +195,7 @@ def main() -> int:
         })
 
         scrub_table(conn, meta, inspector, "newsletter_subscriptions", {
-            "email": lambda t: func.concat("subscriber", t.c.id, "@staging.invalid"),
+            "email": lambda t: func.concat("subscriber", t.c.id, "@staging.example"),
         })
 
         # Organisation contact details rather than personal ones, but staging
@@ -223,8 +223,11 @@ def main() -> int:
             print(f"  {email}")
     else:
         print("no admin account detected — create one with backend/make_admin.py")
-    print("\nemail domain is .invalid, which is reserved and cannot resolve, so a")
-    print("misconfigured mail path fails loudly instead of reaching a real inbox.")
+    print("\nemail domain is .example, an RFC 2606 reserved TLD that has never been")
+    print("delegated in the real DNS root, so a misconfigured mail path fails loudly")
+    print("instead of reaching a real inbox. (.invalid has the same guarantee but is")
+    print("rejected outright by this app's own login validation, so .example is used")
+    print("here instead.)")
     return 0
 
 
