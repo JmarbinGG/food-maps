@@ -130,16 +130,6 @@ function AdminPanel({ onClose }) {
       }
     }, [userRoleFilter]);
 
-    React.useEffect(() => {
-      if (activeTab !== 'ai_query') return;
-      const mount = () => window.FoodMapsNouri?.mountQueryPanel('nouri-query-root');
-      if (window.FoodMapsNouri?.mountWithRetry) {
-        window.FoodMapsNouri.mountWithRetry(mount);
-      } else {
-        mount();
-      }
-    }, [activeTab]);
-
     const loadCenters = async () => {
       try {
         setCentersError('');
@@ -704,7 +694,6 @@ function AdminPanel({ onClose }) {
                 { id: 'newsletter', label: 'Newsletter', icon: 'mail' },
                 { id: 'messages', label: 'Messages', icon: 'message-circle' },
                 { id: 'ai_broadcasts', label: 'AI Broadcasts', icon: 'megaphone' },
-                { id: 'ai_query', label: 'AI Query', icon: 'search' },
                 { id: 'database', label: 'Database', icon: 'database' },
                 { id: 'export', label: 'Export', icon: 'download' }
               ].map(tab => (
@@ -1797,16 +1786,6 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'ai_broadcasts' && (
             <AIBroadcastsPanel />
-          )}
-
-          {activeTab === 'ai_query' && (
-            <div className="bg-white rounded-lg shadow-sm p-6">
-              <h2 className="text-xl font-bold mb-2">AI Query</h2>
-              <p className="text-sm text-gray-600 mb-4">
-                Ask natural-language questions about listings, users, and platform data (read-only).
-              </p>
-              <div id="nouri-query-root" />
-            </div>
           )}
           </div>
         </div>

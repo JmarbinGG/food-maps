@@ -1,5 +1,5 @@
 """
-Centralised error types for the Food Maps AI router (Nouri).
+Centralised error types for the FoodMaps AI router.
 
 Provides a small hierarchy of :class:`AIError` HTTP exceptions with
 language-aware user-facing messages (sourced from
@@ -28,38 +28,15 @@ logger = logging.getLogger("ai_errors")
 # ---------------------------------------------------------------------------
 
 class AIError(HTTPException):
-    """Base class for AI-layer HTTP errors with a structured, language-aware body.
-
-    The ``detail`` payload is a dict so the frontend can branch on
-    ``error_code`` and ``retryable`` without parsing free text::
-
-        {
-            "error_code": "timeout",
-            "message": "The request took too long...",  # localized
-            "retryable": True,
-            "lang": "en",
-        }
-
-    :func:`backend.app.secure_http_exception_handler` preserves this
-    structured body for :class:`AIError` instances while still redacting
-    detail from generic 5xx exceptions.
-    """
+    """Base class for AI-layer HTTP errors with a language-aware message."""
 
     status_code: int = 500
     canned_key: str = "general_error"
-    error_code: str = "internal"
-    retryable: bool = False
 
     def __init__(self, lang: str = "en", detail: Optional[str] = None):
-        message = detail or get_canned_response(self.canned_key, lang)
         super().__init__(
             status_code=self.status_code,
-            detail={
-                "error_code": self.error_code,
-                "message": message,
-                "retryable": self.retryable,
-                "lang": lang,
-            },
+            detail=detail or get_canned_response(self.canned_key, lang),
         )
 
 
@@ -67,41 +44,43 @@ class AITimeout(AIError):
     """Upstream (OpenAI / Mapbox / Twilio) timed out."""
     status_code = 504
     canned_key = "timeout"
-    error_code = "timeout"
-    retryable = True
 
 
 class AIUpstreamError(AIError):
     """Upstream returned an HTTP error or the connection failed."""
     status_code = 502
     canned_key = "api_down"
-    error_code = "upstream_error"
-    retryable = True
 
 
 class AIServiceUnavailable(AIError):
-    """Service is temporarily unable to serve this request (circuit open,
-    missing API key, or model unavailable)."""
+    """Service is temporarily unable to serve this request (circuit open)."""
     status_code = 503
     canned_key = "api_down"
-    error_code = "model_unavailable"
-    retryable = True
+
+
+class AIRateLimited(AIError):
+    """Upstream returned 429 (we've blown our OpenAI quota/RPM/TPM cap).
+
+    Distinct from ``AIServiceUnavailable`` so the user sees "I'm busy,
+    try again in a minute" instead of the misleading "can't reach my
+    AI service". Carries a ``retry_after`` so the response includes a
+    Retry-After header.
+    """
+    status_code = 429
+    canned_key = "rate_limited"
+
+    def __init__(self, lang: str = "en", detail: Optional[str] = None,
+                 retry_after: Optional[float] = None):
+        super().__init__(lang=lang, detail=detail)
+        if retry_after is not None and retry_after > 0:
+            # FastAPI will surface this header to the client.
+            self.headers = {"Retry-After": str(int(max(1, round(retry_after))))}
 
 
 class AIDatabaseError(AIError):
     """Database failed (connection, integrity, deadlock, etc.)."""
     status_code = 503
     canned_key = "general_error"
-    error_code = "database_unavailable"
-    retryable = True
-
-
-class AIInvalidInput(AIError):
-    """Caller sent unusable input (e.g. unintelligible voice audio)."""
-    status_code = 400
-    canned_key = "invalid_input"
-    error_code = "invalid_input"
-    retryable = False
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +104,7 @@ __all__ = [
     "AITimeout",
     "AIUpstreamError",
     "AIServiceUnavailable",
+    "AIRateLimited",
     "AIDatabaseError",
-    "AIInvalidInput",
     "resolve_lang",
 ]

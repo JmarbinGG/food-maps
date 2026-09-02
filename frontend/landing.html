@@ -26,8 +26,6 @@
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" crossorigin="anonymous">
-    <link href="assets/nouri/nouri-ai.css?v=20260903-foodmaps" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
     <script src="js/lib/i18n_platform.js?v=20260812d"></script>
 
@@ -268,15 +266,25 @@
         // AI Search function
         function openAISearch() {
             try {
-                if (window.dispatchEvent) {
-                    window.dispatchEvent(new CustomEvent('nouri:open-chat', {
-                        detail: { message: 'Help me find food near me' },
-                    }));
-                    return;
+                // Check if AIFoodSearch component is available
+                if (window.AIFoodSearch && window.React && window.ReactDOM) {
+                    const container = document.getElementById('ai-search-modal');
+                    if (container) {
+                        const root = ReactDOM.createRoot(container);
+                        root.render(React.createElement(window.AIFoodSearch, {
+                            isOpen: true,
+                            onClose: () => {
+                                root.unmount();
+                            }
+                        }));
+                    }
+                } else {
+                    // Fallback - redirect to main app
+                    window.location.href = 'index.html';
                 }
-                window.location.href = 'index.html';
             } catch (error) {
                 console.error('AI Search error:', error);
+                // Fallback - redirect to main app
                 window.location.href = 'index.html';
             }
         }
@@ -762,8 +770,9 @@
     <script type="text/babel" src="js/lib/database.js"></script>
     <script type="text/babel" src="js/components/auth/SimpleCaptcha.js"></script>
     <script type="text/babel" src="js/components/auth/AuthModal.js"></script>
+    <script type="text/babel" src="js/components/ai/AIFoodSearch.js?v=20260514-autocomplete"></script>
     <script type="text/babel" src="js/components/ai/LandingAISearch.js"></script>
-    <script type="text/babel" src="js/landing-app.js?v=20260903-foodmaps"></script>
+    <script type="text/babel" src="js/landing-app.js"></script>
     <script>
         (function loadImpactStats() {
             const CACHE_KEY = 'landing_public_stats_v1';
@@ -875,8 +884,7 @@
 
     <!-- Anonymous AI chatbot (landing only) -->
     <script>window.FOODMAPS_AI_ANONYMOUS = true;</script>
-    <div id="nouri-ai-root" aria-hidden="false"></div>
-    <script type="module" src="assets/nouri/nouri-ai.js?v=20260903-foodmaps"></script>
+    <script type="text/babel" src="js/components/ai/AIChatbot.js?v=20260514-ai-directions"></script>
 
     <!-- Footer -->
     <footer class="bg-gray-900 text-gray-300 py-16 relative overflow-hidden">

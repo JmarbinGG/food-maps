@@ -34,11 +34,6 @@ class TestScopeSafeQuery:
         assert {"field": "id", "op": "eq", "value": 7} not in out["filters"]
         assert {"field": "id", "op": "eq", "value": 42} in out["filters"]
 
-    def test_users_entity_injects_uuid_self_id(self):
-        uid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-        out = _scope_safe_query({"entity": "users", "filters": []}, uid)
-        assert {"field": "id", "op": "eq", "value": uid} in out["filters"]
-
     def test_listings_scopes_to_donor_or_recipient(self):
         out = _scope_safe_query({"entity": "listings", "filters": []}, 9)
         fields = {f["field"] for f in out["filters"]}

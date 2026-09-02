@@ -25,10 +25,3 @@ python-multipart==0.0.26
 sqlalchemy==2.0.23
 twilio==8.10.0
 uvicorn==0.24.0
-openai>=1.10.0
-langgraph>=0.2.45
-langchain>=0.3.11
-langchain-openai>=0.2.10
-langchain-core>=0.3.27
-langchain-community>=0.3.10
-langgraph-checkpoint>=2.0.8

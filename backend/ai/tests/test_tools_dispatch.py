@@ -63,12 +63,9 @@ class TestRunSafeQueryValidation:
 class TestToolArgValidation:
     async def test_search_food_invalid_user_id(self):
         r = await execute_tool("search_food_near_user", {"user_id": "not-an-int"})
-        # Supabase-backed search: invalid ids may return empty results, not a local parse error.
-        assert isinstance(r, dict)
-        assert "error" not in r or r.get("total", 0) == 0 or r.get("results") == []
+        assert "error" in r and "Invalid user_id" in r["error"]
 
     async def test_get_user_profile_invalid_id(self):
         r = await execute_tool("get_user_profile", {"user_id": "abc"})
-        # Supabase-backed lookup: garbage ids yield no row (not a local int parse error).
-        assert r.get("profile") is None
-        assert r.get("error") or r.get("message")
+        # Either invalid-id error OR wrapped exception — both are acceptable
+        assert "error" in r

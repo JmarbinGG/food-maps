@@ -14,31 +14,17 @@ function SimpleCaptcha({ onVerify }) {
     setCaptchaCode(result);
     setUserInput('');
     setIsVerified(false);
-    onVerify(false);
-  }, [onVerify]);
+  }, []);
 
   React.useEffect(() => {
     generateCaptcha();
   }, [generateCaptcha]);
 
-  const handleVerify = React.useCallback((inputValue) => {
-    const value = (inputValue !== undefined ? inputValue : userInput).toUpperCase();
-    const verified = value.length === captchaCode.length && value === captchaCode;
+  const handleVerify = () => {
+    const verified = userInput.toUpperCase() === captchaCode;
     setIsVerified(verified);
     onVerify(verified);
-    return verified;
-  }, [captchaCode, onVerify, userInput]);
-
-  React.useEffect(() => {
-    if (!userInput) {
-      setIsVerified(false);
-      onVerify(false);
-      return;
-    }
-    if (userInput.toUpperCase() === captchaCode) {
-      handleVerify(userInput);
-    }
-  }, [captchaCode, handleVerify, onVerify, userInput]);
+  };
 
   return (
     <div className="captcha-container mb-4">
@@ -72,20 +58,14 @@ function SimpleCaptcha({ onVerify }) {
         <input
           type="text"
           value={userInput}
-          onChange={(e) => setUserInput(e.target.value.toUpperCase())}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              handleVerify();
-            }
-          }}
+          onChange={(e) => setUserInput(e.target.value)}
           placeholder="Enter captcha code"
           className="flex-1 p-2 border border-[var(--border-color)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
           maxLength="5"
         />
         <button
           type="button"
-          onClick={() => handleVerify()}
+          onClick={handleVerify}
           className={`px-4 py-2 rounded-lg ${
             isVerified 
               ? 'bg-green-500 text-white' 

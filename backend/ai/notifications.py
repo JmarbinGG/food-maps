@@ -1,5 +1,5 @@
 """
-Automated-messaging system for Food Maps AI (Nouri).
+Automated-messaging system for FoodMaps AI.
 
 Responsibilities
 ----------------
@@ -23,19 +23,10 @@ import json
 import logging
 import os
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Optional
 
 logger = logging.getLogger("ai_notifications")
-
-
-def _utcnow() -> datetime:
-    """Naive UTC datetime replacement for the deprecated ``_utcnow()``.
-
-    See ``backend/ai/ai_engine.py::_utcnow`` for why we stay on naive
-    timestamps until the DB columns get a tz-aware migration.
-    """
-    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 # How often the scan/draft job runs (seconds).  Default = 1 hour.
 BROADCAST_INTERVAL = int(os.getenv("AI_BROADCAST_INTERVAL", "3600"))
@@ -57,9 +48,16 @@ def _safe_json_loads(raw: Optional[str]) -> list | dict | None:
     if not raw:
         return None
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
     except (TypeError, ValueError):
         return None
+    # Reject scalars (numbers, bools, strings) so downstream code that
+    # does `prefs.get(...)` or `"x" in prefs` doesn't crash with
+    # TypeError when a column accidentally holds e.g. `"42"` or
+    # `"true"` instead of a JSON object/array.
+    if isinstance(result, (list, dict)):
+        return result
+    return None
 
 
 def _as_lower_set(value) -> set[str]:
@@ -150,7 +148,7 @@ def _template_en(user_name: str, food, donor_name: str) -> str:
     location = f" at {short_addr}" if short_addr else ""
     return (
         f"Hi {name}! {donor_name or 'A donor'} just posted \"{title}\"{location}.{window} "
-        f"Open Food Maps to claim it. Reply STOP to opt out."
+        f"Open FoodMaps to claim it. Reply STOP to opt out."
     )
 
 
@@ -165,7 +163,7 @@ def _template_es(user_name: str, food, donor_name: str) -> str:
     location = f" en {short_addr}" if short_addr else ""
     return (
         f"¡Hola {name}! {donor_name or 'Un donante'} acaba de publicar \"{title}\"{location}.{window} "
-        f"Abre Food Maps para reclamarlo. Responde STOP para cancelar."
+        f"Abre FoodMaps para reclamarlo. Responde STOP para cancelar."
     )
 
 
@@ -234,7 +232,7 @@ def _collect_candidates() -> list[dict]:
     out: list[dict] = []
     db = SessionLocal()
     try:
-        since = _utcnow() - timedelta(minutes=BROADCAST_LOOKBACK_MIN)
+        since = datetime.utcnow() - timedelta(minutes=BROADCAST_LOOKBACK_MIN)
         listings = (
             db.query(FoodResource)
             .filter(FoodResource.created_at >= since)
@@ -267,11 +265,21 @@ def _collect_candidates() -> list[dict]:
             q = q.filter(User.role.in_(candidate_roles))
         users = q.all()
 
+        # Prefetch donors in one query instead of one-per-listing (N+1).
+        donor_ids = {l.donor_id for l in listings if l.donor_id is not None}
+        donor_name_by_id: dict[int, str] = {}
+        if donor_ids:
+            for did, dname in (
+                db.query(User.id, User.name)
+                .filter(User.id.in_(donor_ids))
+                .all()
+            ):
+                donor_name_by_id[did] = dname or ""
+
         for food in listings:
             if food.id in already:
                 continue
-            donor = db.query(User).filter(User.id == food.donor_id).first()
-            donor_name = donor.name if donor else ""
+            donor_name = donor_name_by_id.get(food.donor_id, "")
             for u in users:
                 if u.id == food.donor_id:
                     continue
@@ -444,7 +452,7 @@ async def send_broadcast(broadcast_id: int) -> dict:
             b.status = status
             b.error = error
             if status == "sent":
-                b.sent_at = _utcnow()
+                b.sent_at = datetime.utcnow()
             db.commit()
         finally:
             db.close()
@@ -498,7 +506,7 @@ async def auto_send_pending(batch_id: Optional[str] = None) -> int:
         db = SessionLocal()
         try:
             db.query(AIBroadcast).filter(AIBroadcast.id.in_(ids)).update(
-                {"status": "approved", "approved_at": _utcnow()},
+                {"status": "approved", "approved_at": datetime.utcnow()},
                 synchronize_session=False,
             )
             db.commit()
@@ -536,7 +544,21 @@ async def broadcast_loop() -> None:
             raise
         except Exception as exc:
             consecutive_failures += 1
-            logger.error("Broadcast loop error (#%d): %s", consecutive_failures, exc)
+            # Transient DB errors (DNS, 2003/2006) show up here during
+            # brief RDS / network blips. Log them at WARNING so they
+            # don't masquerade as real errors; the existing exponential
+            # backoff below still throttles retries.
+            from sqlalchemy.exc import OperationalError
+            if isinstance(exc, OperationalError):
+                logger.warning(
+                    "Broadcast loop transient DB error (#%d): %s",
+                    consecutive_failures, exc,
+                )
+            else:
+                logger.error(
+                    "Broadcast loop error (#%d): %s",
+                    consecutive_failures, exc,
+                )
 
         backoff = BROADCAST_INTERVAL
         if consecutive_failures:

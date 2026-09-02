@@ -27,49 +27,31 @@ class TestAIErrorHierarchy:
     def test_base_is_500(self):
         exc = AIError("en")
         assert exc.status_code == 500
-        # detail is a structured dict so the frontend can branch on
-        # error_code / retryable without parsing free text.
-        assert isinstance(exc.detail, dict)
-        assert exc.detail.get("error_code") == "internal"
-        assert exc.detail.get("retryable") is False
-        assert exc.detail.get("lang") == "en"
-        assert isinstance(exc.detail.get("message"), str) and exc.detail["message"]
+        assert isinstance(exc.detail, str) and exc.detail
 
     def test_timeout_is_504(self):
         exc = AITimeout("en")
         assert exc.status_code == 504
-        assert exc.detail["error_code"] == "timeout"
-        assert exc.detail["retryable"] is True
-        msg = exc.detail["message"].lower()
+        msg = exc.detail.lower()
         assert "try again" in msg or "longer" in msg or "moment" in msg
 
     def test_upstream_is_502(self):
-        exc = AIUpstreamError("en")
-        assert exc.status_code == 502
-        assert exc.detail["error_code"] == "upstream_error"
-        assert exc.detail["retryable"] is True
+        assert AIUpstreamError("en").status_code == 502
 
     def test_service_unavailable_is_503(self):
-        exc = AIServiceUnavailable("en")
-        assert exc.status_code == 503
-        assert exc.detail["error_code"] == "model_unavailable"
-        assert exc.detail["retryable"] is True
+        assert AIServiceUnavailable("en").status_code == 503
 
     def test_db_is_503(self):
-        exc = AIDatabaseError("en")
-        assert exc.status_code == 503
-        assert exc.detail["error_code"] == "database_unavailable"
-        assert exc.detail["retryable"] is True
+        assert AIDatabaseError("en").status_code == 503
 
     def test_spanish_message(self):
         exc = AITimeout("es")
-        msg = exc.detail["message"].lower()
-        assert exc.detail["lang"] == "es"
+        msg = exc.detail.lower()
         assert "tardando" in msg or "inténtalo" in msg or "mientras" in msg
 
     def test_custom_detail_overrides_canned(self):
         exc = AIError("en", detail="custom specific message")
-        assert exc.detail["message"] == "custom specific message"
+        assert exc.detail == "custom specific message"
 
     def test_subclass_hierarchy(self):
         from fastapi import HTTPException

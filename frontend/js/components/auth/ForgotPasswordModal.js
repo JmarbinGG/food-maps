@@ -9,8 +9,7 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
 
   const handleEmailSubmit = async (e) => {
     e.preventDefault();
-    const normalizedEmail = String(email || '').trim().toLowerCase();
-    if (!normalizedEmail) {
+    if (!email) {
       setError('Please enter your email address');
       return;
     }
@@ -24,13 +23,12 @@ function ForgotPasswordModal({ onClose, onBackToLogin }) {
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email: normalizedEmail })
+        body: JSON.stringify({ email })
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setEmail(normalizedEmail);
         setStep('code');
         if (typeof window.showAlert === 'function') {
           window.showAlert('Verification code sent to your email', { title: 'Code Sent', variant: 'success' });

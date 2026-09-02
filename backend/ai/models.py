@@ -1,15 +1,17 @@
 """
-AI-specific SQLAlchemy models.
+AI-specific SQLAlchemy models, added to the main MySQL database.
 
-user_id columns use String(64) so they accept both legacy integer PKs and
-Supabase UUIDs. No FK constraint on users.id so the AI conversation store
-is independent of which auth system is in use.
+These replace the Supabase tables used by the original AI backend:
+  - ai_conversations   -> AIConversation
+  - ai_reminders       -> AIReminder
+  - ai_feedback        -> AIFeedback
 """
 from __future__ import annotations
 
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean, ForeignKey
 )
+from sqlalchemy.orm import relationship
 from datetime import datetime
 
 from backend.models import Base  # reuse the same declarative Base
@@ -20,11 +22,13 @@ class AIConversation(Base):
     __tablename__ = "ai_conversations"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     role = Column(String(16), nullable=False)  # 'user' | 'assistant' | 'system'
     message = Column(Text, nullable=False)
     meta = Column(Text, nullable=True)  # JSON string (language, tool calls, etc.)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class AIReminder(Base):
@@ -32,14 +36,16 @@ class AIReminder(Base):
     __tablename__ = "ai_reminders"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String(64), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     message = Column(Text, nullable=False)
     trigger_time = Column(DateTime, nullable=False, index=True)
-    reminder_type = Column(String(32), default="general")
-    related_id = Column(Integer, nullable=True)
+    reminder_type = Column(String(32), default="general")  # pickup|listing_expiry|distribution_event|general
+    related_id = Column(Integer, nullable=True)  # optional FK to food_resource/center/etc.
     sent = Column(Boolean, default=False, index=True)
     sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 class AIFeedback(Base):
@@ -48,51 +54,39 @@ class AIFeedback(Base):
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     conversation_id = Column(Integer, ForeignKey("ai_conversations.id"), nullable=False, index=True)
-    user_id = Column(String(64), nullable=False, index=True)
-    rating = Column(String(16), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    rating = Column(String(16), nullable=False)  # 'up'|'down'|'5'|...
     comment = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
-
-class AIUserPreference(Base):
-    """Learned user preferences stored by the AI agent across conversations."""
-    __tablename__ = "ai_user_preferences"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String(64), nullable=False, index=True)
-    key = Column(String(128), nullable=False)
-    value = Column(Text, nullable=False)
-    confidence = Column(String(8), default="medium")
-    last_seen_at = Column(DateTime, default=datetime.utcnow)
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-
-class AIGoal(Base):
-    """Multi-turn goals tracked by the AI agent."""
-    __tablename__ = "ai_goals"
-
-    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    user_id = Column(String(64), nullable=False, index=True)
-    description = Column(Text, nullable=False)
-    status = Column(String(16), default="done", index=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    completed_at = Column(DateTime, nullable=True)
+    user = relationship("User", foreign_keys=[user_id])
+    conversation = relationship("AIConversation", foreign_keys=[conversation_id])
 
 
 class AIBroadcast(Base):
-    """A personalized notification drafted by the AI for a specific user."""
+    """A personalized notification drafted by the AI for a specific user.
+
+    Lifecycle:  pending -> approved -> sent (or rejected / failed).
+    Admin approval is required before SMS / in-app chat delivery.
+    """
     __tablename__ = "ai_broadcasts"
 
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    # Source of the broadcast (a new food listing, in the typical case)
     food_resource_id = Column(Integer, ForeignKey("food_resources.id"), nullable=True, index=True)
-    user_id = Column(String(64), nullable=False, index=True)
+    # Target recipient
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    # Delivery channel: 'sms', 'chat', or 'both'
     channel = Column(String(16), default="sms")
-    language = Column(String(8), default="en")
+    language = Column(String(8), default="en")  # 'en' | 'es'
     message = Column(Text, nullable=False)
+    # pending | approved | rejected | sent | failed
     status = Column(String(16), default="pending", index=True)
-    batch_id = Column(String(64), nullable=True, index=True)
+    batch_id = Column(String(64), nullable=True, index=True)  # groups one job run
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    approved_by = Column(String(64), nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     sent_at = Column(DateTime, nullable=True)
     error = Column(Text, nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])

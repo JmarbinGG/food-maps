@@ -36,8 +36,6 @@
     <script defer src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script defer src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" crossorigin="anonymous">
-    <link href="assets/nouri/nouri-ai.css?v=20260903-foodmaps" rel="stylesheet">
     <script defer src='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js'></script>
     <link href='https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css' rel='stylesheet' />
     <script defer
@@ -625,6 +623,7 @@
     <script type="text/babel" src="js/lib/api.js"></script>
     <script type="text/babel" src="js/lib/favoritesAPI.js"></script>
     <script type="text/babel" src="js/lib/agentAPI.js"></script>
+    <script type="text/babel" src="js/lib/agents.js"></script>
     <script src="js/lib/i18n.js?v=20260812c"></script>
     <script src="js/lib/i18n_autotranslate.js?v=20260812c"></script>
     <script type="text/babel" src="js/lib/useTranslation.js"></script>
@@ -636,9 +635,11 @@
     <script type="text/babel" src="js/components/safety/ExpirationEducation.js"></script>
     <script type="text/babel" src="js/components/safety/AllergenDietaryFlags.js"></script>
     <script type="text/babel" src="js/components/nutrition/MealBuilder.js"></script>
+    <script type="text/babel" src="js/components/ai/VoiceSearch.js"></script>
     <script type="text/babel" src="js/components/common/SmartNotifications.js"></script>
     <script type="text/babel" src="js/components/safety/SmartStorageCoach.js"></script>
     <script type="text/babel" src="js/components/safety/SpoilageRiskAlerts.js"></script>
+    <script type="text/babel" src="js/components/nutrition/SmartMealSuggestions.js"></script>
     <script type="text/babel" src="js/components/profile/SMSConsentManager.js"></script>
     <script type="text/babel" src="js/components/listings/ListingCard.js"></script>
     <script type="text/babel" src="js/components/partners/StoreMenu.js"></script>
@@ -655,6 +656,7 @@
     <script type="text/babel" src="js/components/dispatch/DispatchDashboard.js"></script>
     <script type="text/babel" src="js/components/ai/AgentStatus.js"></script>
     <script type="text/babel" src="js/components/ai/AIMatching.js"></script>
+    <script type="text/babel" src="js/components/ai/AIFoodSearch.js?v=20260514-autocomplete"></script>
     <script type="text/babel" src="js/components/listings/FoodSearch.js"></script>
     <script type="text/babel" src="js/components/nutrition/ConsumptionTracker.js"></script>
     <script type="text/babel" src="js/components/common/MessageSupport.js"></script>
@@ -698,9 +700,8 @@
     <script type="text/babel" src="js/components/auth/PhoneModal.js"></script>
     <script type="text/babel" src="js/components/common/ConfirmationModal.js"></script>
     <script type="text/babel" src="js/components/listings/ClaimConfirmationModal.js"></script>
-    <div id="nouri-ai-root" aria-hidden="false"></div>
-    <script type="text/babel" src="js/app.js?v=20260903-foodmaps"></script>
-    <script type="module" src="assets/nouri/nouri-ai.js?v=20260903-foodmaps"></script>
+    <script type="text/babel" src="js/app.js?v=20260731-listing-categories"></script>
+    <script type="text/babel" src="js/components/ai/AIChatbot.js?v=20260514-ai-directions"></script>
 
     <!-- Smart Notifications Toggle -->
     <script type="text/babel">

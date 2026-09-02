@@ -53,10 +53,8 @@ def generate_referral_code():
     return ''.join(secrets.choice(alphabet) for _ in range(8))
 
 app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
-if os.getenv("USE_RDS", "").strip().lower() not in {"1", "true", "yes", "on"}:
-    load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
 load_aws_secrets()
+load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # The document root. Only frontend/ is web-reachable; keeping it separate from
@@ -302,34 +300,6 @@ PASSWORD_RESET_RATE_LIMIT_WINDOW = timedelta(minutes=30)
 forgot_password_attempts_by_key: Dict[str, List[datetime]] = {}
 reset_password_attempts_by_key: Dict[str, List[datetime]] = {}
 password_reset_attempts_lock = Lock()
-
-
-def _verify_admin_bootstrap_secret(secret: Optional[str]) -> None:
-    """Require ADMIN_SECRET for local bootstrap endpoints (make-admin, delete-user)."""
-    admin_secret = os.getenv('ADMIN_SECRET')
-    if not admin_secret or len(admin_secret) < 16:
-        raise HTTPException(
-            status_code=503,
-            detail="Admin bootstrap endpoint disabled (ADMIN_SECRET not configured).",
-        )
-    if not secret or not hmac.compare_digest(str(secret), admin_secret):
-        raise HTTPException(status_code=403, detail="Invalid secret")
-
-
-def _normalize_email(email: Optional[str]) -> str:
-    return (email or "").strip().lower()
-
-
-def _find_user_by_email(db: Session, email: Optional[str]) -> Optional[User]:
-    normalized = _normalize_email(email)
-    if not normalized:
-        return None
-    return db.query(User).filter(func.lower(User.email) == normalized).first()
-
-
-def _database_mode() -> str:
-    db_url = (os.getenv("DATABASE_URL") or "").lower()
-    return "local" if db_url.startswith("sqlite") else "cloud"
 
 
 def _client_ip(request: Request) -> str:
@@ -961,14 +931,26 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
     """Make a user an admin by email - temporary endpoint for setup"""
     try:
         body = await request.json()
-        email = (body.get('email') or '').strip().lower()
+        email = body.get('email')
         secret = body.get('secret')
-        _verify_admin_bootstrap_secret(secret)
 
+        # Fail-closed: if ADMIN_SECRET is not configured, the endpoint is
+        # disabled. Previously this fell back to a hardcoded literal which,
+        # in any environment that hadn't set the env var, allowed anyone
+        # who read the source to escalate to admin.
+        admin_secret = os.getenv('ADMIN_SECRET')
+        if not admin_secret or len(admin_secret) < 16:
+            raise HTTPException(
+                status_code=503,
+                detail="Admin bootstrap endpoint disabled (ADMIN_SECRET not configured).",
+            )
+        if not secret or not hmac.compare_digest(str(secret), admin_secret):
+            raise HTTPException(status_code=403, detail="Invalid secret")
+        
         if not email:
             raise HTTPException(status_code=400, detail="Email required")
         
-        user = _find_user_by_email(db, email)
+        user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
@@ -982,31 +964,6 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/admin/delete-user")
-async def admin_delete_user(request: Request, db: Session = Depends(get_db)):
-    """Delete a user by email — local bootstrap only (requires ADMIN_SECRET)."""
-    try:
-        body = await request.json()
-        email = (body.get('email') or '').strip().lower()
-        secret = body.get('secret')
-        _verify_admin_bootstrap_secret(secret)
-
-        if not email:
-            raise HTTPException(status_code=400, detail="Email required")
-
-        user = _find_user_by_email(db, email)
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        db.delete(user)
-        db.commit()
-        return {"success": True, "message": f"Deleted user {email}"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 # Mount AI router (FoodMaps AI assistant)
@@ -1093,12 +1050,8 @@ async def startup_event():
     # any missing table for the connected dialect, so the raw MySQL CREATE
     # TABLE statements that used to live here were redundant - and on Postgres
     # they never did anything but raise a syntax error on AUTO_INCREMENT.
-    from backend.ai.models import (
-        AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
-    )
     _add_missing_model_columns(
-        FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
-        AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
+        FoodResource, DistributionCenter, FavoriteLocation, ListingCategory
     )
 
     # Seed reference data
@@ -1210,25 +1163,6 @@ async def db_test():
         # so a flapping DB doesn't leak connections from health-check
         # traffic and exhaust the pool.
         db.close()
-
-
-@app.get("/api/system/status")
-async def system_status(db: Session = Depends(get_db)):
-    """Lightweight status for the frontend (database connectivity, account count)."""
-    db_url = (os.getenv("DATABASE_URL") or "").lower()
-    if db_url.startswith("sqlite"):
-        raise HTTPException(
-            status_code=503,
-            detail="Server misconfigured: SQLite is not allowed. Use production RDS MySQL.",
-        )
-    try:
-        user_count = db.query(User).count()
-    except Exception:
-        user_count = None
-    return {
-        "database": "cloud",
-        "user_accounts": user_count,
-    }
 
 
 DEFAULT_LISTING_CATEGORIES = [
@@ -1942,16 +1876,16 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
     try:    
         enforce_signup_rate_limit(request)
 
-        email = _normalize_email(payload.email)
-        password = payload.password or ""
+        email = payload.email
+        password = payload.password
         referral_code = payload.referral_code
         try:
             role = UserRole(payload.role)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid role")
 
-        # Check for existing user (case-insensitive)
-        existing_user = _find_user_by_email(db, email)
+        # Check for existing user
+        existing_user = db.query(User).filter(User.email == email).first()
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
         
@@ -1992,8 +1926,8 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
 @app.post("/api/user/login")
 async def login_user(payload: UserLoginRequest, request: Request, db: Session = Depends(get_db)):
     try:
-        email = _normalize_email(payload.email)
-        password = payload.password or ""
+        email = payload.email
+        password = payload.password
 
         enforce_login_rate_limit(request, email)
 
@@ -2003,19 +1937,15 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
             print("Missing email or password")
             raise HTTPException(status_code=400, detail="Email and password are required")
         
-        user = _find_user_by_email(db, email)
+        user = db.query(User).filter(User.email == email).first()
         if not user:
-            print(f"User not found: {email} (db={_database_mode()})")
-            detail = "No account found with this email. Use Create Account below."
-            raise HTTPException(status_code=401, detail=detail)
+            print(f"User not found: {email}")
+            raise HTTPException(status_code=401, detail="Invalid email or password")
         
         print(f"User found: {user.id}, verifying password...")
-        if not user.password_hash or not pwd_context.verify(password, user.password_hash):
+        if not pwd_context.verify(password, user.password_hash):
             print("Password verification failed")
-            raise HTTPException(
-                status_code=401,
-                detail="Incorrect password. Try again or use Forgot password.",
-            )
+            raise HTTPException(status_code=401, detail="Invalid email or password")
         
         print("Password verified successfully")
         # Create token with 24 hour expiration
@@ -2023,17 +1953,11 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
         payload = {
             "sub": str(user.id),
             "name": user.name,
-            "email": user.email,
             "role": user.role.value,
-            "is_admin": user.role == UserRole.ADMIN,
-            "community_id": None,
-            "address": user.address,
             "iat": now,
             "exp": now + timedelta(hours=24)
         }
         token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-        if isinstance(token, bytes):
-            token = token.decode("utf-8")
         print(f"Generated token for user {user.id} ({user.email}), expires in 24 hours")
         return {"success": True, "token": token}
     except HTTPException:
@@ -2049,14 +1973,14 @@ password_reset_codes = {}
 async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """Send password reset code to user's email"""
     try:
-        email = _normalize_email(payload.email)
+        email = payload.email
 
         enforce_forgot_password_rate_limit(request, email)
         
         if not email:
             raise HTTPException(status_code=400, detail="Email is required")
         
-        user = _find_user_by_email(db, email)
+        user = db.query(User).filter(User.email == email).first()
         if not user:
             # Don't reveal if email exists
             return {"success": True, "message": "If the email exists, a reset code has been sent"}
@@ -2069,22 +1993,8 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: 
             'code': reset_code,
             'expires_at': datetime.utcnow() + timedelta(minutes=15)
         }
-
-        base_url = (os.getenv("PUBLIC_BASE_URL") or "").lower()
-        is_local = "localhost" in base_url or "127.0.0.1" in base_url
-        if is_local:
-            print(f"[dev] Password reset code for {email}: {reset_code}")
-
-        try:
-            send_reset_email(email, reset_code, user.name or "there")
-        except Exception as mail_err:
-            print(f"Reset email failed for {email}: {mail_err}")
-            if is_local:
-                return {
-                    "success": True,
-                    "message": "Reset code generated (email delivery failed — check server logs in dev).",
-                }
-            raise HTTPException(status_code=503, detail="Unable to send reset email. Try again later.")
+        
+        send_reset_email(email, reset_code, user.name or "there")
         
         return {"success": True, "message": "Reset code sent"}
     except HTTPException:
@@ -2097,7 +2007,7 @@ async def forgot_password(payload: ForgotPasswordRequest, request: Request, db: 
 async def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     """Reset user password with verification code"""
     try:
-        email = _normalize_email(payload.email)
+        email = payload.email
         code = payload.code
         new_password = payload.new_password
 
@@ -2124,7 +2034,7 @@ async def reset_password(payload: ResetPasswordRequest, request: Request, db: Se
             raise HTTPException(status_code=400, detail="Reset code expired")
         
         # Update password
-        user = _find_user_by_email(db, email)
+        user = db.query(User).filter(User.email == email).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         

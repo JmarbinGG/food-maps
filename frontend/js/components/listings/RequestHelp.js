@@ -94,21 +94,6 @@ function RequestHelp({ onClose, onSuccess }) {
     }
   };
 
-  React.useEffect(() => {
-    const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-request-form-guide', {
-      welcomeMessage: 'Tell me what food you need and where to deliver it.',
-      fieldHints: {
-        address: 'Where should food be delivered?',
-        notes: 'Describe dietary needs or special requests.',
-      },
-    });
-    if (window.FoodMapsNouri?.mountWithRetry) {
-      window.FoodMapsNouri.mountWithRetry(mountGuide);
-    } else {
-      mountGuide();
-    }
-  }, []);
-
   try {
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -121,7 +106,6 @@ function RequestHelp({ onClose, onSuccess }) {
           </div>
           
           <form onSubmit={handleSubmit} className="p-6 space-y-4">
-            <div id="nouri-request-form-guide" className="mb-2" />
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Delivery Address

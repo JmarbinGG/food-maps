@@ -1,26 +1,4 @@
 function BulkListing({ user, onCancel, onSuccess }) {
-  React.useEffect(() => {
-    const mount = () => window.FoodMapsNouri?.mountBulkCsv('nouri-bulk-csv-root', { userId: user?.id });
-    if (window.FoodMapsNouri?.mountWithRetry) {
-      window.FoodMapsNouri.mountWithRetry(mount);
-    } else {
-      mount();
-    }
-  }, [user?.id]);
-
-  React.useEffect(() => {
-    const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-bulk-form-guide', {
-      welcomeMessage: 'Upload a CSV of food listings. I can guide you through each step.',
-      fieldHints: {
-        csv: 'Choose a CSV file with title, quantity, unit, and category columns.',
-      },
-    });
-    if (window.FoodMapsNouri?.mountWithRetry) {
-      window.FoodMapsNouri.mountWithRetry(mountGuide);
-    } else {
-      mountGuide();
-    }
-  }, []);
   const [listings, setListings] = React.useState([{
     id: Date.now(),
     title: '',
@@ -194,9 +172,6 @@ function BulkListing({ user, onCancel, onSuccess }) {
                 Cancel
               </button>
             </div>
-
-            <div id="nouri-bulk-form-guide" className="mb-4" />
-            <div id="nouri-bulk-csv-root" className="mb-8" />
 
             <div className="space-y-6">
               {listings.map((listing, index) => (

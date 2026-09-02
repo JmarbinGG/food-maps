@@ -1,12 +1,4 @@
 function Dashboard({ user, onViewChange }) {
-  React.useEffect(() => {
-    const mount = () => window.FoodMapsNouri?.mountRoleInsights('nouri-insights-root');
-    if (window.FoodMapsNouri?.mountWithRetry) {
-      window.FoodMapsNouri.mountWithRetry(mount);
-    } else {
-      mount();
-    }
-  }, [user?.id]);
   const [activeTab, setActiveTab] = React.useState('overview');
   const [userListings, setUserListings] = React.useState([]);
   const [userTransactions, setUserTransactions] = React.useState([]);
@@ -29,7 +21,7 @@ function Dashboard({ user, onViewChange }) {
   const loadRecommendedListings = async () => {
     setLoadingRecommended(true);
     try {
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      const token = localStorage.getItem('token');
       if (!token) return;
 
       const response = await fetch(`${API_BASE_URL}/api/listings/recommended`, {
@@ -480,8 +472,6 @@ function Dashboard({ user, onViewChange }) {
             </h1>
             <p className="text-[var(--text-secondary)] capitalize">{user.role} Dashboard</p>
           </div>
-
-          <div id="nouri-insights-root" className="mb-6" />
 
           {user.role === 'donor' && renderDonorDashboard()}
           {user.role === 'recipient' && renderRecipientDashboard()}
