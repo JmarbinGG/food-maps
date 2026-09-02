@@ -49,8 +49,26 @@ server {
     access_log /var/log/nginx/foodmaps.access.log;
     error_log  /var/log/nginx/foodmaps.error.log warn;
 
+    # Every /api/ path is exempt from basic auth, not just /health. The app's
+    # own fetch calls set Authorization: Bearer <jwt> explicitly, which
+    # overwrites whatever the browser would have auto-attached from its
+    # cached Basic credentials. nginx then sees a non-Basic Authorization
+    # header, treats it as a failed login, and 401s with
+    # WWW-Authenticate: Basic — which is what was reprompting the browser's
+    # sign-in dialog on every authenticated call. The page shell (location /
+    # below) still requires the staging password, so a casual visitor still
+    # can't load the app; only the already-JWT-authenticated API calls skip
+    # nginx's gate. /api/ai/ needs its own auth_basic off because it is a
+    # more specific prefix than /api/ and nginx would otherwise keep
+    # matching it first.
     location /api/ai/ {
+        auth_basic off;
         client_max_body_size 32m;
+        include /etc/nginx/snippets/proxy-app.conf;
+    }
+
+    location /api/ {
+        auth_basic off;
         include /etc/nginx/snippets/proxy-app.conf;
     }
 
