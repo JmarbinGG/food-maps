@@ -24,6 +24,38 @@ fi
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
+# Load .env if present (systemd also uses EnvironmentFile)
+if [ -f "../.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "../.env"
+    set +a
+elif [ -f ".env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source ".env"
+    set +a
+fi
+
+# Preflight: refuse SQLite — production must use RDS MySQL
+if [ -z "${DATABASE_URL:-}" ]; then
+    echo "ERROR: DATABASE_URL is not set. Configure RDS MySQL in .env" >&2
+    exit 1
+fi
+case "$DATABASE_URL" in
+    sqlite:*)
+        if [ "${ALLOW_SQLITE:-}" != "true" ]; then
+            echo "ERROR: SQLite DATABASE_URL is not allowed. Use production RDS MySQL." >&2
+            exit 1
+        fi
+        ;;
+esac
+
+# Optional preflight (validates RDS + required env keys)
+if [ -f "scripts/verify_production_env.py" ]; then
+    python3 scripts/verify_production_env.py || exit 1
+fi
+
 # Start server with uvicorn and auto-reload on file changes
 echo "Starting Food Maps API server..."
 echo "Server will auto-restart on crashes and code changes"

@@ -1,5 +1,48 @@
 # Food Maps - Production Deployment Guide
 
+## Nouri AI bundle (before every deploy)
+
+The chat FAB and `/api/ai/*` UI are served from static files under `frontend/assets/nouri/`. Rebuild after any change to `frontend/nouri/src/` or `backend/ai/assistant/`:
+
+```bash
+# Linux / EC2
+./backend/scripts/build_nouri.sh
+
+# Windows
+.\backend\scripts\build_nouri.ps1
+```
+
+Or manually:
+
+```bash
+cd frontend/nouri && npm ci && npm run sync && npm run build
+```
+
+Then bump the cache-bust `?v=` tag in `frontend/index.html`, `frontend/landing.html`, and `frontend/voice-search.html` (JS + CSS), commit the built assets, and deploy.
+
+### Deploy checklist (EC2)
+
+```bash
+cd /home/ec2-user/project
+git pull
+cd frontend/nouri && npm ci && npm run sync && npm run build
+cd /home/ec2-user/project
+python3 backend/scripts/verify_production_env.py
+sudo systemctl restart foodmaps
+```
+
+### Post-deploy smoke tests
+
+```bash
+curl -s https://YOUR_DOMAIN/api/ai/health
+curl -s https://YOUR_DOMAIN/api/system/status
+curl -I "https://YOUR_DOMAIN/assets/nouri/nouri-ai.js?v=20260902-nouri"
+```
+
+In the browser: hard-refresh `/index.html` and `/landing.html` — Nouri FAB visible, chat responds, share/claim flows work.
+
+---
+
 ## Running the Server Forever
 
 The application includes multiple methods to ensure the server runs continuously without stopping.

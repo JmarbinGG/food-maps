@@ -30,6 +30,15 @@ try {
   // Ignore non-browser contexts.
 }
 
+function dispatchFoodmapsAuthChanged() {
+  try {
+    window.dispatchEvent(new CustomEvent('foodmaps:auth_changed'));
+  } catch (_) { /* ignore */ }
+}
+try {
+  window.dispatchFoodmapsAuthChanged = dispatchFoodmapsAuthChanged;
+} catch (_) { /* ignore */ }
+
 class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
@@ -154,6 +163,26 @@ function App() {
     } catch (_) {
       // Ignore loader cleanup failures.
     }
+  }, []);
+
+  // One-shot flags from landing.html Nouri redirects
+  React.useEffect(() => {
+    try {
+      if (sessionStorage.getItem('nouri_open_auth') === '1') {
+        sessionStorage.removeItem('nouri_open_auth');
+        setShowAuthModal(true);
+      }
+      const initialView = sessionStorage.getItem('nouri_initial_view');
+      if (initialView) {
+        sessionStorage.removeItem('nouri_initial_view');
+        const allowed = new Set([
+          'map', 'create', 'bulk-create', 'dashboard', 'dispatch', 'admin',
+        ]);
+        if (allowed.has(initialView)) {
+          setCurrentView(initialView);
+        }
+      }
+    } catch (_) { /* ignore */ }
   }, []);
 
   const requestPhone = React.useCallback(() => {
@@ -287,7 +316,7 @@ function App() {
         if (!validation.valid && !validation.isEmpty) {
           // Token exists but is invalid or expired
           console.warn(`Token validation failed: ${validation.reason} - clearing auth and showing modal`);
-          handleTokenExpired();
+          handleTokenExpired({ showAlert: validation.reason === 'expired' });
         } else if (validation.valid && !validation.isEmpty) {
           console.log('Token is valid');
         }
@@ -509,6 +538,48 @@ function App() {
     return () => window.removeEventListener('foodmaps:show_map', handler);
   }, []);
 
+  // Publish SPA page context so Nouri chat can send accurate guide_state.path.
+  React.useEffect(() => {
+    const PAGE_CONTEXT = {
+      map: { pageKey: 'map', path: '/find' },
+      create: { pageKey: 'create', path: '/share' },
+      'bulk-create': { pageKey: 'bulk-create', path: '/share/bulk' },
+      dashboard: { pageKey: 'dashboard', path: '/dashboard' },
+      dispatch: { pageKey: 'dispatch', path: '/admin/distribution' },
+      admin: { pageKey: 'admin', path: '/admin' },
+      schedule: { pageKey: 'schedule', path: '/donations' },
+      partners: { pageKey: 'partners', path: '/sponsors' },
+      'food-rescue': { pageKey: 'food-rescue', path: '/find' },
+      'meal-planning': { pageKey: 'meal-planning', path: '/recipes' },
+      'ai-matching': { pageKey: 'ai-matching', path: '/find' },
+      routes: { pageKey: 'routes', path: '/find' },
+      emergency: { pageKey: 'emergency', path: '/contact' },
+      nutrition: { pageKey: 'nutrition', path: '/recipes' },
+      consumption: { pageKey: 'consumption', path: '/dashboard' },
+    };
+    const ctx = PAGE_CONTEXT[currentView] || { pageKey: currentView, path: `/${currentView}` };
+    try {
+      window.dispatchEvent(new CustomEvent('foodmaps:page_context', { detail: ctx }));
+    } catch (_) { /* ignore */ }
+  }, [currentView]);
+
+  // Open claim confirmation modal when AI claim_listing succeeds.
+  React.useEffect(() => {
+    const handler = (ev) => {
+      try {
+        const detail = ev && ev.detail || {};
+        const listingId = detail.listing_id;
+        if (listingId == null) return;
+        const listing = (listings || []).find((l) => l && String(l.id) === String(listingId));
+        setPendingClaimId(listingId);
+        setPendingClaimListing(listing || { id: listingId, title: detail.title || 'Listing' });
+        setShowClaimConfirmationModal(true);
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:open_claim_confirm', handler);
+    return () => window.removeEventListener('foodmaps:open_claim_confirm', handler);
+  }, [listings]);
+
   // Generic UI navigation driven by the AI's navigate_ui tool. Lets the
   // assistant open and close pages, panels and modals on the user's
   // behalf (dashboard, dispatch, admin, favorites, …).
@@ -518,14 +589,49 @@ function App() {
       'schedule', 'partners', 'food-rescue', 'meal-planning', 'ai-matching',
       'routes', 'emergency', 'nutrition', 'consumption',
     ]);
+    const OPEN_ACTIONS = new Set([
+      'open', 'toggle', 'open_modal', 'toggle_modal', 'navigate',
+      'open_map', 'open_assistant', 'expand_assistant',
+    ]);
+    const normalizeTarget = (detail) => {
+      let raw = (detail.target || detail.path || '').toString().trim();
+      if (raw.startsWith('/')) raw = raw.slice(1);
+      const base = raw.split('?')[0].toLowerCase();
+      const ALIASES = {
+        share: 'create',
+        find: 'map',
+        list: 'map',
+        'near-me': 'map',
+        'bulk-upload': 'bulk-create',
+        'request-food': 'request',
+        settings: 'profile',
+        login: 'login',
+        signup: 'signup',
+      };
+      return ALIASES[base] || base;
+    };
+    const storeSharePrefill = (detail) => {
+      try {
+        const rawPath = (detail.path || detail.target || '').toString();
+        const qIdx = rawPath.indexOf('?');
+        const query = qIdx >= 0 ? rawPath.slice(qIdx + 1) : (detail.query || '');
+        if (!query) return;
+        const params = new URLSearchParams(query.startsWith('?') ? query.slice(1) : query);
+        const prefill = {};
+        params.forEach((val, key) => { if (val) prefill[key] = val; });
+        if (Object.keys(prefill).length) {
+          sessionStorage.setItem('nouri_share_prefill', JSON.stringify(prefill));
+        }
+      } catch (_) { /* ignore */ }
+    };
     const handler = (event) => {
       try {
         const detail = event && event.detail || {};
-        const action = (detail.action || '').toLowerCase();
-        const target = (detail.target || '').toLowerCase();
+        const action = (detail.action || 'open').toLowerCase();
+        const target = normalizeTarget(detail);
+        const isOpen = OPEN_ACTIONS.has(action);
 
-        if (action === 'close') {
-          // Close anything → back to map.
+        if (action === 'close' || action === 'close_modal' || action === 'close_assistant') {
           if (target === 'favorites') {
             setShowFavoritesPanel(false);
           } else {
@@ -535,7 +641,9 @@ function App() {
           return;
         }
 
-        if (target === 'map') {
+        if (!isOpen && !target) return;
+
+        if (target === 'map' || target === 'open_map') {
           setCurrentView('map');
           setViewMode('map');
           return;
@@ -546,11 +654,51 @@ function App() {
           return;
         }
         if (target === 'favorites') {
-          if (action === 'toggle') {
+          if (action === 'toggle' || action === 'toggle_modal') {
             setShowFavoritesPanel(prev => !prev);
           } else {
             setShowFavoritesPanel(true);
           }
+          return;
+        }
+        if (target === 'profile' || target === 'settings') {
+          if (window.openUserProfile) window.openUserProfile();
+          return;
+        }
+        if (target === 'login' || target === 'signup') {
+          if (window.openAuthModal) window.openAuthModal();
+          return;
+        }
+        if (target === 'near-me' || target === 'find') {
+          setCurrentView('map');
+          setViewMode('map');
+          window.dispatchEvent(new CustomEvent('nouri:open-chat', {
+            detail: { message: 'Find food near me' },
+          }));
+          return;
+        }
+        if (target === 'listings') {
+          const role = String(user?.role || '').toLowerCase();
+          if (role === 'donor' || role === 'admin') {
+            setCurrentView('dashboard');
+          } else {
+            setCurrentView('map');
+            setViewMode('list');
+          }
+          return;
+        }
+        if (target === 'request' || target === 'request-food') {
+          window.dispatchEvent(new CustomEvent('nouri:open-chat', {
+            detail: { message: 'I need to request food from the community' },
+          }));
+          return;
+        }
+        if (target === 'chat' || target === 'voice' || target === 'open_assistant' || target === 'expand_assistant') {
+          window.dispatchEvent(new CustomEvent('nouri:open-chat', { detail: {} }));
+          return;
+        }
+        if (target === 'admin' && window.openAdminPanel) {
+          window.openAdminPanel();
           return;
         }
         // Recipient-facing AI feature modals. Each is mounted at the app
@@ -565,11 +713,19 @@ function App() {
           'smart-notifications':() => window.openSmartNotifications && window.openSmartNotifications(),
           'pickup-reminders':   () => window.openPickupReminders && window.openPickupReminders(),
           'sms-consent':        () => window.openSMSConsent && window.openSMSConsent(),
+          'bulk-upload':        () => { setCurrentView('bulk-create'); },
+          'bulk-create':        () => { setCurrentView('bulk-create'); },
+          'voice-search':       () => { window.location.href = '/voice-search.html'; },
         };
         if (AI_FEATURE_OPENERS[target]) {
-          if (action === 'open' || action === 'toggle') {
+          if (isOpen) {
             try { AI_FEATURE_OPENERS[target](); } catch (_) { /* ignore */ }
           }
+          return;
+        }
+        if (target === 'create' || target === 'share') {
+          storeSharePrefill(detail);
+          setCurrentView('create');
           return;
         }
         if (VIEW_TARGETS.has(target)) {
@@ -581,7 +737,7 @@ function App() {
     };
     window.addEventListener('foodmaps:navigate_ui', handler);
     return () => window.removeEventListener('foodmaps:navigate_ui', handler);
-  }, []);
+  }, [user]);
 
   // Expose phone request helper globally
   React.useEffect(() => {
@@ -595,6 +751,7 @@ function App() {
     if (logout) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('current_user');
+      dispatchFoodmapsAuthChanged();
     }
     return new Promise((resolve) => {
       const { title = 'Notice', variant = 'default' } = opts || {};
@@ -609,6 +766,7 @@ function App() {
     if (logout) {
       localStorage.removeItem('auth_token');
       localStorage.removeItem('current_user');
+      dispatchFoodmapsAuthChanged();
       window.location.reload();
     }
     if (alertResolveRef.current) {
@@ -666,7 +824,9 @@ function App() {
   }, [parseJwt]);
 
   // Handle expired/invalid token
-  const handleTokenExpired = React.useCallback(() => {
+  const handleTokenExpired = React.useCallback((options = {}) => {
+    const hadStoredToken = Boolean(localStorage.getItem('auth_token'));
+    const showAlert = options.showAlert !== false && hadStoredToken;
     console.log('Token expired or invalid - clearing authentication');
     // Clear all auth-related localStorage immediately
     localStorage.removeItem('auth_token');
@@ -680,10 +840,12 @@ function App() {
     });
     // Clear user state
     setUser(null);
+    dispatchFoodmapsAuthChanged();
     // Show auth modal
     setShowAuthModal(true);
     // Show alert (use setTimeout to ensure it runs after state updates)
     setTimeout(() => {
+      if (!showAlert) return;
       if (typeof window.showAlert === 'function') {
         window.showAlert('Your session has expired. Please sign in again.', {
           title: 'Session Expired',
@@ -797,10 +959,13 @@ function App() {
           }
           return;
         }
-        const fallback = (typeof window.getListingsArray === 'function' ? window.getListingsArray() : (window.databaseService && Array.isArray(window.databaseService.listings) ? window.databaseService.listings : []));
-        setListings(fallback);
-        // filter effect will derive filteredListings.
-        console.log(`Database failed, using snapshot fallback: ${fallback.length} listings`);
+        if (typeof window.showAlert === 'function') {
+          window.showAlert(
+            'Could not load listings from the server. Check your connection and try refreshing.',
+            { title: 'Connection problem', variant: 'error' }
+          );
+        }
+        setListings([]);
       }
 
       // Initialize scheduling data
@@ -1444,8 +1609,16 @@ function App() {
   React.useEffect(() => {
     window.handleClaimListing = handleClaimListing;
     window.handleShowDetails = handleShowDetails;
-    window.showAISearch = () => setShowAISearch(true);
-    window.showFoodSearch = () => setShowFoodSearch(true);
+    window.showAISearch = () => {
+      window.dispatchEvent(new CustomEvent('nouri:open-chat', {
+        detail: { message: 'Help me find food near me' },
+      }));
+    };
+    window.showFoodSearch = () => {
+      window.dispatchEvent(new CustomEvent('nouri:open-chat', {
+        detail: { message: 'Find food near me' },
+      }));
+    };
     // Allow nested components to trigger the auth modal
     window.openAuthModal = () => setShowAuthModal(true);
 
@@ -1639,6 +1812,16 @@ function App() {
       delete window.triggerListingDetailModal;
     };
   }, [handleClaimListing, handleShowDetails, user]);
+
+  React.useEffect(() => {
+    if (!showMealSuggestions || !user) return;
+    const mount = () => window.FoodMapsNouri?.mountRecipePanel('nouri-recipe-root');
+    if (window.FoodMapsNouri?.mountWithRetry) {
+      window.FoodMapsNouri.mountWithRetry(mount);
+    } else {
+      mount();
+    }
+  }, [showMealSuggestions, user?.id]);
 
   // Listen for listingDeleted events from any delete site (modal, admin, etc.)
   // and remove the listing from React state so the map and lists refresh
@@ -2002,6 +2185,7 @@ function App() {
             localStorage.removeItem('auth_token');
             localStorage.removeItem('current_user');
             setUser(null);
+            dispatchFoodmapsAuthChanged();
           }}
           currentView={currentView}
           onViewChange={setCurrentView}
@@ -2053,27 +2237,6 @@ function App() {
               setSelectedListing(null);
             }}
             onClaim={handleClaimListing}
-            user={user}
-          />
-        )}
-
-        {showAISearch && (
-          <AIFoodSearch
-            onClose={() => setShowAISearch(false)}
-            onSelectFood={(food) => {
-              setSelectedListing(food);
-              setShowDetailModal(true);
-            }}
-          />
-        )}
-
-        {showFoodSearch && (
-          <FoodSearch
-            onClose={() => setShowFoodSearch(false)}
-            onSelectFood={(food) => {
-              setSelectedListing(food);
-              setShowDetailModal(true);
-            }}
             user={user}
           />
         )}
@@ -2343,18 +2506,21 @@ function App() {
           />
         )}
 
-        {/* Smart Meal Suggestions */}
-        {showMealSuggestions && user && window.SmartMealSuggestions && (
-          <window.SmartMealSuggestions
-            user={user}
-            claimedListings={listings.filter(l => {
-              const status = String(l.status || '').toLowerCase();
-              if (!['claimed', 'pending_confirmation', 'confirmed'].includes(status)) return false;
-              const recipientId = l.recipient_id ?? l.recipientId ?? l.recipient?.id;
-              return recipientId != null && String(recipientId) === String(user.id);
-            })}
-            onClose={() => setShowMealSuggestions(false)}
-          />
+        {/* AI Recipe Suggestions (Nouri) */}
+        {showMealSuggestions && user && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto relative">
+              <button
+                type="button"
+                onClick={() => setShowMealSuggestions(false)}
+                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 text-2xl leading-none z-10"
+                aria-label="Close meal suggestions"
+              >
+                &times;
+              </button>
+              <div id="nouri-recipe-root" className="p-4" />
+            </div>
+          </div>
         )}
 
         {/* Spoilage Risk Alerts */}

@@ -35,24 +35,34 @@ class TestNavigateUiHandler:
             "navigate_ui", {"user_id": "1", "action": "open", "target": "dashboard"}
         )
         assert r.get("success") is True
-        assert r["action"] == "open"
+        assert r.get("ok") is True
+        assert r["action"] == "navigate"
+        assert r["path"] == "/dashboard"
         assert r["target"] == "dashboard"
         assert "dashboard" in r["summary"].lower()
+
+    async def test_open_map(self):
+        r = await execute_tool(
+            "navigate_ui", {"user_id": "1", "action": "open", "target": "map"}
+        )
+        assert r["action"] == "open_map"
+        assert r.get("ok") is True
 
     async def test_close_without_target_returns_to_map(self):
         r = await execute_tool(
             "navigate_ui", {"user_id": "1", "action": "close"}
         )
         assert r["success"] is True
-        assert r["action"] == "close"
-        assert r["target"] is None
+        assert r["action"] == "navigate"
+        assert r["path"] == "/find"
 
     async def test_toggle_favorites(self):
         r = await execute_tool(
             "navigate_ui",
             {"user_id": "1", "action": "toggle", "target": "favorites"},
         )
-        assert r["action"] == "toggle"
+        assert r["action"] == "navigate"
+        assert r["path"] == "/find"
         assert r["target"] == "favorites"
 
     async def test_invalid_action_rejected(self):
@@ -73,3 +83,39 @@ class TestNavigateUiHandler:
             "navigate_ui", {"user_id": "1", "action": "open"}
         )
         assert "error" in r
+
+    async def test_open_create_with_fulfill_query(self):
+        r = await execute_tool(
+            "navigate_ui",
+            {
+                "user_id": "1",
+                "action": "open",
+                "target": "create",
+                "query": (
+                    "request=Bread&community_id=abc-123&community=Alameda%20Unified"
+                    "&fulfilling_request_id=req-9&evil=drop"
+                ),
+            },
+        )
+        assert r.get("ok") is True
+        assert r["action"] == "navigate"
+        assert r["path"].startswith("/share?")
+        assert "request=Bread" in r["path"]
+        assert "community_id=abc-123" in r["path"]
+        assert "fulfilling_request_id=req-9" in r["path"]
+        assert "evil=" not in r["path"]
+
+    async def test_open_create_strips_empty_and_unknown_query_keys(self):
+        r = await execute_tool(
+            "navigate_ui",
+            {
+                "user_id": "1",
+                "action": "open",
+                "target": "create",
+                "query": "request=&javascript:alert(1)=x&community=Alameda",
+            },
+        )
+        assert r["path"].startswith("/share?")
+        assert "community=Alameda" in r["path"]
+        assert "javascript" not in r["path"]
+        assert "request=" not in r["path"] or "request=&" not in r["path"]

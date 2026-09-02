@@ -26,6 +26,9 @@ window.databaseService = {
           // Fallback if handler not available
           localStorage.removeItem('auth_token');
           localStorage.removeItem('current_user');
+          if (typeof window.dispatchFoodmapsAuthChanged === 'function') {
+            window.dispatchFoodmapsAuthChanged();
+          }
           if (typeof window.showAlert === 'function') {
             await window.showAlert('Your session has expired. Please sign in again.', { title: 'Session Expired', variant: 'error' });
           }

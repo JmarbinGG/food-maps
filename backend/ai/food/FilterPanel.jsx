@@ -1,0 +1,190 @@
+import React, { useState, useEffect } from 'react';
+import Button from '../common/Button';
+import { Input } from '../common/Input';
+import { locationService } from '../../utils/locationService';
+
+export const FilterPanel = ({ onFilterChange }) => {
+    const [filters, setFilters] = useState({
+        foodType: '',
+        dietaryPreferences: [],
+        pickupTime: '',
+    });
+    const [locationStatus, setLocationStatus] = useState(null);
+
+    const dietaryOptions = [
+        'Vegetarian',
+        'Vegan',
+        'Gluten-Free',
+        'Halal',
+        'Kosher',
+        'Dairy-Free',
+        'Nut-Free'
+    ];
+
+    // Each entry has a `value` (DB category column value) and a `label` (display text).
+    // Using DB values here means NearMePage / FoodList can do `food.category === foodType`
+    // without any extra mapping.
+    const foodTypes = [
+        { value: 'produce',   label: 'Fresh Produce' },
+        { value: 'prepared',  label: 'Prepared Meals' },
+        { value: 'pantry',    label: 'Canned / Pantry' },
+        { value: 'bakery',    label: 'Baked Goods' },
+        { value: 'dairy',     label: 'Dairy' },
+        { value: 'beverages', label: 'Beverages' },
+        { value: 'meat',      label: 'Meat' },
+        { value: 'other',     label: 'Other' },
+    ];
+
+    useEffect(() => {
+        checkLocationPermission();
+    }, []);
+
+    const checkLocationPermission = async () => {
+        try {
+            const status = await locationService.requestLocationPermission();
+            setLocationStatus(status);
+            if (status === 'granted') {
+                await enableLocation();
+            }
+        } catch (error) {
+            setLocationStatus('denied');
+            console.error('Location permission error:', error);
+        }
+    };
+
+    const enableLocation = async () => {
+        try {
+            await locationService.getCurrentPosition();
+            setFilters(prev => {
+                const updated = { ...prev, locationEnabled: true };
+                onFilterChange(updated);
+                return updated;
+            });
+        } catch (error) {
+            console.error('Error getting location:', error);
+            setFilters(prev => ({ ...prev, locationEnabled: false }));
+        }
+    };
+
+    const handleFoodTypeChange = (value) => {
+        setFilters(prev => {
+            const updated = { ...prev, foodType: value };
+            onFilterChange(updated);
+            return updated;
+        });
+    };
+
+    const handleDietaryChange = (preference) => {
+        setFilters(prev => {
+            const newPreferences = prev.dietaryPreferences.includes(preference)
+                ? prev.dietaryPreferences.filter(p => p !== preference)
+                : [...prev.dietaryPreferences, preference];
+
+            // Call onFilterChange with the new preferences immediately.
+            // Using newPreferences from the functional update avoids the
+            // stale-closure bug where filters.dietaryPreferences was the
+            // OLD value from the outer scope.
+            onFilterChange({ ...filters, dietaryPreferences: newPreferences });
+
+            return { ...prev, dietaryPreferences: newPreferences };
+        });
+    };
+
+    const InfoIcon = ({ text }) => (
+        <span
+            title={text}
+            aria-label={text}
+            className="ml-1 inline-flex items-center justify-center w-4 h-4 rounded-full bg-gray-200 text-gray-700 text-[10px] font-bold cursor-help select-none"
+        >
+            ?
+        </span>
+    );
+
+    return (
+        <div className="filter-panel p-4 bg-white rounded-lg shadow-md">
+            <p className="text-sm text-gray-500 mb-4">
+                Use these filters to narrow your search. Changes apply automatically.
+            </p>
+
+            <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-1 flex items-center">
+                    Location
+                    <InfoIcon text="Turn on location so we can sort listings by distance. There is no distance cutoff — all community listings stay visible." />
+                </h3>
+                <p className="text-xs text-gray-500 mb-2">Optional — sorts results nearest first.</p>
+                <div className="flex items-center gap-2">
+                    <Button 
+                        onClick={enableLocation}
+                        disabled={locationStatus === 'denied'}
+                        className={`${filters.locationEnabled ? 'bg-primary-500' : 'bg-gray-500'}`}
+                        title="Share your current location with this page"
+                    >
+                        {filters.locationEnabled ? 'Location Enabled' : 'Enable Location'}
+                    </Button>
+                </div>
+            </div>
+
+            <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-1 flex items-center">
+                    Food Type
+                    <InfoIcon text="Pick a category to only see one kind of food. Tap again to clear." />
+                </h3>
+                <p className="text-xs text-gray-500 mb-2">Choose what kind of food you’re looking for.</p>
+                <div className="flex flex-wrap gap-2">
+                    {foodTypes.map(({ value, label }) => (
+                        <Button
+                            key={value}
+                            onClick={() => handleFoodTypeChange(filters.foodType === value ? '' : value)}
+                            className={`${filters.foodType === value ? 'bg-blue-500' : 'bg-gray-200'}`}
+                            title={`Show only ${label}`}
+                        >
+                            {label}
+                        </Button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-1 flex items-center">
+                    Dietary Preferences
+                    <InfoIcon text="Select one or more diets. Only listings tagged with all of your selections will be shown." />
+                </h3>
+                <p className="text-xs text-gray-500 mb-2">Filter by your dietary needs. Select as many as apply.</p>
+                <div className="flex flex-wrap gap-2">
+                    {dietaryOptions.map(preference => (
+                        <Button
+                            key={preference}
+                            onClick={() => handleDietaryChange(preference)}
+                            className={`${filters.dietaryPreferences.includes(preference) ? 'bg-blue-500' : 'bg-gray-200'}`}
+                            title={`Only show ${preference} options`}
+                        >
+                            {preference}
+                        </Button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="mb-4">
+                <h3 className="text-lg font-semibold mb-1 flex items-center">
+                    Pickup Time
+                    <InfoIcon text="Filter to listings available around the time you can pick them up. Leave blank to see everything." />
+                </h3>
+                <p className="text-xs text-gray-500 mb-2">When can you pick the food up?</p>
+                <Input
+                    type="datetime-local"
+                    value={filters.pickupTime}
+                    onChange={(e) => {
+                        const val = e.target.value;
+                        setFilters(prev => {
+                            const updated = { ...prev, pickupTime: val };
+                            onFilterChange(updated);
+                            return updated;
+                        });
+                    }}
+                    className="w-full"
+                    title="Pick the date and time you can collect the food"
+                />
+            </div>
+        </div>
+    );
+};

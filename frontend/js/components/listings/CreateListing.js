@@ -60,6 +60,29 @@ function CreateListing({ user, onCancel, onSuccess }) {
   ]);
 
   React.useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem('nouri_share_prefill');
+      if (!raw) return;
+      const prefill = JSON.parse(raw);
+      sessionStorage.removeItem('nouri_share_prefill');
+      if (!prefill || typeof prefill !== 'object') return;
+      setFormData((prev) => ({
+        ...prev,
+        title: prefill.request || prefill.title || prev.title,
+        description: prefill.description || prev.description,
+        category: prefill.category || prev.category,
+        qty: prefill.quantity || prefill.qty || prev.qty,
+        unit: prefill.unit || prev.unit,
+        expiration_date: prefill.needed_by || prefill.expiration_date || prev.expiration_date,
+        address: prefill.location || prefill.address || prev.address,
+      }));
+      if (prefill.location || prefill.address) {
+        setAddressQuery(prefill.location || prefill.address);
+      }
+    } catch (_) { /* ignore bad prefill */ }
+  }, []);
+
+  React.useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
@@ -224,6 +247,23 @@ function CreateListing({ user, onCancel, onSuccess }) {
       try { el.removeEventListener('retrieve', handleRetrieve); } catch (_) { }
     };
   }, [errors.address, formatFullAddressFromFeature]);
+
+  React.useEffect(() => {
+    const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-create-form-guide', {
+      welcomeMessage: 'Tell me about the food you want to share. I can guide you through each field.',
+      fieldHints: {
+        title: 'What food are you sharing? Say the name or type.',
+        description: 'Add details like quantity, freshness, or pickup notes.',
+        address: 'Where can someone pick this up?',
+        category: 'Is it produce, prepared food, bakery, or packaged?',
+      },
+    });
+    if (window.FoodMapsNouri?.mountWithRetry) {
+      window.FoodMapsNouri.mountWithRetry(mountGuide);
+    } else {
+      mountGuide();
+    }
+  }, []);
 
   // Helper to format Date -> 'YYYY-MM-DDTHH:mm' in local time for datetime-local inputs
   const toLocalInput = (date) => {
@@ -488,6 +528,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
                 Cancel
               </button>
             </div>
+
+            <div id="nouri-create-form-guide" className="mb-4" />
 
             {step === 1 && (
               <form onSubmit={handleSubmit} className="space-y-6">

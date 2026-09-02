@@ -23,11 +23,24 @@ os.environ.setdefault("TWILIO_AUTH_TOKEN", "")
 os.environ.setdefault("AI_BROADCAST_AUTO_APPROVE", "0")
 # Provide an in-memory SQLite DB so backend.db / backend.app can import without
 # requiring a real MySQL instance. Tests mock or stub DB calls themselves.
+os.environ.setdefault("ALLOW_SQLITE", "true")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
 os.environ.setdefault("PUBLIC_BASE_URL", "http://testserver")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret-not-for-production-use")
+# Tests exercise route logic without minting real Supabase JWTs, so
+# gate off the strict auth enforcement (see `_require_owner` /
+# `_require_authenticated` in backend/ai/routes.py). Production leaves
+# `AI_REQUIRE_AUTH` unset which defaults to True.
+os.environ.setdefault("AI_REQUIRE_AUTH", "false")
 
 import pytest  # noqa: E402
+
+# Script-style HTTP integration tests (run via `python -m backend.ai.tests.test_*`).
+collect_ignore = [
+    "test_share_flow.py",
+    "test_claim_flow.py",
+    "test_granny_chat.py",
+]
 
 
 @pytest.fixture(autouse=True)

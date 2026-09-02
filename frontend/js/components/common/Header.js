@@ -100,6 +100,15 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
                 <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50">
                   <button
                     onClick={() => {
+                      onViewChange?.('dashboard');
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    {t('header.dashboard', 'Dashboard')}
+                  </button>
+                  <button
+                    onClick={() => {
                       window.openUserProfile?.();
                       setShowDropdown(false);
                     }}

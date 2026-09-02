@@ -109,22 +109,23 @@ function AuthModal({ onClose, onAuth }) {
       return;
     }
 
+    const normalizedEmail = String(formData.email || '').trim().toLowerCase();
     const userData = {
       name: formData.name,
-      email: formData.email,
+      email: normalizedEmail,
       role: formData.role,
       isNewUser: !isLogin
     };
-    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) === false) {
+    if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail) === false) {
       console.log('Invalid email format');
       setAuthError('Please enter a valid email address');
       return;
     }
     if (isLogin) {
-      console.log('Attempting login for:', formData.email);
+      console.log('Attempting login for:', normalizedEmail);
       setAuthError('');
       try {
-        const json = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
+        const json = await (window.databaseService ? window.databaseService.authLogin(normalizedEmail, formData.password) : {});
         console.log('Login response:', json);
         if (json && json.success && json.token) {
           localStorage.setItem('auth_token', json.token);
@@ -137,14 +138,19 @@ function AuthModal({ onClose, onAuth }) {
           const loggedUser = {
             id: payload.sub || formData.email,
             name: payload.name || formData.email,
-            role: payload.role || 'recipient'
+            email: payload.email || formData.email,
+            role: payload.role || 'recipient',
+            is_admin: Boolean(payload.is_admin),
+            community_id: payload.community_id ?? null,
+            address: payload.address || null,
           };
           console.log('Login - Setting current_user:', loggedUser);
           localStorage.setItem('current_user', JSON.stringify(loggedUser));
           onAuth(loggedUser);
+          window.dispatchEvent(new CustomEvent('foodmaps:auth_changed'));
           onClose();
         } else {
-          const err = (json && (json.error || json.message || json.detail)) || 'Invalid email or password';
+          const err = (json && (json.error || json.message || json.detail)) || 'Sign in failed. Check your email and password.';
           setAuthError(err);
         }
       } catch (error) {
@@ -157,7 +163,7 @@ function AuthModal({ onClose, onAuth }) {
       try {
         const registerData = {
           name: formData.name,
-          email: formData.email,
+          email: normalizedEmail,
           password: formData.password,
           role: formData.role,
           referral_code: formData.referralCode || undefined
@@ -165,17 +171,22 @@ function AuthModal({ onClose, onAuth }) {
         const json = await (window.databaseService ? window.databaseService.authRegister(registerData) : {});
         if (json && json.success) {
           // Auto-login after create
-          const loginJson = await (window.databaseService ? window.databaseService.authLogin(formData.email, formData.password) : {});
+          const loginJson = await (window.databaseService ? window.databaseService.authLogin(normalizedEmail, formData.password) : {});
           if (loginJson && loginJson.success && loginJson.token) {
             localStorage.setItem('auth_token', loginJson.token);
             const payload = parseJwt(loginJson.token);
             const loggedUser = {
               id: payload && payload.sub ? payload.sub : formData.email,
               name: payload && payload.name ? payload.name : formData.name,
-              role: payload && payload.role ? payload.role : registerData.role
+              email: payload?.email || formData.email,
+              role: payload && payload.role ? payload.role : registerData.role,
+              is_admin: Boolean(payload?.is_admin),
+              community_id: payload?.community_id ?? null,
+              address: payload?.address || null,
             };
             localStorage.setItem('current_user', JSON.stringify(loggedUser));
             onAuth(loggedUser);
+            window.dispatchEvent(new CustomEvent('foodmaps:auth_changed'));
             onClose();
           } else {
             // Fallback: persist local user object (no token)
@@ -185,7 +196,10 @@ function AuthModal({ onClose, onAuth }) {
           }
         } else {
           const err = (json && (json.error || json.message)) || 'Account creation failed';
-          setAuthError(err);
+          const hint = String(err).toLowerCase().includes('already registered')
+            ? ' Use Sign In, or click Forgot password to set a new one.'
+            : '';
+          setAuthError(`${err}${hint}`);
         }
       } catch (error) {
         console.error('request failed:', error);
