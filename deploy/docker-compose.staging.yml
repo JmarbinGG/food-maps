@@ -8,6 +8,12 @@
 services:
   api:
     environment:
+      # Not read anywhere in backend/ yet — no code branches on it today.
+      # Added so future environment-aware logic has somewhere to check
+      # against, rather than introducing a one-off env var at the point
+      # something first needs it.
+      ENVIRONMENT: staging
+
       # Its own secret, read by an instance role scoped to this ARN only. The
       # staging box must not be able to read prod/env.
       AWS_SECRET_NAME: ${AWS_SECRET_NAME:-staging/env}
