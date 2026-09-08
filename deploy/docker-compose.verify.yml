@@ -1,0 +1,32 @@
+# Temporary overlay for verifying a NEW production instance's stack BEFORE
+# the traffic cutover, while the OLD instance may still be running its own
+# copy of the AI reminder/broadcast background loops against the same
+# database.
+#
+# backend/ai/routes.py starts reminder_loop() unconditionally on process
+# startup -- not gated by incoming HTTP traffic -- and
+# process_pending_reminders() has no row locking: a plain SELECT ... WHERE
+# sent = False, then sent = True + commit, with the actual SMS send
+# happening afterward in the caller. Two processes (old instance + this one)
+# polling the same query concurrently can both fetch the same due reminder
+# before either commits, and both send the real SMS to a real person.
+#
+# Blanking Twilio here uses the same mechanism staging already relies on:
+# send_sms() in app.py checks for credentials and falls back to logging when
+# they're absent. Set explicitly, not omitted, because
+# backend/aws_secrets.py uses os.environ.setdefault and would otherwise let
+# the real credential from prod/env through.
+#
+# Use ONLY during pre-cutover verification:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.verify.yml up -d
+# Drop this file from the command (plain docker-compose.prod.yml only) at
+# the moment of actual cutover -- that's when real Twilio should take
+# effect, ideally in the same window the old instance's foodmaps service is
+# being stopped, to minimize how long both processes could theoretically
+# overlap.
+services:
+  api:
+    environment:
+      TWILIO_ACCOUNT_SID: ""
+      TWILIO_AUTH_TOKEN: ""
+      TWILIO_PHONE_NUMBER: ""

@@ -15,6 +15,13 @@ server {
     listen 80;
     listen [::]:80;
     server_name ${FOODMAPS_DOMAIN};
+    # FOODMAPS_DOMAIN may be a space-separated list, e.g.
+    # "dogoodfoodmaps.com www.dogoodfoodmaps.com foodmaps.allgoodlivingfoundation.org"
+    # -- nginx's server_name directive takes multiple names natively, and
+    # envsubst just drops the raw string in here. FOODMAPS_CERT_NAME below is
+    # the single certbot lineage name that actually holds the files (the
+    # lineage's directory is named after whichever domain was primary when
+    # the cert was issued, not the full SAN list).
 
     # Must stay reachable over plain HTTP for certificate renewal.
     location /.well-known/acme-challenge/ {
@@ -32,8 +39,8 @@ server {
     http2 on;
     server_name ${FOODMAPS_DOMAIN};
 
-    ssl_certificate     /etc/letsencrypt/live/${FOODMAPS_DOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${FOODMAPS_DOMAIN}/privkey.pem;
+    ssl_certificate     /etc/letsencrypt/live/${FOODMAPS_CERT_NAME}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${FOODMAPS_CERT_NAME}/privkey.pem;
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
     ssl_session_cache   shared:SSL:10m;

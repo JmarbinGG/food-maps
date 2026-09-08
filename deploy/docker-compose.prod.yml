@@ -55,6 +55,12 @@ services:
       - "443:443"
     environment:
       FOODMAPS_DOMAIN: ${FOODMAPS_DOMAIN:?set FOODMAPS_DOMAIN in deploy/.env}
+      # The certbot lineage name -- only differs from FOODMAPS_DOMAIN when
+      # FOODMAPS_DOMAIN is a space-separated list of multiple server names
+      # sharing one cert (see foodmaps-tls.conf.template). Defaults to
+      # FOODMAPS_DOMAIN so single-domain setups (staging) don't need to set
+      # this at all.
+      FOODMAPS_CERT_NAME: ${FOODMAPS_CERT_NAME:-${FOODMAPS_DOMAIN}}
       # Only consulted by the behind-a-load-balancer config. The default is a
       # placeholder: set it to your actual load balancer subnet CIDR, because
       # trusting too wide a range hands X-Forwarded-For back to the client.
