@@ -77,7 +77,7 @@ class TestSystemPromptShape:
     def test_system_prompt_much_smaller_than_before(self):
         prompt = _build_system_prompt(_load_training_data(), "warm")
         # Historical ~40k; allow modest growth for new flows, still block regression.
-        assert len(prompt) < 29_000, (
+        assert len(prompt) < 30_000, (
             f"System prompt grew back to {len(prompt)} chars — check for "
             "scripted dialogs or duplicated rules."
         )

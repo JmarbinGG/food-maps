@@ -11,6 +11,26 @@ function UserProfile({ user, onClose, onUserUpdate }) {
     role: user?.role || ''
   });
 
+  // JWT is_admin stays true for the session even after switching active role,
+  // so admins can restore Admin without re-login / privilege escalation for others.
+  const canRestoreAdmin = React.useMemo(() => {
+    if (user?.is_admin === true || String(user?.role || '').toLowerCase() === 'admin') {
+      return true;
+    }
+    if (String(accountData.role || '').toLowerCase() === 'admin') return true;
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) return false;
+      const parts = token.split('.');
+      if (parts.length < 2) return false;
+      const json = atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'));
+      const payload = JSON.parse(json);
+      return payload?.is_admin === true;
+    } catch (_) {
+      return false;
+    }
+  }, [user?.is_admin, user?.role, accountData.role]);
+
   const [passwordData, setPasswordData] = React.useState({
     currentPassword: '',
     newPassword: '',
@@ -123,9 +143,16 @@ function UserProfile({ user, onClose, onUserUpdate }) {
 
       if (response.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
-        const updatedUser = { ...user, ...accountData };
         const prevRole = (user && user.role) ? String(user.role).toLowerCase() : '';
         const nextRole = accountData.role ? String(accountData.role).toLowerCase() : '';
+        // Keep is_admin in sync with the saved role so role-aware UIs do not
+        // keep admin privileges after switching to donor/recipient.
+        const updatedUser = {
+          ...user,
+          ...accountData,
+          role: nextRole || accountData.role,
+          is_admin: nextRole === 'admin',
+        };
         localStorage.setItem('current_user', JSON.stringify(updatedUser));
         onUserUpdate(updatedUser);
         // Notify the rest of the app (AI chat, dashboards, etc.) that
@@ -288,8 +315,8 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                     </span>
                   </div>
 
-                  {/* Role Switcher - Only for donor, recipient, driver, volunteer */}
-                  {accountData.role !== 'admin' && accountData.role !== 'dispatcher' && (
+                  {/* Role Switcher — dispatcher locked; admins may switch to donor/recipient and back */}
+                  {accountData.role !== 'dispatcher' && (
                     <div>
                       <label className="block text-xs text-gray-600 mb-1">Change Role:</label>
                       <select
@@ -297,12 +324,19 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                         onChange={(e) => setAccountData({ ...accountData, role: e.target.value })}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                       >
+                        {canRestoreAdmin && (
+                          <option value="admin">Admin - Full platform access</option>
+                        )}
                         <option value="donor">Donor - Share food donations</option>
                         <option value="recipient">Recipient - Request and claim food</option>
                         {/* <option value="driver"> Driver - Deliver food donations</option>
                         <option value="volunteer"> Volunteer - Help with deliveries</option> */}
                       </select>
-                      <p className="text-xs text-gray-500 mt-1">You can switch between these roles anytime</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {canRestoreAdmin
+                          ? 'Switch to donor or recipient to use those flows. Admin stays available while this session keeps admin privilege.'
+                          : 'You can switch between these roles anytime'}
+                      </p>
                     </div>
                   )}
                 </div>

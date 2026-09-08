@@ -1944,9 +1944,16 @@ class ConversationEngine:
         def _sync() -> int:
             db = SessionLocal()
             try:
-                n = db.query(AIConversation).filter(AIConversation.user_id == uid).delete()
+                ids = {uid}
+                if uid.isdigit():
+                    ids.add(str(int(uid)))
+                n = (
+                    db.query(AIConversation)
+                    .filter(AIConversation.user_id.in_(list(ids)))
+                    .delete(synchronize_session=False)
+                )
                 db.commit()
-                return n
+                return int(n or 0)
             except Exception as exc:
                 logger.error("clear_history failed: %s", exc)
                 db.rollback()
@@ -3329,9 +3336,8 @@ class ConversationEngine:
                 # from the current message + saved profile.
                 if fn_name in {
                     "search_food_near_user",
-                    "get_recipe_suggestions",
+                    "get_recipes",
                     "post_food_request",
-                    "update_food_request",
                 }:
                     try:
                         from backend.ai.allergens import enrich_search_allergen_args
@@ -3550,6 +3556,10 @@ class ConversationEngine:
                     fn_args = enrich_claim_listings_args(
                         fn_args, user_text, chat_history, str(auth_user_id),
                     )
+                    from backend.ai.role_guards import resolve_user_community_role
+                    fn_args["_community_role"] = await resolve_user_community_role(
+                        str(auth_user_id),
+                    )
                     block_reason = claiming_batch_tool_block_reason(
                         user_text, chat_history, fn_args,
                         user_id=str(auth_user_id),
@@ -3617,6 +3627,10 @@ class ConversationEngine:
                             }),
                         })
                         continue
+                    from backend.ai.role_guards import resolve_user_community_role
+                    fn_args["_community_role"] = await resolve_user_community_role(
+                        str(auth_user_id),
+                    )
                     block_reason = claiming_tool_block_reason(
                         user_text, chat_history, fn_args, str(auth_user_id),
                     )
@@ -3634,6 +3648,7 @@ class ConversationEngine:
                         "_resolved_from_history",
                         "_resolved_from_title",
                         "_no_matching_listing_food",
+                        "_community_role",
                     ):
                         fn_args.pop(_k, None)
 

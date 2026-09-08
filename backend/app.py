@@ -332,6 +332,21 @@ def _database_mode() -> str:
     return "local" if db_url.startswith("sqlite") else "cloud"
 
 
+def _resolve_profile_role_update(new_role, *, jwt_is_admin: bool = False):
+    """Return a role string to apply, or None if the change is not allowed.
+
+    Non-admins may switch among donor/recipient/driver/volunteer.
+    Restoring admin requires an existing JWT is_admin claim (no escalation).
+    """
+    role = str(new_role or "").strip().lower()
+    allowed_roles = {"donor", "recipient", "driver", "volunteer"}
+    if role in allowed_roles:
+        return role
+    if role == "admin" and jwt_is_admin is True:
+        return "admin"
+    return None
+
+
 def _client_ip(request: Request) -> str:
     """Best-effort client IP extraction with proxy header fallback."""
     forwarded_for = request.headers.get("x-forwarded-for")
@@ -895,12 +910,15 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
         if 'special_needs' in body:
             user.special_needs = body['special_needs']
         
-        # Allow role switching between donor, recipient, driver (but not admin/dispatcher)
+        # Allow role switching between donor, recipient, driver, volunteer.
+        # Restore to admin only when the JWT already carries is_admin (no escalation).
         if 'role' in body:
-            new_role = body['role']
-            allowed_roles = ['donor', 'recipient', 'driver', 'volunteer']
-            if new_role in allowed_roles:
-                user.role = UserRole(new_role)
+            resolved = _resolve_profile_role_update(
+                body['role'],
+                jwt_is_admin=payload.get('is_admin') is True,
+            )
+            if resolved:
+                user.role = UserRole(resolved)
         
         db.commit()
         db.refresh(user)

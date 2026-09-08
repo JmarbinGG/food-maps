@@ -7959,6 +7959,8 @@ var NouriGuideContext = (0, import_react5.createContext)({
   },
   syncFromChat: () => {
   },
+  resetGuideSession: () => {
+  },
   cancelVoice: () => {
   },
   toggleMute: () => {
@@ -7990,6 +7992,25 @@ function NouriGuideProvider({ children }) {
   (0, import_react5.useEffect)(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, guide }));
   }, [settings, guide]);
+  (0, import_react5.useEffect)(() => {
+    const onFormFocus = (ev) => {
+      const detail = ev?.detail;
+      if (!detail || typeof detail !== "object") return;
+      setGuide((g2) => ({
+        ...g2,
+        formId: detail.formId ?? g2.formId,
+        fieldName: detail.fieldName ?? g2.fieldName,
+        label: detail.label ?? g2.label,
+        stepIndex: detail.stepIndex ?? g2.stepIndex,
+        stepTotal: detail.stepTotal ?? g2.stepTotal,
+        path: detail.path ?? g2.path,
+        pageKey: detail.pageKey ?? g2.pageKey,
+        source: detail.source ?? "form"
+      }));
+    };
+    window.addEventListener("foodmaps:form_focus", onFormFocus);
+    return () => window.removeEventListener("foodmaps:form_focus", onFormFocus);
+  }, []);
   const updateSetting = (0, import_react5.useCallback)((key, value2) => {
     setSettings((s2) => ({ ...s2, [key]: value2 }));
   }, []);
@@ -8002,6 +8023,16 @@ function NouriGuideProvider({ children }) {
       window.speechSynthesis.cancel();
     }
     setGuide((g2) => ({ ...g2, isSpeaking: false }));
+  }, []);
+  const resetGuideSession = (0, import_react5.useCallback)(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setGuide((g2) => ({
+      ...defaultGuide,
+      isMuted: g2.isMuted,
+      isDismissed: g2.isDismissed
+    }));
   }, []);
   const toggleMute = (0, import_react5.useCallback)(() => {
     setGuide((g2) => ({ ...g2, isMuted: !g2.isMuted }));
@@ -8022,12 +8053,13 @@ function NouriGuideProvider({ children }) {
     guide,
     updateSetting,
     syncFromChat,
+    resetGuideSession,
     cancelVoice,
     toggleMute,
     dismiss,
     replay,
     resume
-  }), [settings, guide, updateSetting, syncFromChat, cancelVoice, toggleMute, dismiss, replay, resume]);
+  }), [settings, guide, updateSetting, syncFromChat, resetGuideSession, cancelVoice, toggleMute, dismiss, replay, resume]);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(NouriGuideContext.Provider, { value, children });
 }
 function useNouriGuide() {
@@ -8121,6 +8153,13 @@ var aiChatService = {
     fd.append("audio", blob, "voice.webm");
     fd.append("user_id", userId);
     if (opts.lang) fd.append("lang", opts.lang);
+    if (opts.tone) fd.append("tone", opts.tone);
+    if (opts.accessibilityProfile) {
+      fd.append("accessibility_profile", JSON.stringify(opts.accessibilityProfile));
+    }
+    if (opts.guideState) {
+      fd.append("guide_state", JSON.stringify(opts.guideState));
+    }
     const res = await fetch("/api/ai/voice", {
       method: "POST",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -8404,7 +8443,12 @@ function useAIChat() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await aiChatService_default.voice(user.id, blob, { lang: language });
+      const data = await aiChatService_default.voice(user.id, blob, {
+        lang: language,
+        tone,
+        accessibilityProfile: a11ySettings,
+        guideState
+      });
       if (data.transcript) {
         setMessages((m2) => [...m2, { id: `u-${Date.now()}`, role: "user", message: data.transcript }]);
       }
@@ -8416,13 +8460,12 @@ function useAIChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, language]);
+  }, [user?.id, language, tone, a11ySettings, guideState]);
   const clearHistory = (0, import_react7.useCallback)(async () => {
+    lastUserMessageRef.current = "";
+    setError(null);
     if (user?.id) {
-      try {
-        await aiChatService_default.clearHistory(user.id);
-      } catch {
-      }
+      await aiChatService_default.clearHistory(user.id);
     }
     setMessages([]);
   }, [user?.id]);
@@ -8501,7 +8544,8 @@ function useCommunityRole() {
   const { user, isAdmin } = useAuthContext();
   if (isAdmin) return "admin";
   const role = String(user?.role || "").toLowerCase();
-  if (role === "donor" || role === "volunteer") return "donor";
+  if (role === "donor") return "donor";
+  if (role === "volunteer") return "volunteer";
   if (role === "dispatcher" || role === "organizer") return "organizer";
   return "recipient";
 }
@@ -8874,26 +8918,36 @@ var CHAT_UI_LANGUAGES = ["en", "es"];
 var CHAT_LANGUAGE_LABELS = { en: "English", es: "Espa\xF1ol" };
 var STRINGS = {
   en: {
-    welcomeSubtitle: "Share food, find meals nearby, or ask me anything.",
+    welcomeSubtitle: "Tap a suggestion below, a card, or type \u2014 I\u2019ll ask whether to do it for you or guide you step by step.",
     jumpLatest: "Jump to latest",
     latest: "Latest",
     signInForFeatures: "Sign in for claims, photos, and voice.",
     chatLanguage: "Chat language",
     conversationTone: "Tone",
     photoCaptionPlaceholder: "Add a caption (optional)",
-    messagePlaceholder: "Message Nouri\u2026"
+    messagePlaceholder: "Message Nouri\u2026",
+    today: "Today",
+    yesterday: "Yesterday"
   },
   es: {
-    welcomeSubtitle: "Comparte comida, encuentra comida cerca o preg\xFAntame lo que quieras.",
+    welcomeSubtitle: "Elige una sugerencia abajo, una tarjeta, o escribe \u2014 te pregunto si lo hago yo o te gu\xEDo paso a paso.",
     jumpLatest: "Ir al final",
     latest: "Reciente",
     signInForFeatures: "Inicia sesi\xF3n para reclamar, fotos y voz.",
     chatLanguage: "Idioma del chat",
     conversationTone: "Tono",
     photoCaptionPlaceholder: "A\xF1ade un pie de foto (opcional)",
-    messagePlaceholder: "Escribe a Nouri\u2026"
+    messagePlaceholder: "Escribe a Nouri\u2026",
+    today: "Hoy",
+    yesterday: "Ayer"
   }
 };
+function normalizeWelcomeRole(communityRole) {
+  const role = String(communityRole || "member").toLowerCase().trim();
+  if (role === "dispatcher") return "organizer";
+  if (!role) return "member";
+  return role;
+}
 function t2(lang, key) {
   const l = STRINGS[lang] || STRINGS.en;
   return l[key] || STRINGS.en[key] || key;
@@ -8902,27 +8956,139 @@ function chatLang(lang) {
   return CHAT_UI_LANGUAGES.includes(lang) ? lang : "en";
 }
 function welcomeGreeting(lang, userName) {
-  const name = userName ? `, ${userName.split(" ")[0]}` : "";
-  return lang === "es" ? `Hola${name}` : `Hi${name}`;
+  const first = userName ? String(userName).split(" ")[0] : "";
+  if (lang === "es") {
+    return first ? `\xA1Hola, ${first}!` : "\xA1Hola!";
+  }
+  return first ? `Hi, ${first}!` : "Hi there!";
 }
+var WELCOME_CATEGORIES = {
+  en: [
+    {
+      key: "guide",
+      icon: "fa-compass",
+      accent: "amber",
+      title: "Not sure?",
+      blurb: "I\u2019ll walk you through it",
+      prompts: ["I'm not sure what to do \u2014 help me", "How does Food Maps work?"]
+    },
+    {
+      key: "find",
+      icon: "fa-magnifying-glass-location",
+      accent: "emerald",
+      title: "Find food",
+      blurb: "I\u2019ll ask how you want help",
+      prompts: ["I want to find food", "Find free food near me"]
+    },
+    {
+      key: "share",
+      icon: "fa-hand-holding-heart",
+      accent: "fuchsia",
+      title: "Share food",
+      blurb: "I\u2019ll ask how you want help",
+      prompts: ["I want to share food", "Share extra food from my address"]
+    },
+    {
+      key: "request",
+      icon: "fa-clipboard-list",
+      accent: "sky",
+      title: "Request food",
+      blurb: "I\u2019ll ask how you want help",
+      prompts: ["I want to request food", "Request food that isn\u2019t listed yet"]
+    },
+    {
+      key: "manage",
+      icon: "fa-list-check",
+      accent: "cyan",
+      title: "Manage activity",
+      blurb: "Pickups, claims, impact",
+      prompts: ["What are my upcoming pickups?", "Show my impact stats"]
+    }
+  ],
+  es: [
+    {
+      key: "guide",
+      icon: "fa-compass",
+      accent: "amber",
+      title: "\xBFNo est\xE1s seguro?",
+      blurb: "Te gu\xEDo paso a paso",
+      prompts: ["No s\xE9 qu\xE9 hacer \u2014 ay\xFAdame", "\xBFC\xF3mo funciona Food Maps?"]
+    },
+    {
+      key: "find",
+      icon: "fa-magnifying-glass-location",
+      accent: "emerald",
+      title: "Buscar comida",
+      blurb: "Te pregunto c\xF3mo ayudar",
+      prompts: ["Quiero buscar comida", "Buscar comida gratis cerca"]
+    },
+    {
+      key: "share",
+      icon: "fa-hand-holding-heart",
+      accent: "fuchsia",
+      title: "Compartir comida",
+      blurb: "Te pregunto c\xF3mo ayudar",
+      prompts: ["Quiero compartir comida", "Compartir comida extra desde mi direcci\xF3n"]
+    },
+    {
+      key: "request",
+      icon: "fa-clipboard-list",
+      accent: "sky",
+      title: "Solicitar comida",
+      blurb: "Te pregunto c\xF3mo ayudar",
+      prompts: ["Quiero solicitar comida", "Solicitar comida que a\xFAn no est\xE1 listada"]
+    },
+    {
+      key: "manage",
+      icon: "fa-list-check",
+      accent: "cyan",
+      title: "Mi actividad",
+      blurb: "Recogidas, reclamos, impacto",
+      prompts: ["\xBFCu\xE1les son mis pr\xF3ximas recogidas?", "Muestra mis estad\xEDsticas de impacto"]
+    }
+  ]
+};
 function getWelcomeCategories(lang) {
-  const es = lang === "es";
-  return [
-    { key: "find", icon: "fa-search", accent: "emerald", prompts: es ? ["Buscar comida cerca"] : ["Find food nearby"] },
-    { key: "share", icon: "fa-hand-holding-heart", accent: "fuchsia", prompts: es ? ["Compartir comida"] : ["Share food"] },
-    { key: "claim", icon: "fa-shopping-basket", accent: "cyan", prompts: es ? ["Reclamar comida"] : ["Claim food"] },
-    { key: "help", icon: "fa-circle-question", accent: "amber", prompts: es ? ["\xBFC\xF3mo funciona?"] : ["How does this work?"] }
-  ];
+  const key = lang === "es" ? "es" : "en";
+  return WELCOME_CATEGORIES[key].map((cat) => ({ ...cat }));
 }
-function getSuggestions() {
-  return [];
+function filterWelcomeCategories(categories, communityRole) {
+  const role = normalizeWelcomeRole(communityRole);
+  const list = Array.isArray(categories) ? categories : [];
+  return list.filter((cat) => {
+    if (role === "donor") return cat.key !== "find" && cat.key !== "request";
+    if (role === "recipient") return cat.key !== "share";
+    return true;
+  });
+}
+function getSuggestions(lang) {
+  const es = lang === "es";
+  return es ? [
+    "\xBFQu\xE9 comida hay disponible cerca de m\xED?",
+    "\xBFCu\xE1les son mis pr\xF3ximas recogidas?",
+    "Muestra mis estad\xEDsticas de impacto",
+    "Quiero compartir comida",
+    "\xBFC\xF3mo funciona Food Maps?"
+  ] : [
+    "What food is available near me?",
+    "What are my upcoming pickups?",
+    "Show my impact stats",
+    "I want to share some food",
+    "How does Food Maps work?"
+  ];
 }
 function dateLocale(lang) {
   return lang === "es" ? "es" : "en-US";
 }
-function dateLabel(date, lang) {
+function dateLabel(lang, key) {
+  return t2(lang, key);
+}
+function formatChatTime(value) {
+  if (value == null || value === "") return "";
+  const d2 = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d2.getTime())) return "";
   try {
-    return new Date(date).toLocaleString(dateLocale(lang));
+    return d2.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   } catch {
     return "";
   }
@@ -9218,12 +9384,7 @@ var ACCENT_MAP = {
 };
 function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
   const all = getWelcomeCategories(language);
-  const role = String(communityRole || "").toLowerCase();
-  const categories = all.filter((cat) => {
-    if (role === "donor") return cat.key !== "find" && cat.key !== "request";
-    if (role === "recipient") return cat.key !== "share";
-    return true;
-  });
+  const categories = filterWelcomeCategories(all, communityRole);
   const greeting = welcomeGreeting(language, userName);
   const subtitle = t2(language, "welcomeSubtitle");
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "px-4 pt-3 pb-2", children: [
@@ -10095,6 +10256,7 @@ function MessageBubble({
     });
   }, [msg.suggestions, msg.suggestedActions, language]);
   const isVoiceMessage = msg.source === "voice";
+  const timeLabel = formatChatTime(msg.timestamp);
   const handleFeedback = (rating) => {
     setFeedbackGiven(rating);
     onFeedback?.(msg.id, rating);
@@ -10310,7 +10472,7 @@ function MessageBubble({
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-microphone text-[8px]", "aria-hidden": "true" }),
           language === "es" ? "Voz" : "Voice"
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })
+        timeLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: timeLabel })
       ] })
     ] })
   ] }) });
@@ -11008,8 +11170,8 @@ function AIChatPanel() {
     [authUser?.community_id, isAdmin]
   );
   const communityRole = useCommunityRole();
-  const { settings: a11ySettings, guide, syncFromChat, cancelVoice, updateSetting } = useNouriGuide();
-  const canAttachFiles = communityRole !== "recipient";
+  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting } = useNouriGuide();
+  const canAttachFiles = communityRole === "donor" || communityRole === "admin";
   const [pendingChatPhotos, setPendingChatPhotos] = (0, import_react11.useState)([]);
   const prevCommunityRoleRef = (0, import_react11.useRef)(null);
   const lastAppliedToolMsgRef = (0, import_react11.useRef)(null);
@@ -11166,13 +11328,18 @@ function AIChatPanel() {
         });
         return [];
       });
-      await clearHistory();
+      clearAIOverlays();
+      resetGuideSession();
+      try {
+        await clearHistory();
+      } catch (_2) {
+      }
       B.info(
         language === "es" ? `Rol actualizado a ${role}. Empezamos un chat limpio.` : `Role updated to ${role}. Starting a fresh chat.`,
         { autoClose: 3500, position: "top-center" }
       );
     })();
-  }, [communityRole, clearHistory, language]);
+  }, [communityRole, clearHistory, clearAIOverlays, language, resetGuideSession]);
   const inputRef = (0, import_react11.useRef)(null);
   const panelRef = (0, import_react11.useRef)(null);
   const previousFocusRef = (0, import_react11.useRef)(null);
@@ -11602,14 +11769,27 @@ ${imageBlock}` : imageBlock;
       return [];
     });
     clearAIOverlays();
+    resetGuideSession();
     historyScrollDoneRef.current = false;
+    lastSpokenIdRef.current = null;
+    lastToastedClaimRef.current = null;
+    lastAppliedToolMsgRef.current = null;
+    lastSurfacedErrorRef.current = null;
     setShowScrollPill(false);
     setInputText("");
     setSuggestionsOpen(false);
     setSuggestionIndex(-1);
-    await clearHistory();
+    try {
+      await clearHistory();
+    } catch (err) {
+      B.error(
+        language === "es" ? `No se pudo borrar el historial: ${err?.message || "error"}` : `Could not clear history: ${err?.message || "error"}`,
+        { autoClose: 4e3, position: "top-center" }
+      );
+      return;
+    }
     scrollMessagesToEnd();
-  }, [cancelPendingUpload, clearAIOverlays, clearHistory, scrollMessagesToEnd]);
+  }, [cancelPendingUpload, clearAIOverlays, clearHistory, language, resetGuideSession, scrollMessagesToEnd]);
   const handlePhotoSelected = (0, import_react11.useCallback)(async (e2) => {
     const file = e2.target.files?.[0];
     e2.target.value = "";
@@ -12236,7 +12416,13 @@ ${imageBlock}` : imageBlock;
         });
       }
     }
-    syncFromChat(lastAssistantMessage.message, { lang, speak: shouldSpeak });
+    syncFromChat({
+      guide: {
+        caption: lastAssistantMessage.message,
+        text: lastAssistantMessage.message,
+        isSpeaking: shouldSpeak
+      }
+    });
     if (shouldSpeak) {
       const micTimer = setTimeout(() => {
         if (voiceModeRef.current && mediaStreamRef.current) {
@@ -13142,6 +13328,13 @@ var import_react12 = __toESM(require_react(), 1);
 
 // utils/formFieldGuide.js
 var FORM_GUIDE_DESC_ID = "nouri-form-guide-desc";
+function notifyFormFieldFocus(detail) {
+  if (typeof window === "undefined" || !detail || typeof detail !== "object") return;
+  window.dispatchEvent(new CustomEvent("foodmaps:form_focus", { detail }));
+}
+if (typeof window !== "undefined") {
+  window.nouriNotifyFormFocus = notifyFormFieldFocus;
+}
 
 // utils/nouriGuide/registry.js
 var NOURI_GOALS = {};
@@ -13609,7 +13802,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
     }));
     try {
       const data = await aiChatService_default.getInsights(user.id, {
-        roleHint: roleHint || (isAdmin ? "admin" : null)
+        roleHint: effectiveRoleHint
       });
       setState((prev) => ({
         loading: false,
@@ -13636,7 +13829,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
         degraded: prev.insights.length > 0
       }));
     }
-  }, [user?.id, roleHint, isAdmin]);
+  }, [user?.id, effectiveRoleHint]);
   import_react15.default.useEffect(() => {
     load(true);
   }, [load]);

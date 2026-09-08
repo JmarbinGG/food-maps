@@ -542,16 +542,40 @@ def clear_user_ai_caches(user_id: str | None) -> None:
     Called when the user clears conversation history so the next turn does
     not continue an old share/claim/assistance session from cache.
     """
-    uid = str(user_id or "").strip()
-    if not uid:
+    raw = str(user_id or "").strip()
+    if not raw:
         return
-    clear_assistance_session(uid)
-    clear_share_drafts(uid)
-    clear_claim_drafts(uid)
-    clear_last_search_listings(uid)
-    clear_last_bulk_posted_ids(uid)
-    _last_donor_listings_by_user.pop(uid, None)
-    _last_write_action_by_user.pop(uid, None)
+    aliases = {raw}
+    if raw.isdigit():
+        norm = str(int(raw))
+        aliases.add(norm)
+        # Wipe zero-padded variants that may already exist in memory.
+        for store in (
+            _ASSIST_SESSION,
+            _share_drafts_by_user,
+            _claim_drafts_by_user,
+            _last_search_by_user,
+            _last_donor_listings_by_user,
+            _last_bulk_posted_by_user,
+            _last_write_action_by_user,
+        ):
+            for key in list(store.keys()):
+                sk = str(key)
+                if sk.isdigit() and str(int(sk)) == norm:
+                    aliases.add(sk)
+    for uid in aliases:
+        clear_assistance_session(uid)
+        clear_share_drafts(uid)
+        clear_claim_drafts(uid)
+        clear_last_search_listings(uid)
+        clear_last_bulk_posted_ids(uid)
+        _last_donor_listings_by_user.pop(uid, None)
+        _last_write_action_by_user.pop(uid, None)
+        _ASSIST_SESSION.pop(uid, None)
+        _share_drafts_by_user.pop(uid, None)
+        _claim_drafts_by_user.pop(uid, None)
+        _last_search_by_user.pop(uid, None)
+        _last_bulk_posted_by_user.pop(uid, None)
 
 
 def resolve_assistance_mode(
@@ -6074,10 +6098,6 @@ def update_last_search_listing_after_claim(
     _last_search_by_user[uid] = updated
 
 
-def clear_last_search_listings(user_id: str) -> None:
-    _last_search_by_user.pop(str(user_id or ""), None)
-
-
 def set_last_donor_listings(user_id: str, listings: list[dict]) -> None:
     rows = []
     for i, row in enumerate(listings or [], start=1):
@@ -7906,6 +7926,17 @@ def claiming_batch_tool_block_reason(
     """Block claim_listings when the multi-claim queue is incomplete."""
     args = fn_args or {}
     uid = str(user_id or args.get("user_id") or "").strip()
+
+    role_key = str(
+        args.get("community_role")
+        or args.get("_community_role")
+        or ""
+    ).lower().strip()
+    if role_key:
+        from backend.ai.role_guards import claiming_role_block_message
+        role_msg = claiming_role_block_message(role_key, lang="en")
+        if role_msg:
+            return role_msg
     drafts = get_claim_drafts(uid) if uid else []
     items = args.get("items") if isinstance(args.get("items"), list) else []
 
@@ -8080,6 +8111,17 @@ def claiming_tool_block_reason(
 
     args = fn_args or {}
     uid = str(user_id or args.get("user_id") or "")
+
+    role_key = str(
+        args.get("community_role")
+        or args.get("_community_role")
+        or ""
+    ).lower().strip()
+    if role_key:
+        from backend.ai.role_guards import claiming_role_block_message
+        role_msg = claiming_role_block_message(role_key, lang="en")
+        if role_msg:
+            return role_msg
 
     no_match_food = args.get("_no_matching_listing_food")
     if no_match_food:

@@ -58,7 +58,7 @@ function RoleInsightsPanel({ roleHint = null, className = '' }) {
         }));
         try {
             const data = await aiChatService.getInsights(user.id, {
-                roleHint: roleHint || (isAdmin ? 'admin' : null),
+                roleHint: effectiveRoleHint,
             });
             setState((prev) => ({
                 loading: false,
@@ -85,7 +85,7 @@ function RoleInsightsPanel({ roleHint = null, className = '' }) {
                 degraded: prev.insights.length > 0,
             }));
         }
-    }, [user?.id, roleHint, isAdmin]);
+    }, [user?.id, effectiveRoleHint]);
 
     React.useEffect(() => {
         load(true);

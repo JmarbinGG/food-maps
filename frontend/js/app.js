@@ -541,17 +541,17 @@ function App() {
   // Publish SPA page context so Nouri chat can send accurate guide_state.path.
   React.useEffect(() => {
     const PAGE_CONTEXT = {
-      map: { pageKey: 'map', path: '/find' },
-      create: { pageKey: 'create', path: '/share' },
-      'bulk-create': { pageKey: 'bulk-create', path: '/share/bulk' },
+      map: { pageKey: 'find', path: '/find' },
+      create: { pageKey: 'share', path: '/share' },
+      'bulk-create': { pageKey: 'share', path: '/share/bulk' },
       dashboard: { pageKey: 'dashboard', path: '/dashboard' },
       dispatch: { pageKey: 'dispatch', path: '/admin/distribution' },
       admin: { pageKey: 'admin', path: '/admin' },
       schedule: { pageKey: 'schedule', path: '/donations' },
       partners: { pageKey: 'partners', path: '/sponsors' },
-      'food-rescue': { pageKey: 'food-rescue', path: '/find' },
+      'food-rescue': { pageKey: 'find', path: '/find' },
       'meal-planning': { pageKey: 'meal-planning', path: '/recipes' },
-      'ai-matching': { pageKey: 'ai-matching', path: '/find' },
+      'ai-matching': { pageKey: 'find', path: '/find' },
       routes: { pageKey: 'routes', path: '/find' },
       emergency: { pageKey: 'emergency', path: '/contact' },
       nutrition: { pageKey: 'nutrition', path: '/recipes' },

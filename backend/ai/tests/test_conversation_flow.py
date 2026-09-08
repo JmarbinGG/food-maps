@@ -432,6 +432,17 @@ class TestAvailabilityQuestions:
         assert reason is not None
         assert "claim_listing" in reason.lower()
 
+    def test_claim_blocked_for_donor_role(self):
+        reason = claiming_tool_block_reason(
+            "claim it",
+            [],
+            {"listing_id": "abc-123", "_community_role": "donor"},
+            "u-donor",
+        )
+        assert reason is not None
+        assert "donor" in reason.lower()
+        assert "claim_listing" in reason.lower()
+
     def test_search_snapshot_shows_listings(self):
         snap = build_last_search_snapshot_reminder("u-avail")
         assert snap is not None

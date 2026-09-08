@@ -855,6 +855,11 @@ async def ai_bulk_listings(
     uid = _parse_user_id(body.user_id)
     await _require_owner(credentials, uid)
 
+    from backend.ai.role_guards import check_role_allows_tool
+    role_block = await check_role_allows_tool(str(uid), "post_food_listing")
+    if role_block:
+        raise HTTPException(403, role_block.get("error") or "Cannot post listings with this account role")
+
     donor = fetch_donor_listing_defaults_mysql(uid)
     listing_status = await _resolve_create_listing_status()
     geocode_cache: dict[str, tuple | None] = {}
@@ -1558,6 +1563,7 @@ async def ai_voice(
             tone=tone,
             accessibility_profile=a11y_payload,
             guide_state=guide_payload,
+            role_hint=_auth_role_from_credentials(credentials),
         )
         result["transcript"] = transcript
         return result
@@ -1707,6 +1713,7 @@ async def ai_query(
             )
             trace.append({"tool": "search_food_near_user", "result_summary": tool_result.get("summary", "")})
         elif any(k in q_lower for k in ("stat", "how many", "recipient", "user", "admin")):
+            _require_admin(credentials)
             tool_result = await execute_tool("get_platform_stats", {"user_id": uid})
             trace.append({"tool": "get_platform_stats", "result_summary": tool_result.get("summary", "")})
         else:

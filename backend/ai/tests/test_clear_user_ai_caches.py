@@ -29,3 +29,16 @@ def test_clear_user_ai_caches_wipes_all_session_state():
     assert get_claim_drafts(uid) == []
     assert get_last_search_listings(uid) == []
     assert get_last_bulk_posted_ids(uid) == []
+
+
+def test_clear_user_ai_caches_normalizes_numeric_aliases():
+    set_assistance_session("018", mode="hands_on", goal="find")
+    set_last_search_listings("018", [{"id": "x", "title": "milk"}])
+    set_claim_drafts("18", [{"listing_id": "x", "qty": 2}])
+
+    clear_user_ai_caches("18")
+
+    assert get_assistance_session("018") is None
+    assert get_last_search_listings("018") == []
+    assert get_claim_drafts("18") == []
+    assert get_claim_drafts("018") == []

@@ -8,6 +8,8 @@ from backend.ai.ai_engine import (
     _normalize_chat_profile,
     _role_behavior_prompt,
 )
+from backend.ai.conversation_flow import claiming_tool_block_reason
+from backend.tools import _claim_food_listing, _create_food_listing
 
 
 class TestNormalizeChatProfile:
@@ -100,3 +102,65 @@ def test_insights_role_from_nested_profile():
     p = profile.get("profile") or profile
     raw_role = (p.get("community_role") or p.get("role") or "recipient").lower()
     assert raw_role == "donor"
+
+
+class TestRoleGuardsSupabasePaths:
+    @pytest.mark.asyncio
+    async def test_create_food_listing_blocks_recipient(self, monkeypatch):
+        async def fake_check(user_id, tool_name, **kwargs):
+            return {
+                "error": "recipient cannot post",
+                "reason": "wrong_role",
+                "current_role": "recipient",
+                "required_role": "donor",
+            }
+
+        monkeypatch.setattr(
+            "backend.ai.role_guards.check_role_allows_tool",
+            fake_check,
+        )
+        result = await _create_food_listing(
+            user_id="uuid-recipient",
+            title="Bread",
+            quantity=2,
+            unit="loaves",
+            category="bakery",
+            image_url="https://example.com/b.jpg",
+        )
+        assert result.get("success") is False
+        assert result.get("reason") == "wrong_role"
+
+    @pytest.mark.asyncio
+    async def test_claim_food_listing_blocks_donor(self, monkeypatch):
+        async def fake_check(user_id, tool_name, **kwargs):
+            return {
+                "error": "donor cannot claim",
+                "reason": "wrong_role",
+                "current_role": "donor",
+                "required_role": "recipient",
+            }
+
+        monkeypatch.setattr(
+            "backend.ai.role_guards.check_role_allows_tool",
+            fake_check,
+        )
+        result = await _claim_food_listing(
+            user_id="uuid-donor",
+            listing_id="listing-1",
+            quantity=1,
+        )
+        assert result.get("success") is False
+        assert result.get("reason") == "wrong_role"
+
+
+class TestClaimingFlowRoleBlock:
+    def test_donor_blocked_in_claiming_tool_block_reason(self):
+        reason = claiming_tool_block_reason(
+            "claim listing 1",
+            [],
+            {"listing_id": "abc", "_community_role": "donor"},
+            "uuid-donor",
+        )
+        assert reason is not None
+        assert "donor" in reason.lower()
+        assert "claim_listing" in reason.lower()

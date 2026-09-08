@@ -4,16 +4,25 @@
   "platform_overview": "Food Maps connects people who have surplus food to those who need it, reducing waste and fighting hunger. Users list surplus food, claim items, join distribution events at community centres, and track their environmental impact. The AI assistant's name is Nouri.",
 
   "user_roles": [
-    { "role": "Donor/Sharer", "description": "Lists surplus food with pickup times and locations." },
-    { "role": "Recipient/Claimer", "description": "Browses and claims available food by location and type." },
-    { "role": "Community Organiser", "description": "Creates and manages food distribution events." },
-    { "role": "Admin", "description": "Manages users, moderates content, handles compliance." },
+    { "role": "Donor/Sharer", "description": "Lists surplus food with pickup times, locations, and a required photo. Donors cannot claim food — they must sign in as a recipient to claim." },
+    { "role": "Recipient/Claimer", "description": "Browses and claims available food by location and type. Recipients cannot post donation listings — they must sign in as a donor to share food." },
+    { "role": "Volunteer", "description": "Helps with pickup logistics and routes — does not post donations or claim food through this account type." },
+    { "role": "Community Organiser", "description": "Triages requests, matches listings, and manages distribution — operational role, not donor posting or recipient claiming." },
+    { "role": "Admin", "description": "Manages platform health and moderation. Uses admin tools — not a substitute for donor/recipient accounts when sharing or claiming." },
     { "role": "Sponsor", "description": "Supports the platform through donations or food drives." }
   ],
 
+  "role_permissions": [
+    "Donors: post_food_listing / share food only — NEVER claim_listing.",
+    "Recipients: search + claim_listing only — NEVER post_food_listing.",
+    "Volunteers / drivers / dispatchers: logistics tools only (routes, dispatch queue) — no post or claim.",
+    "Members (if shown): may both share and claim.",
+    "When role blocks an action, explain in one short sentence and tell them which account type to use."
+  ],
+
   "processes": [
-    "Share Food: Tell Nouri what you have — name, quantity, photo optional. Nouri uses your saved address and posts in 2–3 turns.",
-    "Find Food: Nouri searches nearby food and shows cards in chat. Pick a number, say how many you want — reserved instantly with pickup details. No SMS code.",
+    "Share Food: Tell Nouri what you have — name, quantity, and attach a real photo (required before posting). Nouri uses your saved address and posts in 2–3 turns.",
+    "Find Food: Nouri searches nearby food and shows cards in chat. Pick a number, say how many you want — reserved with pickup details shown in chat. No SMS code.",
     "Community events: Organisers create events with date, location, and capacity. Members RSVP and check in.",
     "Impact tracking: Each share logs water saved, CO2 prevented, and land preserved — visible on dashboards.",
     "Reminders: Nouri can set reminders for pickups, expirations, and events."

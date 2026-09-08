@@ -19,11 +19,13 @@ import {
 } from '../../utils/communityScope.js'
 import {
   getWelcomeCategories,
+  filterWelcomeCategories,
   getSuggestions,
   welcomeGreeting,
   t as chatT,
   dateLocale,
   dateLabel,
+  formatChatTime,
   languageSwitchPrompt,
   CHAT_UI_LANGUAGES,
   CHAT_LANGUAGE_LABELS,
@@ -149,12 +151,7 @@ const ACCENT_MAP = {
 // ─── WelcomeHero — empty-state onboarding surface ──────────────────
 function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
   const all = getWelcomeCategories(language)
-  const role = String(communityRole || '').toLowerCase()
-  const categories = all.filter((cat) => {
-    if (role === 'donor') return cat.key !== 'find' && cat.key !== 'request'
-    if (role === 'recipient') return cat.key !== 'share'
-    return true
-  })
+  const categories = filterWelcomeCategories(all, communityRole)
   const greeting = welcomeGreeting(language, userName)
   const subtitle = chatT(language, 'welcomeSubtitle')
 
@@ -1271,6 +1268,7 @@ function MessageBubble({
     })
   }, [msg.suggestions, msg.suggestedActions, language])
   const isVoiceMessage = msg.source === 'voice'
+  const timeLabel = formatChatTime(msg.timestamp)
 
   const handleFeedback = (rating) => {
     setFeedbackGiven(rating)
@@ -1522,7 +1520,9 @@ function MessageBubble({
                 {language === 'es' ? 'Voz' : 'Voice'}
               </span>
             )}
-            <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            {timeLabel && (
+              <span>{timeLabel}</span>
+            )}
           </div>
         </div>
       </div>
@@ -2322,9 +2322,9 @@ function AIChatPanel() {
     [authUser?.community_id, isAdmin],
   )
   const communityRole = useCommunityRole()
-  const { settings: a11ySettings, guide, syncFromChat, cancelVoice, updateSetting } = useNouriGuide()
+  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting } = useNouriGuide()
   // Photo / CSV attach is donor-only (list food, attach listing photos, bulk CSV).
-  const canAttachFiles = communityRole !== 'recipient'
+  const canAttachFiles = communityRole === 'donor' || communityRole === 'admin'
   // Staged photos for the composer (attach + optional text, then send together).
   const [pendingChatPhotos, setPendingChatPhotos] = useState([])
   const prevCommunityRoleRef = useRef(null)
@@ -2531,7 +2531,11 @@ function AIChatPanel() {
         })
         return []
       })
-      await clearHistory()
+      clearAIOverlays()
+      resetGuideSession()
+      try {
+        await clearHistory()
+      } catch (_) { /* still show role toast; history may already be empty */ }
       toast.info(
         language === 'es'
           ? `Rol actualizado a ${role}. Empezamos un chat limpio.`
@@ -2539,7 +2543,7 @@ function AIChatPanel() {
         { autoClose: 3500, position: 'top-center' },
       )
     })()
-  }, [communityRole, clearHistory, language])
+  }, [communityRole, clearHistory, clearAIOverlays, language, resetGuideSession])
 
   const inputRef = useRef(null)
   const panelRef = useRef(null)
@@ -3049,14 +3053,29 @@ function AIChatPanel() {
       return []
     })
     clearAIOverlays()
+    resetGuideSession()
     historyScrollDoneRef.current = false
+    lastSpokenIdRef.current = null
+    lastToastedClaimRef.current = null
+    lastAppliedToolMsgRef.current = null
+    lastSurfacedErrorRef.current = null
     setShowScrollPill(false)
     setInputText('')
     setSuggestionsOpen(false)
     setSuggestionIndex(-1)
-    await clearHistory()
+    try {
+      await clearHistory()
+    } catch (err) {
+      toast.error(
+        language === 'es'
+          ? `No se pudo borrar el historial: ${err?.message || 'error'}`
+          : `Could not clear history: ${err?.message || 'error'}`,
+        { autoClose: 4000, position: 'top-center' },
+      )
+      return
+    }
     scrollMessagesToEnd()
-  }, [cancelPendingUpload, clearAIOverlays, clearHistory, scrollMessagesToEnd])
+  }, [cancelPendingUpload, clearAIOverlays, clearHistory, language, resetGuideSession, scrollMessagesToEnd])
 
   const handlePhotoSelected = useCallback(async (e) => {
     const file = e.target.files?.[0]
@@ -3850,7 +3869,13 @@ function AIChatPanel() {
       }
     }
 
-    syncFromChat(lastAssistantMessage.message, { lang, speak: shouldSpeak })
+    syncFromChat({
+      guide: {
+        caption: lastAssistantMessage.message,
+        text: lastAssistantMessage.message,
+        isSpeaking: shouldSpeak,
+      },
+    })
 
     if (shouldSpeak) {
       const micTimer = setTimeout(() => {

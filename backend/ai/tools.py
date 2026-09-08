@@ -1335,6 +1335,14 @@ async def execute_tool(name: str, arguments: dict) -> dict:
     handler = handlers.get(name)
     if handler is None:
         return {"error": f"Unknown tool: {name}"}
+    try:
+        from backend.ai.role_guards import check_role_allows_tool
+        uid = str((arguments or {}).get("user_id") or "")
+        role_block = await check_role_allows_tool(uid, name)
+        if role_block:
+            return role_block
+    except Exception:
+        pass
     # Defense-in-depth: silently drop kwargs the handler doesn't accept.
     # OpenAI tool calls occasionally include legacy/extra fields (e.g.
     # 'confirmed' from a prior schema version) that would otherwise raise
@@ -3147,6 +3155,10 @@ async def _claim_listing(
             }
 
     if _UUID_RE.match(str(lid or "")):
+        from backend.ai.role_guards import check_role_allows_tool
+        role_block = await check_role_allows_tool(uid, "claim_listing")
+        if role_block:
+            return role_block
         from backend.tools import _claim_food_listing
         result = await _claim_food_listing(
             user_id=uid,

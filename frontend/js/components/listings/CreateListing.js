@@ -117,6 +117,22 @@ function CreateListing({ user, onCancel, onSuccess }) {
     }
   };
 
+  const notifyFormFocus = (fieldName, label, stepIndex = step) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('foodmaps:form_focus', {
+      detail: {
+        formId: 'share-listing',
+        fieldName,
+        label,
+        stepIndex,
+        stepTotal: 2,
+        path: '/share',
+        pageKey: 'share',
+        source: 'form',
+      },
+    }));
+  };
+
   // Maximum number of photos and per-file size cap (in bytes).
   const MAX_IMAGES = 6;
   const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB
@@ -541,6 +557,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     type="text"
                     value={formData.title}
                     onChange={(e) => handleInputChange('title', e.target.value)}
+                    onFocus={() => notifyFormFocus('title', 'Title', 1)}
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     placeholder="e.g., Fresh vegetables from community garden"
                   />
@@ -554,6 +571,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <textarea
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
+                    onFocus={() => notifyFormFocus('description', 'Description', 1)}
                     rows={3}
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     placeholder="Describe the food items..."
@@ -648,6 +666,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                       step="0.1"
                       value={formData.qty}
                       onChange={(e) => handleInputChange('qty', e.target.value)}
+                      onFocus={() => notifyFormFocus('qty', 'Quantity', 1)}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     />
                     {errors.qty && <p className="text-red-500 text-sm mt-1">{errors.qty}</p>}

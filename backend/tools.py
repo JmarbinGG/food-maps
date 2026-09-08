@@ -4972,6 +4972,11 @@ async def _create_food_listing(
     **_ignored,
 ) -> dict:
     """Insert a single food donation listing for the authenticated user."""
+    from backend.ai.role_guards import check_role_allows_tool
+    role_block = await check_role_allows_tool(str(user_id or ""), "post_food_listing")
+    if role_block:
+        return {"success": False, **role_block}
+
     from backend.ai_engine import (
         supabase_post,
         fetch_donor_listing_defaults,
@@ -5601,6 +5606,11 @@ async def _claim_food_listing(
     **_ignored,
 ) -> dict:
     """Create a food_claims row for the authenticated user and decrement the listing."""
+    from backend.ai.role_guards import check_role_allows_tool
+    role_block = await check_role_allows_tool(str(user_id or ""), "claim_listing")
+    if role_block:
+        return {"success": False, **role_block}
+
     from backend.ai_engine import supabase_get, supabase_post, supabase_patch, supabase_delete
 
     logger.info(

@@ -185,7 +185,12 @@ export function useAIChat() {
     setIsLoading(true);
     setError(null);
     try {
-      const data = await aiChatService.voice(user.id, blob, { lang: language });
+      const data = await aiChatService.voice(user.id, blob, {
+        lang: language,
+        tone,
+        accessibilityProfile: a11ySettings,
+        guideState,
+      });
       if (data.transcript) {
         setMessages((m) => [...m, { id: `u-${Date.now()}`, role: 'user', message: data.transcript }]);
       }
@@ -197,11 +202,13 @@ export function useAIChat() {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id, language]);
+  }, [user?.id, language, tone, a11ySettings, guideState]);
 
   const clearHistory = useCallback(async () => {
+    lastUserMessageRef.current = '';
+    setError(null);
     if (user?.id) {
-      try { await aiChatService.clearHistory(user.id); } catch { /* */ }
+      await aiChatService.clearHistory(user.id);
     }
     setMessages([]);
   }, [user?.id]);

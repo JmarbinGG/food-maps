@@ -2438,19 +2438,28 @@ def _build_system_prompt(training_data: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Role-specific behaviour
+# Role-specific behaviour (strict Food Maps rules — helpers-only module;
+# production chat uses backend.ai.ai_engine.ConversationEngine)
 # ---------------------------------------------------------------------------
 
 _ROLE_BEHAVIOR_EN: dict[str, str] = {
+    "member": (
+        "The user is a community member (may claim or share). When they express "
+        "hunger, food insecurity, or distress ('nothing to eat', single parent, "
+        "large family, can't walk, pregnant, allergies, vegan), treat it as "
+        "urgent: acknowledge warmly, search_food_near_user immediately, respect "
+        "stated + profile dietary needs, and guide them to claim — never judge."
+    ),
     "recipient": (
         "The user is flagged as a RECIPIENT. Default to helping them FIND food — "
         "use search_food_near_user and get_user_dashboard. Respect their allergies "
         "and dietary_restrictions. Nudge them to set reminders for pickup windows.\n"
         "\n"
-        "BUT: this is a mutual-aid platform. Recipients CAN also share food when "
-        "they have extra. If the user asks to donate, share, give away, or post "
-        "food, HELP THEM — call post_food_listing normally. Do NOT refuse, do NOT "
-        "tell them to switch accounts."
+        "POSTING / DONATING IS NOT ALLOWED FOR RECIPIENT ACCOUNTS. If the recipient "
+        "asks to donate, share, give away, or post food, DO NOT call "
+        "post_food_listing. Politely explain in one short sentence that this account "
+        "is a recipient account and can only claim food, then tell them to sign in "
+        "as a donor (or switch their account role) to share food."
     ),
     "donor": (
         "The user is flagged as a DONOR. Default to helping them MANAGE their "
@@ -2458,17 +2467,17 @@ _ROLE_BEHAVIOR_EN: dict[str, str] = {
         "get_donor_expiring_listings) and suggest re-sharing. Celebrate completed "
         "donations.\n"
         "\n"
-        "BUT: this is a mutual-aid platform. Donors CAN also claim food when "
-        "they need it. If the user asks to claim, reserve, take, or pick up a "
-        "listing, HELP THEM — call search_food_near_user / claim_listing "
-        "normally. Do NOT refuse, do NOT tell them to switch accounts, do NOT "
-        "mention 'donor account' as a limitation. Anyone in need can claim, "
-        "anyone with extra can share."
+        "CLAIMING IS NOT ALLOWED FOR DONOR ACCOUNTS. If the donor asks to claim, "
+        "reserve, take, or pick up a listing, DO NOT call claim_listing / "
+        "confirm_claim / cancel_claim. Politely explain in one short sentence that "
+        "this account is a donor account and can only post listings, then tell them "
+        "to sign in as a recipient (or switch their account role) to claim food."
     ),
     "volunteer": (
         "The user is a VOLUNTEER. Help with pickup logistics — call "
         "get_driver_route_plan for an optimised stop order and get_mapbox_route for "
-        "directions. Encourage safe driving and on-time arrivals."
+        "directions. Volunteers cannot post donations or claim food through this "
+        "account type. Encourage safe driving and on-time arrivals."
     ),
     "driver": (
         "The user is a DRIVER. Prioritise route optimisation (get_driver_route_plan) "
@@ -2492,10 +2501,10 @@ _ROLE_BEHAVIOR_ES: dict[str, str] = {
         "comida (usa search_food_near_user y get_user_dashboard). Respeta alergias y "
         "restricciones dietéticas. Recuérdale configurar alertas de recogida.\n"
         "\n"
-        "PERO: esta es una plataforma de ayuda mutua. Los recipientes también PUEDEN "
-        "compartir comida cuando tienen de más. Si el usuario pide donar, compartir "
-        "o publicar comida, AYÚDALO — llama a post_food_listing normalmente. NO te "
-        "niegues, NO le digas que cambie de cuenta."
+        "LAS CUENTAS DE RECIPIENTE NO PUEDEN DONAR NI PUBLICAR. Si pide donar, "
+        "compartir o publicar comida, NO llames a post_food_listing. Explícale en "
+        "una oración que esta cuenta es de recipiente y solo puede reclamar; debe "
+        "iniciar sesión como donante para compartir comida."
     ),
     "donor": (
         "El usuario está marcado como DONANTE. Por defecto ayúdale a GESTIONAR sus "
@@ -2503,17 +2512,15 @@ _ROLE_BEHAVIOR_ES: dict[str, str] = {
         "(get_donor_expiring_listings) y sugiere acciones. Felicítalo por donaciones "
         "completadas.\n"
         "\n"
-        "PERO: esta es una plataforma de ayuda mutua. Los donantes también PUEDEN "
-        "reclamar comida cuando la necesitan. Si el usuario pide reclamar, "
-        "reservar o recoger un listado, AYÚDALO — llama a search_food_near_user / "
-        "claim_listing normalmente. NO te niegues, NO le digas que cambie de "
-        "cuenta, NO menciones 'cuenta de donante' como una limitación. Cualquiera "
-        "que tenga necesidad puede reclamar, cualquiera que tenga de más puede "
-        "compartir."
+        "LAS CUENTAS DE DONANTE NO PUEDEN RECLAMAR. Si el donante pide reclamar, "
+        "reservar o recoger un listado, NO llames a claim_listing / confirm_claim / "
+        "cancel_claim. Explícale en una oración que esta cuenta es de donante y "
+        "solo puede publicar; debe iniciar sesión como recipiente para reclamar."
     ),
     "volunteer": (
         "El usuario es VOLUNTARIO. Ayúdalo con la logística de recogidas: "
-        "get_driver_route_plan y get_mapbox_route. Recomienda manejar con seguridad."
+        "get_driver_route_plan y get_mapbox_route. Los voluntarios no pueden "
+        "publicar donaciones ni reclamar comida con esta cuenta."
     ),
     "driver": (
         "El usuario es CONDUCTOR. Prioriza rutas optimizadas (get_driver_route_plan) "
@@ -2535,7 +2542,24 @@ def _role_behavior_prompt(role: Optional[str], lang: str = "en") -> Optional[str
         return None
     key = str(role).lower().strip()
     mapping = _ROLE_BEHAVIOR_ES if lang == "es" else _ROLE_BEHAVIOR_EN
-    return mapping.get(key)
+    body = mapping.get(key)
+    if not body:
+        return None
+    if lang == "es":
+        lock = (
+            f"ROL BLOQUEADO ESTE TURNO: community_role=\"{key}\". "
+            "Esto es la fuente de verdad — ignora cualquier turno anterior "
+            "donde el usuario actuara con otro rol (donante vs receptor). "
+            "No ofrezcas acciones prohibidas para este rol."
+        )
+    else:
+        lock = (
+            f"ROLE LOCK THIS TURN: community_role=\"{key}\". "
+            "This is authoritative — IGNORE any earlier turns where the "
+            "user acted under a different role (donor vs recipient). "
+            "Do NOT offer actions that are forbidden for this role."
+        )
+    return f"{lock}\n\n{body}"
 
 
 async def _profile_gap_prompt(user_id: str, lang: str = "en") -> Optional[str]:

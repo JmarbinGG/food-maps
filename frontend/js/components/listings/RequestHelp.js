@@ -29,6 +29,20 @@ function RequestHelp({ onClose, onSuccess }) {
     }));
   };
 
+  const notifyFormFocus = (fieldName, label) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('foodmaps:form_focus', {
+      detail: {
+        formId: 'request-help',
+        fieldName,
+        label,
+        path: '/request',
+        pageKey: 'request',
+        source: 'form',
+      },
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
@@ -131,6 +145,7 @@ function RequestHelp({ onClose, onSuccess }) {
                   type="text"
                   value={formData.address}
                   onChange={(e) => setFormData(prev => ({ ...prev, address: e.target.value }))}
+                  onFocus={() => notifyFormFocus('address', 'Delivery Address')}
                   placeholder="Street address for delivery"
                   className="w-full p-3 border border-gray-300 rounded-lg"
                 />
@@ -197,6 +212,7 @@ function RequestHelp({ onClose, onSuccess }) {
               <textarea
                 value={formData.notes}
                 onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                onFocus={() => notifyFormFocus('notes', 'Additional Notes')}
                 placeholder="Any specific requests or dietary restrictions..."
                 rows={3}
                 className="w-full p-3 border border-gray-300 rounded-lg"

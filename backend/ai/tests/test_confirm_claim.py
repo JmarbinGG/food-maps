@@ -8,6 +8,18 @@ import pytest
 from backend.ai.tools import execute_tool
 
 
+@pytest.fixture(autouse=True)
+def _recipient_role_for_claim_tests(monkeypatch):
+    """Claim confirmation tests use user_id=1; treat as recipient for role guards."""
+    async def _recipient_role(_user_id: str) -> str:
+        return "recipient"
+
+    monkeypatch.setattr(
+        "backend.ai.role_guards.resolve_user_community_role",
+        _recipient_role,
+    )
+
+
 @pytest.mark.asyncio
 class TestConfirmClaimValidation:
     async def test_invalid_user_id_rejected(self):

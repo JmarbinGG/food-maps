@@ -64,6 +64,13 @@ const aiChatService = {
     fd.append('audio', blob, 'voice.webm');
     fd.append('user_id', userId);
     if (opts.lang) fd.append('lang', opts.lang);
+    if (opts.tone) fd.append('tone', opts.tone);
+    if (opts.accessibilityProfile) {
+      fd.append('accessibility_profile', JSON.stringify(opts.accessibilityProfile));
+    }
+    if (opts.guideState) {
+      fd.append('guide_state', JSON.stringify(opts.guideState));
+    }
     const res = await fetch('/api/ai/voice', {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},

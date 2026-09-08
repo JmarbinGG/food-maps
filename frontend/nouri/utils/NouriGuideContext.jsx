@@ -33,6 +33,7 @@ const NouriGuideContext = createContext({
   guide: defaultGuide,
   updateSetting: () => {},
   syncFromChat: () => {},
+  resetGuideSession: () => {},
   cancelVoice: () => {},
   toggleMute: () => {},
   dismiss: () => {},
@@ -60,6 +61,26 @@ export function NouriGuideProvider({ children }) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, guide }));
   }, [settings, guide]);
 
+  useEffect(() => {
+    const onFormFocus = (ev) => {
+      const detail = ev?.detail;
+      if (!detail || typeof detail !== 'object') return;
+      setGuide((g) => ({
+        ...g,
+        formId: detail.formId ?? g.formId,
+        fieldName: detail.fieldName ?? g.fieldName,
+        label: detail.label ?? g.label,
+        stepIndex: detail.stepIndex ?? g.stepIndex,
+        stepTotal: detail.stepTotal ?? g.stepTotal,
+        path: detail.path ?? g.path,
+        pageKey: detail.pageKey ?? g.pageKey,
+        source: detail.source ?? 'form',
+      }));
+    };
+    window.addEventListener('foodmaps:form_focus', onFormFocus);
+    return () => window.removeEventListener('foodmaps:form_focus', onFormFocus);
+  }, []);
+
   const updateSetting = useCallback((key, value) => {
     setSettings((s) => ({ ...s, [key]: value }));
   }, []);
@@ -74,6 +95,17 @@ export function NouriGuideProvider({ children }) {
       window.speechSynthesis.cancel();
     }
     setGuide((g) => ({ ...g, isSpeaking: false }));
+  }, []);
+
+  const resetGuideSession = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setGuide((g) => ({
+      ...defaultGuide,
+      isMuted: g.isMuted,
+      isDismissed: g.isDismissed,
+    }));
   }, []);
 
   const toggleMute = useCallback(() => {
@@ -99,12 +131,13 @@ export function NouriGuideProvider({ children }) {
     guide,
     updateSetting,
     syncFromChat,
+    resetGuideSession,
     cancelVoice,
     toggleMute,
     dismiss,
     replay,
     resume,
-  }), [settings, guide, updateSetting, syncFromChat, cancelVoice, toggleMute, dismiss, replay, resume]);
+  }), [settings, guide, updateSetting, syncFromChat, resetGuideSession, cancelVoice, toggleMute, dismiss, replay, resume]);
 
   return <NouriGuideContext.Provider value={value}>{children}</NouriGuideContext.Provider>;
 }

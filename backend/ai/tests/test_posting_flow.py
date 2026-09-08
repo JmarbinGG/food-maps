@@ -1,6 +1,9 @@
 """Tests for donor posting-flow detection and checklist reminders."""
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from backend.ai.conversation_flow import (
     build_posting_step_reminder,
     enrich_post_food_listing_args,
@@ -316,3 +319,11 @@ class TestSinglePostConfirm:
         )
         assert reason is not None
         assert "ready to post" in reason.lower() or "summary" in reason.lower()
+
+
+class TestTrainingDataPhotoRequired:
+    def test_training_json_does_not_say_photo_optional(self):
+        path = Path(__file__).resolve().parents[1] / "ai_training_data.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        blob = json.dumps(raw).lower()
+        assert "photo optional" not in blob

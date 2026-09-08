@@ -59,6 +59,20 @@ function BulkListing({ user, onCancel, onSuccess }) {
     ));
   };
 
+  const notifyFormFocus = (fieldName, label) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent('foodmaps:form_focus', {
+      detail: {
+        formId: 'bulk-share',
+        fieldName,
+        label,
+        path: '/share/bulk',
+        pageKey: 'share',
+        source: 'form',
+      },
+    }));
+  };
+
   // A guaranteed-visible alert: prefer the in-app modal, but ALWAYS
   // fall back to window.alert so the user never gets a silent button.
   const notify = (msg, opts) => {
@@ -221,6 +235,7 @@ function BulkListing({ user, onCancel, onSuccess }) {
                         type="text"
                         value={listing.title}
                         onChange={(e) => updateListing(listing.id, 'title', e.target.value)}
+                        onFocus={() => notifyFormFocus('title', 'Food Title')}
                         placeholder="e.g., Fresh sandwiches from cafe"
                         className="w-full p-2 border border-gray-300 rounded"
                         required
@@ -269,6 +284,7 @@ function BulkListing({ user, onCancel, onSuccess }) {
                         type="text"
                         value={listing.pickup_location}
                         onChange={(e) => updateListing(listing.id, 'pickup_location', e.target.value)}
+                        onFocus={() => notifyFormFocus('pickup_location', 'Pickup Location')}
                         placeholder="Street address or nearby landmark"
                         className="w-full p-2 border border-gray-300 rounded"
                         required
