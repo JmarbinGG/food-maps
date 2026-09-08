@@ -61,7 +61,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'guide',
       icon: 'fa-compass',
-      accent: 'amber',
+      accent: 'emerald',
       title: 'Not sure?',
       blurb: 'I’ll walk you through it',
       prompts: ["I'm not sure what to do — help me", 'How does Food Maps work?'],
@@ -77,7 +77,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'share',
       icon: 'fa-hand-holding-heart',
-      accent: 'fuchsia',
+      accent: 'emerald',
       title: 'Share food',
       blurb: 'I’ll ask how you want help',
       prompts: ['I want to share food', 'Share extra food from my address'],
@@ -85,7 +85,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'request',
       icon: 'fa-clipboard-list',
-      accent: 'sky',
+      accent: 'emerald',
       title: 'Request food',
       blurb: 'I’ll ask how you want help',
       prompts: ['I want to request food', 'Request food that isn’t listed yet'],
@@ -93,7 +93,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'manage',
       icon: 'fa-list-check',
-      accent: 'cyan',
+      accent: 'emerald',
       title: 'Manage activity',
       blurb: 'Pickups, claims, impact',
       prompts: ['What are my upcoming pickups?', 'Show my impact stats'],
@@ -103,7 +103,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'guide',
       icon: 'fa-compass',
-      accent: 'amber',
+      accent: 'emerald',
       title: '¿No estás seguro?',
       blurb: 'Te guío paso a paso',
       prompts: ['No sé qué hacer — ayúdame', '¿Cómo funciona Food Maps?'],
@@ -119,7 +119,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'share',
       icon: 'fa-hand-holding-heart',
-      accent: 'fuchsia',
+      accent: 'emerald',
       title: 'Compartir comida',
       blurb: 'Te pregunto cómo ayudar',
       prompts: ['Quiero compartir comida', 'Compartir comida extra desde mi dirección'],
@@ -127,7 +127,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'request',
       icon: 'fa-clipboard-list',
-      accent: 'sky',
+      accent: 'emerald',
       title: 'Solicitar comida',
       blurb: 'Te pregunto cómo ayudar',
       prompts: ['Quiero solicitar comida', 'Solicitar comida que aún no está listada'],
@@ -135,7 +135,7 @@ const WELCOME_CATEGORIES = {
     {
       key: 'manage',
       icon: 'fa-list-check',
-      accent: 'cyan',
+      accent: 'emerald',
       title: 'Mi actividad',
       blurb: 'Recogidas, reclamos, impacto',
       prompts: ['¿Cuáles son mis próximas recogidas?', 'Muestra mis estadísticas de impacto'],

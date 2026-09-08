@@ -1076,13 +1076,13 @@ var require_react_dom_production_min = __commonJS({
       return null == a2 || "http://www.w3.org/1999/xhtml" === a2 ? kb(b2) : "http://www.w3.org/2000/svg" === a2 && "foreignObject" === b2 ? "http://www.w3.org/1999/xhtml" : a2;
     }
     var mb;
-    var nb = function(a2) {
+    var nb = (function(a2) {
       return "undefined" !== typeof MSApp && MSApp.execUnsafeLocalFunction ? function(b2, c2, d2, e2) {
         MSApp.execUnsafeLocalFunction(function() {
           return a2(b2, c2, d2, e2);
         });
       } : a2;
-    }(function(a2, b2) {
+    })(function(a2, b2) {
       if ("http://www.w3.org/2000/svg" !== a2.namespaceURI || "innerHTML" in a2) a2.innerHTML = b2;
       else {
         mb = mb || document.createElement("div");
@@ -7441,10 +7441,10 @@ function C(e2, t3) {
   });
 }
 function L(e2) {
-  const { subscribe: o2, getSnapshot: s2, setProps: i2 } = (0, import_react.useRef)(function(e3) {
+  const { subscribe: o2, getSnapshot: s2, setProps: i2 } = (0, import_react.useRef)((function(e3) {
     const n2 = e3.containerId || 1;
     return { subscribe(o3) {
-      const s3 = /* @__PURE__ */ function(e4, n3, o4) {
+      const s3 = /* @__PURE__ */ (function(e4, n3, o4) {
         let s4 = 1, r4 = 0, i3 = [], l2 = [], f2 = [], g2 = n3;
         const v2 = /* @__PURE__ */ new Map(), h2 = /* @__PURE__ */ new Set(), T2 = () => {
           f2 = Array.from(v2.values()), h2.forEach((e5) => e5());
@@ -7490,7 +7490,7 @@ function L(e2) {
         }, setToggle: (e5, t3) => {
           v2.get(e5).toggle = t3;
         }, isToastActive: (e5) => l2.some((t3) => t3 === e5), getSnapshot: () => f2 };
-      }(n2, e3, E);
+      })(n2, e3, E);
       v.set(n2, s3);
       const r3 = s3.observe(o3);
       return h.forEach((e4) => _(e4.content, e4.options)), h = [], () => {
@@ -7503,7 +7503,7 @@ function L(e2) {
       var e4;
       return null == (e4 = v.get(n2)) ? void 0 : e4.getSnapshot();
     } };
-  }(e2)).current;
+  })(e2)).current;
   i2(e2);
   const l = (0, import_react.useSyncExternalStore)(o2, s2, s2);
   return { getToastToRender: function(t3) {
@@ -7591,7 +7591,7 @@ B.loading = (e2, t3) => M(e2, x("default", { isLoading: true, autoClose: false, 
   }, c2 = u(e2) ? e2() : e2;
   return c2.then((e3) => l("success", r3, e3)).catch((e3) => l("error", a2, e3)), c2;
 }, B.success = A("success"), B.info = A("info"), B.error = A("error"), B.warning = A("warning"), B.warn = B.warning, B.dark = (e2, t3) => M(e2, x("default", { theme: "dark", ...t3 })), B.dismiss = function(e2) {
-  !function(e3) {
+  !(function(e3) {
     var t3;
     if (b()) {
       if (null == e3 || d(t3 = e3) || c(t3)) v.forEach((t4) => {
@@ -7604,7 +7604,7 @@ B.loading = (e2, t3) => M(e2, x("default", { isLoading: true, autoClose: false, 
         });
       }
     } else h = h.filter((t4) => null != e3 && t4.options.toastId !== e3);
-  }(e2);
+  })(e2);
 }, B.clearWaitingQueue = function(e2) {
   void 0 === e2 && (e2 = {}), v.forEach((t3) => {
     !t3.props.limit || e2.containerId && t3.id !== e2.containerId || t3.clearQueue();
@@ -7646,18 +7646,18 @@ var z = { info: function(t3) {
   return import_react.default.createElement("div", { className: "Toastify__spinner" });
 } };
 var R = (n2) => {
-  const { isRunning: o2, preventExitTransition: s2, toastRef: r3, eventHandlers: i2, playToast: c2 } = N(n2), { closeButton: d2, children: p2, autoClose: m2, onClick: f2, type: g2, hideProgressBar: y2, closeToast: v2, transition: h2, position: T2, className: E2, style: b2, bodyClassName: I2, bodyStyle: _2, progressClassName: C2, progressStyle: L2, updateId: w2, role: k2, progress: P2, rtl: M2, toastId: x2, deleteToast: A2, isIn: B2, isLoading: O2, closeOnClick: D2, theme: R2 } = n2, S2 = clsx_default("Toastify__toast", `Toastify__toast-theme--${R2}`, `Toastify__toast--${g2}`, { "Toastify__toast--rtl": M2 }, { "Toastify__toast--close-on-click": D2 }), H2 = u(E2) ? E2({ rtl: M2, position: T2, type: g2, defaultClassName: S2 }) : clsx_default(S2, E2), F2 = function(e2) {
+  const { isRunning: o2, preventExitTransition: s2, toastRef: r3, eventHandlers: i2, playToast: c2 } = N(n2), { closeButton: d2, children: p2, autoClose: m2, onClick: f2, type: g2, hideProgressBar: y2, closeToast: v2, transition: h2, position: T2, className: E2, style: b2, bodyClassName: I2, bodyStyle: _2, progressClassName: C2, progressStyle: L2, updateId: w2, role: k2, progress: P2, rtl: M2, toastId: x2, deleteToast: A2, isIn: B2, isLoading: O2, closeOnClick: D2, theme: R2 } = n2, S2 = clsx_default("Toastify__toast", `Toastify__toast-theme--${R2}`, `Toastify__toast--${g2}`, { "Toastify__toast--rtl": M2 }, { "Toastify__toast--close-on-click": D2 }), H2 = u(E2) ? E2({ rtl: M2, position: T2, type: g2, defaultClassName: S2 }) : clsx_default(S2, E2), F2 = (function(e2) {
     let { theme: n3, type: o3, isLoading: s3, icon: r4 } = e2, i3 = null;
     const l = { theme: n3, type: o3 };
     return false === r4 || (u(r4) ? i3 = r4({ ...l, isLoading: s3 }) : (0, import_react.isValidElement)(r4) ? i3 = (0, import_react.cloneElement)(r4, l) : s3 ? i3 = z.spinner() : ((e3) => e3 in z)(o3) && (i3 = z[o3](l))), i3;
-  }(n2), X2 = !!P2 || !m2, Y2 = { closeToast: v2, type: g2, theme: R2 };
+  })(n2), X2 = !!P2 || !m2, Y2 = { closeToast: v2, type: g2, theme: R2 };
   let q2 = null;
-  return false === d2 || (q2 = u(d2) ? d2(Y2) : (0, import_react.isValidElement)(d2) ? (0, import_react.cloneElement)(d2, Y2) : function(t3) {
+  return false === d2 || (q2 = u(d2) ? d2(Y2) : (0, import_react.isValidElement)(d2) ? (0, import_react.cloneElement)(d2, Y2) : (function(t3) {
     let { closeToast: n3, theme: o3, ariaLabel: s3 = "close" } = t3;
     return import_react.default.createElement("button", { className: `Toastify__close-button Toastify__close-button--${o3}`, type: "button", onClick: (e2) => {
       e2.stopPropagation(), n3(e2);
     }, "aria-label": s3 }, import_react.default.createElement("svg", { "aria-hidden": "true", viewBox: "0 0 14 16" }, import_react.default.createElement("path", { fillRule: "evenodd", d: "M7.71 8.23l3.75 3.75-1.48 1.48-3.75-3.75-3.75 3.75L1 11.98l3.75-3.75L1 4.48 2.48 3l3.75 3.75L9.98 3l1.48 1.48-3.75 3.75z" })));
-  }(Y2)), import_react.default.createElement(h2, { isIn: B2, done: A2, position: T2, preventExitTransition: s2, nodeRef: r3, playToast: c2 }, import_react.default.createElement("div", { id: x2, onClick: f2, "data-in": B2, className: H2, ...i2, style: b2, ref: r3 }, import_react.default.createElement("div", { ...B2 && { role: k2 }, className: u(I2) ? I2({ type: g2 }) : clsx_default("Toastify__toast-body", I2), style: _2 }, null != F2 && import_react.default.createElement("div", { className: clsx_default("Toastify__toast-icon", { "Toastify--animate-icon Toastify__zoom-enter": !O2 }) }, F2), import_react.default.createElement("div", null, p2)), q2, import_react.default.createElement($, { ...w2 && !X2 ? { key: `pb-${w2}` } : {}, rtl: M2, theme: R2, delay: m2, isRunning: o2, isIn: B2, closeToast: v2, hide: y2, type: g2, style: L2, className: C2, controlledProgress: X2, progress: P2 || 0 })));
+  })(Y2)), import_react.default.createElement(h2, { isIn: B2, done: A2, position: T2, preventExitTransition: s2, nodeRef: r3, playToast: c2 }, import_react.default.createElement("div", { id: x2, onClick: f2, "data-in": B2, className: H2, ...i2, style: b2, ref: r3 }, import_react.default.createElement("div", { ...B2 && { role: k2 }, className: u(I2) ? I2({ type: g2 }) : clsx_default("Toastify__toast-body", I2), style: _2 }, null != F2 && import_react.default.createElement("div", { className: clsx_default("Toastify__toast-icon", { "Toastify--animate-icon Toastify__zoom-enter": !O2 }) }, F2), import_react.default.createElement("div", null, p2)), q2, import_react.default.createElement($, { ...w2 && !X2 ? { key: `pb-${w2}` } : {}, rtl: M2, theme: R2, delay: m2, isRunning: o2, isIn: B2, closeToast: v2, hide: y2, type: g2, style: L2, className: C2, controlledProgress: X2, progress: P2 || 0 })));
 };
 var S = function(e2, t3) {
   return void 0 === t3 && (t3 = false), { enter: `Toastify--animate Toastify__${e2}-enter`, exit: `Toastify--animate Toastify__${e2}-exit`, appendPosition: t3 };
@@ -8967,7 +8967,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "guide",
       icon: "fa-compass",
-      accent: "amber",
+      accent: "emerald",
       title: "Not sure?",
       blurb: "I\u2019ll walk you through it",
       prompts: ["I'm not sure what to do \u2014 help me", "How does Food Maps work?"]
@@ -8983,7 +8983,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "share",
       icon: "fa-hand-holding-heart",
-      accent: "fuchsia",
+      accent: "emerald",
       title: "Share food",
       blurb: "I\u2019ll ask how you want help",
       prompts: ["I want to share food", "Share extra food from my address"]
@@ -8991,7 +8991,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "request",
       icon: "fa-clipboard-list",
-      accent: "sky",
+      accent: "emerald",
       title: "Request food",
       blurb: "I\u2019ll ask how you want help",
       prompts: ["I want to request food", "Request food that isn\u2019t listed yet"]
@@ -8999,7 +8999,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "manage",
       icon: "fa-list-check",
-      accent: "cyan",
+      accent: "emerald",
       title: "Manage activity",
       blurb: "Pickups, claims, impact",
       prompts: ["What are my upcoming pickups?", "Show my impact stats"]
@@ -9009,7 +9009,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "guide",
       icon: "fa-compass",
-      accent: "amber",
+      accent: "emerald",
       title: "\xBFNo est\xE1s seguro?",
       blurb: "Te gu\xEDo paso a paso",
       prompts: ["No s\xE9 qu\xE9 hacer \u2014 ay\xFAdame", "\xBFC\xF3mo funciona Food Maps?"]
@@ -9025,7 +9025,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "share",
       icon: "fa-hand-holding-heart",
-      accent: "fuchsia",
+      accent: "emerald",
       title: "Compartir comida",
       blurb: "Te pregunto c\xF3mo ayudar",
       prompts: ["Quiero compartir comida", "Compartir comida extra desde mi direcci\xF3n"]
@@ -9033,7 +9033,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "request",
       icon: "fa-clipboard-list",
-      accent: "sky",
+      accent: "emerald",
       title: "Solicitar comida",
       blurb: "Te pregunto c\xF3mo ayudar",
       prompts: ["Quiero solicitar comida", "Solicitar comida que a\xFAn no est\xE1 listada"]
@@ -9041,7 +9041,7 @@ var WELCOME_CATEGORIES = {
     {
       key: "manage",
       icon: "fa-list-check",
-      accent: "cyan",
+      accent: "emerald",
       title: "Mi actividad",
       blurb: "Recogidas, reclamos, impacto",
       prompts: ["\xBFCu\xE1les son mis pr\xF3ximas recogidas?", "Muestra mis estad\xEDsticas de impacto"]
@@ -9352,34 +9352,34 @@ function parseStorageTipEntries(result, language = "en") {
 }
 var ACCENT_MAP = {
   emerald: {
-    iconBg: "bg-emerald-500/15 text-emerald-700 ring-emerald-400/30",
-    border: "border-emerald-500/20 hover:border-emerald-400/40",
-    glow: "hover:shadow-emerald-500/10",
-    promptHover: "hover:bg-emerald-500/10 hover:text-emerald-800"
+    iconBg: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    border: "border-gray-200 hover:border-emerald-300",
+    glow: "",
+    promptHover: "hover:bg-emerald-50 hover:text-emerald-800"
   },
   fuchsia: {
-    iconBg: "bg-fuchsia-500/15 text-fuchsia-700 ring-fuchsia-400/30",
-    border: "border-fuchsia-500/20 hover:border-fuchsia-400/40",
-    glow: "hover:shadow-fuchsia-500/10",
-    promptHover: "hover:bg-fuchsia-500/10 hover:text-fuchsia-800"
+    iconBg: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    border: "border-gray-200 hover:border-emerald-300",
+    glow: "",
+    promptHover: "hover:bg-emerald-50 hover:text-emerald-800"
   },
   cyan: {
-    iconBg: "bg-[#2CABE3]/15 text-[#2CABE3] ring-[#2CABE3]/30",
-    border: "border-[#2CABE3]/20 hover:border-[#2CABE3]/40",
-    glow: "hover:shadow-[#2CABE3]/10",
-    promptHover: "hover:bg-[#2CABE3]/10 hover:text-[#2299c7]"
+    iconBg: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    border: "border-gray-200 hover:border-emerald-300",
+    glow: "",
+    promptHover: "hover:bg-emerald-50 hover:text-emerald-800"
   },
   sky: {
-    iconBg: "bg-sky-500/15 text-sky-600 ring-sky-400/30",
-    border: "border-sky-500/20 hover:border-sky-400/40",
-    glow: "hover:shadow-sky-500/10",
-    promptHover: "hover:bg-sky-500/10 hover:text-sky-700"
+    iconBg: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    border: "border-gray-200 hover:border-emerald-300",
+    glow: "",
+    promptHover: "hover:bg-emerald-50 hover:text-emerald-800"
   },
   amber: {
-    iconBg: "bg-amber-500/15 text-amber-600 ring-amber-400/30",
-    border: "border-amber-500/20 hover:border-amber-400/40",
-    glow: "hover:shadow-amber-500/10",
-    promptHover: "hover:bg-amber-500/10 hover:text-amber-800"
+    iconBg: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    border: "border-gray-200 hover:border-emerald-300",
+    glow: "",
+    promptHover: "hover:bg-emerald-50 hover:text-emerald-800"
   }
 };
 function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
@@ -9397,7 +9397,7 @@ function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
       return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
         "div",
         {
-          className: `rounded-xl p-3 bg-white/70 backdrop-blur-sm border transition-all ${accent.border} hover:bg-white/90 hover:shadow-md shadow-sm ${accent.glow}`,
+          className: `rounded-lg p-3 bg-white border transition-all ${accent.border} hover:bg-gray-50 shadow-sm ${accent.glow}`,
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `w-7 h-7 rounded-lg ring-1 flex items-center justify-center ${accent.iconBg}`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${cat.icon} text-xs`, "aria-hidden": "true" }) }),
@@ -9439,9 +9439,9 @@ function formatSeparator(iso, language) {
 }
 function DateSeparator({ label }) {
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative my-3 flex items-center gap-2", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-r from-transparent via-[#2CABE3]/25 to-transparent" }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white/80 border border-[#2CABE3]/15", children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-l from-transparent via-[#2CABE3]/25 to-transparent" })
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-r from-transparent via-emerald-200 to-transparent" }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white border border-gray-200", children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-l from-transparent via-emerald-200 to-transparent" })
   ] });
 }
 function ScrollToBottomPill({ visible, onClick, language }) {
@@ -9451,7 +9451,7 @@ function ScrollToBottomPill({ visible, onClick, language }) {
     {
       type: "button",
       onClick,
-      className: "absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-[#2CABE3]/20 text-[#2CABE3] text-xs shadow-lg shadow-[#2CABE3]/10 hover:bg-white hover:border-[#2CABE3]/40 hover:scale-105 active:scale-95 transition-all animate-fade-in",
+      className: "absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-emerald-700 text-xs shadow-md hover:bg-gray-50 hover:border-emerald-300 active:scale-95 transition-all animate-fade-in",
       "aria-label": t2(language, "jumpLatest"),
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-arrow-down text-[10px]", "aria-hidden": "true" }),
@@ -9461,10 +9461,10 @@ function ScrollToBottomPill({ visible, onClick, language }) {
   );
 }
 function TypingIndicator() {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex px-4 py-1.5", "aria-live": "polite", "aria-label": "Nouri is typing", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "inline-flex items-center gap-1 rounded-2xl bg-white/80 border border-[#2CABE3]/15 px-3 py-2 backdrop-blur-sm shadow-sm", children: [0, 180, 360].map((delay) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex px-4 py-1.5", "aria-live": "polite", "aria-label": "Nouri is typing", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "inline-flex items-center gap-1 rounded-2xl bg-white border border-gray-200 px-3 py-2 shadow-sm", children: [0, 180, 360].map((delay) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
     "span",
     {
-      className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-[#2CABE3]/70",
+      className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-emerald-600/70",
       style: { animationDelay: `${delay}ms` },
       "aria-hidden": "true"
     },
@@ -9475,118 +9475,118 @@ var TOOL_CARD_TOKENS = {
   search: {
     title: { en: "Nearby food", es: "Comida cerca" },
     icon: "fa-utensils",
-    ring: "ring-emerald-400/50",
-    bg: "bg-emerald-950 border-emerald-500/40",
-    accent: "text-white",
-    sub: "text-emerald-50",
-    tag: "bg-emerald-500/30 text-white border-emerald-400/50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700",
+    tag: "bg-emerald-50 text-emerald-800 border-emerald-200"
   },
   mylistings: {
     title: { en: "Your listings", es: "Tus publicaciones" },
     icon: "fa-clipboard-list",
-    ring: "ring-emerald-400/50",
-    bg: "bg-emerald-950 border-emerald-500/40",
-    accent: "text-white",
-    sub: "text-emerald-50",
-    tag: "bg-emerald-500/30 text-white border-emerald-400/50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700",
+    tag: "bg-emerald-50 text-emerald-800 border-emerald-200"
   },
   myclaims: {
     title: { en: "Your claims", es: "Tus reclamos" },
     icon: "fa-hand-holding-heart",
-    ring: "ring-emerald-400/50",
-    bg: "bg-emerald-950 border-emerald-500/40",
-    accent: "text-white",
-    sub: "text-emerald-50",
-    tag: "bg-emerald-500/30 text-white border-emerald-400/50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700",
+    tag: "bg-emerald-50 text-emerald-800 border-emerald-200"
   },
   community: {
     title: { en: "Community listings", es: "Publicaciones de la comunidad" },
     icon: "fa-school",
-    ring: "ring-emerald-400/50",
-    bg: "bg-emerald-950 border-emerald-500/40",
-    accent: "text-white",
-    sub: "text-emerald-50",
-    tag: "bg-emerald-500/30 text-white border-emerald-400/50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700",
+    tag: "bg-emerald-50 text-emerald-800 border-emerald-200"
   },
   claim: {
     title: { en: "Claim confirmed", es: "Reclamo confirmado" },
     icon: "fa-circle-check",
-    ring: "ring-emerald-400/50",
-    bg: "bg-emerald-950 border-emerald-500/40",
-    accent: "text-white",
-    sub: "text-emerald-50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   error: {
     title: { en: "Something went wrong", es: "Algo sali\xF3 mal" },
     icon: "fa-triangle-exclamation",
-    ring: "ring-rose-400/50",
-    bg: "bg-rose-950 border-rose-500/40",
-    accent: "text-white",
-    sub: "text-rose-50"
+    ring: "ring-red-200",
+    bg: "bg-red-50 border-red-200",
+    accent: "text-red-800",
+    sub: "text-red-700"
   },
   cancel: {
     title: { en: "Claim released", es: "Reclamo liberado" },
     icon: "fa-arrow-rotate-left",
-    ring: "ring-amber-400/50",
-    bg: "bg-amber-950 border-amber-500/40",
-    accent: "text-white",
-    sub: "text-amber-50"
+    ring: "ring-amber-200",
+    bg: "bg-amber-50 border-amber-200",
+    accent: "text-amber-800",
+    sub: "text-amber-800"
   },
   updated: {
     title: { en: "Listing updated", es: "Listado actualizado" },
     icon: "fa-pen-to-square",
-    ring: "ring-violet-400/50",
-    bg: "bg-violet-950 border-violet-500/40",
-    accent: "text-white",
-    sub: "text-violet-50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   deleted: {
     title: { en: "Listing deleted", es: "Listado eliminado" },
     icon: "fa-trash-can",
-    ring: "ring-slate-400/50",
-    bg: "bg-slate-900 border-slate-500/40",
-    accent: "text-white",
-    sub: "text-slate-100"
+    ring: "ring-gray-200",
+    bg: "bg-gray-50 border-gray-200",
+    accent: "text-gray-800",
+    sub: "text-gray-700"
   },
   post: {
     title: { en: "Listing posted", es: "Donaci\xF3n publicada" },
     icon: "fa-bullhorn",
-    ring: "ring-fuchsia-400/50",
-    bg: "bg-fuchsia-950 border-fuchsia-500/40",
-    accent: "text-white",
-    sub: "text-fuchsia-50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   pickup: {
     title: { en: "Pickup confirmed", es: "Recogida confirmada" },
     icon: "fa-check-double",
-    ring: "ring-sky-400/50",
-    bg: "bg-sky-950 border-sky-500/40",
-    accent: "text-white",
-    sub: "text-sky-50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   reminder: {
     title: { en: "Reminder set", es: "Recordatorio creado" },
     icon: "fa-bell",
-    ring: "ring-blue-400/50",
-    bg: "bg-blue-950 border-blue-500/40",
-    accent: "text-white",
-    sub: "text-blue-50"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   generic: {
     title: { en: "Done", es: "Hecho" },
     icon: "fa-circle-check",
-    ring: "ring-slate-400/40",
-    bg: "bg-slate-900 border-slate-500/40",
-    accent: "text-white",
-    sub: "text-slate-100"
+    ring: "ring-emerald-200",
+    bg: "bg-white border-gray-200",
+    accent: "text-emerald-800",
+    sub: "text-gray-700"
   },
   claimfail: {
     title: { en: "Could not claim", es: "No se pudo reclamar" },
     icon: "fa-circle-xmark",
-    ring: "ring-red-400/50",
-    bg: "bg-red-950 border-red-500/40",
-    accent: "text-white",
-    sub: "text-red-50"
+    ring: "ring-red-200",
+    bg: "bg-red-50 border-red-200",
+    accent: "text-red-800",
+    sub: "text-red-700"
   }
 };
 function ToolCardShell({ kind, language = "en", titleOverride, children }) {
@@ -9599,7 +9599,7 @@ function ToolCardShell({ kind, language = "en", titleOverride, children }) {
       className: `mt-2 ${t3.bg} border rounded-xl p-3 text-sm shadow-md`,
       children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `inline-flex w-6 h-6 rounded-full bg-black/30 ring-1 ${t3.ring} items-center justify-center`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${t3.icon} text-[11px] ${t3.accent}`, "aria-hidden": "true" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `inline-flex w-6 h-6 rounded-full bg-emerald-50 ring-1 ${t3.ring} items-center justify-center`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${t3.icon} text-[11px] ${t3.accent}`, "aria-hidden": "true" }) }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `font-semibold text-xs uppercase tracking-wide ${t3.accent}`, children: title })
         ] }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `text-xs leading-relaxed ${t3.sub}`, children })
@@ -9664,7 +9664,7 @@ function SearchResultsClaimList({
           {
             type: "button",
             onClick: selectAllVisible,
-            className: "text-[11px] px-2 py-0.5 rounded-md border border-emerald-400/40 text-emerald-50 hover:bg-emerald-500/30",
+            className: "text-[11px] px-2 py-0.5 rounded-md border border-emerald-200 text-emerald-800 hover:bg-emerald-50",
             children: isEs ? "Seleccionar visibles" : "Select visible"
           }
         ),
@@ -9683,7 +9683,7 @@ function SearchResultsClaimList({
             type: "button",
             onClick: claimSelected,
             disabled: selected.size === 0,
-            className: "ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/40 border border-emerald-300/60 text-white text-[11px] font-semibold hover:bg-emerald-500/55 disabled:opacity-40 disabled:cursor-not-allowed",
+            className: "ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 border border-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed",
             children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
               selected.size === 0 ? isEs ? "Reclamar seleccionados" : "Claim selected" : isEs ? `Reclamar ${selected.size} seleccionados` : `Claim ${selected.size} selected`
@@ -9707,7 +9707,7 @@ function SearchResultsClaimList({
         return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
           "li",
           {
-            className: `rounded-lg px-2.5 py-2 border ${isSelected ? "bg-emerald-500/15 border-emerald-400/40" : "bg-slate-900/40 border-emerald-500/15"}`,
+            className: `rounded-lg px-2.5 py-2 border ${isSelected ? "bg-emerald-500/15 border-emerald-400/40" : "bg-emerald-50 border-emerald-100"}`,
             children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
               claimable && onSuggestionClick && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("label", { className: "flex-shrink-0 mt-0.5 cursor-pointer", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                 "input",
@@ -9715,7 +9715,7 @@ function SearchResultsClaimList({
                   type: "checkbox",
                   checked: isSelected,
                   onChange: () => toggle(displayNum),
-                  className: "rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40",
+                  className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40",
                   "aria-label": isEs ? `Seleccionar #${displayNum}` : `Select #${displayNum}`
                 }
               ) }),
@@ -9758,7 +9758,7 @@ function SearchResultsClaimList({
                     onClick: () => onSuggestionClick(
                       isEs ? `Quiero reclamar el #${displayNum}` : `I'd like to claim #${displayNum}`
                     ),
-                    className: "mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-50 text-[11px] font-semibold hover:bg-emerald-500/40 transition-colors",
+                    className: "mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors",
                     children: [
                       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
                       isEs ? "Reclamar solo este" : "Claim this one"
@@ -9826,7 +9826,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
       const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(" \xB7 ");
       const address = item.address || item.full_address || item.pickup_location || null;
       const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("li", { className: "rounded-lg bg-slate-900/40 px-2.5 py-2 border border-emerald-500/15", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
+      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("li", { className: "rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
           "span",
           {
@@ -9869,9 +9869,9 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         language,
         titleOverride: language === "es" ? `Reclamos \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} fallaron` : ""}` : `Multi-claim \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} failed` : ""}`,
         children: [
-          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-white text-[12px]", children: [
+          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: c2.title || c2.listing_id || "Listing" }),
-            c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-emerald-50", children: [
+            c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
               " \xB7 ",
               c2.quantity,
               " ",
@@ -9883,7 +9883,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
             ": ",
             f2.error || "failed"
           ] }, f2.listing_id || i2)) }),
-          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px] mt-1", children: result.summary || result.message })
+          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
         ]
       }
     );
@@ -9891,7 +9891,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
   if ((tool === "claim_listing" || tool === "claim_food") && !ok && (result?.error || toolResult.summary)) {
     const errText = result?.error || toolResult.summary;
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "claimfail", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white", children: errText }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: errText }),
       result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
     ] });
   }
@@ -9911,7 +9911,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-        result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white", children: [
+        result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-800", children: [
           result.quantity ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "font-medium", children: [
             result.quantity,
             " ",
@@ -9920,25 +9920,25 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
           ] }) : null,
           result.quantity ? language === "es" ? "de " : "of " : null,
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title }),
-          result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-emerald-50", children: [
+          result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
             " \xB7 ",
             result.category
           ] })
         ] }),
-        result.pickup_location && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white text-[11px] mt-1 flex items-start gap-1", children: [
+        result.pickup_location && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-location-dot text-[10px] mt-[2px] opacity-70", "aria-hidden": "true" }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: result.pickup_location })
         ] }),
-        result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white text-[11px] mt-0.5 flex items-center gap-1", children: [
+        result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: result.community_name })
         ] }),
-        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px] mt-1", children: result.summary || result.message })
+        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
       ] })
     ] }) });
   }
   if (tool === "create_reminder" && (result?.success || result?.created)) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "reminder", language, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-white", children: result.summary || (language === "es" ? "Te avisar\xE9." : "I'll ping you.") }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "reminder", language, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-800", children: result.summary || (language === "es" ? "Te avisar\xE9." : "I'll ping you.") }) });
   }
   if ((tool === "post_food_listings" || tool === "bulk_post_food_listings" || tool === "bulk_import_listings") && ok) {
     const posted = Array.isArray(result.posted) ? result.posted : Array.isArray(result.listings) ? result.listings : [];
@@ -9951,9 +9951,9 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         language,
         titleOverride: language === "es" ? `Publicado \xB7 ${count} listado${count === 1 ? "" : "s"}` : `Posted \xB7 ${count} listing${count === 1 ? "" : "s"}`,
         children: [
-          posted.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: posted.slice(0, 12).map((row, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-white text-[12px]", children: [
+          posted.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: posted.slice(0, 12).map((row, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: row.title || row.listing_id || `Item ${i2 + 1}` }),
-            row.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-fuchsia-50", children: [
+            row.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
               " \xB7 ",
               row.quantity,
               " ",
@@ -9965,7 +9965,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
             ": ",
             f2.error || "failed"
           ] }, f2.listing_id || i2)) }),
-          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px] mt-1", children: result.summary || result.message })
+          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
         ]
       }
     );
@@ -9973,30 +9973,30 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
   if ((tool === "create_food_listing" || tool === "post_food_listing") && !ok && (result?.error || toolResult.summary)) {
     const errText = result?.error || toolResult.summary;
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo publicar" : "Could not post", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white", children: errText }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: errText }),
       result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
     ] });
   }
   if ((tool === "create_food_listing" || tool === "post_food_listing") && ok) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "post", language, children: [
-      result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white", children: [
+      result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-800", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title }),
-        result.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-white", children: [
+        result.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-800", children: [
           " \xB7 ",
           result.quantity,
           " ",
           result.unit || ""
         ] }),
-        result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-white", children: [
+        result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-800", children: [
           " \xB7 ",
           result.category
         ] })
       ] }),
-      result.address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white text-[11px] mt-1 flex items-start gap-1", children: [
+      result.address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: result.address })
       ] }),
-      result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-white text-[11px] mt-0.5 flex items-center gap-1", children: [
+      result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: result.community_name })
       ] }),
@@ -10004,7 +10004,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-triangle-exclamation text-[10px]", "aria-hidden": "true" }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: language === "es" ? "Sin coordenadas \u2014 no aparecer\xE1 en el mapa" : "No coordinates \u2014 listing will not appear on the map" })
       ] }),
-      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white mt-1", children: result.summary || result.message })
+      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
     ] });
   }
   if ((tool === "update_food_listing" || tool === "update_listing" || tool === "edit_listing") && ok) {
@@ -10029,14 +10029,14 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
           src: photoUrl,
           alt: item.title || "",
           loading: "lazy",
-          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-violet-500/15 bg-slate-800",
+          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
           onError: (e2) => {
             e2.currentTarget.style.display = "none";
           }
         }
       ),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-        item.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white font-semibold", children: item.title }),
+        item.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-900 font-semibold", children: item.title }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `${TOOL_CARD_TOKENS.updated.sub} text-[11px] mt-0.5 space-y-0.5`, children: [
           qtyLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
             language === "es" ? "Cantidad: " : "Quantity: ",
@@ -10056,28 +10056,28 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
           ] }),
           item.description && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "italic opacity-90", children: item.description })
         ] }),
-        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[11px] mt-1", children: result.summary || result.message })
+        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-700 text-[11px] mt-1", children: result.summary || result.message })
       ] })
     ] }) });
   }
   if ((tool === "update_food_listing" || tool === "update_listing" || tool === "edit_listing") && !ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo actualizar" : "Could not update", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white", children: result?.error || result?.message || result?.summary }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo actualizar" : "Could not update", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: result?.error || result?.message || result?.summary }) });
   }
   if (tool === "delete_listing" && ok) {
     const count = result.deleted_count || 1;
     const titles = result.titles || (result.title ? [result.title] : []);
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "deleted", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white", children: count > 1 ? language === "es" ? `Eliminados ${count} listados duplicados.` : `Removed ${count} duplicate listings.` : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: count > 1 ? language === "es" ? `Eliminados ${count} listados duplicados.` : `Removed ${count} duplicate listings.` : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
         language === "es" ? "Eliminado: " : "Removed: ",
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title || titles[0] || "listing" })
       ] }) }),
-      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white mt-1", children: result.summary || result.message })
+      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
     ] });
   }
   if (tool === "delete_listing" && !ok) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "error", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white font-medium", children: language === "es" ? "No se pudo eliminar" : "Could not delete listing" }),
-      (result.error || result.message || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white mt-1", children: result.error || result.message || result.summary })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-900 font-medium", children: language === "es" ? "No se pudo eliminar" : "Could not delete listing" }),
+      (result.error || result.message || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.error || result.message || result.summary })
     ] });
   }
   if (tool === "cancel_claim" && ok) {
@@ -10095,7 +10095,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         language === "es" ? "Completado: " : "Completed: ",
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title })
       ] }),
-      result.summary && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white mt-1", children: result.summary })
+      result.summary && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary })
     ] });
   }
   if (tool === "get_recipes" && !result?.error) {
@@ -10109,8 +10109,8 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         language,
         titleOverride: language === "es" ? "Recetas sugeridas" : "Recipe suggestions",
         children: [
-          (result.headline || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px] mb-3", children: result.headline || result.summary }),
-          cards.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "space-y-3", children: cards.map((recipe, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(RecipeCard_default, { recipe }, `${recipe.name}-${idx}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px]", children: result.summary || result.headline })
+          (result.headline || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mb-3", children: result.headline || result.summary }),
+          cards.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "space-y-3", children: cards.map((recipe, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(RecipeCard_default, { recipe }, `${recipe.name}-${idx}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.headline })
         ]
       }
     );
@@ -10119,7 +10119,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const entries = parseStorageTipEntries(result, language);
     if (entries.length === 0) {
       if (result.summary || result.message) {
-        return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: language === "es" ? "Conservaci\xF3n" : "Storage tips", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px]", children: result.summary || result.message }) });
+        return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: language === "es" ? "Conservaci\xF3n" : "Storage tips", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
       }
       return null;
     }
@@ -10135,7 +10135,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
   }
   const SILENT_UI_TOOLS = /* @__PURE__ */ new Set(["ui_action", "navigate_ui", "mark_notifications_read"]);
   if (ok && !SILENT_UI_TOOLS.has(tool) && (result?.summary || result?.message)) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: tool?.replace(/_/g, " ") || (language === "es" ? "Acci\xF3n" : "Action"), children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-white text-[12px]", children: result.summary || result.message }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: tool?.replace(/_/g, " ") || (language === "es" ? "Acci\xF3n" : "Action"), children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
   }
   return null;
 }
@@ -10288,16 +10288,16 @@ function MessageBubble({
   }, [currentUser?.name, currentUser?.email]);
   const userAvatarUrl = !avatarBroken ? currentUser?.avatar_url : null;
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `flex ${isUser ? "justify-end" : "justify-start"} mb-3`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `max-w-[85%] flex items-start gap-2 ${isUser ? "flex-row-reverse" : ""}`, children: [
-    !isUser && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center mt-1 shadow-sm shadow-[#2CABE3]/25", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-5 h-5", children: [
+    !isUser && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex-shrink-0 w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center mt-1 shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-5 h-5", children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#67e8f9", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#67e8f9", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
     ] }) }),
     isUser && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
       "div",
       {
-        className: "flex-shrink-0 w-7 h-7 rounded-full overflow-hidden mt-1 shadow-sm shadow-[#2CABE3]/20 ring-1 ring-[#2CABE3]/30 bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center",
+        className: "flex-shrink-0 w-7 h-7 rounded-full overflow-hidden mt-1 ring-1 ring-emerald-200 bg-emerald-600 flex items-center justify-center",
         title: currentUser?.name || currentUser?.email || "You",
         "aria-label": `Message from ${currentUser?.name || "you"}`,
         children: userAvatarUrl ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
@@ -10315,7 +10315,7 @@ function MessageBubble({
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
         "div",
         {
-          className: `px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${isUser ? "bg-gradient-to-br from-[#2CABE3] to-emerald-500 text-white rounded-br-md shadow-md shadow-[#2CABE3]/20 ring-1 ring-[#2CABE3]/20" : msg.isError ? "bg-red-50 text-red-800 border border-red-200 rounded-bl-md backdrop-blur-sm" : "bg-white text-gray-900 rounded-bl-md border border-[#2CABE3]/15 shadow-sm"}`,
+          className: `px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${isUser ? "bg-emerald-600 text-white rounded-br-md shadow-sm" : msg.isError ? "bg-red-50 text-red-800 border border-red-200 rounded-bl-md backdrop-blur-sm" : "bg-white text-gray-900 rounded-bl-md border border-gray-200 shadow-sm"}`,
           children: [
             /^image:\s*https?:\/\//i.test(msg.message) ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
@@ -10418,10 +10418,10 @@ function MessageBubble({
               {
                 type: "button",
                 onClick: handleCopy,
-                className: "inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 transition-colors",
+                className: "inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors",
                 title: copied ? language === "es" ? "Copiado" : "Copied" : language === "es" ? "Copiar" : "Copy",
                 "aria-label": language === "es" ? "Copiar mensaje" : "Copy message",
-                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${copied ? "fa-check text-[#2CABE3]" : "fa-copy"} text-[11px]`, "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${copied ? "fa-check text-emerald-600" : "fa-copy"} text-[11px]`, "aria-hidden": "true" })
               }
             ),
             !feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
@@ -10448,14 +10448,14 @@ function MessageBubble({
                 }
               )
             ] }),
-            feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] text-[#2299c7] px-1.5 py-0.5 rounded-md bg-[#2CABE3]/10 border border-[#2CABE3]/20", children: feedbackGiven === "helpful" ? language === "es" ? "Gracias \u{1F44D}" : "Thanks \u{1F44D}" : language === "es" ? "Anotado \u{1F44E}" : "Noted \u{1F44E}" }),
+            feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] text-[#059669] px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200", children: feedbackGiven === "helpful" ? language === "es" ? "Gracias \u{1F44D}" : "Thanks \u{1F44D}" : language === "es" ? "Anotado \u{1F44E}" : "Noted \u{1F44E}" }),
             showRegenerate && onRegenerate && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
               "button",
               {
                 type: "button",
                 onClick: onRegenerate,
                 disabled: isLoading,
-                className: "ml-1 inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-gray-500 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-[10px] font-medium",
+                className: "ml-1 inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-[10px] font-medium",
                 title: language === "es" ? "Regenerar respuesta" : "Regenerate response",
                 "aria-label": language === "es" ? "Regenerar respuesta" : "Regenerate response",
                 children: [
@@ -10510,7 +10510,7 @@ function SuggestedActionButton({ action, onSuggestionClick, onAttachPhoto, disab
     }
   };
   if (!label) return null;
-  const styleClass = actionType === "navigate" ? "bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-300 font-medium" : "bg-[#2CABE3]/15 text-[#1a7a9e] hover:bg-[#2CABE3]/25 border-[#2CABE3]/30 font-medium";
+  const styleClass = actionType === "navigate" ? "bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-300 font-medium" : "bg-[#10b981]/15 text-[#047857] hover:bg-[#10b981]/25 border-[#10b981]/30 font-medium";
   return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
     "button",
     {
@@ -10536,9 +10536,8 @@ function BulkUploadPreview({
   const isEs = language === "es";
   const kindLabel = pending.kind === "photo" ? isEs ? "Borrador desde foto" : "Draft from photo" : isEs ? "Importaci\xF3n CSV" : "CSV import";
   const icon = pending.kind === "photo" ? "fa-camera" : "fa-file-csv";
-  const tint = pending.kind === "photo" ? "fuchsia" : "emerald";
-  const ringClass = pending.kind === "photo" ? "border-fuchsia-500/40 shadow-fuchsia-500/10" : "border-emerald-500/40 shadow-emerald-500/10";
-  const headerClass = pending.kind === "photo" ? "text-fuchsia-200" : "text-emerald-200";
+  const ringClass = "border-gray-200";
+  const headerClass = "text-emerald-800";
   const [communities, setCommunities] = (0, import_react11.useState)([]);
   const [communitiesError, setCommunitiesError] = (0, import_react11.useState)(null);
   const [communitiesLoading, setCommunitiesLoading] = (0, import_react11.useState)(true);
@@ -10694,7 +10693,7 @@ function BulkUploadPreview({
   };
   if (pending.error) {
     const allErrors = [pending.error, ...(pending.parseErrors || []).slice(1)].filter(Boolean);
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 shadow-sm`, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-start gap-3", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass} mt-0.5`, "aria-hidden": "true" }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
@@ -10707,7 +10706,7 @@ function BulkUploadPreview({
           {
             type: "button",
             onClick: onCancel,
-            className: "text-xs text-slate-300 hover:text-white px-2 py-1 rounded-md hover:bg-slate-800/60 flex-shrink-0",
+            className: "text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded-md hover:bg-gray-100 flex-shrink-0",
             children: isEs ? "Cerrar" : "Dismiss"
           }
         )
@@ -10717,7 +10716,7 @@ function BulkUploadPreview({
         {
           type: "button",
           onClick: downloadCsvTemplate,
-          className: "mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/25 text-emerald-50 hover:bg-emerald-500/35 border border-emerald-400/40 transition-colors",
+          className: "mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors",
           children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-download text-[10px]", "aria-hidden": "true" }),
             isEs ? "Descargar plantilla CSV" : "Download CSV template"
@@ -10727,13 +10726,13 @@ function BulkUploadPreview({
     ] });
   }
   if (pending.analyzing || pending.enriching) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 flex items-center gap-3 shadow-sm`, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 flex items-center gap-3 shadow-sm`, children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs font-semibold text-slate-100", children: kindLabel }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs text-slate-300 truncate", children: pending.filename }),
         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 text-sm text-slate-200", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1.5 text-cyan-300 animate-pulse", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1.5 text-emerald-300 animate-pulse", "aria-hidden": "true" }),
           pending.enriching ? isEs ? "Rellenando huecos con IA\u2026" : "Filling gaps with AI\u2026" : isEs ? "Analizando con IA..." : "Analyzing with AI\u2026"
         ] })
       ] })
@@ -10746,7 +10745,7 @@ function BulkUploadPreview({
   const selectAllRef = (el) => {
     if (el) el.indeterminate = someSelected;
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 shadow-sm`, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
     /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-2", children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-xs font-semibold text-slate-200", children: [
@@ -10764,7 +10763,7 @@ function BulkUploadPreview({
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-[11px] text-slate-300 mb-2 truncate", title: pending.filename, children: pending.filename }),
-    pending.enriched && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-2 flex items-start gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/15 px-2 py-1.5 text-[11px] text-cyan-50", children: [
+    pending.enriched && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800", children: [
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mt-0.5", "aria-hidden": "true" }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1", children: pending.enrichSummary || (totalFilled ? isEs ? `IA rellen\xF3 huecos en ${totalFilled} fila(s). Revisa y confirma.` : `AI filled gaps on ${totalFilled} row(s). Review and confirm.` : isEs ? "IA revis\xF3 tus filas \u2014 no hab\xEDa huecos que rellenar." : "AI reviewed your rows \u2014 no gaps to fill.") })
     ] }),
@@ -10779,7 +10778,7 @@ function BulkUploadPreview({
               checked: allSelected,
               onChange: toggleSelectAll,
               disabled: busy || rows.length === 0,
-              className: "rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40",
+              className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40",
               "aria-label": isEs ? "Seleccionar todas las filas" : "Select all rows"
             }
           ),
@@ -10800,7 +10799,7 @@ function BulkUploadPreview({
               checked: fillEmptyOnly,
               onChange: (e2) => setFillEmptyOnly(e2.target.checked),
               disabled: busy,
-              className: "rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+              className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
             }
           ),
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: isEs ? "Solo rellenar vac\xEDos" : "Only fill empty" })
@@ -10815,7 +10814,7 @@ function BulkUploadPreview({
               value: bulkCommunityId,
               onChange: (e2) => setBulkCommunityId(e2.target.value),
               disabled: busy || communitiesLoading || communities.length === 0,
-              className: "flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50",
+              className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Comunidad compartida" : "Shared community",
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : isEs ? "Una comunidad para las seleccionadas\u2026" : "One community for selected rows\u2026" }),
@@ -10830,7 +10829,7 @@ function BulkUploadPreview({
             type: "button",
             onClick: applyCommunityToSelected,
             disabled: busy || !String(bulkCommunityId || "").trim() || selectedRowIndexes.size === 0,
-            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
+            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
             children: isEs ? `Aplicar comunidad (${selectedRowIndexes.size})` : `Apply community (${selectedRowIndexes.size})`
           }
         )
@@ -10846,7 +10845,7 @@ function BulkUploadPreview({
               onChange: (e2) => setBulkLocation(e2.target.value),
               disabled: busy,
               placeholder: isEs ? "Una direcci\xF3n de recogida para las seleccionadas\u2026" : "One pickup address for selected rows\u2026",
-              className: "flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 placeholder:text-slate-400 outline-none focus:border-emerald-500/50",
+              className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 placeholder:text-gray-400 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Direcci\xF3n compartida" : "Shared pickup address"
             }
           )
@@ -10857,7 +10856,7 @@ function BulkUploadPreview({
             type: "button",
             onClick: applyLocationToSelected,
             disabled: busy || !String(bulkLocation || "").trim() || selectedRowIndexes.size === 0,
-            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
+            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
             children: isEs ? `Aplicar direcci\xF3n (${selectedRowIndexes.size})` : `Apply address (${selectedRowIndexes.size})`
           }
         )
@@ -10871,7 +10870,7 @@ function BulkUploadPreview({
               value: bulkCategory,
               onChange: (e2) => setBulkCategory(e2.target.value),
               disabled: busy,
-              className: "flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50",
+              className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Categor\xEDa compartida" : "Shared category",
               children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: isEs ? "Categor\xEDa (opcional)\u2026" : "Category (optional)\u2026" }),
@@ -10889,7 +10888,7 @@ function BulkUploadPreview({
               value: bulkExpiry,
               onChange: (e2) => setBulkExpiry(e2.target.value),
               disabled: busy,
-              className: "flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50",
+              className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Caducidad compartida" : "Shared expiry"
             }
           )
@@ -10903,7 +10902,7 @@ function BulkUploadPreview({
               if (String(bulkExpiry || "").trim()) applyExpiryToSelected();
             },
             disabled: busy || selectedRowIndexes.size === 0 || !String(bulkCategory || "").trim() && !String(bulkExpiry || "").trim(),
-            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
+            className: "flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors",
             children: isEs ? "Aplicar" : "Apply"
           }
         )
@@ -10914,7 +10913,7 @@ function BulkUploadPreview({
           type: "button",
           onClick: applyAllMissingToSelected,
           disabled: busy || selectedRowIndexes.size === 0 || !String(bulkLocation || "").trim() && !String(bulkCommunityId || "").trim() && !String(bulkCategory || "").trim() && !String(bulkExpiry || "").trim(),
-          className: "w-full text-[11px] px-2.5 py-1.5 rounded-md bg-cyan-500/25 text-cyan-50 border border-cyan-400/40 hover:bg-cyan-500/35 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium",
+          className: "w-full text-[11px] px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium",
           children: fillEmptyOnly ? isEs ? `Aplicar todo a campos vac\xEDos (${selectedRowIndexes.size} filas)` : `Apply all to empty fields (${selectedRowIndexes.size} rows)` : isEs ? `Aplicar todo a seleccionadas (${selectedRowIndexes.size})` : `Apply all to selected (${selectedRowIndexes.size})`
         }
       )
@@ -10928,7 +10927,7 @@ function BulkUploadPreview({
             checked: selectedRowIndexes.has(idx),
             onChange: () => toggleRowSelected(idx),
             disabled: busy,
-            className: "mt-1 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40 flex-shrink-0",
+            className: "mt-1 rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40 flex-shrink-0",
             "aria-label": isEs ? `Seleccionar fila ${idx + 1}` : `Select row ${idx + 1}`
           }
         ),
@@ -10952,14 +10951,14 @@ function BulkUploadPreview({
                 value: row.title || "",
                 onChange: (e2) => onUpdateRow(idx, { title: e2.target.value }),
                 disabled: busy,
-                className: "flex-1 min-w-0 bg-transparent text-sm text-slate-100 font-medium outline-none focus:bg-slate-900/60 px-1.5 py-0.5 rounded",
+                className: "flex-1 min-w-0 bg-transparent text-sm text-gray-900 font-medium outline-none focus:bg-emerald-50 px-1.5 py-0.5 rounded",
                 "aria-label": `Row ${idx + 1} title`
               }
             ),
             filledByIndex.has(idx) && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
               "span",
               {
-                className: "text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-cyan-500/25 text-cyan-50 border border-cyan-400/40 whitespace-nowrap",
+                className: "text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap",
                 title: `${isEs ? "IA rellen\xF3" : "AI filled"}: ${filledByIndex.get(idx).join(", ")}`,
                 children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-0.5", "aria-hidden": "true" }),
@@ -10979,7 +10978,7 @@ function BulkUploadPreview({
                 value: row.quantity ?? "",
                 onChange: (e2) => onUpdateRow(idx, { quantity: Number(e2.target.value) }),
                 disabled: busy,
-                className: "w-16 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100",
+                className: "w-16 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900",
                 "aria-label": "Quantity"
               }
             ),
@@ -10990,7 +10989,7 @@ function BulkUploadPreview({
                 value: row.unit || "",
                 onChange: (e2) => onUpdateRow(idx, { unit: e2.target.value }),
                 disabled: busy,
-                className: "w-16 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100",
+                className: "w-16 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900",
                 "aria-label": "Unit"
               }
             ),
@@ -11001,7 +11000,7 @@ function BulkUploadPreview({
                 value: row.category || "other",
                 onChange: (e2) => onUpdateRow(idx, { category: e2.target.value }),
                 disabled: busy,
-                className: "bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-100",
+                className: "bg-white border border-gray-300 rounded px-1 py-0.5 text-gray-900",
                 "aria-label": "Category",
                 children: ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"].map((c2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: c2, children: c2 }, c2))
               }
@@ -11018,7 +11017,7 @@ function BulkUploadPreview({
                   onChange: (e2) => onUpdateRow(idx, { location: e2.target.value }),
                   disabled: busy,
                   placeholder: isEs ? "Direcci\xF3n de recogida" : "Pickup address",
-                  className: "flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100 placeholder:text-slate-400",
+                  className: "flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400",
                   "aria-label": isEs ? "Direcci\xF3n de recogida" : "Pickup address"
                 }
               )
@@ -11032,7 +11031,7 @@ function BulkUploadPreview({
                   value: row.expiry_date || "",
                   onChange: (e2) => onUpdateRow(idx, { expiry_date: e2.target.value }),
                   disabled: busy,
-                  className: "flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100",
+                  className: "flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900",
                   "aria-label": isEs ? "Fecha de caducidad" : "Expiry date"
                 }
               )
@@ -11052,7 +11051,7 @@ function BulkUploadPreview({
                     });
                   },
                   disabled: busy,
-                  className: `flex-1 min-w-0 bg-slate-900 border rounded px-1 py-0.5 text-slate-100 ${row.community_id ? "border-slate-600" : "border-amber-400"}`,
+                  className: `flex-1 min-w-0 bg-white border rounded px-1 py-0.5 text-gray-900 ${row.community_id ? "border-slate-600" : "border-amber-400"}`,
                   "aria-label": isEs ? "Comunidad / escuela" : "Community / school",
                   required: true,
                   children: [
@@ -11071,13 +11070,13 @@ function BulkUploadPreview({
                   }),
                   disabled: busy || communitiesLoading,
                   placeholder: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : isEs ? "Nombre de escuela o comunidad" : "School or community name",
-                  className: `flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100 placeholder:text-slate-400 ${row.community_name ? "" : "ring-1 ring-amber-400 rounded"}`,
+                  className: `flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400 ${row.community_name ? "" : "ring-1 ring-amber-400 rounded"}`,
                   "aria-label": isEs ? "Comunidad / escuela" : "Community / school"
                 }
               )
             ] })
           ] }),
-          communitiesError && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 flex items-center gap-2 text-[10px] text-amber-200", children: [
+          communitiesError && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 flex items-center gap-2 text-[10px] text-amber-700", children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: communitiesError }),
             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "button",
@@ -11123,7 +11122,7 @@ function BulkUploadPreview({
           type: "button",
           onClick: onCancel,
           disabled: busy,
-          className: "text-xs px-3 py-1.5 rounded-full bg-slate-700 text-slate-50 hover:bg-slate-600 border border-slate-700/60 disabled:opacity-40",
+          className: "text-xs px-3 py-1.5 rounded-full bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 disabled:opacity-40",
           children: isEs ? "Cancelar" : "Cancel"
         }
       ),
@@ -11133,7 +11132,7 @@ function BulkUploadPreview({
           type: "button",
           onClick: onConfirm,
           disabled: busy || rows.length === 0 || missingCommunity,
-          className: `text-xs px-3 py-1.5 rounded-full text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all ml-auto bg-gradient-to-r ${tint === "fuchsia" ? "from-fuchsia-500 to-purple-500 hover:from-fuchsia-400 hover:to-purple-400 shadow-md shadow-fuchsia-500/20" : "from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-md shadow-emerald-500/20"}`,
+          className: "text-xs px-3 py-1.5 rounded-full text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all ml-auto bg-emerald-600 hover:bg-emerald-700 shadow-sm",
           children: busy ? isEs ? "Creando\u2026" : "Creating\u2026" : isEs ? `Crear ${rows.length} publicaci\xF3n${rows.length === 1 ? "" : "es"}` : `Create ${rows.length} listing${rows.length === 1 ? "" : "s"}`
         }
       )
@@ -12494,20 +12493,20 @@ ${imageBlock}` : imageBlock;
   }, [handleSend, isLoading, suggestionsOpen, filteredSuggestions, suggestionIndex, acceptSuggestion]);
   if (!isOpen) {
     return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[10060] group fab-base pointer-events-auto", style: { perspective: "600px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-cyan-200/50", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-cyan-500 font-bold text-lg", children: "?" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-cyan-200/50 transform rotate-45" })
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-6000 font-bold text-lg", children: "?" }),
+        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-emerald-200/50 transform rotate-45" })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 m-auto w-16 h-16 rounded-full bg-cyan-400/20 blur-xl animate-pulse-glow" }),
+      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 m-auto w-16 h-16 rounded-full bg-emerald-100/80" }),
       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
         "button",
         {
           onClick: () => setIsOpen(true),
-          className: "relative w-[68px] h-[68px] rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 animate-bob",
+          className: "relative w-[68px] h-[68px] rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 animate-bob",
           "aria-label": "Open Nouri AI Assistant",
           style: { transformStyle: "preserve-3d" },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-full h-full drop-shadow-2xl", style: { filter: "drop-shadow(0 8px 16px rgba(0,200,255,0.3))" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-full h-full drop-shadow-2xl", style: { filter: "drop-shadow(0 8px 16px rgba(16,185,129,0.2))" }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("defs", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "bodyGrad", cx: "40%", cy: "35%", r: "60%", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#ffffff" }),
@@ -12515,12 +12514,12 @@ ${imageBlock}` : imageBlock;
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#d1dbe6" })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "eyeGrad", cx: "50%", cy: "40%", r: "50%", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#67e8f9" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#06b6d4" })
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#34d399" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#059669" })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "cheekGrad", cx: "50%", cy: "50%", r: "50%", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#22d3ee", stopOpacity: "0.6" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#22d3ee", stopOpacity: "0" })
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#10b981", stopOpacity: "0.35" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#10b981", stopOpacity: "0" })
                 ] }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("filter", { id: "glow", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("feGaussianBlur", { stdDeviation: "2", result: "coloredBlur" }),
@@ -12538,14 +12537,14 @@ ${imageBlock}` : imageBlock;
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M44 57 Q50 61 56 57", stroke: "#67e8f9", strokeWidth: "1.5", strokeLinecap: "round", fill: "none", opacity: "0.7" }),
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M44 57 Q50 61 56 57", stroke: "#34d399", strokeWidth: "1.5", strokeLinecap: "round", fill: "none", opacity: "0.7" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "14", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "14", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "86", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "86", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "38", cy: "36", rx: "10", ry: "5", fill: "white", opacity: "0.5" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 rounded-full ring-2 ring-cyan-300/0 group-hover:ring-cyan-300/40 transition-all duration-300" })
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 rounded-full ring-2 ring-emerald-300/0 group-hover:ring-emerald-300/40 transition-all duration-300" })
           ]
         }
       ),
@@ -12597,24 +12596,19 @@ ${imageBlock}` : imageBlock;
         role: "dialog",
         "aria-modal": "true",
         "aria-label": language === "es" ? "Asistente Nouri" : "Nouri AI Assistant",
-        className: `${panelClasses} flex flex-col rounded-2xl shadow-2xl shadow-[#2CABE3]/10 overflow-hidden transition-all duration-300 border border-[#2CABE3]/15 bg-white/75 backdrop-blur-xl`,
+        className: `${panelClasses} flex flex-col rounded-2xl shadow-xl overflow-hidden transition-all duration-300 border border-gray-200 bg-white`,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "pointer-events-none absolute inset-0 overflow-hidden", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#2CABE3]/15 blur-3xl" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute top-1/4 -right-20 w-64 h-64 rounded-full bg-emerald-300/20 blur-3xl" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute bottom-0 left-1/4 w-48 h-48 rounded-full bg-[#2CABE3]/8 blur-2xl" })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative z-30 flex-shrink-0 bg-white/60 backdrop-blur-md text-gray-900 px-4 py-3 flex items-center justify-between border-b border-[#2CABE3]/15", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative z-30 flex-shrink-0 bg-white text-gray-900 px-4 py-3 flex items-center justify-between border-b border-gray-200", children: [
             /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-3", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "w-9 h-9 rounded-full bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center shadow-md shadow-[#2CABE3]/25", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-6 h-6", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-6 h-6", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#67e8f9", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#67e8f9", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
               ] }) }),
               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold text-sm text-gray-900 leading-tight", children: "Nouri" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "text-[#2CABE3] text-[10px] flex items-center gap-1.5 leading-tight mt-0.5", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                     "span",
                     {
@@ -12640,7 +12634,7 @@ ${imageBlock}` : imageBlock;
                     updateSetting("preferredLanguage", newLang);
                     sendMessage(languageSwitchPrompt(newLang));
                   },
-                  className: "text-[#2CABE3] hover:text-[#2299c7] text-[11px] font-semibold px-2 py-1 rounded-full bg-[#2CABE3]/10 border border-[#2CABE3]/20 hover:border-[#2CABE3]/35 max-w-[5.5rem] truncate",
+                  className: "text-emerald-600 hover:text-emerald-700 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 hover:border-emerald-300 max-w-[5.5rem] truncate",
                   "aria-label": t2(language, "chatLanguage"),
                   children: CHAT_UI_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: code, children: CHAT_LANGUAGE_LABELS[code] }, code))
                 }
@@ -12650,13 +12644,13 @@ ${imageBlock}` : imageBlock;
                   "button",
                   {
                     onClick: () => setShowMenu(!showMenu),
-                    className: "text-[#2CABE3]/70 hover:text-[#2CABE3] p-1 rounded hover:bg-[#2CABE3]/10 transition-colors",
+                    className: "text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors",
                     "aria-label": "Chat menu",
                     "aria-expanded": showMenu,
                     children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-5 w-5", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" }) })
                   }
                 ),
-                showMenu && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "absolute right-0 top-full mt-1 bg-white/95 rounded-lg shadow-xl border border-[#2CABE3]/15 py-1 w-52 z-50 backdrop-blur-md", children: [
+                showMenu && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-52 z-50", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "px-2 pt-1 pb-0.5", children: [
                     /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-[10px] uppercase tracking-wider text-gray-400 px-2 py-1", children: t2(language, "conversationTone") }),
                     AI_TONE_OPTIONS.map((t3) => {
@@ -12670,7 +12664,7 @@ ${imageBlock}` : imageBlock;
                             setTone(t3);
                             setShowMenu(false);
                           },
-                          className: `w-full text-left px-4 py-1.5 text-sm transition-colors ${active ? "text-[#2CABE3] bg-[#2CABE3]/10" : "text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3]"}`,
+                          className: `w-full text-left px-4 py-1.5 text-sm transition-colors ${active ? "text-emerald-600 bg-emerald-50" : "text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600"}`,
                           children: [
                             active ? "\u2713 " : "",
                             labels[t3]
@@ -12680,12 +12674,12 @@ ${imageBlock}` : imageBlock;
                       );
                     })
                   ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "border-t border-[#2CABE3]/10 my-1" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "border-t border-gray-100 my-1" }),
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                     "button",
                     {
                       onClick: handleClearConversation,
-                      className: "w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors",
+                      className: "w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors",
                       children: "\u{1F5D1}\uFE0F Clear conversation"
                     }
                   ),
@@ -12696,7 +12690,7 @@ ${imageBlock}` : imageBlock;
                         setIsExpanded(!isExpanded);
                         setShowMenu(false);
                       },
-                      className: "w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors",
+                      className: "w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors",
                       children: isExpanded ? "\u{1F5D7} Compact view" : "\u2B1C Full screen"
                     }
                   )
@@ -12706,7 +12700,7 @@ ${imageBlock}` : imageBlock;
                 "button",
                 {
                   onClick: () => setIsExpanded(!isExpanded),
-                  className: "text-[#2CABE3]/70 hover:text-[#2CABE3] p-1 rounded hover:bg-[#2CABE3]/10 transition-colors hidden md:block",
+                  className: "text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors hidden md:block",
                   "aria-label": isExpanded ? "Compact view" : "Expand",
                   children: isExpanded ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z", clipRule: "evenodd" }) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 11-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L5.414 15H7a1 1 0 110 2H3a1 1 0 01-1-1v-4zm13.707.707a1 1 0 00-1.414-1.414L13 13.586V12a1 1 0 10-2 0v4a1 1 0 001 1h4a1 1 0 100-2h-1.586l2.293-2.293z", clipRule: "evenodd" }) })
                 }
@@ -12725,17 +12719,16 @@ ${imageBlock}` : imageBlock;
           voiceMode ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
             "div",
             {
-              className: "relative z-0 flex-1 flex flex-col items-center justify-between py-5 px-6 overflow-hidden bg-gradient-to-b from-[#2CABE3]/5 via-white/40 to-emerald-50/30 backdrop-blur-sm",
+              className: "relative z-0 flex-1 flex flex-col items-center justify-between py-5 px-6 overflow-hidden bg-emerald-50/40",
               role: "region",
               "aria-label": language === "es" ? "Modo de voz" : "Voice mode",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "voice-aurora", "aria-hidden": "true" }),
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative w-full flex items-center justify-between gap-2 z-10", children: [
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
                     "button",
                     {
                       onClick: exitVoiceMode,
-                      className: "inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-900/5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50",
+                      className: "inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-900/5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50",
                       "aria-label": language === "es" ? "Salir del modo de voz" : "Exit voice mode",
                       children: [
                         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z", clipRule: "evenodd" }) }),
@@ -12772,28 +12765,28 @@ ${imageBlock}` : imageBlock;
                   "button",
                   {
                     onClick: handleOrbTap,
-                    className: "relative focus:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400/30 rounded-full group",
+                    className: "relative focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400/30 rounded-full group",
                     "aria-label": isVoiceSpeaking ? language === "es" ? "Toca para interrumpir" : "Tap to interrupt" : isVoiceListening ? language === "es" ? "Toca para enviar" : "Tap to send now" : language === "es" ? "Toca para hablar" : "Tap to speak",
                     children: [
                       isVoiceListening && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-8 rounded-full border-2 border-blue-400/40 animate-voice-ring-1 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-14 rounded-full border border-blue-400/20 animate-voice-ring-2 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-20 rounded-full border border-blue-400/10 animate-voice-ring-3 pointer-events-none" })
+                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-8 rounded-full border-2 border-emerald-400/40 animate-voice-ring-1 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-14 rounded-full border border-emerald-400/20 animate-voice-ring-2 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-20 rounded-full border border-emerald-400/10 animate-voice-ring-3 pointer-events-none" })
                       ] }),
                       isVoiceSpeaking && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-6 rounded-full border-2 border-teal-400/40 animate-voice-speak-ring-1 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-10 rounded-full border border-teal-400/20 animate-voice-speak-ring-2 pointer-events-none" })
+                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-6 rounded-full border-2 border-emerald-400/40 animate-voice-speak-ring-1 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-10 rounded-full border border-emerald-400/20 animate-voice-speak-ring-2 pointer-events-none" })
                       ] }),
                       /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                         "div",
                         {
-                          className: `absolute -inset-8 rounded-full blur-2xl transition-all duration-700 pointer-events-none ${isVoiceSpeaking ? "bg-teal-500/30" : isVoiceListening ? "bg-blue-500/30" : isLoading ? "bg-violet-500/25" : "bg-slate-600/10"}`
+                          className: `absolute -inset-8 rounded-full blur-2xl transition-all duration-700 pointer-events-none ${isVoiceSpeaking ? "bg-emerald-500/20" : isVoiceListening ? "bg-emerald-500/20" : isLoading ? "bg-emerald-500/15" : "bg-slate-600/10"}`
                         }
                       ),
                       /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
                         "div",
                         {
-                          className: `relative w-36 h-36 rounded-full transition-all duration-300 flex items-center justify-center cursor-pointer ${isVoiceListening ? "bg-gradient-to-br from-blue-400 via-indigo-500 to-violet-600 shadow-[0_0_60px_rgba(99,102,241,0.45)]" : isVoiceSpeaking ? "bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 shadow-[0_0_60px_rgba(20,184,166,0.45)] scale-110" : isLoading ? "bg-gradient-to-br from-violet-400 via-purple-500 to-fuchsia-500 shadow-[0_0_40px_rgba(168,85,247,0.35)]" : "bg-gradient-to-br from-slate-500 via-slate-600 to-slate-700 shadow-[0_0_20px_rgba(100,116,139,0.25)] scale-95 group-hover:scale-100"}`,
+                          className: `relative w-36 h-36 rounded-full transition-all duration-300 flex items-center justify-center cursor-pointer ${isVoiceListening ? "bg-emerald-600 shadow-md" : isVoiceSpeaking ? "bg-emerald-700 shadow-md scale-110" : isLoading ? "bg-emerald-500 shadow-sm" : "bg-emerald-600/90 shadow-sm scale-95 group-hover:scale-100"}`,
                           style: isVoiceListening ? { transform: `scale(${(1.05 + audioLevel * 0.18).toFixed(3)})` } : void 0,
                           children: [
                             /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-transparent to-white/15 pointer-events-none" }),
@@ -12837,7 +12830,7 @@ ${imageBlock}` : imageBlock;
                   return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                     "span",
                     {
-                      className: "w-[3px] rounded-full bg-blue-400/80 transition-[height] duration-75",
+                      className: "w-[3px] rounded-full bg-emerald-400/80 transition-[height] duration-75",
                       style: { height: `${h2}px` }
                     },
                     i2
@@ -12854,7 +12847,7 @@ ${imageBlock}` : imageBlock;
                         } catch {
                         }
                       },
-                      className: "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-teal-500/15 text-teal-200 ring-1 ring-teal-400/40 hover:bg-teal-500/25 transition-colors",
+                      className: "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100 transition-colors",
                       "aria-label": language === "es" ? "Toca para escuchar la respuesta" : "Tap to hear the response",
                       children: [
                         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" }) }),
@@ -12877,14 +12870,14 @@ ${imageBlock}` : imageBlock;
                   /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
                     "div",
                     {
-                      className: `inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide transition-all duration-300 ring-1 ${voiceError ? "bg-rose-500/10 text-rose-700 ring-rose-500/40" : isVoiceSpeaking ? "bg-teal-500/10 text-teal-800 ring-teal-500/40" : isLoading ? "bg-violet-500/10 text-violet-800 ring-violet-500/40" : isVoiceListening ? "bg-blue-500/10 text-blue-700 ring-blue-500/40" : "bg-slate-900/5 text-slate-600 ring-slate-300/70"}`,
+                      className: `inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide transition-all duration-300 ring-1 ${voiceError ? "bg-red-50 text-red-700 ring-red-200" : isVoiceSpeaking ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : isLoading ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : isVoiceListening ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-gray-50 text-gray-600 ring-gray-200"}`,
                       role: "status",
                       "aria-live": "polite",
                       children: [
                         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                           "span",
                           {
-                            className: `h-1.5 w-1.5 rounded-full ${voiceError ? "bg-rose-400" : isVoiceSpeaking ? "bg-teal-400 animate-pulse" : isLoading ? "bg-violet-400 animate-pulse" : isVoiceListening ? "bg-blue-400 animate-pulse" : "bg-slate-500"}`,
+                            className: `h-1.5 w-1.5 rounded-full ${voiceError ? "bg-red-500" : isVoiceSpeaking ? "bg-emerald-500 animate-pulse" : isLoading ? "bg-emerald-400 animate-pulse" : isVoiceListening ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`,
                             "aria-hidden": "true"
                           }
                         ),
@@ -12896,7 +12889,7 @@ ${imageBlock}` : imageBlock;
                     "button",
                     {
                       onClick: exitVoiceMode,
-                      className: "group/end inline-flex items-center gap-2 pl-3 pr-4 h-12 rounded-full bg-rose-500/15 hover:bg-rose-500 border border-rose-500/30 hover:border-rose-500 text-rose-300 hover:text-white transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-rose-500/10 hover:shadow-rose-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50",
+                      className: "group/end inline-flex items-center gap-2 pl-3 pr-4 h-12 rounded-full bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 text-red-700 hover:text-white transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50",
                       "aria-label": language === "es" ? "Terminar conversaci\xF3n de voz" : "End voice conversation",
                       children: [
                         /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/25 group-hover/end:bg-white/15", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
@@ -13044,8 +13037,8 @@ ${imageBlock}` : imageBlock;
                 tabIndex: -1
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("form", { onSubmit: handleSend, className: "relative z-0 border-t border-[#2CABE3]/15 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white/60 backdrop-blur-md", children: [
-              pendingChatPhotos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex gap-2 overflow-x-auto pb-1 nourish-scrollbar-h", "aria-label": language === "es" ? "Fotos adjuntas" : "Attached photos", children: pendingChatPhotos.map((photo) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-[#2CABE3]/25 bg-white shadow-sm", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("form", { onSubmit: handleSend, className: "relative z-0 border-t border-gray-200 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white", children: [
+              pendingChatPhotos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex gap-2 overflow-x-auto pb-1 nourish-scrollbar-h", "aria-label": language === "es" ? "Fotos adjuntas" : "Attached photos", children: pendingChatPhotos.map((photo) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                   "img",
                   {
@@ -13082,7 +13075,7 @@ ${imageBlock}` : imageBlock;
                         type: "button",
                         onClick: () => handleQuickAction(message),
                         disabled: isLoading,
-                        className: "whitespace-nowrap flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#2CABE3]/30 bg-white/90 text-[#1a7a9e] font-medium hover:bg-[#2CABE3]/10 hover:border-[#2CABE3]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
+                        className: "whitespace-nowrap flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#10b981]/30 bg-white/90 text-[#047857] font-medium hover:bg-emerald-50 hover:border-[#10b981]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed",
                         children: label
                       },
                       `${label}-${i2}`
@@ -13098,7 +13091,7 @@ ${imageBlock}` : imageBlock;
                       type: "button",
                       onClick: () => setShowAttachMenu((v2) => !v2),
                       disabled: isLoading || uploadBusy,
-                      className: `inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${showAttachMenu ? "bg-[#2CABE3]/15 text-[#2CABE3] border-[#2CABE3]/30 rotate-45" : "bg-white/80 text-gray-600 border-[#2CABE3]/15 hover:bg-[#2CABE3]/10 hover:text-[#2CABE3] hover:border-[#2CABE3]/30"} disabled:opacity-40 disabled:cursor-not-allowed`,
+                      className: `inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${showAttachMenu ? "bg-[#10b981]/15 text-emerald-600 border-[#10b981]/30 rotate-45" : "bg-white/80 text-gray-600 border-[#10b981]/15 hover:bg-emerald-50 hover:text-emerald-600 hover:border-[#10b981]/30"} disabled:opacity-40 disabled:cursor-not-allowed`,
                       title: language === "es" ? "Adjuntar" : "Attach",
                       "aria-label": language === "es" ? "Adjuntar foto o CSV" : "Attach photo or CSV",
                       "aria-expanded": showAttachMenu,
@@ -13110,7 +13103,7 @@ ${imageBlock}` : imageBlock;
                     "div",
                     {
                       role: "menu",
-                      className: "absolute bottom-full left-0 mb-2 min-w-[200px] rounded-xl border border-[#2CABE3]/15 bg-white/95 backdrop-blur-md shadow-xl shadow-[#2CABE3]/10 overflow-hidden z-30 animate-fade-in",
+                      className: "absolute bottom-full left-0 mb-2 min-w-[200px] rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-xl shadow-[#10b981]/10 overflow-hidden z-30 animate-fade-in",
                       children: [
                         /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
                           "button",
@@ -13121,9 +13114,9 @@ ${imageBlock}` : imageBlock;
                               setShowAttachMenu(false);
                               triggerPhotoUpload();
                             },
-                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors",
+                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors",
                             children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-fuchsia-500/15 text-fuchsia-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-camera text-[13px]", "aria-hidden": "true" }) }),
+                              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-camera text-[13px]", "aria-hidden": "true" }) }),
                               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
                                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "Foto \u2192 publicar" : "Photo \u2192 list food" }),
                                 /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "IA detecta art\xEDculos" : "AI auto-detects items" })
@@ -13140,7 +13133,7 @@ ${imageBlock}` : imageBlock;
                               setShowAttachMenu(false);
                               triggerInlinePhotoUpload();
                             },
-                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors border-t border-[#2CABE3]/10",
+                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100",
                             children: [
                               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-sky-500/15 text-sky-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-image text-[13px]", "aria-hidden": "true" }) }),
                               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
@@ -13159,7 +13152,7 @@ ${imageBlock}` : imageBlock;
                               setShowAttachMenu(false);
                               triggerCsvUpload();
                             },
-                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors border-t border-[#2CABE3]/10",
+                            className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100",
                             children: [
                               /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-file-csv text-[13px]", "aria-hidden": "true" }) }),
                               /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
@@ -13179,7 +13172,7 @@ ${imageBlock}` : imageBlock;
                     {
                       role: "listbox",
                       "aria-label": language === "es" ? "Sugerencias" : "Suggestions",
-                      className: "absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-[#2CABE3]/15 bg-white/95 backdrop-blur-md shadow-lg shadow-[#2CABE3]/10 z-20 nourish-scrollbar",
+                      className: "absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-lg shadow-[#10b981]/10 z-20 nourish-scrollbar",
                       children: filteredSuggestions.map((s2, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
                         "li",
                         {
@@ -13190,7 +13183,7 @@ ${imageBlock}` : imageBlock;
                             acceptSuggestion(s2);
                           },
                           onMouseEnter: () => setSuggestionIndex(idx),
-                          className: `px-3 py-2 text-sm cursor-pointer transition-colors ${idx === suggestionIndex ? "bg-[#2CABE3]/15 text-[#2299c7]" : "text-gray-700 hover:bg-[#2CABE3]/5"}`,
+                          className: `px-3 py-2 text-sm cursor-pointer transition-colors ${idx === suggestionIndex ? "bg-[#10b981]/15 text-[#059669]" : "text-gray-700 hover:bg-[#10b981]/5"}`,
                           children: s2
                         },
                         s2
@@ -13212,7 +13205,7 @@ ${imageBlock}` : imageBlock;
                       onFocus: () => setSuggestionsOpen(true),
                       onBlur: () => setTimeout(() => setSuggestionsOpen(false), 120),
                       placeholder: pendingChatPhotos.length > 0 ? t2(language, "photoCaptionPlaceholder") : t2(language, "messagePlaceholder"),
-                      className: `w-full resize-none rounded-2xl border bg-white/90 text-gray-800 placeholder-gray-400 px-4 py-2.5 text-sm leading-relaxed max-h-32 outline-none transition-all backdrop-blur-sm ${isLoading ? "ai-input-glow border-[#2CABE3]/60 cursor-wait" : "border-[#2CABE3]/15 focus:border-[#2CABE3]/50 focus:ring-2 focus:ring-[#2CABE3]/20 focus:bg-white"}`,
+                      className: `w-full resize-none rounded-2xl border bg-white/90 text-gray-800 placeholder-gray-400 px-4 py-2.5 text-sm leading-relaxed max-h-32 outline-none transition-all backdrop-blur-sm ${isLoading ? "ai-input-glow border-[#10b981]/60 cursor-wait" : "border-[#10b981]/15 focus:border-[#10b981]/50 focus:ring-2 focus:ring-[#10b981]/20 focus:bg-white"}`,
                       rows: 1,
                       readOnly: isLoading,
                       "aria-busy": isLoading,
@@ -13228,7 +13221,7 @@ ${imageBlock}` : imageBlock;
                   {
                     type: "button",
                     onClick: toggleWakeWord,
-                    className: `flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${wakeWordEnabled ? "border-emerald-500/40 bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "border-[#2CABE3]/15 bg-white/80 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400/30"}`,
+                    className: `flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${wakeWordEnabled ? "border-emerald-500/40 bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "border-[#10b981]/15 bg-white/80 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400/30"}`,
                     title: wakeWordEnabled ? language === "es" ? "Palabra de activaci\xF3n activada \u2014 di \u201CNouri\u201D" : "Wake word on \u2014 say \u201CNouri\u201D" : language === "es" ? "Activar manos libres con \u201CNouri\u201D" : "Enable hands-free wake word \u201CNouri\u201D",
                     "aria-label": language === "es" ? "Alternar palabra de activaci\xF3n Nouri" : "Toggle Nouri wake word",
                     "aria-pressed": wakeWordEnabled,
@@ -13244,7 +13237,7 @@ ${imageBlock}` : imageBlock;
                     type: "button",
                     onClick: enterVoiceMode,
                     disabled: isLoading,
-                    className: "flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border border-[#2CABE3]/15 bg-white/80 text-gray-600 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 hover:border-[#2CABE3]/30 disabled:opacity-40 disabled:cursor-not-allowed",
+                    className: "flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border border-gray-200 bg-white text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed",
                     title: language === "es" ? "Modo voz" : "Voice mode",
                     "aria-label": "Switch to voice mode",
                     children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-microphone text-[13px]", "aria-hidden": "true" })
@@ -13255,7 +13248,7 @@ ${imageBlock}` : imageBlock;
                   {
                     type: "submit",
                     disabled: !inputText.trim() && pendingChatPhotos.length === 0 || isLoading || uploadBusy,
-                    className: `flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all ${(inputText.trim() || pendingChatPhotos.length > 0) && !isLoading && !uploadBusy ? "bg-gradient-to-br from-[#2CABE3] to-emerald-500 text-white hover:from-[#2299c7] hover:to-emerald-600 shadow-md shadow-[#2CABE3]/25 hover:scale-105 active:scale-95" : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"}`,
+                    className: `flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all ${(inputText.trim() || pendingChatPhotos.length > 0) && !isLoading && !uploadBusy ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm" : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"}`,
                     "aria-label": language === "es" ? "Enviar mensaje" : "Send message",
                     children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-paper-plane text-[12px]", "aria-hidden": "true" })
                   }
@@ -13270,14 +13263,14 @@ ${imageBlock}` : imageBlock;
           /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("style", { children: `
         .nourish-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .nourish-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .nourish-scrollbar::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.2); border-radius: 4px; }
-        .nourish-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.4); }
+        .nourish-scrollbar::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.2); border-radius: 4px; }
+        .nourish-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.4); }
 
         /* Thin horizontal scrollbar for the quick-chip rail */
         .nourish-scrollbar-h::-webkit-scrollbar { height: 4px; }
         .nourish-scrollbar-h::-webkit-scrollbar-track { background: transparent; }
-        .nourish-scrollbar-h::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.15); border-radius: 4px; }
-        .nourish-scrollbar-h::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.3); }
+        .nourish-scrollbar-h::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.15); border-radius: 4px; }
+        .nourish-scrollbar-h::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.3); }
 
         /* Fade-in for menus / pills */
         @keyframes ai-fade-in {

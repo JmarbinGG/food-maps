@@ -117,34 +117,34 @@ function parseStorageTipEntries(result, language = 'en') {
 // while still being visually distinct from each other.
 const ACCENT_MAP = {
   emerald: {
-    iconBg: 'bg-emerald-500/15 text-emerald-700 ring-emerald-400/30',
-    border: 'border-emerald-500/20 hover:border-emerald-400/40',
-    glow: 'hover:shadow-emerald-500/10',
-    promptHover: 'hover:bg-emerald-500/10 hover:text-emerald-800',
+    iconBg: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    border: 'border-gray-200 hover:border-emerald-300',
+    glow: '',
+    promptHover: 'hover:bg-emerald-50 hover:text-emerald-800',
   },
   fuchsia: {
-    iconBg: 'bg-fuchsia-500/15 text-fuchsia-700 ring-fuchsia-400/30',
-    border: 'border-fuchsia-500/20 hover:border-fuchsia-400/40',
-    glow: 'hover:shadow-fuchsia-500/10',
-    promptHover: 'hover:bg-fuchsia-500/10 hover:text-fuchsia-800',
+    iconBg: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    border: 'border-gray-200 hover:border-emerald-300',
+    glow: '',
+    promptHover: 'hover:bg-emerald-50 hover:text-emerald-800',
   },
   cyan: {
-    iconBg: 'bg-[#2CABE3]/15 text-[#2CABE3] ring-[#2CABE3]/30',
-    border: 'border-[#2CABE3]/20 hover:border-[#2CABE3]/40',
-    glow: 'hover:shadow-[#2CABE3]/10',
-    promptHover: 'hover:bg-[#2CABE3]/10 hover:text-[#2299c7]',
+    iconBg: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    border: 'border-gray-200 hover:border-emerald-300',
+    glow: '',
+    promptHover: 'hover:bg-emerald-50 hover:text-emerald-800',
   },
   sky: {
-    iconBg: 'bg-sky-500/15 text-sky-600 ring-sky-400/30',
-    border: 'border-sky-500/20 hover:border-sky-400/40',
-    glow: 'hover:shadow-sky-500/10',
-    promptHover: 'hover:bg-sky-500/10 hover:text-sky-700',
+    iconBg: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    border: 'border-gray-200 hover:border-emerald-300',
+    glow: '',
+    promptHover: 'hover:bg-emerald-50 hover:text-emerald-800',
   },
   amber: {
-    iconBg: 'bg-amber-500/15 text-amber-600 ring-amber-400/30',
-    border: 'border-amber-500/20 hover:border-amber-400/40',
-    glow: 'hover:shadow-amber-500/10',
-    promptHover: 'hover:bg-amber-500/10 hover:text-amber-800',
+    iconBg: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    border: 'border-gray-200 hover:border-emerald-300',
+    glow: '',
+    promptHover: 'hover:bg-emerald-50 hover:text-emerald-800',
   },
 }
 
@@ -168,7 +168,7 @@ function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
           return (
             <div
               key={cat.key}
-              className={`rounded-xl p-3 bg-white/70 backdrop-blur-sm border transition-all ${accent.border} hover:bg-white/90 hover:shadow-md shadow-sm ${accent.glow}`}
+              className={`rounded-lg p-3 bg-white border transition-all ${accent.border} hover:bg-gray-50 shadow-sm ${accent.glow}`}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span className={`w-7 h-7 rounded-lg ring-1 flex items-center justify-center ${accent.iconBg}`}>
@@ -220,11 +220,11 @@ function formatSeparator(iso, language) {
 function DateSeparator({ label }) {
   return (
     <div className="relative my-3 flex items-center gap-2" aria-hidden="true">
-      <span className="flex-1 h-px bg-gradient-to-r from-transparent via-[#2CABE3]/25 to-transparent" />
-      <span className="text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white/80 border border-[#2CABE3]/15">
+      <span className="flex-1 h-px bg-gradient-to-r from-transparent via-emerald-200 to-transparent" />
+      <span className="text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white border border-gray-200">
         {label}
       </span>
-      <span className="flex-1 h-px bg-gradient-to-l from-transparent via-[#2CABE3]/25 to-transparent" />
+      <span className="flex-1 h-px bg-gradient-to-l from-transparent via-emerald-200 to-transparent" />
     </div>
   )
 }
@@ -236,7 +236,7 @@ function ScrollToBottomPill({ visible, onClick, language }) {
     <button
       type="button"
       onClick={onClick}
-      className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-[#2CABE3]/20 text-[#2CABE3] text-xs shadow-lg shadow-[#2CABE3]/10 hover:bg-white hover:border-[#2CABE3]/40 hover:scale-105 active:scale-95 transition-all animate-fade-in"
+      className="absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-emerald-700 text-xs shadow-md hover:bg-gray-50 hover:border-emerald-300 active:scale-95 transition-all animate-fade-in"
       aria-label={chatT(language, 'jumpLatest')}
     >
       <i className="fas fa-arrow-down text-[10px]" aria-hidden="true" />
@@ -250,11 +250,11 @@ function ScrollToBottomPill({ visible, onClick, language }) {
 function TypingIndicator() {
   return (
     <div className="flex px-4 py-1.5" aria-live="polite" aria-label="Nouri is typing">
-      <div className="inline-flex items-center gap-1 rounded-2xl bg-white/80 border border-[#2CABE3]/15 px-3 py-2 backdrop-blur-sm shadow-sm">
+      <div className="inline-flex items-center gap-1 rounded-2xl bg-white border border-gray-200 px-3 py-2 shadow-sm">
         {[0, 180, 360].map((delay) => (
           <span
             key={delay}
-            className="ai-typing-dot w-1.5 h-1.5 rounded-full bg-[#2CABE3]/70"
+            className="ai-typing-dot w-1.5 h-1.5 rounded-full bg-emerald-600/70"
             style={{ animationDelay: `${delay}ms` }}
             aria-hidden="true"
           />
@@ -274,118 +274,118 @@ const TOOL_CARD_TOKENS = {
   search: {
     title: { en: 'Nearby food', es: 'Comida cerca' },
     icon: 'fa-utensils',
-    ring: 'ring-emerald-400/50',
-    bg: 'bg-emerald-950 border-emerald-500/40',
-    accent: 'text-white',
-    sub: 'text-emerald-50',
-    tag: 'bg-emerald-500/30 text-white border-emerald-400/50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
+    tag: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   },
   mylistings: {
     title: { en: 'Your listings', es: 'Tus publicaciones' },
     icon: 'fa-clipboard-list',
-    ring: 'ring-emerald-400/50',
-    bg: 'bg-emerald-950 border-emerald-500/40',
-    accent: 'text-white',
-    sub: 'text-emerald-50',
-    tag: 'bg-emerald-500/30 text-white border-emerald-400/50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
+    tag: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   },
   myclaims: {
     title: { en: 'Your claims', es: 'Tus reclamos' },
     icon: 'fa-hand-holding-heart',
-    ring: 'ring-emerald-400/50',
-    bg: 'bg-emerald-950 border-emerald-500/40',
-    accent: 'text-white',
-    sub: 'text-emerald-50',
-    tag: 'bg-emerald-500/30 text-white border-emerald-400/50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
+    tag: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   },
   community: {
     title: { en: 'Community listings', es: 'Publicaciones de la comunidad' },
     icon: 'fa-school',
-    ring: 'ring-emerald-400/50',
-    bg: 'bg-emerald-950 border-emerald-500/40',
-    accent: 'text-white',
-    sub: 'text-emerald-50',
-    tag: 'bg-emerald-500/30 text-white border-emerald-400/50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
+    tag: 'bg-emerald-50 text-emerald-800 border-emerald-200',
   },
   claim: {
     title: { en: 'Claim confirmed', es: 'Reclamo confirmado' },
     icon: 'fa-circle-check',
-    ring: 'ring-emerald-400/50',
-    bg: 'bg-emerald-950 border-emerald-500/40',
-    accent: 'text-white',
-    sub: 'text-emerald-50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   error: {
     title: { en: 'Something went wrong', es: 'Algo salió mal' },
     icon: 'fa-triangle-exclamation',
-    ring: 'ring-rose-400/50',
-    bg: 'bg-rose-950 border-rose-500/40',
-    accent: 'text-white',
-    sub: 'text-rose-50',
+    ring: 'ring-red-200',
+    bg: 'bg-red-50 border-red-200',
+    accent: 'text-red-800',
+    sub: 'text-red-700',
   },
   cancel: {
     title: { en: 'Claim released', es: 'Reclamo liberado' },
     icon: 'fa-arrow-rotate-left',
-    ring: 'ring-amber-400/50',
-    bg: 'bg-amber-950 border-amber-500/40',
-    accent: 'text-white',
-    sub: 'text-amber-50',
+    ring: 'ring-amber-200',
+    bg: 'bg-amber-50 border-amber-200',
+    accent: 'text-amber-800',
+    sub: 'text-amber-800',
   },
   updated: {
     title: { en: 'Listing updated', es: 'Listado actualizado' },
     icon: 'fa-pen-to-square',
-    ring: 'ring-violet-400/50',
-    bg: 'bg-violet-950 border-violet-500/40',
-    accent: 'text-white',
-    sub: 'text-violet-50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   deleted: {
     title: { en: 'Listing deleted', es: 'Listado eliminado' },
     icon: 'fa-trash-can',
-    ring: 'ring-slate-400/50',
-    bg: 'bg-slate-900 border-slate-500/40',
-    accent: 'text-white',
-    sub: 'text-slate-100',
+    ring: 'ring-gray-200',
+    bg: 'bg-gray-50 border-gray-200',
+    accent: 'text-gray-800',
+    sub: 'text-gray-700',
   },
   post: {
     title: { en: 'Listing posted', es: 'Donación publicada' },
     icon: 'fa-bullhorn',
-    ring: 'ring-fuchsia-400/50',
-    bg: 'bg-fuchsia-950 border-fuchsia-500/40',
-    accent: 'text-white',
-    sub: 'text-fuchsia-50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   pickup: {
     title: { en: 'Pickup confirmed', es: 'Recogida confirmada' },
     icon: 'fa-check-double',
-    ring: 'ring-sky-400/50',
-    bg: 'bg-sky-950 border-sky-500/40',
-    accent: 'text-white',
-    sub: 'text-sky-50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   reminder: {
     title: { en: 'Reminder set', es: 'Recordatorio creado' },
     icon: 'fa-bell',
-    ring: 'ring-blue-400/50',
-    bg: 'bg-blue-950 border-blue-500/40',
-    accent: 'text-white',
-    sub: 'text-blue-50',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   generic: {
     title: { en: 'Done', es: 'Hecho' },
     icon: 'fa-circle-check',
-    ring: 'ring-slate-400/40',
-    bg: 'bg-slate-900 border-slate-500/40',
-    accent: 'text-white',
-    sub: 'text-slate-100',
+    ring: 'ring-emerald-200',
+    bg: 'bg-white border-gray-200',
+    accent: 'text-emerald-800',
+    sub: 'text-gray-700',
   },
   claimfail: {
     title: { en: 'Could not claim', es: 'No se pudo reclamar' },
     icon: 'fa-circle-xmark',
-    ring: 'ring-red-400/50',
-    bg: 'bg-red-950 border-red-500/40',
-    accent: 'text-white',
-    sub: 'text-red-50',
+    ring: 'ring-red-200',
+    bg: 'bg-red-50 border-red-200',
+    accent: 'text-red-800',
+    sub: 'text-red-700',
   },
 }
 
@@ -398,7 +398,7 @@ function ToolCardShell({ kind, language = 'en', titleOverride, children }) {
       className={`mt-2 ${t.bg} border rounded-xl p-3 text-sm shadow-md`}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <span className={`inline-flex w-6 h-6 rounded-full bg-black/30 ring-1 ${t.ring} items-center justify-center`}>
+        <span className={`inline-flex w-6 h-6 rounded-full bg-emerald-50 ring-1 ${t.ring} items-center justify-center`}>
           <i className={`fas ${t.icon} text-[11px] ${t.accent}`} aria-hidden="true" />
         </span>
         <div className={`font-semibold text-xs uppercase tracking-wide ${t.accent}`}>{title}</div>
@@ -486,7 +486,7 @@ function SearchResultsClaimList({
             <button
               type="button"
               onClick={selectAllVisible}
-              className="text-[11px] px-2 py-0.5 rounded-md border border-emerald-400/40 text-emerald-50 hover:bg-emerald-500/30"
+              className="text-[11px] px-2 py-0.5 rounded-md border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
             >
               {isEs ? 'Seleccionar visibles' : 'Select visible'}
             </button>
@@ -503,7 +503,7 @@ function SearchResultsClaimList({
               type="button"
               onClick={claimSelected}
               disabled={selected.size === 0}
-              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-500/40 border border-emerald-300/60 text-white text-[11px] font-semibold hover:bg-emerald-500/55 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 border border-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <i className="fas fa-hand-holding-heart text-[10px]" aria-hidden="true" />
               {selected.size === 0
@@ -542,7 +542,7 @@ function SearchResultsClaimList({
               className={`rounded-lg px-2.5 py-2 border ${
                 isSelected
                   ? 'bg-emerald-500/15 border-emerald-400/40'
-                  : 'bg-slate-900/40 border-emerald-500/15'
+                  : 'bg-emerald-50 border-emerald-100'
               }`}
             >
               <div className="flex gap-2.5">
@@ -552,7 +552,7 @@ function SearchResultsClaimList({
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggle(displayNum)}
-                      className="rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+                      className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
                       aria-label={isEs ? `Seleccionar #${displayNum}` : `Select #${displayNum}`}
                     />
                   </label>
@@ -602,7 +602,7 @@ function SearchResultsClaimList({
                           ? `Quiero reclamar el #${displayNum}`
                           : `I'd like to claim #${displayNum}`,
                       )}
-                      className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-50 text-[11px] font-semibold hover:bg-emerald-500/40 transition-colors"
+                      className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors"
                     >
                       <i className="fas fa-hand-holding-heart text-[10px]" aria-hidden="true" />
                       {isEs ? 'Reclamar solo este' : 'Claim this one'}
@@ -703,7 +703,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
               ? item.image_url
               : null
             return (
-              <li key={item.id || displayNum} className="rounded-lg bg-slate-900/40 px-2.5 py-2 border border-emerald-500/15">
+              <li key={item.id || displayNum} className="rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200">
                 <div className="flex gap-2.5">
                   <span
                     className={`flex-shrink-0 w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-[12px] font-bold ${t.accent}`}
@@ -756,10 +756,10 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
         {claimed.length > 0 && (
           <ul className="space-y-1.5 mb-2">
             {claimed.map((c, i) => (
-              <li key={c.listing_id || c.claim_id || i} className="text-white text-[12px]">
+              <li key={c.listing_id || c.claim_id || i} className="text-gray-800 text-[12px]">
                 <span className="font-semibold">{c.title || c.listing_id || 'Listing'}</span>
                 {c.quantity != null && (
-                  <span className="text-emerald-50"> · {c.quantity} {c.unit || ''}</span>
+                  <span className="text-gray-600"> · {c.quantity} {c.unit || ''}</span>
                 )}
               </li>
             ))}
@@ -775,7 +775,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           </ul>
         )}
         {(result.summary || result.message) && (
-          <div className="text-white text-[12px] mt-1">{result.summary || result.message}</div>
+          <div className="text-gray-800 text-[12px] mt-1">{result.summary || result.message}</div>
         )}
       </ToolCardShell>
     )
@@ -785,7 +785,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
     const errText = result?.error || toolResult.summary
     return (
       <ToolCardShell kind="claimfail" language={language}>
-        <div className="text-white">{errText}</div>
+        <div className="text-gray-800">{errText}</div>
         {result?.next_step && (
           <div className={`${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`}>{result.next_step}</div>
         )}
@@ -813,27 +813,27 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           )}
           <div className="min-w-0 flex-1">
             {result.title && (
-              <div className="text-white">
+              <div className="text-gray-800">
                 {result.quantity ? <span className="font-medium">{result.quantity} {result.unit || ''} </span> : null}
                 {result.quantity ? (language === 'es' ? 'de ' : 'of ') : null}
                 <span className="font-semibold">{result.title}</span>
-                {result.category && <span className="text-emerald-50"> · {result.category}</span>}
+                {result.category && <span className="text-gray-600"> · {result.category}</span>}
               </div>
             )}
             {result.pickup_location && (
-              <div className="text-white text-[11px] mt-1 flex items-start gap-1">
+              <div className="text-gray-700 text-[11px] mt-1 flex items-start gap-1">
                 <i className="fas fa-location-dot text-[10px] mt-[2px] opacity-70" aria-hidden="true" />
                 <span className="break-words">{result.pickup_location}</span>
               </div>
             )}
             {result.community_name && (
-              <div className="text-white text-[11px] mt-0.5 flex items-center gap-1">
+              <div className="text-gray-700 text-[11px] mt-0.5 flex items-center gap-1">
                 <i className="fas fa-people-group text-[10px] opacity-70" aria-hidden="true" />
                 <span>{result.community_name}</span>
               </div>
             )}
             {(result.summary || result.message) && (
-              <div className="text-white text-[12px] mt-1">{result.summary || result.message}</div>
+              <div className="text-gray-800 text-[12px] mt-1">{result.summary || result.message}</div>
             )}
           </div>
         </div>
@@ -844,7 +844,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   if (tool === 'create_reminder' && (result?.success || result?.created)) {
     return (
       <ToolCardShell kind="reminder" language={language}>
-        <span className="text-white">{result.summary || (language === 'es' ? 'Te avisaré.' : "I'll ping you.")}</span>
+        <span className="text-gray-800">{result.summary || (language === 'es' ? 'Te avisaré.' : "I'll ping you.")}</span>
       </ToolCardShell>
     )
   }
@@ -866,10 +866,10 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
         {posted.length > 0 && (
           <ul className="space-y-1.5 mb-2">
             {posted.slice(0, 12).map((row, i) => (
-              <li key={row.listing_id || row.id || i} className="text-white text-[12px]">
+              <li key={row.listing_id || row.id || i} className="text-gray-800 text-[12px]">
                 <span className="font-semibold">{row.title || row.listing_id || `Item ${i + 1}`}</span>
                 {row.quantity != null && (
-                  <span className="text-fuchsia-50"> · {row.quantity} {row.unit || ''}</span>
+                  <span className="text-gray-600"> · {row.quantity} {row.unit || ''}</span>
                 )}
               </li>
             ))}
@@ -885,7 +885,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           </ul>
         )}
         {(result.summary || result.message) && (
-          <div className="text-white text-[12px] mt-1">{result.summary || result.message}</div>
+          <div className="text-gray-800 text-[12px] mt-1">{result.summary || result.message}</div>
         )}
       </ToolCardShell>
     )
@@ -895,7 +895,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
     const errText = result?.error || toolResult.summary
     return (
       <ToolCardShell kind="claimfail" language={language} titleOverride={language === 'es' ? 'No se pudo publicar' : 'Could not post'}>
-        <div className="text-white">{errText}</div>
+        <div className="text-gray-800">{errText}</div>
         {result?.next_step && (
           <div className={`${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`}>{result.next_step}</div>
         )}
@@ -907,20 +907,20 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
     return (
       <ToolCardShell kind="post" language={language}>
         {result.title && (
-          <div className="text-white">
+          <div className="text-gray-800">
             <span className="font-semibold">{result.title}</span>
-            {result.quantity != null && <span className="text-white"> · {result.quantity} {result.unit || ''}</span>}
-            {result.category && <span className="text-white"> · {result.category}</span>}
+            {result.quantity != null && <span className="text-gray-800"> · {result.quantity} {result.unit || ''}</span>}
+            {result.category && <span className="text-gray-800"> · {result.category}</span>}
           </div>
         )}
         {result.address && (
-          <div className="text-white text-[11px] mt-1 flex items-start gap-1">
+          <div className="text-gray-700 text-[11px] mt-1 flex items-start gap-1">
             <i className="fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70" aria-hidden="true" />
             <span className="break-words">{result.address}</span>
           </div>
         )}
         {result.community_name && (
-          <div className="text-white text-[11px] mt-0.5 flex items-center gap-1">
+          <div className="text-gray-700 text-[11px] mt-0.5 flex items-center gap-1">
             <i className="fas fa-people-group text-[10px] opacity-70" aria-hidden="true" />
             <span>{result.community_name}</span>
           </div>
@@ -932,7 +932,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           </div>
         )}
         {(result.summary || result.message) && (
-          <div className="text-white mt-1">{result.summary || result.message}</div>
+          <div className="text-gray-800 mt-1">{result.summary || result.message}</div>
         )}
       </ToolCardShell>
     )
@@ -965,13 +965,13 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
               src={photoUrl}
               alt={item.title || ''}
               loading="lazy"
-              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-violet-500/15 bg-slate-800"
+              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
           )}
           <div className="min-w-0 flex-1">
             {item.title && (
-              <div className="text-white font-semibold">{item.title}</div>
+              <div className="text-gray-900 font-semibold">{item.title}</div>
             )}
             <div className={`${TOOL_CARD_TOKENS.updated.sub} text-[11px] mt-0.5 space-y-0.5`}>
               {qtyLabel && (
@@ -997,7 +997,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
               )}
             </div>
             {(result.summary || result.message) && (
-              <div className="text-white text-[11px] mt-1">{result.summary || result.message}</div>
+              <div className="text-gray-700 text-[11px] mt-1">{result.summary || result.message}</div>
             )}
           </div>
         </div>
@@ -1008,7 +1008,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   if ((tool === 'update_food_listing' || tool === 'update_listing' || tool === 'edit_listing') && !ok) {
     return (
       <ToolCardShell kind="claimfail" language={language} titleOverride={language === 'es' ? 'No se pudo actualizar' : 'Could not update'}>
-        <div className="text-white">{result?.error || result?.message || result?.summary}</div>
+        <div className="text-gray-800">{result?.error || result?.message || result?.summary}</div>
       </ToolCardShell>
     )
   }
@@ -1018,7 +1018,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
     const titles = result.titles || (result.title ? [result.title] : [])
     return (
       <ToolCardShell kind="deleted" language={language}>
-        <div className="text-white">
+        <div className="text-gray-800">
           {count > 1 ? (
             language === 'es'
               ? `Eliminados ${count} listados duplicados.`
@@ -1031,7 +1031,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           )}
         </div>
         {(result.summary || result.message) && (
-          <div className="text-white mt-1">{result.summary || result.message}</div>
+          <div className="text-gray-800 mt-1">{result.summary || result.message}</div>
         )}
       </ToolCardShell>
     )
@@ -1040,11 +1040,11 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   if (tool === 'delete_listing' && !ok) {
     return (
       <ToolCardShell kind="error" language={language}>
-        <div className="text-white font-medium">
+        <div className="text-gray-900 font-medium">
           {language === 'es' ? 'No se pudo eliminar' : 'Could not delete listing'}
         </div>
         {(result.error || result.message || result.summary) && (
-          <div className="text-white mt-1">{result.error || result.message || result.summary}</div>
+          <div className="text-gray-800 mt-1">{result.error || result.message || result.summary}</div>
         )}
       </ToolCardShell>
     )
@@ -1073,7 +1073,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
             <span className="font-semibold">{result.title}</span>
           </div>
         )}
-        {result.summary && <div className="text-white mt-1">{result.summary}</div>}
+        {result.summary && <div className="text-gray-800 mt-1">{result.summary}</div>}
       </ToolCardShell>
     )
   }
@@ -1089,7 +1089,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
         titleOverride={language === 'es' ? 'Recetas sugeridas' : 'Recipe suggestions'}
       >
         {(result.headline || result.summary) && (
-          <div className="text-white text-[12px] mb-3">{result.headline || result.summary}</div>
+          <div className="text-gray-800 text-[12px] mb-3">{result.headline || result.summary}</div>
         )}
         {cards.length > 0 ? (
           <div className="space-y-3">
@@ -1098,7 +1098,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
             ))}
           </div>
         ) : (
-          <div className="text-white text-[12px]">{result.summary || result.headline}</div>
+          <div className="text-gray-800 text-[12px]">{result.summary || result.headline}</div>
         )}
       </ToolCardShell>
     )
@@ -1110,7 +1110,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
       if (result.summary || result.message) {
         return (
           <ToolCardShell kind="generic" language={language} titleOverride={language === 'es' ? 'Conservación' : 'Storage tips'}>
-            <div className="text-white text-[12px]">{result.summary || result.message}</div>
+            <div className="text-gray-800 text-[12px]">{result.summary || result.message}</div>
           </ToolCardShell>
         )
       }
@@ -1142,7 +1142,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   if (ok && !SILENT_UI_TOOLS.has(tool) && (result?.summary || result?.message)) {
     return (
       <ToolCardShell kind="generic" language={language} titleOverride={tool?.replace(/_/g, ' ') || (language === 'es' ? 'Acción' : 'Action')}>
-        <div className="text-white text-[12px]">{result.summary || result.message}</div>
+        <div className="text-gray-800 text-[12px]">{result.summary || result.message}</div>
       </ToolCardShell>
     )
   }
@@ -1310,12 +1310,12 @@ function MessageBubble({
       <div className={`max-w-[85%] flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
         {/* Nouri avatar (assistant) */}
         {!isUser && (
-          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center mt-1 shadow-sm shadow-[#2CABE3]/25">
+          <div className="flex-shrink-0 w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center mt-1 shadow-sm">
             <svg viewBox="0 0 100 100" className="w-5 h-5">
               <circle cx="50" cy="52" r="36" fill="#f0f4f8" />
               <rect x="26" y="38" rx="12" ry="12" width="48" height="24" fill="#1e293b" opacity="0.85" />
-              <path d="M35 53 Q38 46 41 53" stroke="#67e8f9" strokeWidth="4" strokeLinecap="round" fill="none" />
-              <path d="M59 53 Q62 46 65 53" stroke="#67e8f9" strokeWidth="4" strokeLinecap="round" fill="none" />
+              <path d="M35 53 Q38 46 41 53" stroke="#34d399" strokeWidth="4" strokeLinecap="round" fill="none" />
+              <path d="M59 53 Q62 46 65 53" stroke="#34d399" strokeWidth="4" strokeLinecap="round" fill="none" />
             </svg>
           </div>
         )}
@@ -1323,7 +1323,7 @@ function MessageBubble({
         {/* User avatar bubble */}
         {isUser && (
           <div
-            className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden mt-1 shadow-sm shadow-[#2CABE3]/20 ring-1 ring-[#2CABE3]/30 bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center"
+            className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden mt-1 ring-1 ring-emerald-200 bg-emerald-600 flex items-center justify-center"
             title={currentUser?.name || currentUser?.email || 'You'}
             aria-label={`Message from ${currentUser?.name || 'you'}`}
           >
@@ -1344,10 +1344,10 @@ function MessageBubble({
           <div
             className={`px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${
               isUser
-                ? 'bg-gradient-to-br from-[#2CABE3] to-emerald-500 text-white rounded-br-md shadow-md shadow-[#2CABE3]/20 ring-1 ring-[#2CABE3]/20'
+                ? 'bg-emerald-600 text-white rounded-br-md shadow-sm'
                 : msg.isError
                   ? 'bg-red-50 text-red-800 border border-red-200 rounded-bl-md backdrop-blur-sm'
-                  : 'bg-white text-gray-900 rounded-bl-md border border-[#2CABE3]/15 shadow-sm'
+                  : 'bg-white text-gray-900 rounded-bl-md border border-gray-200 shadow-sm'
             }`}
           >
             {/* Inline photo message: show thumbnail instead of raw URL */}
@@ -1459,11 +1459,11 @@ function MessageBubble({
               <button
                 type="button"
                 onClick={handleCopy}
-                className="inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 transition-colors"
+                className="inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors"
                 title={copied ? (language === 'es' ? 'Copiado' : 'Copied') : (language === 'es' ? 'Copiar' : 'Copy')}
                 aria-label={language === 'es' ? 'Copiar mensaje' : 'Copy message'}
               >
-                <i className={`fas ${copied ? 'fa-check text-[#2CABE3]' : 'fa-copy'} text-[11px]`} aria-hidden="true" />
+                <i className={`fas ${copied ? 'fa-check text-emerald-600' : 'fa-copy'} text-[11px]`} aria-hidden="true" />
               </button>
               {!feedbackGiven && (
                 <>
@@ -1488,7 +1488,7 @@ function MessageBubble({
                 </>
               )}
               {feedbackGiven && (
-                <span className="text-[10px] text-[#2299c7] px-1.5 py-0.5 rounded-md bg-[#2CABE3]/10 border border-[#2CABE3]/20">
+                <span className="text-[10px] text-[#059669] px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200">
                   {feedbackGiven === 'helpful'
                     ? (language === 'es' ? 'Gracias 👍' : 'Thanks 👍')
                     : (language === 'es' ? 'Anotado 👎' : 'Noted 👎')}
@@ -1501,7 +1501,7 @@ function MessageBubble({
                   type="button"
                   onClick={onRegenerate}
                   disabled={isLoading}
-                  className="ml-1 inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-gray-500 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-[10px] font-medium"
+                  className="ml-1 inline-flex items-center gap-1 px-1.5 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed text-[10px] font-medium"
                   title={language === 'es' ? 'Regenerar respuesta' : 'Regenerate response'}
                   aria-label={language === 'es' ? 'Regenerar respuesta' : 'Regenerate response'}
                 >
@@ -1580,7 +1580,7 @@ function SuggestedActionButton({ action, onSuggestionClick, onAttachPhoto, disab
 
   const styleClass = actionType === 'navigate'
     ? 'bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-300 font-medium'
-    : 'bg-[#2CABE3]/15 text-[#1a7a9e] hover:bg-[#2CABE3]/25 border-[#2CABE3]/30 font-medium'
+    : 'bg-[#10b981]/15 text-[#047857] hover:bg-[#10b981]/25 border-[#10b981]/30 font-medium'
 
   return (
     <button
@@ -1611,11 +1611,8 @@ function BulkUploadPreview({
     ? (isEs ? 'Borrador desde foto' : 'Draft from photo')
     : (isEs ? 'Importación CSV' : 'CSV import')
   const icon = pending.kind === 'photo' ? 'fa-camera' : 'fa-file-csv'
-  const tint = pending.kind === 'photo' ? 'fuchsia' : 'emerald'
-  const ringClass = pending.kind === 'photo'
-    ? 'border-fuchsia-500/40 shadow-fuchsia-500/10'
-    : 'border-emerald-500/40 shadow-emerald-500/10'
-  const headerClass = pending.kind === 'photo' ? 'text-fuchsia-200' : 'text-emerald-200'
+  const ringClass = 'border-gray-200'
+  const headerClass = 'text-emerald-800'
 
   // Lazy-load active communities once so the preview can offer a selector.
   const [communities, setCommunities] = useState([])
@@ -1808,7 +1805,7 @@ function BulkUploadPreview({
   if (pending.error) {
     const allErrors = [pending.error, ...(pending.parseErrors || []).slice(1)].filter(Boolean)
     return (
-      <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 shadow-sm`}>
+      <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`}>
         <div className="flex items-start gap-3">
           <i className={`fas ${icon} ${headerClass} mt-0.5`} aria-hidden="true" />
           <div className="flex-1 min-w-0">
@@ -1821,7 +1818,7 @@ function BulkUploadPreview({
           <button
             type="button"
             onClick={onCancel}
-            className="text-xs text-slate-300 hover:text-white px-2 py-1 rounded-md hover:bg-slate-800/60 flex-shrink-0"
+            className="text-xs text-gray-500 hover:text-gray-800 px-2 py-1 rounded-md hover:bg-gray-100 flex-shrink-0"
           >
             {isEs ? 'Cerrar' : 'Dismiss'}
           </button>
@@ -1830,7 +1827,7 @@ function BulkUploadPreview({
           <button
             type="button"
             onClick={downloadCsvTemplate}
-            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-500/25 text-emerald-50 hover:bg-emerald-500/35 border border-emerald-400/40 transition-colors"
+            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors"
           >
             <i className="fas fa-download text-[10px]" aria-hidden="true" />
             {isEs ? 'Descargar plantilla CSV' : 'Download CSV template'}
@@ -1842,13 +1839,13 @@ function BulkUploadPreview({
 
   if (pending.analyzing || pending.enriching) {
     return (
-      <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 flex items-center gap-3 shadow-sm`}>
+      <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 flex items-center gap-3 shadow-sm`}>
         <i className={`fas ${icon} ${headerClass}`} aria-hidden="true" />
         <div className="flex-1 min-w-0">
           <div className="text-xs font-semibold text-slate-100">{kindLabel}</div>
           <div className="text-xs text-slate-300 truncate">{pending.filename}</div>
           <div className="mt-1 text-sm text-slate-200">
-            <i className="fas fa-wand-magic-sparkles mr-1.5 text-cyan-300 animate-pulse" aria-hidden="true" />
+            <i className="fas fa-wand-magic-sparkles mr-1.5 text-emerald-300 animate-pulse" aria-hidden="true" />
             {pending.enriching
               ? (isEs ? 'Rellenando huecos con IA…' : 'Filling gaps with AI…')
               : (isEs ? 'Analizando con IA...' : 'Analyzing with AI…')}
@@ -1869,7 +1866,7 @@ function BulkUploadPreview({
   }
 
   return (
-    <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-slate-900/80 backdrop-blur-sm p-3 shadow-sm`}>
+    <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`}>
       <div className="flex items-center gap-2 mb-2">
         <i className={`fas ${icon} ${headerClass}`} aria-hidden="true" />
         <div className="text-xs font-semibold text-slate-200">
@@ -1884,7 +1881,7 @@ function BulkUploadPreview({
       <div className="text-[11px] text-slate-300 mb-2 truncate" title={pending.filename}>{pending.filename}</div>
 
       {pending.enriched && (
-        <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/15 px-2 py-1.5 text-[11px] text-cyan-50">
+        <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">
           <i className="fas fa-wand-magic-sparkles mt-0.5" aria-hidden="true" />
           <span className="flex-1">
             {pending.enrichSummary
@@ -1909,7 +1906,7 @@ function BulkUploadPreview({
                 checked={allSelected}
                 onChange={toggleSelectAll}
                 disabled={busy || rows.length === 0}
-                className="rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+                className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
                 aria-label={isEs ? 'Seleccionar todas las filas' : 'Select all rows'}
               />
               <span className="font-medium">
@@ -1925,7 +1922,7 @@ function BulkUploadPreview({
                 checked={fillEmptyOnly}
                 onChange={(e) => setFillEmptyOnly(e.target.checked)}
                 disabled={busy}
-                className="rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40"
+                className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
               />
               <span>
                 {isEs ? 'Solo rellenar vacíos' : 'Only fill empty'}
@@ -1940,7 +1937,7 @@ function BulkUploadPreview({
                 value={bulkCommunityId}
                 onChange={(e) => setBulkCommunityId(e.target.value)}
                 disabled={busy || communitiesLoading || communities.length === 0}
-                className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50"
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50"
                 aria-label={isEs ? 'Comunidad compartida' : 'Shared community'}
               >
                 <option value="">
@@ -1957,7 +1954,7 @@ function BulkUploadPreview({
               type="button"
               onClick={applyCommunityToSelected}
               disabled={busy || !String(bulkCommunityId || '').trim() || selectedRowIndexes.size === 0}
-              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {isEs
                 ? `Aplicar comunidad (${selectedRowIndexes.size})`
@@ -1974,7 +1971,7 @@ function BulkUploadPreview({
                 onChange={(e) => setBulkLocation(e.target.value)}
                 disabled={busy}
                 placeholder={isEs ? 'Una dirección de recogida para las seleccionadas…' : 'One pickup address for selected rows…'}
-                className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 placeholder:text-slate-400 outline-none focus:border-emerald-500/50"
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 placeholder:text-gray-400 outline-none focus:border-emerald-500/50"
                 aria-label={isEs ? 'Dirección compartida' : 'Shared pickup address'}
               />
             </label>
@@ -1982,7 +1979,7 @@ function BulkUploadPreview({
               type="button"
               onClick={applyLocationToSelected}
               disabled={busy || !String(bulkLocation || '').trim() || selectedRowIndexes.size === 0}
-              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {isEs
                 ? `Aplicar dirección (${selectedRowIndexes.size})`
@@ -1997,7 +1994,7 @@ function BulkUploadPreview({
                 value={bulkCategory}
                 onChange={(e) => setBulkCategory(e.target.value)}
                 disabled={busy}
-                className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50"
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50"
                 aria-label={isEs ? 'Categoría compartida' : 'Shared category'}
               >
                 <option value="">{isEs ? 'Categoría (opcional)…' : 'Category (optional)…'}</option>
@@ -2013,7 +2010,7 @@ function BulkUploadPreview({
                 value={bulkExpiry}
                 onChange={(e) => setBulkExpiry(e.target.value)}
                 disabled={busy}
-                className="flex-1 min-w-0 bg-slate-900 border border-slate-600 rounded px-2 py-1 text-slate-100 outline-none focus:border-emerald-500/50"
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50"
                 aria-label={isEs ? 'Caducidad compartida' : 'Shared expiry'}
               />
             </label>
@@ -2028,7 +2025,7 @@ function BulkUploadPreview({
                 || selectedRowIndexes.size === 0
                 || (!String(bulkCategory || '').trim() && !String(bulkExpiry || '').trim())
               }
-              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-500/35 text-emerald-50 border border-emerald-400/50 hover:bg-emerald-500/45 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="flex-shrink-0 text-[11px] px-2.5 py-1 rounded-md bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             >
               {isEs ? 'Aplicar' : 'Apply'}
             </button>
@@ -2047,7 +2044,7 @@ function BulkUploadPreview({
                 && !String(bulkExpiry || '').trim()
               )
             }
-            className="w-full text-[11px] px-2.5 py-1.5 rounded-md bg-cyan-500/25 text-cyan-50 border border-cyan-400/40 hover:bg-cyan-500/35 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
+            className="w-full text-[11px] px-2.5 py-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {fillEmptyOnly
               ? (isEs
@@ -2069,7 +2066,7 @@ function BulkUploadPreview({
                 checked={selectedRowIndexes.has(idx)}
                 onChange={() => toggleRowSelected(idx)}
                 disabled={busy}
-                className="mt-1 rounded border-slate-600 bg-slate-900 text-emerald-500 focus:ring-emerald-500/40 flex-shrink-0"
+                className="mt-1 rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40 flex-shrink-0"
                 aria-label={isEs ? `Seleccionar fila ${idx + 1}` : `Select row ${idx + 1}`}
               />
             )}
@@ -2089,12 +2086,12 @@ function BulkUploadPreview({
                   value={row.title || ''}
                   onChange={(e) => onUpdateRow(idx, { title: e.target.value })}
                   disabled={busy}
-                  className="flex-1 min-w-0 bg-transparent text-sm text-slate-100 font-medium outline-none focus:bg-slate-900/60 px-1.5 py-0.5 rounded"
+                  className="flex-1 min-w-0 bg-transparent text-sm text-gray-900 font-medium outline-none focus:bg-emerald-50 px-1.5 py-0.5 rounded"
                   aria-label={`Row ${idx + 1} title`}
                 />
                 {filledByIndex.has(idx) && (
                   <span
-                    className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-cyan-500/25 text-cyan-50 border border-cyan-400/40 whitespace-nowrap"
+                    className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap"
                     title={`${isEs ? 'IA rellenó' : 'AI filled'}: ${filledByIndex.get(idx).join(', ')}`}
                   >
                     <i className="fas fa-wand-magic-sparkles mr-0.5" aria-hidden="true" />
@@ -2110,7 +2107,7 @@ function BulkUploadPreview({
                   value={row.quantity ?? ''}
                   onChange={(e) => onUpdateRow(idx, { quantity: Number(e.target.value) })}
                   disabled={busy}
-                  className="w-16 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100"
+                  className="w-16 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900"
                   aria-label="Quantity"
                 />
                 <input
@@ -2118,7 +2115,7 @@ function BulkUploadPreview({
                   value={row.unit || ''}
                   onChange={(e) => onUpdateRow(idx, { unit: e.target.value })}
                   disabled={busy}
-                  className="w-16 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100"
+                  className="w-16 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900"
                   aria-label="Unit"
                 />
                 <span className="text-slate-300">·</span>
@@ -2126,7 +2123,7 @@ function BulkUploadPreview({
                   value={row.category || 'other'}
                   onChange={(e) => onUpdateRow(idx, { category: e.target.value })}
                   disabled={busy}
-                  className="bg-slate-900 border border-slate-600 rounded px-1 py-0.5 text-slate-100"
+                  className="bg-white border border-gray-300 rounded px-1 py-0.5 text-gray-900"
                   aria-label="Category"
                 >
                   {['produce','bakery','dairy','pantry','meat','prepared','other'].map(c => (
@@ -2147,7 +2144,7 @@ function BulkUploadPreview({
                     onChange={(e) => onUpdateRow(idx, { location: e.target.value })}
                     disabled={busy}
                     placeholder={isEs ? 'Dirección de recogida' : 'Pickup address'}
-                    className="flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100 placeholder:text-slate-400"
+                    className="flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400"
                     aria-label={isEs ? 'Dirección de recogida' : 'Pickup address'}
                   />
                 </label>
@@ -2158,7 +2155,7 @@ function BulkUploadPreview({
                     value={row.expiry_date || ''}
                     onChange={(e) => onUpdateRow(idx, { expiry_date: e.target.value })}
                     disabled={busy}
-                    className="flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100"
+                    className="flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900"
                     aria-label={isEs ? 'Fecha de caducidad' : 'Expiry date'}
                   />
                 </label>
@@ -2176,7 +2173,7 @@ function BulkUploadPreview({
                         })
                       }}
                       disabled={busy}
-                      className={`flex-1 min-w-0 bg-slate-900 border rounded px-1 py-0.5 text-slate-100 ${
+                      className={`flex-1 min-w-0 bg-white border rounded px-1 py-0.5 text-gray-900 ${
                         row.community_id ? 'border-slate-600' : 'border-amber-400'
                       }`}
                       aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
@@ -2203,7 +2200,7 @@ function BulkUploadPreview({
                           ? (isEs ? 'Cargando comunidades…' : 'Loading communities…')
                           : (isEs ? 'Nombre de escuela o comunidad' : 'School or community name')
                       }
-                      className={`flex-1 min-w-0 bg-transparent outline-none focus:bg-slate-900/60 px-1 py-0.5 rounded text-slate-100 placeholder:text-slate-400 ${
+                      className={`flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400 ${
                         row.community_name ? '' : 'ring-1 ring-amber-400 rounded'
                       }`}
                       aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
@@ -2212,7 +2209,7 @@ function BulkUploadPreview({
                 </label>
               </div>
               {communitiesError && (
-                <div className="mt-1 flex items-center gap-2 text-[10px] text-amber-200">
+                <div className="mt-1 flex items-center gap-2 text-[10px] text-amber-700">
                   <span>{communitiesError}</span>
                   <button
                     type="button"
@@ -2265,7 +2262,7 @@ function BulkUploadPreview({
           type="button"
           onClick={onCancel}
           disabled={busy}
-          className="text-xs px-3 py-1.5 rounded-full bg-slate-700 text-slate-50 hover:bg-slate-600 border border-slate-700/60 disabled:opacity-40"
+          className="text-xs px-3 py-1.5 rounded-full bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 disabled:opacity-40"
         >
           {isEs ? 'Cancelar' : 'Cancel'}
         </button>
@@ -2273,11 +2270,7 @@ function BulkUploadPreview({
           type="button"
           onClick={onConfirm}
           disabled={busy || rows.length === 0 || missingCommunity}
-          className={`text-xs px-3 py-1.5 rounded-full text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all ml-auto bg-gradient-to-r ${
-            tint === 'fuchsia'
-              ? 'from-fuchsia-500 to-purple-500 hover:from-fuchsia-400 hover:to-purple-400 shadow-md shadow-fuchsia-500/20'
-              : 'from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 shadow-md shadow-emerald-500/20'
-          }`}
+          className="text-xs px-3 py-1.5 rounded-full text-white font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all ml-auto bg-emerald-600 hover:bg-emerald-700 shadow-sm" 
         >
           {busy
             ? (isEs ? 'Creando…' : 'Creating…')
@@ -3953,24 +3946,24 @@ function AIChatPanel() {
       <div className="fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[10060] group fab-base pointer-events-auto" style={{ perspective: '600px' }}>
         {/* Speech bubble with "?" */}
         <div className="absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
-          <div className="relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-cyan-200/50">
-            <span className="text-cyan-500 font-bold text-lg">?</span>
+          <div className="relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50">
+            <span className="text-gray-6000 font-bold text-lg">?</span>
             {/* Speech tail */}
-            <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-cyan-200/50 transform rotate-45" />
+            <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-emerald-200/50 transform rotate-45" />
           </div>
         </div>
 
         {/* Glow ring behind robot */}
-        <div className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-cyan-400/20 blur-xl animate-pulse-glow" />
+        <div className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-emerald-100/80" />
 
         <button
           onClick={() => setIsOpen(true)}
-          className="relative w-[68px] h-[68px] rounded-full focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 animate-bob"
+          className="relative w-[68px] h-[68px] rounded-full focus:outline-none focus:ring-2 focus:ring-emerald-400 focus:ring-offset-2 animate-bob"
           aria-label="Open Nouri AI Assistant"
           style={{ transformStyle: 'preserve-3d' }}
         >
           {/* Robot SVG body */}
-          <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,200,255,0.3))' }}>
+          <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-2xl" style={{ filter: 'drop-shadow(0 8px 16px rgba(16,185,129,0.2))' }}>
             {/* Body circle — glossy white */}
             <defs>
               <radialGradient id="bodyGrad" cx="40%" cy="35%" r="60%">
@@ -3979,12 +3972,12 @@ function AIChatPanel() {
                 <stop offset="100%" stopColor="#d1dbe6" />
               </radialGradient>
               <radialGradient id="eyeGrad" cx="50%" cy="40%" r="50%">
-                <stop offset="0%" stopColor="#67e8f9" />
-                <stop offset="100%" stopColor="#06b6d4" />
+                <stop offset="0%" stopColor="#34d399" />
+                <stop offset="100%" stopColor="#059669" />
               </radialGradient>
               <radialGradient id="cheekGrad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.35" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
               </radialGradient>
               <filter id="glow">
                 <feGaussianBlur stdDeviation="2" result="coloredBlur" />
@@ -4015,7 +4008,7 @@ function AIChatPanel() {
             <path d="M59 53 Q62 46 65 53" stroke="url(#eyeGrad)" strokeWidth="3" strokeLinecap="round" fill="none" filter="url(#glow)" />
 
             {/* Mouth — small smile */}
-            <path d="M44 57 Q50 61 56 57" stroke="#67e8f9" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7" />
+            <path d="M44 57 Q50 61 56 57" stroke="#34d399" strokeWidth="1.5" strokeLinecap="round" fill="none" opacity="0.7" />
 
             {/* Left ear / side detail */}
             <ellipse cx="14" cy="52" rx="5" ry="8" fill="#e2e8f0" stroke="#b0bec5" strokeWidth="0.8" />
@@ -4030,7 +4023,7 @@ function AIChatPanel() {
           </svg>
 
           {/* Hover 3D tilt effect handled by CSS */}
-          <div className="absolute inset-0 rounded-full ring-2 ring-cyan-300/0 group-hover:ring-cyan-300/40 transition-all duration-300" />
+          <div className="absolute inset-0 rounded-full ring-2 ring-emerald-300/0 group-hover:ring-emerald-300/40 transition-all duration-300" />
         </button>
 
         {/* Inline keyframes */}
@@ -4085,29 +4078,22 @@ function AIChatPanel() {
         role="dialog"
         aria-modal="true"
         aria-label={language === 'es' ? 'Asistente Nouri' : 'Nouri AI Assistant'}
-        className={`${panelClasses} flex flex-col rounded-2xl shadow-2xl shadow-[#2CABE3]/10 overflow-hidden transition-all duration-300 border border-[#2CABE3]/15 bg-white/75 backdrop-blur-xl`}
+        className={`${panelClasses} flex flex-col rounded-2xl shadow-xl overflow-hidden transition-all duration-300 border border-gray-200 bg-white`}
       >
-      {/* Ambient orbs — matches Find Food / Share Food hero pages */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        <div className="absolute -top-24 -left-24 w-72 h-72 rounded-full bg-[#2CABE3]/15 blur-3xl" />
-        <div className="absolute top-1/4 -right-20 w-64 h-64 rounded-full bg-emerald-300/20 blur-3xl" />
-        <div className="absolute bottom-0 left-1/4 w-48 h-48 rounded-full bg-[#2CABE3]/8 blur-2xl" />
-      </div>
-
-      {/* Header — z-30 so the ⋮ menu dropdown sits above message content */}
-      <div className="relative z-30 flex-shrink-0 bg-white/60 backdrop-blur-md text-gray-900 px-4 py-3 flex items-center justify-between border-b border-[#2CABE3]/15">
+      {/* Header    {/* Header — z-30 so the ⋮ menu dropdown sits above message content */}
+      <div className="relative z-30 flex-shrink-0 bg-white text-gray-900 px-4 py-3 flex items-center justify-between border-b border-gray-200">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2CABE3] to-emerald-500 flex items-center justify-center shadow-md shadow-[#2CABE3]/25">
+          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm">
             <svg viewBox="0 0 100 100" className="w-6 h-6">
               <circle cx="50" cy="52" r="36" fill="#f0f4f8" />
               <rect x="26" y="38" rx="12" ry="12" width="48" height="24" fill="#1e293b" opacity="0.85" />
-              <path d="M35 53 Q38 46 41 53" stroke="#67e8f9" strokeWidth="4" strokeLinecap="round" fill="none" />
-              <path d="M59 53 Q62 46 65 53" stroke="#67e8f9" strokeWidth="4" strokeLinecap="round" fill="none" />
+              <path d="M35 53 Q38 46 41 53" stroke="#34d399" strokeWidth="4" strokeLinecap="round" fill="none" />
+              <path d="M59 53 Q62 46 65 53" stroke="#34d399" strokeWidth="4" strokeLinecap="round" fill="none" />
             </svg>
           </div>
           <div>
             <h3 className="font-semibold text-sm text-gray-900 leading-tight">Nouri</h3>
-            <p className="text-[#2CABE3] text-[10px] flex items-center gap-1.5 leading-tight mt-0.5">
+            <p className="text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5">
               <span
                 className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400/60"
                 aria-hidden="true"
@@ -4133,7 +4119,7 @@ function AIChatPanel() {
               updateSetting('preferredLanguage', newLang)
               sendMessage(languageSwitchPrompt(newLang))
             }}
-            className="text-[#2CABE3] hover:text-[#2299c7] text-[11px] font-semibold px-2 py-1 rounded-full bg-[#2CABE3]/10 border border-[#2CABE3]/20 hover:border-[#2CABE3]/35 max-w-[5.5rem] truncate"
+            className="text-emerald-600 hover:text-emerald-700 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 hover:border-emerald-300 max-w-[5.5rem] truncate"
             aria-label={chatT(language, 'chatLanguage')}
           >
             {CHAT_UI_LANGUAGES.map((code) => (
@@ -4145,7 +4131,7 @@ function AIChatPanel() {
           <div className="relative z-40">
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="text-[#2CABE3]/70 hover:text-[#2CABE3] p-1 rounded hover:bg-[#2CABE3]/10 transition-colors"
+              className="text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors"
               aria-label="Chat menu"
               aria-expanded={showMenu}
             >
@@ -4154,7 +4140,7 @@ function AIChatPanel() {
               </svg>
             </button>
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 bg-white/95 rounded-lg shadow-xl border border-[#2CABE3]/15 py-1 w-52 z-50 backdrop-blur-md">
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-52 z-50">
                 <div className="px-2 pt-1 pb-0.5">
                   <p className="text-[10px] uppercase tracking-wider text-gray-400 px-2 py-1">
                     {chatT(language, 'conversationTone')}
@@ -4169,8 +4155,8 @@ function AIChatPanel() {
                         onClick={() => { setTone(t); setShowMenu(false) }}
                         className={`w-full text-left px-4 py-1.5 text-sm transition-colors ${
                           active
-                            ? 'text-[#2CABE3] bg-[#2CABE3]/10'
-                            : 'text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3]'
+                            ? 'text-emerald-600 bg-emerald-50'
+                            : 'text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600'
                         }`}
                       >
                         {active ? '✓ ' : ''}{labels[t]}
@@ -4178,16 +4164,16 @@ function AIChatPanel() {
                     )
                   })}
                 </div>
-                <div className="border-t border-[#2CABE3]/10 my-1" />
+                <div className="border-t border-gray-100 my-1" />
                 <button
                   onClick={handleClearConversation}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors"
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors"
                 >
                   🗑️ Clear conversation
                 </button>
                 <button
                   onClick={() => { setIsExpanded(!isExpanded); setShowMenu(false) }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors"
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors"
                 >
                   {isExpanded ? '🗗 Compact view' : '⬜ Full screen'}
                 </button>
@@ -4198,7 +4184,7 @@ function AIChatPanel() {
           {/* Expand / collapse */}
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="text-[#2CABE3]/70 hover:text-[#2CABE3] p-1 rounded hover:bg-[#2CABE3]/10 transition-colors hidden md:block"
+            className="text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors hidden md:block"
             aria-label={isExpanded ? 'Compact view' : 'Expand'}
           >
             {isExpanded ? (
@@ -4228,19 +4214,17 @@ function AIChatPanel() {
       {/* ─── Voice Mode (ChatGPT-like immersive voice UI) ─────── */}
       {voiceMode ? (
         <div
-          className="relative z-0 flex-1 flex flex-col items-center justify-between py-5 px-6 overflow-hidden bg-gradient-to-b from-[#2CABE3]/5 via-white/40 to-emerald-50/30 backdrop-blur-sm"
+          className="relative z-0 flex-1 flex flex-col items-center justify-between py-5 px-6 overflow-hidden bg-emerald-50/40"
           role="region"
           aria-label={language === 'es' ? 'Modo de voz' : 'Voice mode'}
         >
           {/* Animated aurora behind everything — keeps the surface alive
               even when idle so the mode never looks frozen. */}
-          <div className="voice-aurora" aria-hidden="true" />
-
           {/* ─── Top bar: exit + language pill + help hint ─── */}
           <div className="relative w-full flex items-center justify-between gap-2 z-10">
             <button
               onClick={exitVoiceMode}
-              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-900/5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50"
+              className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-900/5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50"
               aria-label={language === 'es' ? 'Salir del modo de voz' : 'Exit voice mode'}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -4286,7 +4270,7 @@ function AIChatPanel() {
           <div className="relative flex-1 flex items-center justify-center z-10">
             <button
               onClick={handleOrbTap}
-              className="relative focus:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400/30 rounded-full group"
+              className="relative focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400/30 rounded-full group"
               aria-label={
                 isVoiceSpeaking
                   ? (language === 'es' ? 'Toca para interrumpir' : 'Tap to interrupt')
@@ -4298,24 +4282,24 @@ function AIChatPanel() {
               {/* Listening rings (now properly animated thanks to main.css) */}
               {isVoiceListening && (
                 <>
-                  <div className="absolute inset-0 -m-8 rounded-full border-2 border-blue-400/40 animate-voice-ring-1 pointer-events-none" />
-                  <div className="absolute inset-0 -m-14 rounded-full border border-blue-400/20 animate-voice-ring-2 pointer-events-none" />
-                  <div className="absolute inset-0 -m-20 rounded-full border border-blue-400/10 animate-voice-ring-3 pointer-events-none" />
+                  <div className="absolute inset-0 -m-8 rounded-full border-2 border-emerald-400/40 animate-voice-ring-1 pointer-events-none" />
+                  <div className="absolute inset-0 -m-14 rounded-full border border-emerald-400/20 animate-voice-ring-2 pointer-events-none" />
+                  <div className="absolute inset-0 -m-20 rounded-full border border-emerald-400/10 animate-voice-ring-3 pointer-events-none" />
                 </>
               )}
 
               {/* Speaking ripple */}
               {isVoiceSpeaking && (
                 <>
-                  <div className="absolute inset-0 -m-6 rounded-full border-2 border-teal-400/40 animate-voice-speak-ring-1 pointer-events-none" />
-                  <div className="absolute inset-0 -m-10 rounded-full border border-teal-400/20 animate-voice-speak-ring-2 pointer-events-none" />
+                  <div className="absolute inset-0 -m-6 rounded-full border-2 border-emerald-400/40 animate-voice-speak-ring-1 pointer-events-none" />
+                  <div className="absolute inset-0 -m-10 rounded-full border border-emerald-400/20 animate-voice-speak-ring-2 pointer-events-none" />
                 </>
               )}
 
               {/* Glow */}
               <div
                 className={`absolute -inset-8 rounded-full blur-2xl transition-all duration-700 pointer-events-none ${
-                  isVoiceSpeaking ? 'bg-teal-500/30' : isVoiceListening ? 'bg-blue-500/30' : isLoading ? 'bg-violet-500/25' : 'bg-slate-600/10'
+                  isVoiceSpeaking ? 'bg-emerald-500/20' : isVoiceListening ? 'bg-emerald-500/20' : isLoading ? 'bg-emerald-500/15' : 'bg-slate-600/10'
                 }`}
               />
 
@@ -4323,12 +4307,12 @@ function AIChatPanel() {
               <div
                 className={`relative w-36 h-36 rounded-full transition-all duration-300 flex items-center justify-center cursor-pointer ${
                   isVoiceListening
-                    ? 'bg-gradient-to-br from-blue-400 via-indigo-500 to-violet-600 shadow-[0_0_60px_rgba(99,102,241,0.45)]'
+                    ? 'bg-emerald-600 shadow-md'
                     : isVoiceSpeaking
-                      ? 'bg-gradient-to-br from-teal-400 via-cyan-500 to-blue-500 shadow-[0_0_60px_rgba(20,184,166,0.45)] scale-110'
+                      ? 'bg-emerald-700 shadow-md scale-110'
                       : isLoading
-                        ? 'bg-gradient-to-br from-violet-400 via-purple-500 to-fuchsia-500 shadow-[0_0_40px_rgba(168,85,247,0.35)]'
-                        : 'bg-gradient-to-br from-slate-500 via-slate-600 to-slate-700 shadow-[0_0_20px_rgba(100,116,139,0.25)] scale-95 group-hover:scale-100'
+                        ? 'bg-emerald-500 shadow-sm'
+                        : 'bg-emerald-600/90 shadow-sm scale-95 group-hover:scale-100'
                 }`}
                 style={
                   isVoiceListening
@@ -4390,7 +4374,7 @@ function AIChatPanel() {
               return (
                 <span
                   key={i}
-                  className="w-[3px] rounded-full bg-blue-400/80 transition-[height] duration-75"
+                  className="w-[3px] rounded-full bg-emerald-400/80 transition-[height] duration-75"
                   style={{ height: `${h}px` }}
                 />
               )
@@ -4406,7 +4390,7 @@ function AIChatPanel() {
               <button
                 type="button"
                 onClick={() => { try { tapToHear() } catch { /* noop */ } }}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-teal-500/15 text-teal-200 ring-1 ring-teal-400/40 hover:bg-teal-500/25 transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100 transition-colors"
                 aria-label={language === 'es' ? 'Toca para escuchar la respuesta' : 'Tap to hear the response'}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -4444,21 +4428,21 @@ function AIChatPanel() {
             <div
               className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide transition-all duration-300 ring-1 ${
                 voiceError
-                  ? 'bg-rose-500/10 text-rose-700 ring-rose-500/40'
+                  ? 'bg-red-50 text-red-700 ring-red-200'
                   : isVoiceSpeaking
-                    ? 'bg-teal-500/10 text-teal-800 ring-teal-500/40'
+                    ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
                     : isLoading
-                      ? 'bg-violet-500/10 text-violet-800 ring-violet-500/40'
+                      ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
                       : isVoiceListening
-                        ? 'bg-blue-500/10 text-blue-700 ring-blue-500/40'
-                        : 'bg-slate-900/5 text-slate-600 ring-slate-300/70'
+                        ? 'bg-emerald-50 text-emerald-800 ring-emerald-200'
+                        : 'bg-gray-50 text-gray-600 ring-gray-200'
               }`}
               role="status"
               aria-live="polite"
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${
-                  voiceError ? 'bg-rose-400' : isVoiceSpeaking ? 'bg-teal-400 animate-pulse' : isLoading ? 'bg-violet-400 animate-pulse' : isVoiceListening ? 'bg-blue-400 animate-pulse' : 'bg-slate-500'
+                  voiceError ? 'bg-red-500' : isVoiceSpeaking ? 'bg-emerald-500 animate-pulse' : isLoading ? 'bg-emerald-400 animate-pulse' : isVoiceListening ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'
                 }`}
                 aria-hidden="true"
               />
@@ -4476,7 +4460,7 @@ function AIChatPanel() {
             {/* End voice mode */}
             <button
               onClick={exitVoiceMode}
-              className="group/end inline-flex items-center gap-2 pl-3 pr-4 h-12 rounded-full bg-rose-500/15 hover:bg-rose-500 border border-rose-500/30 hover:border-rose-500 text-rose-300 hover:text-white transition-all hover:scale-[1.02] active:scale-95 shadow-lg shadow-rose-500/10 hover:shadow-rose-500/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50"
+              className="group/end inline-flex items-center gap-2 pl-3 pr-4 h-12 rounded-full bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 text-red-700 hover:text-white transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50"
               aria-label={language === 'es' ? 'Terminar conversación de voz' : 'End voice conversation'}
             >
               <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/25 group-hover/end:bg-white/15">
@@ -4633,11 +4617,11 @@ function AIChatPanel() {
       />
 
       {/* Input area */}
-      <form onSubmit={handleSend} className="relative z-0 border-t border-[#2CABE3]/15 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white/60 backdrop-blur-md">
+      <form onSubmit={handleSend} className="relative z-0 border-t border-gray-200 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white">
         {pendingChatPhotos.length > 0 && (
           <div className="flex gap-2 overflow-x-auto pb-1 nourish-scrollbar-h" aria-label={language === 'es' ? 'Fotos adjuntas' : 'Attached photos'}>
             {pendingChatPhotos.map((photo) => (
-              <div key={photo.id} className="relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-[#2CABE3]/25 bg-white shadow-sm">
+              <div key={photo.id} className="relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm">
                 <img
                   src={photo.previewUrl}
                   alt={photo.name || 'attachment'}
@@ -4678,7 +4662,7 @@ function AIChatPanel() {
                   type="button"
                   onClick={() => handleQuickAction(message)}
                   disabled={isLoading}
-                  className="whitespace-nowrap flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#2CABE3]/30 bg-white/90 text-[#1a7a9e] font-medium hover:bg-[#2CABE3]/10 hover:border-[#2CABE3]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="whitespace-nowrap flex-shrink-0 text-[11px] px-2.5 py-1 rounded-full border border-[#10b981]/30 bg-white/90 text-[#047857] font-medium hover:bg-emerald-50 hover:border-[#10b981]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {label}
                 </button>
@@ -4698,8 +4682,8 @@ function AIChatPanel() {
               disabled={isLoading || uploadBusy}
               className={`inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${
                 showAttachMenu
-                  ? 'bg-[#2CABE3]/15 text-[#2CABE3] border-[#2CABE3]/30 rotate-45'
-                  : 'bg-white/80 text-gray-600 border-[#2CABE3]/15 hover:bg-[#2CABE3]/10 hover:text-[#2CABE3] hover:border-[#2CABE3]/30'
+                  ? 'bg-[#10b981]/15 text-emerald-600 border-[#10b981]/30 rotate-45'
+                  : 'bg-white/80 text-gray-600 border-[#10b981]/15 hover:bg-emerald-50 hover:text-emerald-600 hover:border-[#10b981]/30'
               } disabled:opacity-40 disabled:cursor-not-allowed`}
               title={language === 'es' ? 'Adjuntar' : 'Attach'}
               aria-label={language === 'es' ? 'Adjuntar foto o CSV' : 'Attach photo or CSV'}
@@ -4712,15 +4696,15 @@ function AIChatPanel() {
             {showAttachMenu && (
               <div
                 role="menu"
-                className="absolute bottom-full left-0 mb-2 min-w-[200px] rounded-xl border border-[#2CABE3]/15 bg-white/95 backdrop-blur-md shadow-xl shadow-[#2CABE3]/10 overflow-hidden z-30 animate-fade-in"
+                className="absolute bottom-full left-0 mb-2 min-w-[200px] rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-xl shadow-[#10b981]/10 overflow-hidden z-30 animate-fade-in"
               >
                 <button
                   type="button"
                   role="menuitem"
                   onClick={() => { setShowAttachMenu(false); triggerPhotoUpload() }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors"
                 >
-                  <span className="inline-flex w-8 h-8 rounded-lg bg-fuchsia-500/15 text-fuchsia-600 items-center justify-center">
+                  <span className="inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center">
                     <i className="fas fa-camera text-[13px]" aria-hidden="true" />
                   </span>
                   <span className="flex-1 text-left">
@@ -4736,7 +4720,7 @@ function AIChatPanel() {
                   type="button"
                   role="menuitem"
                   onClick={() => { setShowAttachMenu(false); triggerInlinePhotoUpload() }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors border-t border-[#2CABE3]/10"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100"
                 >
                   <span className="inline-flex w-8 h-8 rounded-lg bg-sky-500/15 text-sky-600 items-center justify-center">
                     <i className="fas fa-image text-[13px]" aria-hidden="true" />
@@ -4754,7 +4738,7 @@ function AIChatPanel() {
                   type="button"
                   role="menuitem"
                   onClick={() => { setShowAttachMenu(false); triggerCsvUpload() }}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#2CABE3]/5 hover:text-[#2CABE3] transition-colors border-t border-[#2CABE3]/10"
+                  className="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100"
                 >
                   <span className="inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center">
                     <i className="fas fa-file-csv text-[13px]" aria-hidden="true" />
@@ -4779,7 +4763,7 @@ function AIChatPanel() {
               <ul
                 role="listbox"
                 aria-label={language === 'es' ? 'Sugerencias' : 'Suggestions'}
-                className="absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-[#2CABE3]/15 bg-white/95 backdrop-blur-md shadow-lg shadow-[#2CABE3]/10 z-20 nourish-scrollbar"
+                className="absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-lg shadow-[#10b981]/10 z-20 nourish-scrollbar"
               >
                 {filteredSuggestions.map((s, idx) => (
                   <li
@@ -4790,8 +4774,8 @@ function AIChatPanel() {
                     onMouseEnter={() => setSuggestionIndex(idx)}
                     className={`px-3 py-2 text-sm cursor-pointer transition-colors ${
                       idx === suggestionIndex
-                        ? 'bg-[#2CABE3]/15 text-[#2299c7]'
-                        : 'text-gray-700 hover:bg-[#2CABE3]/5'
+                        ? 'bg-[#10b981]/15 text-[#059669]'
+                        : 'text-gray-700 hover:bg-[#10b981]/5'
                     }`}
                   >
                     {s}
@@ -4813,8 +4797,8 @@ function AIChatPanel() {
               }
               className={`w-full resize-none rounded-2xl border bg-white/90 text-gray-800 placeholder-gray-400 px-4 py-2.5 text-sm leading-relaxed max-h-32 outline-none transition-all backdrop-blur-sm ${
                 isLoading
-                  ? 'ai-input-glow border-[#2CABE3]/60 cursor-wait'
-                  : 'border-[#2CABE3]/15 focus:border-[#2CABE3]/50 focus:ring-2 focus:ring-[#2CABE3]/20 focus:bg-white'
+                  ? 'ai-input-glow border-[#10b981]/60 cursor-wait'
+                  : 'border-[#10b981]/15 focus:border-[#10b981]/50 focus:ring-2 focus:ring-[#10b981]/20 focus:bg-white'
               }`}
               rows={1}
               readOnly={isLoading}
@@ -4834,7 +4818,7 @@ function AIChatPanel() {
               className={`flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border ${
                 wakeWordEnabled
                   ? 'border-emerald-500/40 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                  : 'border-[#2CABE3]/15 bg-white/80 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400/30'
+                  : 'border-[#10b981]/15 bg-white/80 text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 hover:border-emerald-400/30'
               }`}
               title={
                 wakeWordEnabled
@@ -4858,7 +4842,7 @@ function AIChatPanel() {
             type="button"
             onClick={enterVoiceMode}
             disabled={isLoading}
-            className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border border-[#2CABE3]/15 bg-white/80 text-gray-600 hover:text-[#2CABE3] hover:bg-[#2CABE3]/10 hover:border-[#2CABE3]/30 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border border-gray-200 bg-white text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed"
             title={language === 'es' ? 'Modo voz' : 'Voice mode'}
             aria-label="Switch to voice mode"
           >
@@ -4871,7 +4855,7 @@ function AIChatPanel() {
             disabled={(!inputText.trim() && pendingChatPhotos.length === 0) || isLoading || uploadBusy}
             className={`flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all ${
               (inputText.trim() || pendingChatPhotos.length > 0) && !isLoading && !uploadBusy
-                ? 'bg-gradient-to-br from-[#2CABE3] to-emerald-500 text-white hover:from-[#2299c7] hover:to-emerald-600 shadow-md shadow-[#2CABE3]/25 hover:scale-105 active:scale-95'
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm'
                 : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
             }`}
             aria-label={language === 'es' ? 'Enviar mensaje' : 'Send message'}
@@ -4901,14 +4885,14 @@ function AIChatPanel() {
       <style>{`
         .nourish-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .nourish-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .nourish-scrollbar::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.2); border-radius: 4px; }
-        .nourish-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.4); }
+        .nourish-scrollbar::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.2); border-radius: 4px; }
+        .nourish-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.4); }
 
         /* Thin horizontal scrollbar for the quick-chip rail */
         .nourish-scrollbar-h::-webkit-scrollbar { height: 4px; }
         .nourish-scrollbar-h::-webkit-scrollbar-track { background: transparent; }
-        .nourish-scrollbar-h::-webkit-scrollbar-thumb { background: rgba(34,211,238,0.15); border-radius: 4px; }
-        .nourish-scrollbar-h::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.3); }
+        .nourish-scrollbar-h::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.15); border-radius: 4px; }
+        .nourish-scrollbar-h::-webkit-scrollbar-thumb:hover { background: rgba(16,185,129,0.3); }
 
         /* Fade-in for menus / pills */
         @keyframes ai-fade-in {

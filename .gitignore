@@ -32,6 +32,10 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Accidental local pip freezes (use requirements.txt only)
+/requirement.txt
+/requirement2.txt
+
 # Virtual environments
 venv/
 .venv/
