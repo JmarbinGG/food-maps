@@ -85,12 +85,17 @@ app.add_middleware(
 )
 
 
-@app.exception_handler(HTTPException)
-async def secure_http_exception_handler(request: Request, exc: HTTPException):
-    """Avoid leaking internal server details through HTTP 500 responses."""
+def _http_exception_response(exc: HTTPException) -> JSONResponse:
+    """Render an HTTPException without leaking internals on a 5xx."""
     if exc.status_code >= 500:
         return JSONResponse(status_code=exc.status_code, content={"detail": "Internal server error"})
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+
+@app.exception_handler(HTTPException)
+async def secure_http_exception_handler(request: Request, exc: HTTPException):
+    """Avoid leaking internal server details through HTTP 500 responses."""
+    return _http_exception_response(exc)
 
 
 @app.middleware("http")
@@ -231,7 +236,22 @@ async def _set_request_body(request: Request, body: bytes) -> None:
 
 @app.middleware("http")
 async def sanitize_api_input(request: Request, call_next):
-    """Validate and sanitize user-provided API input before endpoint handlers run."""
+    """Validate and sanitize user-provided API input before endpoint handlers run.
+
+    The HTTPExceptions raised below have to be turned into responses here.
+    Starlette applies the registered exception handlers in ExceptionMiddleware,
+    which sits *inside* this middleware, so anything raised before call_next()
+    reaches ServerErrorMiddleware instead and every rejection - a body over the
+    size cap, a malformed JSON payload - is served as a bare 500 with the real
+    status lost.
+    """
+    try:
+        return await _sanitize_api_input(request, call_next)
+    except HTTPException as exc:
+        return _http_exception_response(exc)
+
+
+async def _sanitize_api_input(request: Request, call_next):
     path = request.url.path.lower()
 
     if path.startswith("/api"):
