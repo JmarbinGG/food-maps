@@ -2506,6 +2506,40 @@ async def get_distribution_centers(db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+def _require_center_text(body: dict, field: str, label: str) -> str:
+    """Return a non-blank value for a column the centers table declares NOT NULL."""
+    value = body.get(field)
+    value = value.strip() if isinstance(value, str) else value
+    if not value:
+        raise HTTPException(status_code=400, detail=f"{label} is required")
+    return value
+
+
+def _require_center_coord(body: dict, field: str, label: str, limit: float) -> float:
+    """Return a usable coordinate, rejecting the blank inputs the admin form sends.
+
+    distribution_centers.coords_lat/lng are NOT NULL in the deployed schema and
+    DistributionCenterResponse types them as plain floats, so a center saved
+    without coordinates fails the INSERT outright - and would break the list
+    endpoint for every client if it ever landed. The admin form posts null when
+    its latitude/longitude inputs are left empty, so reject that here with a
+    message the form can show instead of a 500 from the database driver.
+    """
+    value = body.get(field)
+    if value is None or (isinstance(value, str) and not value.strip()):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{label} is required - set it manually or use the address lookup",
+        )
+    try:
+        coord = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{label} must be a number")
+    if coord != coord or abs(coord) > limit:  # NaN, or off the globe
+        raise HTTPException(status_code=400, detail=f"{label} is out of range")
+    return coord
+
+
 @app.post("/api/centers")
 async def create_distribution_center(request: Request, admin_user: User = Depends(verify_admin), db: Session = Depends(get_db)):
     """Create a new distribution center (Admin only)"""
@@ -2513,11 +2547,11 @@ async def create_distribution_center(request: Request, admin_user: User = Depend
         body = await request.json()
         center = DistributionCenter(
             owner_id=admin_user.id,
-            name=body.get('name'),
+            name=_require_center_text(body, 'name', 'Name'),
             description=body.get('description'),
-            address=body.get('address'),
-            coords_lat=body.get('coords_lat'),
-            coords_lng=body.get('coords_lng'),
+            address=_require_center_text(body, 'address', 'Address'),
+            coords_lat=_require_center_coord(body, 'coords_lat', 'Latitude', 90),
+            coords_lng=_require_center_coord(body, 'coords_lng', 'Longitude', 180),
             phone=body.get('phone'),
             hours=body.get('hours'),
             eligibility=body.get('eligibility'),
@@ -2534,7 +2568,11 @@ async def create_distribution_center(request: Request, admin_user: User = Depend
         db.commit()
         db.refresh(center)
         return {"success": True, "center": center}
+    except HTTPException:
+        raise
     except Exception as e:
+        db.rollback()
+        print(f"Create center error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.put("/api/centers/{center_id}")
@@ -2547,17 +2585,20 @@ async def update_distribution_center(center_id: int, request: Request, admin_use
         
         body = await request.json()
         
-        # Update fields if provided
+        # Update fields if provided. The NOT NULL columns go through the same
+        # guards as the create path - the admin form posts the whole record on
+        # an edit too, so a cleared latitude field would otherwise fail the
+        # UPDATE in the driver rather than in validation.
         if 'name' in body:
-            center.name = body['name']
+            center.name = _require_center_text(body, 'name', 'Name')
         if 'description' in body:
             center.description = body['description']
         if 'address' in body:
-            center.address = body['address']
+            center.address = _require_center_text(body, 'address', 'Address')
         if 'coords_lat' in body:
-            center.coords_lat = body['coords_lat']
+            center.coords_lat = _require_center_coord(body, 'coords_lat', 'Latitude', 90)
         if 'coords_lng' in body:
-            center.coords_lng = body['coords_lng']
+            center.coords_lng = _require_center_coord(body, 'coords_lng', 'Longitude', 180)
         if 'phone' in body:
             center.phone = body['phone']
         if 'hours' in body:
