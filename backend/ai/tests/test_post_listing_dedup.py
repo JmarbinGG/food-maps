@@ -1,4 +1,4 @@
-"""Duplicate-post guard for Supabase create_food_listing."""
+"""Duplicate-post guard for create_food_listing."""
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, patch
@@ -11,7 +11,7 @@ from backend.tools import _create_food_listing
 @pytest.mark.asyncio
 async def test_duplicate_post_returns_existing_without_second_insert():
     existing = {
-        "id": "abc-123",
+        "id": "123",
         "title": "Rice",
         "quantity": 10,
         "unit": "lbs",
@@ -36,7 +36,7 @@ async def test_duplicate_post_returns_existing_without_second_insert():
         return_value={"community_id": "8", "address": "1423 Park St"},
     ), patch("backend.ai_engine.supabase_post", new_callable=AsyncMock) as mock_post:
         result = await _create_food_listing(
-            user_id="user-uuid",
+            user_id="42",
             title="Rice",
             quantity=10,
             unit="lbs",
@@ -49,14 +49,14 @@ async def test_duplicate_post_returns_existing_without_second_insert():
         )
     assert result["success"] is True
     assert result["duplicate_of_recent"] is True
-    assert result["listing_id"] == "abc-123"
+    assert result["listing_id"] == "123"
     mock_post.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_duplicate_post_merges_photo_instead_of_new_listing():
     existing = {
-        "id": "abc-123",
+        "id": "123",
         "title": "Rice",
         "quantity": 10,
         "unit": "lbs",
@@ -84,7 +84,7 @@ async def test_duplicate_post_merges_photo_instead_of_new_listing():
         new_callable=AsyncMock,
     ) as mock_patch, patch("backend.ai_engine.supabase_post", new_callable=AsyncMock) as mock_post:
         result = await _create_food_listing(
-            user_id="user-uuid",
+            user_id="42",
             title="Rice",
             quantity=10,
             unit="lbs",

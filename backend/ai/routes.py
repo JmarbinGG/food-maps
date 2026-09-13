@@ -76,21 +76,11 @@ if not JWT_SECRET:
     JWT_SECRET = ""
 JWT_ALGORITHM = "HS256"
 
-# Supabase-issued JWTs are HS256, signed with the project's JWT secret
-# (Dashboard → Settings → API → "JWT Secret"). If that secret is
-# available, verifying locally is fast and offline. If it isn't, we
-# fall back to hitting Supabase's GoTrue /auth/v1/user endpoint so
-# real deploys keep working while ops rotates keys.
-SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET") or ""
-SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("VITE_SUPABASE_URL") or ""
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY") or os.getenv("VITE_SUPABASE_ANON_KEY") or ""
-
 # When `AI_REQUIRE_AUTH=true` (production default) every user-scoped
 # AI endpoint MUST present a valid Bearer token and the token's `sub`
 # must match the body `user_id`. When "false" (only intended for the
-# in-process test harness that stubs Supabase auth) we degrade to a
-# best-effort ownership check — a token, if present, is verified, but
-# missing tokens do not block requests.
+# in-process test harness) we degrade to a best-effort ownership check —
+# a token, if present, is verified, but missing tokens do not block.
 # Fail closed: unset or blank → require auth. Only explicit falsey values disable.
 _ai_auth_raw = os.getenv("AI_REQUIRE_AUTH")
 if _ai_auth_raw is None or str(_ai_auth_raw).strip() == "":
@@ -119,82 +109,21 @@ def _enforce_rate_limit(request: Request) -> None:
         raise HTTPException(429, "Rate limit exceeded. Try again later.")
 
 
-_UUID_RE = re.compile(
-    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-"
-    r"[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
-)
-
-
 def _parse_user_id(raw: str) -> str:
-    """Accept any non-empty user_id string (integer or Supabase UUID)."""
+    """Accept a non-empty Food Maps user_id string."""
     if not raw:
         raise HTTPException(400, "user_id required")
     return str(raw).strip()
 
 
-def _require_uuid(user_id: str) -> None:
-    """Reject non-UUID user_ids on endpoints that only serve real users.
-
-    Legacy endpoints still accept numeric IDs for backwards compat with
-    the in-memory test fixtures, but user-facing surfaces (voice, chat
-    with real Supabase auth) should require a proper UUID so a garbled
-    input yields 400 (bad request) rather than 403 (forbidden) after the
-    ownership check fails.
-    """
-    if not _UUID_RE.match(user_id):
-        raise HTTPException(400, "user_id must be a UUID")
+def _require_voice_user_id(user_id: str) -> None:
+    """Food Maps accepts local numeric IDs for voice turns."""
+    if str(user_id).isdigit():
+        return
+    raise HTTPException(400, "user_id must be a numeric id")
 
 
-# --- Bearer token verification -------------------------------------
-#
-# The frontend authenticates with Supabase Auth
-# (``supabase.auth.signInWithPassword``) which issues HS256 JWTs signed
-# with the project's JWT secret — NOT the same secret this backend uses
-# for its own local login tokens. We therefore try three strategies in
-# order:
-#
-#   1) Verify with our local ``JWT_SECRET`` (backwards compat for any
-#      HS256 tokens minted by ``backend/app.py`` login endpoints).
-#   2) Verify with ``SUPABASE_JWT_SECRET`` if configured — fast, offline,
-#      no network round-trip per request.
-#   3) Ask Supabase's GoTrue REST endpoint (``/auth/v1/user``) to
-#      validate the token, with a short in-process cache so we don't
-#      burn a REST call on every AI turn. This path keeps working when
-#      ops hasn't provisioned SUPABASE_JWT_SECRET yet.
-#
-# All three return the token's ``sub`` (user UUID) on success or None.
-
-# Verified-token cache: token → (sub, expires_at). Bounded and short-lived
-# so a compromised token can't be replayed indefinitely, but long enough
-# that a burst of AI chat turns doesn't spam GoTrue.
-_SUPABASE_TOKEN_CACHE: dict[str, tuple[str, float]] = {}
-_SUPABASE_TOKEN_CACHE_TTL_S = 60.0
-_SUPABASE_TOKEN_CACHE_MAX = 512
-
-
-def _cache_get(token: str) -> str | None:
-    import time
-    entry = _SUPABASE_TOKEN_CACHE.get(token)
-    if not entry:
-        return None
-    sub, expires_at = entry
-    if time.time() >= expires_at:
-        _SUPABASE_TOKEN_CACHE.pop(token, None)
-        return None
-    return sub
-
-
-def _cache_put(token: str, sub: str) -> None:
-    import time
-    if len(_SUPABASE_TOKEN_CACHE) >= _SUPABASE_TOKEN_CACHE_MAX:
-        # Evict the oldest entry — dict preserves insertion order in
-        # CPython 3.7+, so `next(iter(...))` is the FIFO victim.
-        try:
-            _SUPABASE_TOKEN_CACHE.pop(next(iter(_SUPABASE_TOKEN_CACHE)))
-        except (StopIteration, KeyError):
-            pass
-    _SUPABASE_TOKEN_CACHE[token] = (sub, time.time() + _SUPABASE_TOKEN_CACHE_TTL_S)
-
+# --- Bearer token verification (Food Maps JWT only) ---
 
 def _try_hs256_payload(token: str, secret: str) -> dict | None:
     """Decode an HS256 token with ``secret`` and return its payload on success."""
@@ -224,77 +153,25 @@ def _auth_role_from_credentials(
     """Best-effort role from Bearer JWT (local login tokens include role)."""
     if credentials is None:
         return None
-    token = credentials.credentials
-    for secret in (JWT_SECRET, SUPABASE_JWT_SECRET):
-        payload = _try_hs256_payload(token, secret)
-        if not payload:
-            continue
-        role = payload.get("role")
-        if role:
-            return str(role).lower().strip()
-    return None
-
-
-async def _verify_via_supabase_rest(token: str) -> str | None:
-    """Ask Supabase GoTrue to validate a Bearer token.
-
-    Returns the user's UUID on success or None. Used only when the
-    fast HS256 paths don't yield a decode (SUPABASE_JWT_SECRET not
-    configured, or token wasn't minted by us OR by our Supabase project).
-    """
-    if not token or not SUPABASE_URL or not SUPABASE_ANON_KEY:
+    payload = _try_hs256_payload(credentials.credentials, JWT_SECRET)
+    if not payload:
         return None
-    cached = _cache_get(token)
-    if cached is not None:
-        return cached
-    url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/user"
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.get(
-                url,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    # GoTrue requires the anon key on top of the user
-                    # bearer even for /user calls; without it you get 401.
-                    "apikey": SUPABASE_ANON_KEY,
-                },
-            )
-        if resp.status_code != 200:
-            return None
-        data = resp.json()
-        sub = data.get("id") or data.get("sub")
-        if sub:
-            sub = str(sub)
-            _cache_put(token, sub)
-            return sub
-        return None
-    except (httpx.HTTPError, ValueError, TypeError) as exc:
-        logger.debug("Supabase REST verify failed: %s", exc)
-        return None
+    role = payload.get("role")
+    return str(role).lower().strip() if role else None
 
 
 def _auth_user_id(credentials: HTTPAuthorizationCredentials | None) -> str | None:
-    """Synchronous best-effort verify — used from sync code paths.
-
-    Tries the two HS256 secrets we know about. Callers that need
-    Supabase REST fallback should use :func:`_auth_user_id_async`.
-    """
+    """Verify Bearer token with Food Maps JWT_SECRET; return ``sub`` or None."""
     if credentials is None:
         return None
-    token = credentials.credentials
-    return _try_hs256(token, JWT_SECRET) or _try_hs256(token, SUPABASE_JWT_SECRET)
+    return _try_hs256(credentials.credentials, JWT_SECRET)
 
 
 async def _auth_user_id_async(
     credentials: HTTPAuthorizationCredentials | None,
 ) -> str | None:
-    """Async variant that adds Supabase REST fallback verification."""
-    sub = _auth_user_id(credentials)
-    if sub is not None:
-        return sub
-    if credentials is None:
-        return None
-    return await _verify_via_supabase_rest(credentials.credentials)
+    """Async wrapper around local JWT verification."""
+    return _auth_user_id(credentials)
 
 
 def _check_ownership(auth_uid: str | None, requested_uid: str) -> None:
@@ -323,8 +200,6 @@ async def _require_owner(
     Tests that need to bypass this can either mint a JWT with
     ``JWT_SECRET`` from the conftest, or set ``AI_REQUIRE_AUTH=false``.
 
-    Async so it can transparently fall back to Supabase REST
-    verification when neither local secret decodes the token.
     """
     if not AI_REQUIRE_AUTH:
         _check_ownership(await _auth_user_id_async(credentials), requested_uid)
@@ -1510,10 +1385,9 @@ async def ai_voice(
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
     # Voice is a real-user only surface (recording audio requires an
-    # active session). Validate the user_id looks like a UUID BEFORE
-    # running the ownership check so obviously malformed inputs return
-    # 400 (bad request) instead of 403 (forbidden).
-    _require_uuid(uid)
+    # active session). Accept Food Maps numeric IDs or UUIDs; reject
+    # garbled input with 400 before ownership checks.
+    _require_voice_user_id(uid)
     await _require_owner(credentials, uid)
 
     base_type = (audio.content_type or "").split(";")[0].strip().lower()
@@ -2260,7 +2134,12 @@ async def stop_background_jobs() -> None:
 # ---------------------------------------------------------------------------
 
 def _require_admin(credentials: HTTPAuthorizationCredentials | None) -> int:
-    """Return the admin user_id or raise 401/403."""
+    """Return the admin user_id or raise 401/403.
+
+    Honors durable ``users.is_admin`` via ``backend.app._user_is_admin``
+    (not only ``role == ADMIN``), so donors/staff with the privilege flag
+    can access AI broadcast admin endpoints.
+    """
     if credentials is None:
         raise HTTPException(401, "Authentication required")
     try:
@@ -2274,12 +2153,12 @@ def _require_admin(credentials: HTTPAuthorizationCredentials | None) -> int:
         raise HTTPException(401, "Invalid token") from exc
 
     def _check():
-        from backend.app import SessionLocal
-        from backend.models import User, UserRole
+        from backend.app import SessionLocal, _user_is_admin
+        from backend.models import User
         db = SessionLocal()
         try:
             u = db.query(User).filter(User.id == uid).first()
-            return bool(u and u.role == UserRole.ADMIN)
+            return _user_is_admin(u)
         finally:
             db.close()
 

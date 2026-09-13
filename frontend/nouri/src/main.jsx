@@ -16,8 +16,6 @@ import { UIControlProvider } from '../utils/UIControlContext.jsx';
 
 import { NouriGuideProvider } from '../utils/NouriGuideContext.jsx';
 
-import { AccessibilityProvider } from '../utils/AccessibilityContext.jsx';
-
 import AIChatPanel from './assistant/AIChatPanel.jsx';
 
 import NouriGuideBar from './common/NouriGuideBar.jsx';
@@ -37,6 +35,10 @@ import AIHealthBanner from './common/AIHealthBanner.jsx';
 import AICaptionBar from './common/AICaptionBar.jsx';
 
 import FormVoiceGuideHost from './common/FormVoiceGuideHost.jsx';
+
+import HumanSupportBridge from './common/HumanSupportBridge.jsx';
+
+import AccessibilitySettings from './common/AccessibilitySettings.jsx';
 
 
 
@@ -62,6 +64,8 @@ function NouriShell() {
 
       <NouriGuideBar />
 
+      <HumanSupportBridge />
+
       <AIChatPanel />
 
       <ToastContainer position="top-center" autoClose={4000} hideProgressBar theme="colored" />
@@ -80,8 +84,6 @@ function Providers({ children }) {
 
     <AuthProvider>
 
-      <AccessibilityProvider>
-
         <NouriGuideProvider>
 
           <MapProvider>
@@ -95,8 +97,6 @@ function Providers({ children }) {
           </MapProvider>
 
         </NouriGuideProvider>
-
-      </AccessibilityProvider>
 
     </AuthProvider>
 
@@ -228,6 +228,8 @@ window.FoodMapsNouri = {
 
   FormVoiceGuideHost,
 
+  AccessibilitySettings,
+
   mountRoleInsights: (hostId, props) => mountPanel(RoleInsightsPanel, hostId, props),
 
   mountBulkCsv: (hostId, props) => mountPanel(ShareBulkCsvPanel, hostId, props),
@@ -239,6 +241,17 @@ window.FoodMapsNouri = {
   mountQueryPanel: (hostId, props) => mountPanel(AIQueryPanel, hostId, props),
 
   mountFormVoiceGuide: (hostId, props) => mountPanel(FormVoiceGuideHost, hostId, props),
+
+  mountAccessibilitySettings: (hostId, props) => mountPanel(AccessibilitySettings, hostId, props),
+
+  unmountAccessibilitySettings: (hostId = 'nouri-a11y-settings-root') => {
+    const root = mountRoots.get(hostId);
+    if (!root) return;
+    try {
+      root.unmount();
+    } catch { /* */ }
+    mountRoots.delete(hostId);
+  },
 
 };
 

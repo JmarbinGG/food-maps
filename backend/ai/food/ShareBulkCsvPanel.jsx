@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import PropTypes from 'prop-types'
 import { toast } from 'react-toastify'
-import supabase from '../../utils/supabaseClient.js'
+import centersClient from '../../utils/centersClient.js'
 import aiChatService from '../../utils/services/aiChatService.js'
 import {
   parseListingsCsv,
@@ -57,7 +57,7 @@ function ShareBulkCsvPanel({
     setCommunitiesLoading(true)
     setCommunitiesError(null)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await centersClient
         .from('communities')
         .select('id, name')
         .eq('is_active', true)

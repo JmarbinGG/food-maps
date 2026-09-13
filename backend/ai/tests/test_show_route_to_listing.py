@@ -68,7 +68,6 @@ def test_show_route_schema_requires_user_id():
     assert "user_id" in params["properties"]
     assert "listing_id" in params["properties"]
     assert set(params["required"]) >= {"user_id"}
-    # listing_id is a string so UUIDs and "#1" both work for Supabase users.
     assert params["properties"]["listing_id"]["type"] == "string"
 
 
@@ -83,40 +82,17 @@ async def test_invalid_listing_id_returns_error():
 
 
 @pytest.mark.asyncio
-async def test_supabase_user_routes_via_food_listings():
-    """UUID auth users must not hit the legacy FoodResource int path."""
-    uid = "56e3c110-8e22-4756-b98e-02d2d5c81a36"
-    lid = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
-
-    async def fake_get(table, params=None):
-        if table == "users":
-            return [{
-                "id": uid,
-                "address": "1 Market St, San Francisco, CA",
-                "latitude": 37.7749,
-                "longitude": -122.4194,
-            }]
-        if table == "food_listings":
-            return [{
-                "id": lid,
-                "title": "Fresh bread",
-                "full_address": "200 Pine St, San Francisco, CA",
-                "latitude": 37.7849,
-                "longitude": -122.4094,
-            }]
-        return []
-
-    with patch("backend.ai_engine.supabase_get", side_effect=fake_get), \
-         patch("backend.ai.tools.MAPBOX_TOKEN", ""):
-        r = await execute_tool(
-            "show_route_to_listing",
-            {"user_id": uid, "listing_id": lid},
-        )
-
-    assert r.get("success") is True
-    assert r.get("action") == "open_map"
-    assert r["route"]["destination"]["listing_id"] == lid
-    assert r["route"]["fallback"] is True
+async def test_non_digit_user_id_rejected():
+    """UUID / non-numeric user ids are not supported on the MySQL route path."""
+    r = await execute_tool(
+        "show_route_to_listing",
+        {
+            "user_id": "56e3c110-8e22-4756-b98e-02d2d5c81a36",
+            "listing_id": "42",
+        },
+    )
+    assert "error" in r
+    assert "user_id" in r["error"].lower()
 
 
 @pytest.mark.asyncio

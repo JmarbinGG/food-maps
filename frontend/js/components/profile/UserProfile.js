@@ -1,7 +1,33 @@
-function UserProfile({ user, onClose, onUserUpdate }) {
-  const [activeTab, setActiveTab] = React.useState('account');
+function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
+  const [activeTab, setActiveTab] = React.useState(initialTab || 'account');
   const [loading, setLoading] = React.useState(false);
   const [message, setMessage] = React.useState({ type: '', text: '' });
+  const A11Y_ROOT_ID = 'nouri-a11y-settings-root';
+
+  React.useEffect(() => {
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialTab]);
+
+  React.useEffect(() => {
+    if (activeTab !== 'accessibility') {
+      window.FoodMapsNouri?.unmountAccessibilitySettings?.(A11Y_ROOT_ID);
+      return undefined;
+    }
+    const mount = () => {
+      if (!document.getElementById(A11Y_ROOT_ID)) return;
+      window.FoodMapsNouri?.mountAccessibilitySettings?.(A11Y_ROOT_ID);
+    };
+    mount();
+    const t = setTimeout(mount, 50);
+    return () => {
+      clearTimeout(t);
+      window.FoodMapsNouri?.unmountAccessibilitySettings?.(A11Y_ROOT_ID);
+    };
+  }, [activeTab]);
+
+  React.useEffect(() => () => {
+    window.FoodMapsNouri?.unmountAccessibilitySettings?.(A11Y_ROOT_ID);
+  }, []);
 
   const [accountData, setAccountData] = React.useState({
     name: user?.name || '',
@@ -10,6 +36,50 @@ function UserProfile({ user, onClose, onUserUpdate }) {
     address: user?.address || '',
     role: user?.role || ''
   });
+  const [communityInfo, setCommunityInfo] = React.useState({
+    community_id: user?.community_id ?? null,
+    approval_number: user?.approval_number || '',
+    community_name: ''
+  });
+  const formDirtyRef = React.useRef(false);
+
+  const markAccountDirty = React.useCallback((updater) => {
+    formDirtyRef.current = true;
+    setAccountData(updater);
+  }, []);
+
+  // Committed role for badge/copy — draft select does not apply until Update Profile.
+  const committedRole = String(user?.role || accountData.role || '').toLowerCase();
+  const draftRole = String(accountData.role || '').toLowerCase();
+  const rolePending = Boolean(draftRole && committedRole && draftRole !== committedRole);
+
+  const roleBadgeClass = (role) => {
+    if (role === 'admin') return 'bg-purple-100 text-purple-800';
+    if (role === 'donor') return 'bg-green-100 text-green-800';
+    if (role === 'recipient') return 'bg-blue-100 text-blue-800';
+    if (role === 'volunteer') return 'bg-yellow-100 text-yellow-800';
+    if (role === 'driver') return 'bg-indigo-100 text-indigo-800';
+    if (role === 'dispatcher') return 'bg-orange-100 text-orange-800';
+    return 'bg-gray-100 text-gray-800';
+  };
+  const roleLabel = (role) => {
+    if (role === 'admin') return 'Admin';
+    if (role === 'donor') return 'Donor';
+    if (role === 'recipient') return 'Recipient';
+    if (role === 'volunteer') return 'Volunteer';
+    if (role === 'driver') return 'Driver';
+    if (role === 'dispatcher') return 'Dispatcher';
+    return 'User';
+  };
+  const roleHint = (role) => {
+    if (role === 'admin') return 'Full platform access';
+    if (role === 'donor') return 'Can share food donations';
+    if (role === 'recipient') return 'Can request and claim food';
+    if (role === 'volunteer') return 'Can volunteer for deliveries';
+    if (role === 'driver') return 'Can deliver food donations';
+    if (role === 'dispatcher') return 'Can coordinate deliveries';
+    return '';
+  };
 
   // JWT is_admin stays true for the session even after switching active role,
   // so admins can restore Admin without re-login / privilege escalation for others.
@@ -44,6 +114,7 @@ function UserProfile({ user, onClose, onUserUpdate }) {
   const [copied, setCopied] = React.useState(false);
 
   React.useEffect(() => {
+    let cancelled = false;
     const fetchUserData = async () => {
       try {
         const token = localStorage.getItem('auth_token');
@@ -55,8 +126,12 @@ function UserProfile({ user, onClose, onUserUpdate }) {
           }
         });
 
-        if (response.ok) {
-          const userData = await response.json();
+        if (!response.ok || cancelled) return;
+        const userData = await response.json();
+        if (cancelled) return;
+
+        // Do not clobber unsaved draft edits (e.g. pending role selection).
+        if (!formDirtyRef.current) {
           setAccountData({
             name: userData.name || '',
             email: userData.email || '',
@@ -65,9 +140,22 @@ function UserProfile({ user, onClose, onUserUpdate }) {
             role: userData.role || ''
           });
         }
+        setCommunityInfo({
+          community_id: userData.community_id ?? null,
+          approval_number: userData.approval_number || '',
+          community_name: userData.community_name || '',
+        });
+        // Stamp missing durable privilege once — never loop on every /me.
+        if (
+          userData.is_admin === true
+          && user?.is_admin !== true
+          && typeof onUserUpdate === 'function'
+        ) {
+          onUserUpdate({ ...user, is_admin: true });
+        }
       } catch (error) {
         console.error('Error fetching user data:', error);
-        if (user) {
+        if (!cancelled && !formDirtyRef.current && user) {
           setAccountData({
             name: user.name || '',
             email: user.email || '',
@@ -84,7 +172,9 @@ function UserProfile({ user, onClose, onUserUpdate }) {
     if (activeTab === 'referral') {
       loadReferralData();
     }
-  }, [user, activeTab]);
+    return () => { cancelled = true; };
+    // Depend on user id (not whole user object) to avoid submit → setUser → re-fetch loops.
+  }, [user?.id, activeTab]);
 
   const loadReferralData = async () => {
     try {
@@ -144,26 +234,67 @@ function UserProfile({ user, onClose, onUserUpdate }) {
       if (response.ok) {
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
         const prevRole = (user && user.role) ? String(user.role).toLowerCase() : '';
-        const nextRole = accountData.role ? String(accountData.role).toLowerCase() : '';
-        // Keep is_admin in sync with the saved role so role-aware UIs do not
-        // keep admin privileges after switching to donor/recipient.
+        // Read privilege from the pre-swap JWT before overwriting the token.
+        let jwtIsAdmin = false;
+        try {
+          const existingToken = localStorage.getItem('auth_token');
+          if (existingToken) {
+            const parts = existingToken.split('.');
+            if (parts.length >= 2) {
+              const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+              jwtIsAdmin = payload?.is_admin === true;
+            }
+          }
+        } catch (_) { /* ignore */ }
+        if (data?.token) {
+          localStorage.setItem('auth_token', data.token);
+        }
+        // Prefer server role so a rejected restore cannot leave the UI lying.
+        const nextRole = data?.role
+          ? String(data.role).toLowerCase()
+          : (accountData.role ? String(accountData.role).toLowerCase() : '');
+        // Preserve durable admin privilege separately from active UX role.
+        const keepAdmin =
+          data?.is_admin === true
+          || user?.is_admin === true
+          || jwtIsAdmin
+          || nextRole === 'admin';
         const updatedUser = {
           ...user,
           ...accountData,
-          role: nextRole || accountData.role,
-          is_admin: nextRole === 'admin',
+          ...data,
+          role: data?.role || nextRole || accountData.role,
+          is_admin: keepAdmin,
+          community_id: data?.community_id ?? user?.community_id ?? null,
+          approval_number: data?.approval_number ?? user?.approval_number ?? null,
         };
+        formDirtyRef.current = false;
+        setAccountData((prev) => ({
+          ...prev,
+          name: data?.name ?? prev.name,
+          email: data?.email ?? prev.email,
+          phone: data?.phone ?? prev.phone,
+          address: data?.address ?? prev.address,
+          role: data?.role || prev.role,
+        }));
+        delete updatedUser.token;
         localStorage.setItem('current_user', JSON.stringify(updatedUser));
         onUserUpdate(updatedUser);
+        window.dispatchEvent(new CustomEvent('foodmaps:auth_changed'));
         // Notify the rest of the app (AI chat, dashboards, etc.) that
         // the active role changed so role-aware UIs can refresh without
         // a page reload.
-        if (prevRole !== nextRole && typeof window !== 'undefined') {
+        const roleChanged = prevRole !== nextRole;
+        if (roleChanged && typeof window !== 'undefined') {
           try {
             window.dispatchEvent(new CustomEvent('roleChanged', {
               detail: { previousRole: prevRole, role: nextRole, user: updatedUser },
             }));
           } catch (_) { /* ignore */ }
+          // Close so Header CTAs are immediately clickable (modal was covering them).
+          if (typeof onClose === 'function') {
+            onClose();
+          }
         }
       } else {
         setMessage({ type: 'error', text: data.detail || 'Failed to update profile' });
@@ -217,16 +348,18 @@ function UserProfile({ user, onClose, onUserUpdate }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+      <div className={`bg-white rounded-lg shadow-xl w-full max-h-[90vh] overflow-y-auto ${
+        activeTab === 'accessibility' ? 'max-w-lg' : 'max-w-md'
+      }`}>
         <div className="flex justify-between items-center p-6 border-b">
           <h2 className="text-xl font-semibold text-gray-900">Account Settings</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl">×</button>
         </div>
 
-        <div className="flex border-b">
+        <div className="flex border-b overflow-x-auto">
           <button
             onClick={() => setActiveTab('account')}
-            className={`flex-1 py-3 px-4 text-sm font-medium ${activeTab === 'account'
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${activeTab === 'account'
               ? 'border-b-2 border-green-500 text-green-600'
               : 'text-gray-500 hover:text-gray-700'
               }`}
@@ -264,12 +397,21 @@ function UserProfile({ user, onClose, onUserUpdate }) {
           </button>
           <button
             onClick={() => setActiveTab('referral')}
-            className={`flex-1 py-3 px-4 text-sm font-medium ${activeTab === 'referral'
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${activeTab === 'referral'
               ? 'border-b-2 border-green-500 text-green-600'
               : 'text-gray-500 hover:text-gray-700'
               }`}
           >
             Referrals
+          </button>
+          <button
+            onClick={() => setActiveTab('accessibility')}
+            className={`flex-1 py-3 px-4 text-sm font-medium whitespace-nowrap ${activeTab === 'accessibility'
+              ? 'border-b-2 border-green-500 text-green-600'
+              : 'text-gray-500 hover:text-gray-700'
+              }`}
+          >
+            Accessibility
           </button>
         </div>
 
@@ -289,39 +431,26 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <label className="block text-sm font-medium text-gray-700 mb-2">Account Role</label>
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${accountData.role === 'admin' ? 'bg-purple-100 text-purple-800' :
-                      accountData.role === 'donor' ? 'bg-green-100 text-green-800' :
-                        accountData.role === 'recipient' ? 'bg-blue-100 text-blue-800' :
-                          accountData.role === 'volunteer' ? 'bg-yellow-100 text-yellow-800' :
-                            accountData.role === 'driver' ? 'bg-indigo-100 text-indigo-800' :
-                              accountData.role === 'dispatcher' ? 'bg-orange-100 text-orange-800' :
-                                'bg-gray-100 text-gray-800'
-                      }`}>
-                      {accountData.role === 'admin' && 'Admin'}
-                      {accountData.role === 'donor' && 'Donor'}
-                      {accountData.role === 'recipient' && 'Recipient'}
-                      {accountData.role === 'volunteer' && 'Volunteer'}
-                      {accountData.role === 'driver' && 'Driver'}
-                      {accountData.role === 'dispatcher' && 'Dispatcher'}
-                      {!accountData.role && 'User'}
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${roleBadgeClass(committedRole)}`}>
+                      {roleLabel(committedRole)}
                     </span>
                     <span className="text-xs text-gray-500 italic">
-                      {accountData.role === 'admin' && 'Full platform access'}
-                      {accountData.role === 'donor' && 'Can share food donations'}
-                      {accountData.role === 'recipient' && 'Can request and claim food'}
-                      {accountData.role === 'volunteer' && 'Can volunteer for deliveries'}
-                      {accountData.role === 'driver' && 'Can deliver food donations'}
-                      {accountData.role === 'dispatcher' && 'Can coordinate deliveries'}
+                      {roleHint(committedRole)}
                     </span>
                   </div>
 
                   {/* Role Switcher — dispatcher locked; admins may switch to donor/recipient and back */}
-                  {accountData.role !== 'dispatcher' && (
+                  {committedRole !== 'dispatcher' && draftRole !== 'dispatcher' && (
                     <div>
-                      <label className="block text-xs text-gray-600 mb-1">Change Role:</label>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        Change Role (saved on Update Profile)
+                      </label>
                       <select
                         value={accountData.role}
-                        onChange={(e) => setAccountData({ ...accountData, role: e.target.value })}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          markAccountDirty((prev) => ({ ...prev, role: value }));
+                        }}
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
                       >
                         {canRestoreAdmin && (
@@ -332,14 +461,49 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                         {/* <option value="driver"> Driver - Deliver food donations</option>
                         <option value="volunteer"> Volunteer - Help with deliveries</option> */}
                       </select>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {canRestoreAdmin
-                          ? 'Switch to donor or recipient to use those flows. Admin stays available while this session keeps admin privilege.'
-                          : 'You can switch between these roles anytime'}
-                      </p>
+                      {rolePending ? (
+                        <p className="text-xs text-amber-700 mt-1 font-medium">
+                          Selected {roleLabel(draftRole)}. Click Update Profile to apply.
+                        </p>
+                      ) : (
+                        <p className="text-xs text-gray-500 mt-1">
+                          {canRestoreAdmin
+                            ? 'Switch to donor or recipient to use those flows. Admin stays available while this session keeps admin privilege.'
+                            : 'You can switch between these roles anytime'}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Community</label>
+                {communityInfo.community_id != null || communityInfo.approval_number ? (
+                  <div className="space-y-1 text-sm text-gray-800">
+                    <p className="font-medium">
+                      {communityInfo.community_name
+                        || (communityInfo.community_id != null
+                          ? `Community #${communityInfo.community_id}`
+                          : 'Not assigned')}
+                    </p>
+                    {communityInfo.approval_number && (
+                      <p className="text-gray-600">
+                        Approval code:{' '}
+                        <code className="bg-white border px-1.5 py-0.5 rounded text-xs">
+                          {communityInfo.approval_number}
+                        </code>
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500">
+                      Set by your signup approval code. Contact a Food Maps admin to change it.
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No community assigned yet. An admin can place you in a school or hub group.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -347,7 +511,10 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <input
                   type="text"
                   value={accountData.name}
-                  onChange={(e) => setAccountData({ ...accountData, name: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    markAccountDirty((prev) => ({ ...prev, name: value }));
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -358,7 +525,10 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <input
                   type="email"
                   value={accountData.email}
-                  onChange={(e) => setAccountData({ ...accountData, email: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    markAccountDirty((prev) => ({ ...prev, email: value }));
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   required
                 />
@@ -374,7 +544,10 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <input
                   type="tel"
                   value={accountData.phone}
-                  onChange={(e) => setAccountData({ ...accountData, phone: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    markAccountDirty((prev) => ({ ...prev, phone: value }));
+                  }}
                   placeholder="(555) 123-4567"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
@@ -394,7 +567,10 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Address</label>
                 <textarea
                   value={accountData.address}
-                  onChange={(e) => setAccountData({ ...accountData, address: e.target.value })}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    markAccountDirty((prev) => ({ ...prev, address: value }));
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500"
                   rows="3"
                 />
@@ -576,6 +752,9 @@ function UserProfile({ user, onClose, onUserUpdate }) {
                 </ul>
               </div>
             </div>
+          )}
+          {activeTab === 'accessibility' && (
+            <div id="nouri-a11y-settings-root" className="min-h-[12rem]" />
           )}
         </div>
       </div>

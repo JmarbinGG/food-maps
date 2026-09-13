@@ -10,7 +10,7 @@ import aiChatService from '../../utils/services/aiChatService.js'
 import { parseListingsCsv, downloadCsvTemplate, sanitizeListingExpiry, visionDraftToRow, matchCommunityByName } from '../../utils/csvListings.js'
 import { assignImagestoRows, assignFoodImage } from '../../utils/foodImages.js'
 import dataService from '../../utils/dataService.js'
-import supabase from '../../utils/supabaseClient.js'
+import centersClient from '../../utils/centersClient.js'
 import { liveAssistantIndex, resolveInputChips } from '../../utils/suggestionChips.js'
 import { toast } from 'react-toastify'
 import {
@@ -494,7 +494,7 @@ function SearchResultsClaimList({
               <button
                 type="button"
                 onClick={clearSelection}
-                className="text-[11px] px-2 py-0.5 rounded-md border border-slate-500 text-slate-100 hover:bg-slate-800/60"
+                className="text-[11px] px-2 py-0.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100"
               >
                 {isEs ? 'Limpiar' : 'Clear'}
               </button>
@@ -552,7 +552,7 @@ function SearchResultsClaimList({
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggle(displayNum)}
-                      className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
+                      className="rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40"
                       aria-label={isEs ? `Seleccionar #${displayNum}` : `Select #${displayNum}`}
                     />
                   </label>
@@ -568,7 +568,7 @@ function SearchResultsClaimList({
                     src={photoUrl}
                     alt={item.title || ''}
                     loading="lazy"
-                    className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800"
+                    className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
                     onError={(e) => { e.currentTarget.style.display = 'none' }}
                   />
                 )}
@@ -716,7 +716,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
                       src={photoUrl}
                       alt={item.title || ''}
                       loading="lazy"
-                      className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800"
+                      className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
                       onError={(e) => { e.currentTarget.style.display = 'none' }}
                     />
                   )}
@@ -807,7 +807,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
               src={photoUrl}
               alt={result.title || ''}
               loading="lazy"
-              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800"
+              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
               onError={(e) => { e.currentTarget.style.display = 'none' }}
             />
           )}
@@ -1634,7 +1634,7 @@ function BulkUploadPreview({
     setCommunitiesLoading(true)
     setCommunitiesError(null)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await centersClient
         .from('communities')
         .select('id, name')
         .eq('is_active', true)
@@ -1809,7 +1809,7 @@ function BulkUploadPreview({
         <div className="flex items-start gap-3">
           <i className={`fas ${icon} ${headerClass} mt-0.5`} aria-hidden="true" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold text-slate-100">{kindLabel}</div>
+            <div className="text-xs font-semibold text-gray-900">{kindLabel}</div>
             <div className="text-xs text-slate-300 truncate mb-1">{pending.filename}</div>
             {allErrors.map((e, i) => (
               <div key={i} className="text-sm text-rose-300">{e}</div>
@@ -1842,7 +1842,7 @@ function BulkUploadPreview({
       <div className={`mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 flex items-center gap-3 shadow-sm`}>
         <i className={`fas ${icon} ${headerClass}`} aria-hidden="true" />
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-semibold text-slate-100">{kindLabel}</div>
+          <div className="text-xs font-semibold text-gray-900">{kindLabel}</div>
           <div className="text-xs text-slate-300 truncate">{pending.filename}</div>
           <div className="mt-1 text-sm text-slate-200">
             <i className="fas fa-wand-magic-sparkles mr-1.5 text-emerald-300 animate-pulse" aria-hidden="true" />
@@ -1906,7 +1906,7 @@ function BulkUploadPreview({
                 checked={allSelected}
                 onChange={toggleSelectAll}
                 disabled={busy || rows.length === 0}
-                className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
+                className="rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40"
                 aria-label={isEs ? 'Seleccionar todas las filas' : 'Select all rows'}
               />
               <span className="font-medium">
@@ -1922,7 +1922,7 @@ function BulkUploadPreview({
                 checked={fillEmptyOnly}
                 onChange={(e) => setFillEmptyOnly(e.target.checked)}
                 disabled={busy}
-                className="rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
+                className="rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40"
               />
               <span>
                 {isEs ? 'Solo rellenar vacíos' : 'Only fill empty'}
@@ -2059,14 +2059,14 @@ function BulkUploadPreview({
 
       <div className={`space-y-1.5 overflow-y-auto nourish-scrollbar pr-1 ${isCsv ? 'max-h-64' : 'max-h-44'}`}>
         {previewRows.map((row, idx) => (
-          <div key={idx} className="rounded-lg border border-slate-700/60 bg-slate-800/40 p-2 flex items-start gap-2">
+          <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-2 flex items-start gap-2">
             {isCsv && (
               <input
                 type="checkbox"
                 checked={selectedRowIndexes.has(idx)}
                 onChange={() => toggleRowSelected(idx)}
                 disabled={busy}
-                className="mt-1 rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40 flex-shrink-0"
+                className="mt-1 rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40 flex-shrink-0"
                 aria-label={isEs ? `Seleccionar fila ${idx + 1}` : `Select row ${idx + 1}`}
               />
             )}
@@ -2315,7 +2315,7 @@ function AIChatPanel() {
     [authUser?.community_id, isAdmin],
   )
   const communityRole = useCommunityRole()
-  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting } = useNouriGuide()
+  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting, setAutoplayBlockedHandler } = useNouriGuide()
   // Photo / CSV attach is donor-only (list food, attach listing photos, bulk CSV).
   const canAttachFiles = communityRole === 'donor' || communityRole === 'admin'
   // Staged photos for the composer (attach + optional text, then send together).
@@ -2541,7 +2541,6 @@ function AIChatPanel() {
   const inputRef = useRef(null)
   const panelRef = useRef(null)
   const previousFocusRef = useRef(null)
-  const currentAudioRef = useRef(null)
   const lastSpokenIdRef = useRef(null)
   const voiceModeRef = useRef(false)
   const sendVoiceRef = useRef(sendVoice)
@@ -3504,8 +3503,12 @@ function AIChatPanel() {
         try {
           // Send raw audio to backend so Whisper + AI chat run through the
           // same server-side system (history, tool-calling, safeguards).
-          await sendVoiceRef.current(audioBlob)
-          setVoiceTranscript('')
+          const result = await sendVoiceRef.current(audioBlob)
+          if (result?.transcript) {
+            setVoiceTranscript(result.transcript)
+          } else {
+            setVoiceTranscript('')
+          }
         } catch (err) {
           console.error('[Voice] Backend voice processing failed:', err)
           setVoiceError(language === 'es' ? 'Error de voz' : 'Voice processing failed')
@@ -3597,32 +3600,20 @@ function AIChatPanel() {
     setTapToHear(null)
     setAudioLevel(0)
     stopRecording()
+    cancelVoice()
     // Release mic stream
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach(t => t.stop())
       mediaStreamRef.current = null
     }
-    if (currentAudioRef.current) {
-      currentAudioRef.current()
-      currentAudioRef.current = null
-    }
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
-  }, [stopRecording])
+  }, [stopRecording, cancelVoice])
 
   // Interrupt AI speech (barge-in) — user must tap orb again to start listening
   const interruptSpeaking = useCallback(() => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current()
-      currentAudioRef.current = null
-    }
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel()
-    }
+    cancelVoice()
     setIsVoiceSpeaking(false)
     setTapToHear(null)
-  }, [])
+  }, [cancelVoice])
 
   // Orb tap: interrupt when speaking, start listening when idle
   const handleOrbTap = useCallback(() => {
@@ -3773,7 +3764,10 @@ function AIChatPanel() {
     setWakeWordEnabled((prev) => {
       const next = !prev
       wakeWordEnabledRef.current = next
-      try { localStorage.setItem('dg.ai.wakeword', next ? '1' : '0') } catch { /* private mode */ }
+      try {
+        localStorage.setItem('fm.ai.wakeword', next ? '1' : '0')
+        localStorage.removeItem('dg.ai.wakeword')
+      } catch { /* private mode */ }
       if (next) {
         if (!voiceModeRef.current
             && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording')) {
@@ -3790,7 +3784,15 @@ function AIChatPanel() {
   // Restore the saved preference on mount and arm the recognizer.
   useEffect(() => {
     let saved = '0'
-    try { saved = localStorage.getItem('dg.ai.wakeword') || '0' } catch { /* noop */ }
+    try {
+      saved = localStorage.getItem('fm.ai.wakeword')
+        || localStorage.getItem('dg.ai.wakeword')
+        || '0'
+      if (saved === '1' && !localStorage.getItem('fm.ai.wakeword')) {
+        localStorage.setItem('fm.ai.wakeword', '1')
+        localStorage.removeItem('dg.ai.wakeword')
+      }
+    } catch { /* noop */ }
     if (saved === '1' && wakeWordSupported) {
       setWakeWordEnabled(true)
       wakeWordEnabledRef.current = true
@@ -3801,21 +3803,23 @@ function AIChatPanel() {
 
   // Re-arm the mic for the user's follow-up after Nouri finishes speaking,
   // so a wake-triggered conversation flows turn-by-turn without any taps.
+  // Skip while Tap-to-hear is waiting (autoplay blocked).
   useEffect(() => {
     const was = prevSpeakingRef.current
     prevSpeakingRef.current = isVoiceSpeaking
-    if (was && !isVoiceSpeaking && voiceMode && handsFreeRef.current && !isLoading) {
+    if (was && !isVoiceSpeaking && voiceMode && handsFreeRef.current && !isLoading && !tapToHear) {
       const t = setTimeout(() => {
         if (voiceModeRef.current
             && handsFreeRef.current
             && !isVoiceSpeakingRef.current
+            && !tapToHear
             && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording')) {
           startVoiceListening()
         }
       }, 700)
       return () => clearTimeout(t)
     }
-  }, [isVoiceSpeaking, voiceMode, isLoading, startVoiceListening])
+  }, [isVoiceSpeaking, voiceMode, isLoading, startVoiceListening, tapToHear])
 
   // Tear down the wake recognizer on unmount.
   useEffect(() => {
@@ -3862,27 +3866,30 @@ function AIChatPanel() {
       }
     }
 
-    syncFromChat({
-      guide: {
-        caption: lastAssistantMessage.message,
-        text: lastAssistantMessage.message,
-        isSpeaking: shouldSpeak,
-      },
-    })
-
-    if (shouldSpeak) {
-      const micTimer = setTimeout(() => {
-        if (voiceModeRef.current && mediaStreamRef.current) {
-          mediaStreamRef.current.getAudioTracks().forEach((t) => { t.enabled = true })
-        }
-      }, 3500)
-      return () => clearTimeout(micTimer)
-    }
-  }, [voiceMode, lastAssistantMessage, isLoading, language, a11ySettings.preferTextOverVoice, syncFromChat])
+    syncFromChat(lastAssistantMessage.message, { lang, speak: shouldSpeak })
+  }, [voiceMode, lastAssistantMessage, isLoading, language, a11ySettings.preferTextOverVoice, a11ySettings.preferredLanguage, syncFromChat])
 
   useEffect(() => {
     if (voiceMode) setIsVoiceSpeaking(guide.isSpeaking)
   }, [guide.isSpeaking, voiceMode])
+
+  // Mute mic while Nouri is speaking; restore when speech ends
+  useEffect(() => {
+    if (!voiceMode || !mediaStreamRef.current) return
+    mediaStreamRef.current.getAudioTracks().forEach((t) => {
+      t.enabled = !isVoiceSpeaking
+    })
+    if (isVoiceSpeaking) setVoiceTranscript('')
+  }, [isVoiceSpeaking, voiceMode])
+
+  // Wire Tap-to-hear when OpenAI TTS autoplay is blocked (iOS / mobile)
+  useEffect(() => {
+    if (!setAutoplayBlockedHandler) return undefined
+    setAutoplayBlockedHandler((replay) => {
+      setTapToHear(() => (typeof replay === 'function' ? replay : null))
+    })
+    return () => setAutoplayBlockedHandler(null)
+  }, [setAutoplayBlockedHandler])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -3896,13 +3903,9 @@ function AIChatPanel() {
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach(t => t.stop())
       }
-      if (currentAudioRef.current) {
-        currentAudioRef.current()
-        currentAudioRef.current = null
-      }
       cancelVoice()
     }
-  }, [])
+  }, [cancelVoice])
 
   const handleKeyDown = useCallback((e) => {
     // Autocomplete navigation takes priority when the dropdown is visible
@@ -3943,11 +3946,11 @@ function AIChatPanel() {
   // ─── Floating bubble (closed state) ──────
   if (!isOpen) {
     return (
-      <div className="fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[10060] group fab-base pointer-events-auto" style={{ perspective: '600px' }}>
+      <div className="fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[46] group fab-base pointer-events-auto" style={{ perspective: '600px' }}>
         {/* Speech bubble with "?" */}
         <div className="absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none">
           <div className="relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50">
-            <span className="text-gray-6000 font-bold text-lg">?</span>
+            <span className="text-gray-600 font-bold text-lg">?</span>
             {/* Speech tail */}
             <div className="absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-emerald-200/50 transform rotate-45" />
           </div>

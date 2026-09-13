@@ -133,63 +133,96 @@ def _normalize_recipe(raw: Any) -> dict:
 
 
 async def _load_user_recipe_context(user_id: str) -> dict:
-    from backend.ai_engine import supabase_get
-
     ctx: dict = {
         "household_size": None,
         "dietary_restrictions": [],
         "allergies": [],
     }
-    try:
-        rows = await supabase_get("users", {
-            "id": f"eq.{user_id}",
-            "select": "household_size,dietary_restrictions,allergies",
-        })
-        if not rows:
-            return ctx
-        row = rows[0]
-        ctx["household_size"] = row.get("household_size")
-        for field in ("dietary_restrictions", "allergies"):
-            raw = row.get(field)
-            if isinstance(raw, list):
-                ctx[field] = [str(x).strip() for x in raw if x]
-            elif isinstance(raw, str) and raw.strip():
+    uid = str(user_id or "").strip()
+    if not uid:
+        return ctx
+
+    # Food Maps integer ids → MySQL User row (never Supabase).
+    if uid.isdigit():
+        try:
+            from backend.app import SessionLocal
+            from backend.models import User
+
+            def _sync() -> dict:
+                db = SessionLocal()
                 try:
-                    parsed = json.loads(raw)
-                    if isinstance(parsed, list):
-                        ctx[field] = [str(x).strip() for x in parsed if x]
-                    else:
-                        ctx[field] = [raw.strip()]
-                except (ValueError, TypeError):
-                    ctx[field] = [p.strip() for p in raw.split(",") if p.strip()]
-    except Exception as exc:
-        logger.warning("recipe user context lookup failed: %s", exc)
+                    user = db.query(User).filter(User.id == int(uid)).first()
+                    if not user:
+                        return ctx
+                    out = dict(ctx)
+                    out["household_size"] = getattr(user, "household_size", None)
+                    for field, attr in (
+                        ("dietary_restrictions", "dietary_restrictions"),
+                        ("allergies", "allergies"),
+                    ):
+                        raw = getattr(user, attr, None)
+                        if isinstance(raw, list):
+                            out[field] = [str(x).strip() for x in raw if x]
+                        elif isinstance(raw, str) and raw.strip():
+                            try:
+                                parsed = json.loads(raw)
+                                if isinstance(parsed, list):
+                                    out[field] = [str(x).strip() for x in parsed if x]
+                                else:
+                                    out[field] = [raw.strip()]
+                            except (ValueError, TypeError):
+                                out[field] = [p.strip() for p in raw.split(",") if p.strip()]
+                    return out
+                finally:
+                    db.close()
+
+            import asyncio
+            return await asyncio.to_thread(_sync)
+        except Exception as exc:
+            logger.warning("recipe user context MySQL lookup failed: %s", exc)
+            return ctx
+
     return ctx
 
 
 async def _load_claimed_ingredients(user_id: str, limit: int = 10) -> list[str]:
-    from backend.ai_engine import supabase_get
-
+    uid = str(user_id or "").strip()
     titles: list[str] = []
-    try:
-        claims = await supabase_get("food_claims", {
-            "claimer_id": f"eq.{user_id}",
-            "status": "in.(pending,approved)",
-            "select": "food_id",
-            "limit": str(limit),
-        })
-        food_ids = [c["food_id"] for c in claims if c.get("food_id")]
-        for fid in food_ids[:limit]:
-            rows = await supabase_get("food_listings", {
-                "id": f"eq.{fid}",
-                "select": "title,category",
-            })
-            if rows:
-                title = (rows[0].get("title") or "").strip()
-                if title and title not in titles:
-                    titles.append(title)
-    except Exception as exc:
-        logger.warning("claimed ingredients lookup failed: %s", exc)
+    if not uid:
+        return titles
+
+    # Food Maps: claimed listings live on FoodResource.recipient_id.
+    if uid.isdigit():
+        try:
+            from backend.app import SessionLocal
+            from backend.models import FoodResource
+
+            def _sync() -> list[str]:
+                db = SessionLocal()
+                try:
+                    rows = (
+                        db.query(FoodResource)
+                        .filter(FoodResource.recipient_id == int(uid))
+                        .filter(FoodResource.status.in_(["claimed", "pending", "approved"]))
+                        .order_by(FoodResource.claimed_at.desc())
+                        .limit(max(1, min(int(limit or 10), 25)))
+                        .all()
+                    )
+                    out: list[str] = []
+                    for r in rows:
+                        title = (r.title or "").strip()
+                        if title and title not in out:
+                            out.append(title)
+                    return out
+                finally:
+                    db.close()
+
+            import asyncio
+            return await asyncio.to_thread(_sync)
+        except Exception as exc:
+            logger.warning("claimed ingredients MySQL lookup failed: %s", exc)
+            return titles
+
     return titles
 
 

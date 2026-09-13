@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import Input from '../common/Input';
 import Button from '../common/Button';
 import { useAuthContext } from '../../utils/AuthContext';
-import supabase from '../../utils/supabaseClient';
+import centersClient from '../../utils/centersClient';
 import { API_CONFIG } from '../../utils/config';
 import dataService from '../../utils/dataService';
 import useFormVoiceGuide, { SHARE_FOOD_WELCOME, SHARE_FOOD_HINTS } from '../../hooks/useFormVoiceGuide';
@@ -59,7 +59,7 @@ function FoodForm({
     useEffect(() => {
         const fetchCommunities = async () => {
             try {
-                const { data, error } = await supabase
+                const { data, error } = await centersClient
                     .from('communities')
                     .select('id, name')
                     .eq('is_active', true)

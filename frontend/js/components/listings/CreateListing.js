@@ -266,12 +266,14 @@ function CreateListing({ user, onCancel, onSuccess }) {
 
   React.useEffect(() => {
     const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-create-form-guide', {
+      formId: 'share-listing',
       welcomeMessage: 'Tell me about the food you want to share. I can guide you through each field.',
       fieldHints: {
         title: 'What food are you sharing? Say the name or type.',
         description: 'Add details like quantity, freshness, or pickup notes.',
         address: 'Where can someone pick this up?',
         category: 'Is it produce, prepared food, bakery, or packaged?',
+        qty: 'How many portions or packages are available?',
       },
     });
     if (window.FoodMapsNouri?.mountWithRetry) {

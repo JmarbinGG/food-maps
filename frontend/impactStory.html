@@ -865,18 +865,7 @@
     <div class="fm-status" data-fm-status></div>
   </div>
 
-  <script src="js/lib/newsletterSignup.js?v=20260814-newsletter"></script>
-  <script src="js/lib/pageEditor.js"></script>
-  <script>
-    window.FoodMapsPageEditor.init({
-      pageId: 'impactStory',
-      fullPage: true,
-      migrateLocalStorageKey: 'impactStoryContent',
-      excludeSelectors: ['#newsletterForm', '#storiesModal input', '#storiesModal button']
-    });
-  </script>
-
-  <!-- Stories Modal -->
+  <!-- Stories Modal (before pageEditor.init so CMS content applies on load) -->
   <div id="storiesModal" class="modal">
     <div class="modal-content">
       <div class="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-xl">
@@ -989,6 +978,17 @@
       </div>
     </div>
   </div>
+
+  <script src="js/lib/newsletterSignup.js?v=20260814-newsletter"></script>
+  <script src="js/lib/pageEditor.js?v=20260911-editor-fix"></script>
+  <script>
+    window.FoodMapsPageEditor.init({
+      pageId: 'impactStory',
+      fullPage: true,
+      migrateLocalStorageKey: 'impactStoryContent',
+      excludeSelectors: ['#newsletterForm', '#storiesModal input', '#storiesModal button']
+    });
+  </script>
 
   <script>
     function openStoriesModal() {

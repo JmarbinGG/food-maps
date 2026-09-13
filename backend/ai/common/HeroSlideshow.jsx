@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useAuthContext } from '../../utils/AuthContext';
-import supabase from '../../utils/supabaseClient';
 
 function HeroSlideshow({ children }) {
     const { isAdmin } = useAuthContext();
@@ -33,71 +32,18 @@ function HeroSlideshow({ children }) {
         }
     ];
 
-    // Load slides from database
+    // Food Maps: use built-in defaults (no remote slide table).
     useEffect(() => {
-        let mounted = true;
-        
-        const loadSlides = async () => {
-            try {
-                setLoading(true);
-                const { data, error } = await supabase
-                    .from('hero_slides')
-                    .select('*')
-                    .order('order_index', { ascending: true });
-
-                if (!mounted) return;
-
-                if (error) {
-                    console.error('Error loading slides:', error);
-                    setSlides(defaultSlides);
-                } else if (data && data.length > 0) {
-                    setSlides(data);
-                } else {
-                    setSlides(defaultSlides);
-                }
-            } catch (err) {
-                console.error('Error:', err);
-                if (mounted) {
-                    setSlides(defaultSlides);
-                }
-            } finally {
-                if (mounted) {
-                    setLoading(false);
-                }
-            }
-        };
-
-        loadSlides();
-
-        return () => {
-            mounted = false;
-        };
+        setSlides(defaultSlides);
+        setLoading(false);
     }, []);
 
-    // Separate loadSlides function for manual reloads (admin use)
-    const reloadSlides = async () => {
-        try {
-            setLoading(true);
-            const { data, error } = await supabase
-                .from('hero_slides')
-                .select('*')
-                .order('order_index', { ascending: true });
 
-            if (error) {
-                console.error('Error loading slides:', error);
-                setSlides(defaultSlides);
-            } else if (data && data.length > 0) {
-                setSlides(data);
-            } else {
-                setSlides(defaultSlides);
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            setSlides(defaultSlides);
-        } finally {
-            setLoading(false);
-        }
+    const reloadSlides = async () => {
+        setSlides(defaultSlides);
+        setLoading(false);
     };
+
 
     // Auto-advance slideshow
     useEffect(() => {
@@ -127,58 +73,26 @@ function HeroSlideshow({ children }) {
             alert('Please enter an image URL');
             return;
         }
-
-        try {
-            const { data, error } = await supabase
-                .from('hero_slides')
-                .insert({
-                    image_url: newSlideUrl,
-                    caption: newSlideCaption,
-                    order_index: slides.length
-                })
-                .select()
-                .single();
-
-            if (error) {
-                console.error('Error adding slide:', error);
-                alert('Failed to add slide. Check console for details.');
-            } else {
-                setSlides([...slides, data]);
-                setNewSlideUrl('');
-                setNewSlideCaption('');
-                alert('Slide added successfully!');
-                await reloadSlides();
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            alert('Failed to add slide.');
-        }
+        const slide = {
+            id: `local-${Date.now()}`,
+            image_url: newSlideUrl,
+            caption: newSlideCaption,
+            order_index: slides.length,
+        };
+        setSlides([...slides, slide]);
+        setNewSlideUrl('');
+        setNewSlideCaption('');
     };
 
     const removeSlide = async (slideId) => {
         if (!confirm('Are you sure you want to remove this slide?')) return;
-
-        try {
-            const { error } = await supabase
-                .from('hero_slides')
-                .delete()
-                .eq('id', slideId);
-
-            if (error) {
-                console.error('Error removing slide:', error);
-                alert('Failed to remove slide.');
-            } else {
-                if (currentSlide >= slides.length - 1) {
-                    setCurrentSlide(Math.max(0, slides.length - 2));
-                }
-                alert('Slide removed successfully!');
-                await reloadSlides();
-            }
-        } catch (err) {
-            console.error('Error:', err);
-            alert('Failed to remove slide.');
+        const next = slides.filter((s) => s.id !== slideId);
+        setSlides(next.length ? next : defaultSlides);
+        if (currentSlide >= next.length) {
+            setCurrentSlide(Math.max(0, next.length - 1));
         }
     };
+
 
     if (loading) {
         return (

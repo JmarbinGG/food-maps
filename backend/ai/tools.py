@@ -1342,7 +1342,17 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         if role_block:
             return role_block
     except Exception:
-        pass
+        logger.exception(
+            "Role guard check failed for tool=%s — failing closed", name,
+        )
+        return {
+            "error": (
+                "I couldn't verify your account role right now, so I can't "
+                "safely run that action. Please try again in a moment."
+            ),
+            "reason": "role_guard_unavailable",
+            "ok": False,
+        }
     # Defense-in-depth: silently drop kwargs the handler doesn't accept.
     # OpenAI tool calls occasionally include legacy/extra fields (e.g.
     # 'confirmed' from a prior schema version) that would otherwise raise
@@ -1427,24 +1437,18 @@ def _to_int(value) -> Optional[int]:
 _UUID_RE = re.compile(r"^[0-9a-f-]{36}$", re.I)
 
 
-def _is_supabase_user_id(user_id: str) -> bool:
-    """True when auth id is a Supabase UUID (not a legacy integer PK)."""
+def _reject_non_mysql_user(user_id) -> Optional[dict]:
+    """Return an error dict when user_id is not a Food Maps numeric id."""
     uid = str(user_id or "").strip()
-    return bool(uid) and not uid.isdigit()
+    if uid.isdigit():
+        return None
+    return {
+        "ok": False,
+        "error": "Food Maps requires a numeric user id",
+        "message": "Food Maps requires a numeric user id",
+    }
 
 
-def _resolve_supabase_listing_id(listing_id, user_id: str) -> Optional[str]:
-    """Map search display index (1, 2, 3…) to a Supabase listing UUID."""
-    if listing_id is None:
-        return None
-    lid = str(listing_id).strip().lstrip("#").strip()
-    if not lid:
-        return None
-    if _UUID_RE.match(lid):
-        return lid
-    from backend.ai.conversation_flow import resolve_listing_id_from_search
-    resolved, _err = resolve_listing_id_from_search(lid, str(user_id or ""))
-    return resolved
 
 
 # Keyword -> FoodCategory guessing so the AI doesn't have to ask the donor
@@ -1597,17 +1601,8 @@ async def _search_food_near_user(
     max_results: int = 25,
     **kwargs,
 ) -> dict:
-    """Search available food near the user (Supabase UUID or MySQL integer ids)."""
+    """Search available food near the user (MySQL integer ids, community-scoped)."""
     kwargs.pop("radius_km", None)
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _search_food_near_user as _impl
-        return await _impl(
-            user_id=user_id,
-            food_type=food_type,
-            max_results=max_results,
-            **kwargs,
-        )
-
     from backend.app import SessionLocal
     from backend.models import User, FoodResource, FoodCategory
 
@@ -1627,9 +1622,25 @@ async def _search_food_near_user(
             user = db.query(User).filter(User.id == uid).first()
             user_lat = user.coords_lat if user else None
             user_lng = user.coords_lng if user else None
+            viewer_community_id = getattr(user, "community_id", None) if user else None
+            viewer_is_admin = False
+            if user is not None:
+                try:
+                    from backend.app import _user_is_admin
+                    viewer_is_admin = bool(_user_is_admin(user))
+                except Exception:
+                    viewer_is_admin = bool(getattr(user, "is_admin", False))
 
             q = db.query(FoodResource).filter(FoodResource.status == "available")
             q = q.filter(FoodResource.donor_id != uid)
+            if (
+                not viewer_is_admin
+                and viewer_community_id is not None
+            ):
+                q = q.filter(FoodResource.community_id == int(viewer_community_id))
+            elif not viewer_is_admin:
+                # Non-admin with no community: do not leak cross-community rows.
+                q = q.filter(FoodResource.community_id == -1)
             if food_type:
                 try:
                     cat = FoodCategory(food_type.lower())
@@ -1661,6 +1672,7 @@ async def _search_food_near_user(
                     "expiry_date": r.expiration_date.isoformat() if r.expiration_date else None,
                     "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
                     "donor_id": r.donor_id,
+                    "community_id": getattr(r, "community_id", None),
                     "urgency_score": r.urgency_score,
                 })
 
@@ -1692,14 +1704,91 @@ async def _get_recent_listings(
     category: Optional[str] = None,
     **kwargs,
 ) -> dict:
-    from backend.tools import _get_recent_listings as _impl
-    return await _impl(
-        user_id=user_id,
-        hours=hours,
-        limit=limit,
-        category=category,
-        **kwargs,
-    )
+    """Recent donations. Integer Food Maps ids → MySQL; UUID → legacy Supabase."""
+
+    from backend.app import SessionLocal
+    from backend.models import FoodResource, FoodCategory, User
+
+    uid = _to_int(user_id) if user_id else None
+    try:
+        safe_hours = max(1, min(int(hours or 72), 24 * 14))
+    except (TypeError, ValueError):
+        safe_hours = 72
+    try:
+        safe_limit = max(1, min(int(limit or 10), 25))
+    except (TypeError, ValueError):
+        safe_limit = 10
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            viewer_community_id = None
+            viewer_is_admin = False
+            if uid is not None:
+                user = db.query(User).filter(User.id == uid).first()
+                if user is not None:
+                    viewer_community_id = getattr(user, "community_id", None)
+                    try:
+                        from backend.app import _user_is_admin
+                        viewer_is_admin = bool(_user_is_admin(user))
+                    except Exception:
+                        viewer_is_admin = bool(getattr(user, "is_admin", False))
+
+            cutoff = _utcnow() - timedelta(hours=safe_hours)
+            q = (
+                db.query(FoodResource)
+                .filter(FoodResource.status == "available")
+                .filter(FoodResource.created_at >= cutoff)
+            )
+            if uid is not None:
+                q = q.filter(FoodResource.donor_id != uid)
+            if category:
+                try:
+                    q = q.filter(FoodResource.category == FoodCategory(str(category).lower()))
+                except ValueError:
+                    pass
+            if (
+                not viewer_is_admin
+                and viewer_community_id is not None
+            ):
+                q = q.filter(FoodResource.community_id == int(viewer_community_id))
+            elif not viewer_is_admin and uid is not None and viewer_community_id is None:
+                # Non-admin with no community: do not leak cross-community rows.
+                q = q.filter(FoodResource.community_id == -1)
+
+            now = _utcnow()
+            rows = q.order_by(FoodResource.created_at.desc()).limit(safe_limit * 3).all()
+            listings = []
+            for r in rows:
+                if r.expiration_date and r.expiration_date < now:
+                    continue
+                listings.append({
+                    "id": r.id,
+                    "title": r.title,
+                    "category": r.category.value if r.category else None,
+                    "quantity": r.qty,
+                    "unit": r.unit,
+                    "address": r.address,
+                    "latitude": r.coords_lat,
+                    "longitude": r.coords_lng,
+                    "community_id": getattr(r, "community_id", None),
+                    "expiry_date": r.expiration_date.isoformat() if r.expiration_date else None,
+                    "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
+                    "donor_id": r.donor_id,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                })
+                if len(listings) >= safe_limit:
+                    break
+            summary = (
+                f"Found {len(listings)} recent listing(s)."
+                if listings else
+                "No recent listings right now."
+            )
+            return {"listings": listings, "total": len(listings), "summary": summary}
+        finally:
+            db.close()
+
+    return await _run(_sync)
 
 
 async def _get_community_listings(
@@ -1709,22 +1798,111 @@ async def _get_community_listings(
     category: Optional[str] = None,
     **kwargs,
 ) -> dict:
-    from backend.tools import _get_community_listings as _impl
-    return await _impl(
-        community_id=str(community_id),
-        user_id=user_id,
-        limit=limit,
-        category=category,
-        **kwargs,
-    )
+    """Community donations. Integer community/user → MySQL; UUID → legacy Supabase."""
+
+    cid = _to_int(community_id)
+    if cid is None:
+        # Non-integer community id without UUID user: not a Food Maps MySQL id.
+        logger.warning(
+            "get_community_listings: refusing non-integer community_id=%r for Food Maps",
+            community_id,
+        )
+        return {
+            "success": False,
+            "error": "community_id must be a Food Maps integer id",
+            "listings": [],
+            "total": 0,
+        }
+
+    from backend.app import SessionLocal
+    from backend.models import FoodResource, FoodCategory, User, DistributionCenter
+
+    uid = _to_int(user_id) if user_id else None
+    try:
+        safe_limit = max(1, min(int(limit or 10), 25))
+    except (TypeError, ValueError):
+        safe_limit = 10
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            if uid is not None:
+                user = db.query(User).filter(User.id == uid).first()
+                if user is not None:
+                    try:
+                        from backend.app import _user_is_admin
+                        is_admin = bool(_user_is_admin(user))
+                    except Exception:
+                        is_admin = bool(getattr(user, "is_admin", False))
+                    own = getattr(user, "community_id", None)
+                    if not is_admin and own is not None and int(own) != cid:
+                        return {
+                            "success": True,
+                            "listings": [],
+                            "total": 0,
+                            "summary": (
+                                "That community's food isn't available in your school scope. "
+                                "I can only show food from your own community."
+                            ),
+                        }
+
+            center = (
+                db.query(DistributionCenter)
+                .filter(DistributionCenter.id == cid)
+                .first()
+            )
+            community_name = center.name if center else None
+
+            q = (
+                db.query(FoodResource)
+                .filter(FoodResource.status == "available")
+                .filter(FoodResource.community_id == cid)
+            )
+            if category:
+                try:
+                    q = q.filter(FoodResource.category == FoodCategory(str(category).lower()))
+                except ValueError:
+                    pass
+            now = _utcnow()
+            rows = q.order_by(FoodResource.created_at.desc()).limit(safe_limit).all()
+            listings = []
+            for r in rows:
+                if r.expiration_date and r.expiration_date < now:
+                    continue
+                listings.append({
+                    "id": r.id,
+                    "title": r.title,
+                    "category": r.category.value if r.category else None,
+                    "quantity": r.qty,
+                    "unit": r.unit,
+                    "address": r.address,
+                    "community_id": cid,
+                    "community_name": community_name,
+                    "expiry_date": r.expiration_date.isoformat() if r.expiration_date else None,
+                    "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
+                })
+            label = community_name or f"community #{cid}"
+            summary = (
+                f"Found {len(listings)} listing(s) for {label}."
+                if listings else
+                f"No active listings for {label} right now."
+            )
+            return {
+                "success": True,
+                "listings": listings,
+                "total": len(listings),
+                "community_id": cid,
+                "community_name": community_name,
+                "summary": summary,
+            }
+        finally:
+            db.close()
+
+    return await _run(_sync)
 
 
 async def _get_user_profile(user_id: str) -> dict:
     """Retrieve user profile (Supabase UUID or MySQL integer ids)."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _get_user_profile as _impl
-        return await _impl(user_id=user_id)
-
     from backend.app import SessionLocal
     from backend.models import User
 
@@ -1747,7 +1925,9 @@ async def _get_user_profile(user_id: str) -> dict:
                 "latitude": user.coords_lat,
                 "longitude": user.coords_lng,
                 "phone": getattr(user, "phone", None),
-                "is_admin": bool(getattr(user, "is_admin", False)),
+                "community_id": getattr(user, "community_id", None),
+                "is_admin": bool(getattr(user, "is_admin", False))
+                or (user.role.value == "admin" if user.role else False),
             }
         finally:
             db.close()
@@ -1760,14 +1940,6 @@ async def _get_pickup_schedule(
     include_community_events: bool = True,
     days_ahead: int = 7,
 ) -> dict:
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _get_pickup_schedule as _impl
-        return await _impl(
-            user_id=str(user_id).strip(),
-            include_community_events=include_community_events,
-            days_ahead=days_ahead,
-        )
-
     from backend.app import SessionLocal
     from backend.models import FoodResource, DistributionCenter
 
@@ -1830,16 +2002,6 @@ async def _create_reminder(
     reminder_type: str = "general",
     related_id: Optional[int] = None,
 ) -> dict:
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _create_reminder as _impl
-        return await _impl(
-            user_id=str(user_id).strip(),
-            message=message,
-            trigger_time=trigger_time,
-            reminder_type=reminder_type,
-            related_id=str(related_id) if related_id is not None else None,
-        )
-
     from backend.app import SessionLocal
     from backend.ai.models import AIReminder
 
@@ -2028,10 +2190,6 @@ async def _query_distribution_centers(
 
 async def _get_user_dashboard(user_id: str) -> dict:
     """Rich dashboard summary for the user."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _get_user_dashboard as _impl
-        return await _impl(user_id=str(user_id).strip())
-
     from backend.app import SessionLocal
     from backend.models import User, FoodResource
 
@@ -2084,14 +2242,6 @@ async def _check_pickup_schedule(
     days_ahead: int = 14,
 ) -> dict:
     """Supabase-backed schedule (UUID auth users). Legacy int ids stay on MySQL."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _check_pickup_schedule as _impl
-        return await _impl(
-            user_id=str(user_id).strip(),
-            include_sent=include_sent,
-            days_ahead=days_ahead,
-        )
-
     from backend.app import SessionLocal
     from backend.models import FoodResource
     from backend.ai.models import AIReminder
@@ -2274,16 +2424,6 @@ async def _get_donor_expiring_listings(
     **_ignored,
 ) -> dict:
     """Donor: own listings whose expiry is close (Supabase for UUID users)."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _get_donor_expiring_listings as _impl
-        # Canonical tool uses days; map hours_ahead when days omitted.
-        if days is None:
-            try:
-                days = max(1, int(math.ceil(float(hours_ahead or 48) / 24.0)))
-            except (TypeError, ValueError):
-                days = 2
-        return await _impl(user_id=str(user_id).strip(), days=days)
-
     from backend.app import SessionLocal
     from backend.models import FoodResource
 
@@ -2398,167 +2538,163 @@ async def _get_driver_route_plan(user_id: str, max_stops: int = 8) -> dict:
 
 
 async def _get_dispatch_queue(user_id: str, max_items: int = 20) -> dict:
-    """Dispatcher: open food requests + unclaimed donation listings (Supabase)."""
-    from backend.ai_engine import supabase_get
-
+    """Dispatcher: open food requests + unclaimed donation listings (MySQL)."""
     if not (user_id or "").strip():
+        return {"error": "Invalid user_id"}
+
+    from backend.app import SessionLocal
+    from backend.models import FoodResource, FoodRequest
+
+    uid = _to_int(user_id)
+    if uid is None:
         return {"error": "Invalid user_id"}
 
     limit = max(1, min(int(max_items or 20), 50))
-    try:
-        open_requests = await supabase_get("food_listings", {
-            "listing_type": "eq.request",
-            "status": "in.(approved,active,pending)",
-            "select": (
-                "id,user_id,title,category,quantity,unit,full_address,location,"
-                "community_id,communities(id,name),status,created_at,expiry_date"
-            ),
-            "order": "created_at.desc",
-            "limit": str(limit),
-        })
-        unclaimed_listings = await supabase_get("food_listings", {
-            "listing_type": "eq.donation",
-            "status": "in.(approved,active)",
-            "select": (
-                "id,title,category,quantity,unit,full_address,location,"
-                "pickup_by,community_id,created_at"
-            ),
-            "order": "created_at.desc",
-            "limit": str(limit),
-        })
-    except Exception as exc:
-        return {"error": f"dispatch queue failed: {exc}"}
 
-    reqs = []
-    for r in (open_requests or []):
-        community = r.get("communities")
-        if isinstance(community, list):
-            community = community[0] if community else None
-        cname = (community or {}).get("name") if isinstance(community, dict) else None
-        reqs.append({
-            "id": r.get("id"),
-            "recipient_id": r.get("user_id"),
-            "title": r.get("title"),
-            "category": r.get("category"),
-            "quantity": r.get("quantity"),
-            "unit": r.get("unit"),
-            "address": r.get("full_address") or r.get("location"),
-            "status": r.get("status"),
-            "created_at": r.get("created_at"),
-            "needed_by": r.get("expiry_date"),
-            "community_id": r.get("community_id"),
-            "community_name": cname,
-        })
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            open_reqs = (
+                db.query(FoodRequest)
+                .filter(FoodRequest.status.in_(["open", "pending", "active"]))
+                .order_by(FoodRequest.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            unclaimed = (
+                db.query(FoodResource)
+                .filter(FoodResource.status == "available")
+                .filter(FoodResource.recipient_id.is_(None))
+                .order_by(FoodResource.created_at.desc())
+                .limit(limit)
+                .all()
+            )
 
-    lst = [{
-        "id": l.get("id"),
-        "title": l.get("title"),
-        "category": l.get("category"),
-        "address": l.get("full_address") or l.get("location"),
-        "qty": l.get("quantity"),
-        "unit": l.get("unit"),
-        "pickup_by": l.get("pickup_by"),
-    } for l in (unclaimed_listings or [])]
+            reqs = []
+            for r in open_reqs:
+                cat = r.category.value if hasattr(r.category, "value") else str(r.category or "")
+                reqs.append({
+                    "id": r.id,
+                    "recipient_id": r.recipient_id,
+                    "title": (r.notes or "").strip()[:80] or f"Food request ({cat or 'any'})",
+                    "category": cat or None,
+                    "quantity": None,
+                    "unit": None,
+                    "address": r.address,
+                    "status": r.status,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "needed_by": r.latest_by.isoformat() if r.latest_by else None,
+                    "community_id": None,
+                    "community_name": None,
+                })
 
-    summary = (
-        f"Dispatch queue: {len(reqs)} open request(s) and "
-        f"{len(lst)} unclaimed listing(s) need attention."
-    )
-    return {
-        "open_requests": reqs,
-        "unclaimed_listings": lst,
-        "summary": summary,
-    }
+            lst = []
+            for l in unclaimed:
+                cat = l.category.value if hasattr(l.category, "value") else str(l.category or "")
+                lst.append({
+                    "id": l.id,
+                    "title": l.title,
+                    "category": cat or None,
+                    "address": l.address,
+                    "qty": l.qty,
+                    "unit": l.unit,
+                    "pickup_by": (
+                        l.pickup_window_end.isoformat() if l.pickup_window_end else None
+                    ),
+                })
+
+            if not reqs and not lst:
+                summary = (
+                    "Dispatch queue is empty — no open requests or unclaimed listings."
+                )
+            else:
+                summary = (
+                    f"Dispatch queue: {len(reqs)} open request(s) and "
+                    f"{len(lst)} unclaimed listing(s) need attention."
+                )
+            return {
+                "open_requests": reqs,
+                "unclaimed_listings": lst,
+                "summary": summary,
+            }
+        finally:
+            db.close()
+
+    return await _run(_sync)
 
 
 async def _get_platform_stats(user_id: str) -> dict:
-    """Admin: high-level metrics + encouragement-ready stats (Supabase)."""
-    from backend.ai_engine import supabase_get
-
+    """Admin: high-level metrics + encouragement-ready stats (MySQL)."""
     if not (user_id or "").strip():
         return {"error": "Invalid user_id"}
 
-    try:
-        admin_rows = await supabase_get("users", {
-            "id": f"eq.{user_id}",
-            "select": "id,is_admin",
-            "limit": "1",
-        })
-        admin = (admin_rows or [{}])[0]
-        if not admin.get("is_admin"):
-            return {"error": "Admin role required"}
+    from backend.app import SessionLocal, _user_is_admin
+    from backend.models import User, FoodResource, FoodRequest
 
-        open_requests = await supabase_get("food_listings", {
-            "listing_type": "eq.request",
-            "status": "in.(approved,active,pending)",
-            "select": "id,created_at",
-            "order": "created_at.desc",
-            "limit": "500",
-        })
-        active_listings = await supabase_get("food_listings", {
-            "listing_type": "eq.donation",
-            "status": "in.(approved,active)",
-            "select": "id,created_at",
-            "order": "created_at.desc",
-            "limit": "500",
-        })
-        users = await supabase_get("users", {
-            "select": "id,created_at",
-            "order": "created_at.desc",
-            "limit": "1000",
-        })
-    except Exception as exc:
-        return {"error": f"platform stats failed: {exc}"}
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
 
-    now = _utcnow()
-    last_24h = now - timedelta(hours=24)
-    last_7d = now - timedelta(days=7)
-
-    def _parse_dt(value):
-        if not value:
-            return None
+    def _sync() -> dict:
+        db = SessionLocal()
         try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except Exception:
-            return None
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {
+                    "error": "User not found",
+                    "summary": "Could not load platform stats — user profile missing.",
+                }
+            if not _user_is_admin(user):
+                return {"error": "Admin role required"}
 
-    user_rows = users or []
-    listing_rows = active_listings or []
-    request_rows = open_requests or []
+            now = _utcnow()
+            last_24h = now - timedelta(hours=24)
+            last_7d = now - timedelta(days=7)
 
-    total_users = len(user_rows)
-    new_users_7d = sum(
-        1 for u in user_rows
-        if (_parse_dt(u.get("created_at")) or now) >= last_7d
-    )
-    listings_24h = sum(
-        1 for l in listing_rows
-        if (_parse_dt(l.get("created_at")) or now) >= last_24h
-    )
-    open_request_count = len(request_rows)
-    active_count = len(listing_rows)
+            total_users = db.query(User).count()
+            new_users_7d = (
+                db.query(User)
+                .filter(User.created_at >= last_7d)
+                .count()
+            )
+            active_count = (
+                db.query(FoodResource)
+                .filter(FoodResource.status == "available")
+                .count()
+            )
+            listings_24h = (
+                db.query(FoodResource)
+                .filter(FoodResource.status == "available")
+                .filter(FoodResource.created_at >= last_24h)
+                .count()
+            )
+            open_request_count = (
+                db.query(FoodRequest)
+                .filter(FoodRequest.status.in_(["open", "pending", "active"]))
+                .count()
+            )
 
-    summary = (
-        f"Platform health: {total_users} members, +{new_users_7d} this week. "
-        f"{active_count} live donations (+{listings_24h} in 24h). "
-        f"{open_request_count} open food request(s)."
-    )
-    return {
-        "total_users": total_users,
-        "new_users_7d": new_users_7d,
-        "active_listings": active_count,
-        "listings_24h": listings_24h,
-        "open_requests": open_request_count,
-        "summary": summary,
-    }
+            summary = (
+                f"Platform health: {total_users} members, +{new_users_7d} this week. "
+                f"{active_count} live donations (+{listings_24h} in 24h). "
+                f"{open_request_count} open food request(s)."
+            )
+            return {
+                "total_users": total_users,
+                "new_users_7d": new_users_7d,
+                "active_listings": active_count,
+                "listings_24h": listings_24h,
+                "open_requests": open_request_count,
+                "summary": summary,
+            }
+        finally:
+            db.close()
+
+    return await _run(_sync)
 
 
 async def _get_profile_gaps(user_id: str) -> dict:
     """Return profile fields the user has not filled."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _get_profile_gaps as _impl
-        return await _impl(user_id=user_id)
-
     from backend.app import SessionLocal
     from backend.models import User
 
@@ -2851,24 +2987,23 @@ _QUERY_WHITELIST: dict[str, dict] = {
             "category": "category", "status": "status", "qty": "qty",
             "urgency_score": "urgency_score", "expiration_date": "expiration_date",
             "pickup_window_end": "pickup_window_end", "created_at": "created_at",
-            "title": "title", "address": "address",
+            "title": "title", "address": "address", "community_id": "community_id",
         },
         "select": ["id", "donor_id", "recipient_id", "title", "category",
-                   "status", "qty", "unit", "address", "urgency_score",
-                   "pickup_window_end", "expiration_date", "created_at"],
+                   "status", "qty", "unit", "address", "community_id",
+                   "urgency_score", "pickup_window_end", "expiration_date",
+                   "created_at"],
     },
     "requests": {
-        # Handled via Supabase food_listings (listing_type=request); no SQLAlchemy model.
-        "model_import": None,
-        "supabase_table": "food_listings",
-        "supabase_filters": {"listing_type": "eq.request"},
+        # Food Maps MySQL FoodRequest — not Supabase food_listings.
+        "model_import": ("backend.models", "FoodRequest"),
         "fields": {
-            "id": "id", "user_id": "user_id", "category": "category",
-            "status": "status", "quantity": "quantity", "title": "title",
-            "created_at": "created_at",
+            "id": "id", "recipient_id": "recipient_id", "category": "category",
+            "status": "status", "created_at": "created_at",
+            "address": "address", "urgency_score": "urgency_score",
         },
-        "select": ["id", "user_id", "title", "category", "status", "quantity",
-                   "unit", "full_address", "created_at"],
+        "select": ["id", "recipient_id", "category", "status", "address",
+                   "household_size", "urgency_score", "latest_by", "created_at"],
     },
     "centers": {
         "model_import": ("backend.models", "DistributionCenter"),
@@ -2921,46 +3056,20 @@ async def _run_safe_query(
     except (TypeError, ValueError):
         limit = 25
 
-    # Supabase-backed entities (no SQLAlchemy model)
+    # Legacy UUID-only entity tables (none currently). Food Maps entities
+    # must use model_import + SQLAlchemy above — never silently empty via
     if not spec.get("model_import") and spec.get("supabase_table"):
-        from backend.ai_engine import supabase_get
-
-        params = {
-            "select": ",".join(spec.get("select") or ["id"]),
-            "order": f"{order_by or 'created_at'}.{'desc' if descending else 'asc'}",
-            "limit": str(limit),
-        }
-        for key, value in (spec.get("supabase_filters") or {}).items():
-            params[key] = value
-        for f in (filters or []):
-            fname = str(f.get("field", "")).strip()
-            op = str(f.get("op", "eq")).lower()
-            value = f.get("value")
-            if fname not in (spec.get("fields") or {}):
-                return {"error": f"field '{fname}' not allowed for {entity}"}
-            if op not in _ALLOWED_OPS:
-                return {"error": f"op '{op}' not allowed"}
-            col = spec["fields"][fname]
-            if op == "eq":
-                params[col] = f"eq.{value}"
-            elif op == "ne":
-                params[col] = f"neq.{value}"
-            elif op == "in":
-                vals = value if isinstance(value, (list, tuple)) else [value]
-                params[col] = f"in.({','.join(str(v) for v in vals)})"
-            elif op == "like":
-                params[col] = f"ilike.*{value}*"
-            elif op in {"gt", "gte", "lt", "lte"}:
-                params[col] = f"{op}.{value}"
-        try:
-            rows = await supabase_get(spec["supabase_table"], params)
-        except Exception as exc:
-            return {"error": f"query failed: {exc}"}
+        logger.error(
+            "run_safe_query: entity=%r still points at supabase_table=%r — "
+            "refusing (Food Maps uses MySQL). Migrate the whitelist entry.",
+            entity,
+            spec.get("supabase_table"),
+        )
         return {
-            "entity": entity,
-            "count": len(rows or []),
-            "rows": rows or [],
-            "summary": f"Found {len(rows or [])} {entity}.",
+            "error": (
+                f"entity '{entity}' is legacy UUID/Supabase-only and is not "
+                "available for Food Maps integer-id queries"
+            ),
         }
 
     mod_name, cls_name = spec["model_import"]
@@ -3138,62 +3247,23 @@ async def _claim_listing(
     quantity: Optional[object] = None,
     **_ignored,
 ) -> dict:
-    """Claim a listing — Supabase (UUID) or legacy SQLite (int)."""
-    uid = str(user_id or "").strip()
-    lid = listing_id
+    """Claim a listing by integer Food Maps id (MySQL)."""
+    uid_raw = str(user_id or "").strip()
+    lid_raw = str(listing_id or "").strip()
 
-    if _is_supabase_user_id(uid):
-        resolved = _resolve_supabase_listing_id(lid, uid)
-        if resolved:
-            lid = resolved
-        elif lid is not None and not _UUID_RE.match(str(lid)):
-            return {
-                "error": (
-                    "Listing not found. Search for food first, then use the "
-                    "list number (1, 2, 3…) from those results."
-                ),
-            }
-
-    if _UUID_RE.match(str(lid or "")):
-        from backend.ai.role_guards import check_role_allows_tool
-        role_block = await check_role_allows_tool(uid, "claim_listing")
-        if role_block:
-            return role_block
-        from backend.tools import _claim_food_listing
-        result = await _claim_food_listing(
-            user_id=uid,
-            listing_id=str(lid),
-            quantity=quantity,
-        )
-        if result.get("success"):
-            out = {
-                "success": True,
-                "listing_id": result.get("listing_id"),
-                "claim_id": result.get("claim_id"),
-                "quantity": result.get("quantity"),
-                "summary": result.get("summary"),
-                "title": result.get("title"),
-                "pickup_location": result.get("pickup_location"),
-                "pickup_deadline": result.get("pickup_deadline"),
-            }
-            if result.get("already_claimed"):
-                out["already_claimed"] = True
-                out["message"] = result.get("message")
-            return out
-        err = result.get("error", "Could not complete the claim.")
-        hint = "Tell the user exactly what went wrong — do not re-run search unless they ask."
-        if "already have an active claim" in str(err).lower():
-            hint = "Offer cancel_claim first if they want to switch listings."
-        elif "your own listing" in str(err).lower():
-            hint = "They cannot claim their own donation — pick a different listing."
-        return {"error": err, "next_step": hint}
-
-    if uid and not uid.isdigit():
+    if _UUID_RE.match(lid_raw) or (lid_raw and _to_int(lid_raw) is None and not lid_raw.isdigit()):
         return {
             "error": (
-                "Listing not found. Pass the UUID id from search results, "
-                "or the display list number (1, 2, 3…) after search_food_near_user."
+                "Food Maps requires an integer listing id from search results "
+                "(or the display list number 1, 2, 3… after search_food_near_user)."
             ),
+            "ok": False,
+        }
+
+    if uid_raw and not uid_raw.isdigit():
+        return {
+            "error": "Food Maps requires a numeric user id",
+            "ok": False,
         }
 
     from backend.app import SessionLocal, pending_confirmations, send_sms, generate_reset_code, auto_release_claim
@@ -3484,24 +3554,6 @@ async def _claim_listings(
 
 async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -> dict:
     """Finalize a pending claim (SMS code for legacy SQLite, pickup confirm for Supabase)."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _confirm_claim as _impl
-        uid = str(user_id).strip()
-        resolved_lid = _resolve_supabase_listing_id(listing_id, uid) if listing_id is not None else None
-        result = await _impl(
-            user_id=uid,
-            listing_id=resolved_lid,
-            claim_id=None,
-        )
-        if result.get("success"):
-            return {
-                "success": True,
-                "listing_id": result.get("listing_id"),
-                "claim_id": result.get("claim_id"),
-                "summary": result.get("summary"),
-            }
-        return {"error": result.get("error", "Could not confirm the claim.")}
-
     from backend.app import SessionLocal, pending_confirmations, send_sms
     from backend.models import FoodResource, User
 
@@ -3665,24 +3717,6 @@ async def _confirm_claim(user_id: str, listing_id: int = None, code: str = "") -
 
 
 async def _cancel_claim(user_id: str, listing_id: int) -> dict:
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _cancel_claim as _impl
-        uid = str(user_id).strip()
-        resolved_lid = _resolve_supabase_listing_id(listing_id, uid)
-        result = await _impl(
-            user_id=uid,
-            listing_id=resolved_lid,
-            claim_id=None,
-        )
-        if result.get("success"):
-            return {
-                "success": True,
-                "listing_id": result.get("listing_id"),
-                "claim_id": result.get("claim_id"),
-                "summary": result.get("summary"),
-            }
-        return {"error": result.get("error", "Could not cancel the claim.")}
-
     from backend.app import SessionLocal, pending_confirmations
     from backend.models import FoodResource
 
@@ -3768,41 +3802,6 @@ async def _update_user_profile(
     sms_consent_given: Optional[bool] = None,
     notification_preferences: Optional[dict] = None,
 ) -> dict:
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _update_user_profile as _impl
-        fields: dict = {}
-        if phone is not None:
-            fields["phone"] = phone
-        if address is not None:
-            fields["address"] = address
-        if dietary_restrictions:
-            fields["dietary_restrictions"] = list(dietary_restrictions)
-        if allergies:
-            fields["allergies"] = list(allergies)
-        if sms_consent_given is not None:
-            fields["sms_opt_in"] = bool(sms_consent_given)
-        if isinstance(notification_preferences, dict):
-            if "pickup_reminder" in notification_preferences:
-                fields["pickup_reminder_enabled"] = bool(
-                    notification_preferences["pickup_reminder"]
-                )
-            if "sms_notifications" in notification_preferences:
-                fields["sms_notifications_enabled"] = bool(
-                    notification_preferences["sms_notifications"]
-                )
-        result = await _impl(user_id=str(user_id).strip(), **fields)
-        if result.get("success"):
-            updated = result.get("updated_fields") or []
-            return {
-                "success": True,
-                "updated": updated,
-                "summary": (
-                    f"Done — updated your {', '.join(updated)}. All saved."
-                    if updated else "Profile updated."
-                ),
-            }
-        return {"error": result.get("error", "update failed")}
-
     from backend.app import SessionLocal
     from backend.models import User
 
@@ -3881,36 +3880,56 @@ async def _post_food_request(
     special_needs: Optional[list] = None,
     dietary_restrictions: Optional[list] = None,
 ) -> dict:
-    """Create a community food request in Supabase (listing_type=request)."""
-    from backend.tools import _create_food_request
+    """Create a community food request in MySQL (FoodRequest)."""
+    import json as _json
+    from backend.app import SessionLocal
     from backend.ai_engine import _is_placeholder_address
+    from backend.models import FoodRequest, FoodCategory, User
 
-    if not (user_id or "").strip():
+    rejected = _reject_non_mysql_user(user_id)
+    if rejected:
+        return {"error": rejected["error"], "ok": False}
+
+    uid = _to_int(user_id)
+    if uid is None:
         return {"error": "Invalid user_id"}
 
     if notes:
         notes = _translate_listing_text(notes)
+    if title:
+        title = _translate_listing_text(title) or title
     if isinstance(special_needs, list):
         special_needs = [_translate_listing_text(s) or s for s in special_needs]
     if isinstance(dietary_restrictions, list):
         dietary_restrictions = [_translate_listing_text(d) or d for d in dietary_restrictions]
 
+    needs_list = []
+    for item in list(special_needs or []):
+        s = str(item or "").strip()
+        if s and s not in needs_list:
+            needs_list.append(s)
+
     dietary = []
-    for item in list(dietary_restrictions or []) + list(special_needs or []):
+    for item in list(dietary_restrictions or []):
         s = str(item or "").strip()
         if s and s not in dietary:
             dietary.append(s)
 
-    desc_parts = []
+    note_parts = []
+    if title and str(title).strip():
+        note_parts.append(str(title).strip())
     if notes:
-        desc_parts.append(str(notes).strip())
-    if dietary:
-        desc_parts.append("Dietary needs: " + ", ".join(dietary))
-    description = "\n\n".join(desc_parts) or None
+        note_parts.append(str(notes).strip())
+    combined_notes = "\n\n".join(note_parts) or None
 
-    needed = None
+    needed_dt = None
     if latest_by:
-        needed = str(latest_by).strip()[:10] if "T" in str(latest_by) else str(latest_by).strip()[:10]
+        raw = str(latest_by).strip()
+        day = raw[:10] if "T" in raw else raw[:10]
+        try:
+            needed_dt = datetime.strptime(day, "%Y-%m-%d")
+        except ValueError:
+            needed_dt = None
 
     loc = None if _is_placeholder_address(address) else address
 
@@ -3919,61 +3938,109 @@ async def _post_food_request(
     except (TypeError, ValueError):
         qty = 1
 
-    result = await _create_food_request(
-        user_id=str(user_id),
-        title=title,
-        category=category,
-        quantity=qty,
-        unit="items",
-        description=description,
-        needed_by=needed,
-        location=loc,
-        dietary_tags=dietary or None,
-    )
+    cat_enum = None
+    if category:
+        try:
+            cat_enum = FoodCategory(str(category).strip().lower())
+        except ValueError:
+            cat_enum = None
 
-    if result.get("success"):
-        return {
-            "success": True,
-            "request_id": result.get("request_id") or result.get("listing_id"),
-            "listing_id": result.get("listing_id"),
-            "listing_type": "request",
-            "status": result.get("status"),
-            "awaiting_approval": bool(result.get("awaiting_approval")),
-            "verified": not bool(result.get("awaiting_approval")),
-            "verify_issues": (
-                ["awaiting admin approval"] if result.get("awaiting_approval") else []
-            ),
-            "summary": result.get("summary") or "Food request posted.",
-            "duplicate_of_recent": bool(result.get("duplicate_of_recent")),
-        }
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == uid).first()
+            if user is None:
+                return {"error": "User not found"}
 
-    return {
-        "error": result.get("message") or result.get("error") or "Could not post food request.",
-        "next_step": (
-            "Ask which school/community they belong to, or open /request to submit the form."
-            if result.get("error") == "community_required"
-            else None
-        ),
-    }
+            resolved_address = loc or getattr(user, "address", None)
+            req = FoodRequest(
+                recipient_id=uid,
+                category=cat_enum,
+                household_size=qty,
+                special_needs=_json.dumps(needs_list) if needs_list else None,
+                dietary_restrictions=_json.dumps(dietary) if dietary else None,
+                latest_by=needed_dt,
+                address=resolved_address,
+                coords_lat=getattr(user, "coords_lat", None),
+                coords_lng=getattr(user, "coords_lng", None),
+                status="open",
+                notes=combined_notes,
+            )
+
+            db.add(req)
+            db.commit()
+            db.refresh(req)
+            rid = req.id
+            return {
+                "success": True,
+                "request_id": rid,
+                "listing_id": rid,
+                "listing_type": "request",
+                "status": "open",
+                "awaiting_approval": False,
+                "verified": True,
+                "verify_issues": [],
+                "summary": (
+                    f"Food request #{rid} posted"
+                    + (f" for {title.strip()}" if title and str(title).strip() else "")
+                    + "."
+                ),
+                "duplicate_of_recent": False,
+            }
+        except Exception as exc:  # noqa: BLE001
+            db.rollback()
+            logger.exception("post_food_request MySQL insert failed")
+            return {"error": f"Could not post food request: {exc}"}
+        finally:
+            db.close()
+
+    return await _run(_sync)
 
 
-_AI_TO_SUPABASE_CATEGORY = {
-    "produce": "produce",
-    "prepared": "prepared",
-    "packaged": "pantry",
-    "bakery": "bakery",
-    "water": "beverages",
-    "fruit": "produce",
-    "leftovers": "prepared",
-}
 
 
 async def _fallback_community_for_user(user_id: str) -> tuple[Optional[str], Optional[str]]:
-    """Best-effort community when the donor profile has none set."""
-    from backend.ai_engine import supabase_get, fetch_donor_listing_defaults
+    """Best-effort community when the donor profile has none set.
+
+    Uses MySQL donor defaults + DistributionCenter catalog for integer Food
+    Maps ids. Never pretends a community exists when the DB is empty.
+    """
     from backend.tools import _resolve_community
 
-    donor = await fetch_donor_listing_defaults(str(user_id))
+    uid = str(user_id or "").strip()
+    if not uid:
+        return None, None
+
+    if uid.isdigit():
+        from backend.ai.bulk_mysql import (
+            fetch_active_communities_mysql,
+            fetch_donor_listing_defaults_mysql,
+            resolve_community_mysql,
+        )
+        donor = fetch_donor_listing_defaults_mysql(uid)
+        if donor.get("community_id"):
+            cid, cname = resolve_community_mysql(
+                community_id=str(donor["community_id"]),
+            )
+            if cid:
+                return cid, cname
+            # User.community_id may reference an external/Supabase catalog id
+            # that is not a DistributionCenter — still surface the id.
+            return str(donor["community_id"]), None
+
+        for name in ("Alameda Unified", "Alameda", "Oakland"):
+            cid, cname = resolve_community_mysql(community_name=name)
+            if cid:
+                return cid, cname
+
+        rows = fetch_active_communities_mysql(max_results=1)
+        if rows:
+            return str(rows[0]["id"]), rows[0].get("name")
+        return None, None
+
+    from backend.ai_engine import fetch_donor_listing_defaults
+
+    donor = await fetch_donor_listing_defaults(uid)
     if donor.get("community_id"):
         cid, cname = await _resolve_community(None, str(donor["community_id"]))
         if cid:
@@ -3985,11 +4052,8 @@ async def _fallback_community_for_user(user_id: str) -> tuple[Optional[str], Opt
             return cid, cname
 
     try:
-        rows = await supabase_get("communities", {
-            "is_active": "eq.true",
-            "select": "id,name",
-            "limit": "1",
-        })
+        from backend.ai.bulk_mysql import fetch_active_communities_mysql
+        rows = fetch_active_communities_mysql(max_results=1)
         if rows:
             return str(rows[0]["id"]), rows[0].get("name")
     except Exception:
@@ -4005,9 +4069,7 @@ async def _check_recipient_role_block(user_id: str) -> Optional[dict]:
     'confirm the community' errors — they should be told immediately to
     switch to a donor account.
 
-    Uses SessionLocal (legacy int ids) when available, then falls back to
-    the Supabase `users` table. Both paths return the same shape so
-    `execute_tool` and legacy tests treat them identically.
+    Integer Food Maps ids use SessionLocal only.
     """
     if not user_id:
         return None
@@ -4040,8 +4102,15 @@ async def _check_recipient_role_block(user_id: str) -> Optional[dict]:
                         "current_role": "recipient",
                         "required_role": "donor",
                     }
+                # Integer Food Maps path: do not fall through to Supabase.
+                return None
             except Exception:
-                pass
+                # Still do not hit Supabase for digit ids — avoid empty "success".
+                logger.exception(
+                    "check_recipient_role_block: MySQL lookup failed for user_id=%s",
+                    user_id,
+                )
+                return None
             finally:
                 try:
                     if db is not None:
@@ -4049,221 +4118,7 @@ async def _check_recipient_role_block(user_id: str) -> Optional[dict]:
                 except Exception:
                     pass
 
-    try:
-        from backend.ai_engine import supabase_get
-        rows = await supabase_get("users", {
-            "id": f"eq.{user_id}",
-            "select": "id,community_role",
-            "limit": "1",
-        })
-        if rows:
-            role = str(rows[0].get("community_role") or "").strip().lower()
-            if role == "recipient":
-                return {
-                    "error": (
-                        "This account is a recipient account and cannot "
-                        "donate or post food listings. Please sign in as "
-                        "a donor to share food."
-                    ),
-                    "reason": "wrong_role",
-                    "current_role": "recipient",
-                    "required_role": "donor",
-                }
-    except Exception:
-        pass
     return None
-
-
-async def _post_food_listing_via_supabase(
-    user_id: str,
-    title: str,
-    category: Optional[str] = None,
-    qty: float = 1,
-    description: Optional[str] = None,
-    unit: Optional[str] = None,
-    address: Optional[str] = None,
-    expiration_date: Optional[str] = None,
-    allergens: Optional[list] = None,
-    dietary_tags: Optional[list] = None,
-    images: Optional[list] = None,
-    community_name: Optional[str] = None,
-    community_id: Optional[str] = None,
-    community_confirmed: bool = False,
-    fulfilling_request_id: Optional[str] = None,
-    **_ignored,
-) -> dict:
-    """Post a donation listing to Supabase (UUID user ids)."""
-    from backend.tools import _create_food_listing
-    from backend.ai_engine import fetch_donor_listing_defaults, _is_placeholder_address
-
-    if _is_placeholder_address(address):
-        address = None
-
-    if not (user_id or "").strip():
-        return {"error": "Invalid user_id"}
-
-    role_block = await _check_recipient_role_block(str(user_id))
-    if role_block is not None:
-        return role_block
-
-    confirmed = bool(community_confirmed)
-
-    # Sharing to fulfill an open request → lock to that request's community.
-    if fulfilling_request_id:
-        from backend.tools import _community_from_food_request
-        req_cid, req_cname, req_title = await _community_from_food_request(
-            str(fulfilling_request_id)
-        )
-        if not req_cid:
-            return {
-                "error": "request_not_found",
-                "message": (
-                    "Could not find that food request. Open Community Requests "
-                    "or pass a valid fulfilling_request_id."
-                ),
-            }
-        community_id = req_cid
-        community_name = req_cname or community_name
-        confirmed = True
-        if not description and req_title:
-            description = f"Shared in response to a community request for: {req_title}"
-
-    if community_id and not community_name:
-        from backend.tools import _resolve_community
-        cid, cname = await _resolve_community(None, community_id)
-        if cid:
-            community_id, community_name = cid, cname
-        else:
-            # Name was stuffed into community_id and still failed — clear the
-            # bogus id so the confirmed-without-name guard can ask again.
-            community_id = None
-    elif community_name and not community_id:
-        from backend.tools import _resolve_community
-        cid, cname = await _resolve_community(community_name, None)
-        if cid:
-            community_id, community_name = cid, cname
-    elif community_name and community_id:
-        from backend.tools import _resolve_community
-        cid, cname = await _resolve_community(community_name, community_id)
-        if cid:
-            community_id, community_name = cid, cname
-        else:
-            community_id = None
-
-    if not confirmed:
-        suggested_id, suggested_name = await _fallback_community_for_user(str(user_id))
-        return {
-            "error": "community_not_confirmed",
-            "suggested_community_name": suggested_name,
-            "suggested_community_id": suggested_id,
-            "next_step": (
-                "Ask the donor which community/school this goes under, get explicit "
-                "confirmation, then retry with community_name and community_confirmed=true."
-            ),
-        }
-
-    if confirmed and not community_id and not community_name:
-        # Do not silently assign Alameda Unified / first active community.
-        # Confirmed without a name usually means the model lied about
-        # community_confirmed — force an explicit pick.
-        suggested_id, suggested_name = await _fallback_community_for_user(str(user_id))
-        return {
-            "error": "community_name_required",
-            "suggested_community_name": suggested_name,
-            "suggested_community_id": suggested_id,
-            "next_step": (
-                "Ask which community/school this donation goes under, then retry "
-                "with that community_name and community_confirmed=true."
-            ),
-        }
-
-    image_url = None
-    if isinstance(images, list):
-        from backend.ai.conversation_flow import normalize_public_image_url
-        for url in images:
-            if not url:
-                continue
-            norm = normalize_public_image_url(str(url).strip())
-            if norm:
-                image_url = norm
-                break
-            if str(url).strip().startswith(("http://", "https://", "/")):
-                image_url = str(url).strip()
-                break
-
-    supabase_cat = _AI_TO_SUPABASE_CATEGORY.get(
-        str(category or "").lower(),
-        str(category or "other").lower(),
-    )
-
-    result = await _create_food_listing(
-        user_id=str(user_id),
-        title=title,
-        quantity=qty,
-        unit=unit or "items",
-        category=supabase_cat,
-        description=description,
-        expiry_date=expiration_date,
-        expiration_date=expiration_date,
-        location=address,
-        dietary_tags=dietary_tags,
-        allergens=allergens,
-        community_name=community_name,
-        community_id=community_id,
-        community_confirmed=confirmed,
-        image_url=image_url,
-        fulfilling_request_id=fulfilling_request_id,
-    )
-
-    if result.get("success"):
-        out = {
-            "success": True,
-            "listing_id": result.get("listing_id"),
-            "address": result.get("address"),
-            "coords_lat": result.get("latitude"),
-            "coords_lng": result.get("longitude"),
-            "verified": bool(result.get("on_map", True)),
-            "verify_issues": [],
-            "summary": result.get("summary"),
-        }
-        if result.get("duplicate_of_recent"):
-            out["duplicate_of_recent"] = True
-        if result.get("photo_merged"):
-            out["photo_merged"] = True
-        if result.get("image_url"):
-            out["image_url"] = result["image_url"]
-            out["has_photo"] = True
-        return out
-
-    err = result.get("message") or result.get("error") or "Could not post the listing."
-    out: dict = {"error": err}
-    err_code = result.get("error")
-    if err_code == "community_not_confirmed":
-        sug = result.get("suggested_community_name")
-        if sug:
-            out["suggested_community_name"] = sug
-        out["next_step"] = (
-            "Ask the donor to confirm that community, then call post_food_listing "
-            "with community_name and community_confirmed=true."
-        )
-    elif err_code == "expiry_date_required":
-        out["next_step"] = (
-            "Ask when the food expires or its best-by date, then pass "
-            "expiration_date as YYYY-MM-DD."
-        )
-        if result.get("suggested_expiry_date"):
-            out["suggested_expiry_date"] = result["suggested_expiry_date"]
-    elif err_code == "community_required":
-        out["next_step"] = (
-            "Ask them to pick an active catalog community by exact name "
-            "(call get_active_communities with max_results=100), confirm it, "
-            "then retry the post with community_name + community_confirmed=true."
-        )
-        if isinstance(result.get("active_communities"), list):
-            out["active_communities"] = result["active_communities"]
-        if result.get("suggested_community_name"):
-            out["suggested_community_name"] = result["suggested_community_name"]
-    return out
 
 
 async def _post_food_listings(
@@ -4468,6 +4323,11 @@ async def _post_food_listing(
         allergens=allergens,
         dietary_tags=dietary_tags,
         images=cleaned_images,
+        # Food Maps MySQL: community_* resolves against DistributionCenter and
+        # is stamped onto FoodResource.community_id (+ User when confirmed/unset).
+        community_name=community_name,
+        community_id=community_id,
+        community_confirmed=community_confirmed,
     )
 
 
@@ -4486,6 +4346,9 @@ async def _post_food_listing_legacy_sqlalchemy(
     allergens: Optional[list] = None,
     dietary_tags: Optional[list] = None,
     images: Optional[list] = None,
+    community_name: Optional[str] = None,
+    community_id: Optional[str] = None,
+    community_confirmed: bool = False,
 ) -> dict:
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource, FoodCategory, PerishabilityLevel
@@ -4631,6 +4494,46 @@ async def _post_food_listing_legacy_sqlalchemy(
                 return {"error": "Drivers and dispatchers can't post donor listings from chat."}
 
             # ----------------------------------------------------------
+            # Community args: resolve against the MySQL DistributionCenter
+            # catalog, stamp FoodResource.community_id when resolved, and
+            # when the donor has no users.community_id yet and
+            # community_confirmed is true, stamp the user profile too.
+            # ----------------------------------------------------------
+            resolved_community_id = None
+            resolved_community_name = None
+            try:
+                from backend.ai.bulk_mysql import resolve_community_mysql
+                if community_id or community_name:
+                    resolved_community_id, resolved_community_name = resolve_community_mysql(
+                        community_name=community_name,
+                        community_id=community_id,
+                    )
+                if (
+                    bool(community_confirmed)
+                    and resolved_community_id
+                    and getattr(user, "community_id", None) is None
+                ):
+                    try:
+                        user.community_id = int(resolved_community_id)
+                    except (TypeError, ValueError):
+                        pass
+                elif not resolved_community_id and community_name:
+                    # Keep the free-text name for the tool response even when
+                    # the catalog miss means we cannot stamp a profile id.
+                    resolved_community_name = str(community_name).strip() or None
+            except Exception:
+                logger.exception(
+                    "post_food_listing: community resolve failed (continuing)"
+                )
+
+            listing_community_id = None
+            if resolved_community_id is not None:
+                try:
+                    listing_community_id = int(resolved_community_id)
+                except (TypeError, ValueError):
+                    listing_community_id = None
+
+            # ----------------------------------------------------------
             # Idempotency / duplicate-post guard.
             # The most common cause of duplicate listings is the model
             # re-issuing the same tool call after a transient network
@@ -4663,7 +4566,7 @@ async def _post_food_listing_legacy_sqlalchemy(
                             "post_food_listing: dedup hit for donor=%s title=%r addr=%r -> existing id=%s",
                             uid, normalized_title, normalized_addr, dup.id,
                         )
-                        return {
+                        out = {
                             "success": True,
                             "listing_id": dup.id,
                             "address": dup.address,
@@ -4677,6 +4580,15 @@ async def _post_food_listing_legacy_sqlalchemy(
                                 "Skipping the duplicate so you don't end up with two pins for the same food."
                             ),
                         }
+                        if resolved_community_id:
+                            out["community_id"] = resolved_community_id
+                        if resolved_community_name:
+                            out["community_name"] = resolved_community_name
+                        # Prefer the stored listing column when present.
+                        stored = getattr(dup, "community_id", None)
+                        if stored is not None:
+                            out["community_id"] = stored
+                        return out
             except Exception:
                 # Dedup is best-effort; never block the post on a
                 # query-shape problem.
@@ -4734,6 +4646,7 @@ async def _post_food_listing_legacy_sqlalchemy(
                 address=resolved_address,
                 coords_lat=lat,
                 coords_lng=lng,
+                community_id=listing_community_id,
                 status="available",
                 allergens=json.dumps(list(allergens)) if allergens else None,
                 dietary_tags=json.dumps(list(dietary_tags)) if dietary_tags else None,
@@ -4832,6 +4745,12 @@ async def _post_food_listing_legacy_sqlalchemy(
                 "verify_issues": verify_issues,
                 "visible_listings_for_donor": visible_count,
                 "summary": summary,
+                **({
+                    "community_id": getattr(item, "community_id", None) or resolved_community_id,
+                } if (getattr(item, "community_id", None) or resolved_community_id) else {}),
+                **({
+                    "community_name": resolved_community_name,
+                } if resolved_community_name else {}),
             }
         except Exception as exc:
             logger.exception("post_food_listing failed")
@@ -4849,32 +4768,6 @@ async def _attach_photos_to_listing(
     images: list,
 ) -> dict:
     """Append one or more image URLs to an existing listing's photo gallery."""
-    if _is_supabase_user_id(user_id):
-        from backend.tools import _attach_photos_to_listing as _impl
-        uid = str(user_id).strip()
-        resolved_lid = _resolve_supabase_listing_id(listing_id, uid)
-        if not resolved_lid:
-            return {"error": "Invalid listing_id"}
-        cleaned = [str(u).strip() for u in (images or []) if u and str(u).strip()]
-        if not cleaned:
-            return {"error": "No image URLs provided."}
-        last_result = None
-        for url in cleaned:
-            last_result = await _impl(
-                user_id=uid,
-                listing_id=resolved_lid,
-                image_url=url,
-            )
-            if not last_result.get("success"):
-                return {"error": last_result.get("error", "Could not attach photos.")}
-        if last_result and last_result.get("success"):
-            return {
-                "success": True,
-                "listing_id": resolved_lid,
-                "summary": last_result.get("summary"),
-            }
-        return {"error": "No valid image URLs (must start with http:// or https://)."}
-
     from backend.app import SessionLocal
     from backend.models import User, UserRole, FoodResource
 
@@ -4940,9 +4833,6 @@ async def _get_user_listings(
     limit: int = 20,
     **_ignored,
 ) -> dict:
-    if _is_supabase_user_id(str(user_id)):
-        from backend.tools import _get_user_listings as _impl
-        return await _impl(user_id=user_id, status=status, limit=limit, **_ignored)
 
     from backend.app import SessionLocal
     from backend.models import FoodResource
@@ -5007,21 +4897,6 @@ async def _update_food_listing(
     location: Optional[str] = None,
     **_ignored,
 ) -> dict:
-    if _is_supabase_user_id(str(user_id)):
-        from backend.tools import _update_food_listing as _impl
-        return await _impl(
-            user_id=user_id,
-            listing_id=listing_id,
-            title=title,
-            quantity=quantity,
-            unit=unit,
-            description=description,
-            category=category,
-            expiry_date=expiry_date,
-            pickup_by=pickup_by,
-            location=location,
-            **_ignored,
-        )
 
     from backend.app import SessionLocal
     from backend.models import FoodResource, FoodCategory
@@ -5096,9 +4971,6 @@ async def _update_food_listing(
 
 
 async def _deactivate_listing(**kwargs) -> dict:
-    if _is_supabase_user_id(str(kwargs.get("user_id", ""))):
-        from backend.tools import _deactivate_listing as _impl
-        return await _impl(**kwargs)
     kwargs = dict(kwargs)
     kwargs["status"] = "unavailable"
     return await _update_food_listing(**kwargs)
@@ -5110,9 +4982,6 @@ async def _delete_listing(
     confirmed: bool = False,
     **_ignored,
 ) -> dict:
-    if _is_supabase_user_id(str(user_id)):
-        from backend.tools import _delete_listing as _impl
-        return await _impl(user_id=user_id, listing_id=listing_id, confirmed=confirmed, **_ignored)
 
     if not confirmed:
         return {
@@ -5169,19 +5038,6 @@ async def _bulk_import_listings(
     **kwargs,
 ) -> dict:
     """Bulk import listings — MySQL for integer user ids."""
-    if _is_supabase_user_id(str(user_id)):
-        from backend.tools import _bulk_import_listings as _impl
-        return await _impl(
-            user_id=user_id,
-            csv_text=csv_text,
-            listings=listings,
-            default_address=default_address,
-            default_expiry_date=default_expiry_date,
-            community_name=community_name,
-            community_id=community_id,
-            community_confirmed=community_confirmed,
-            **kwargs,
-        )
 
     from backend.ai.bulk_mysql import (
         fetch_donor_listing_defaults_mysql,
@@ -5374,117 +5230,6 @@ def _coords_from_row(row: Optional[dict], *, address_keys: tuple = ()) -> tuple:
     return (lat, lng, addr)
 
 
-async def _resolve_supabase_route_endpoints(
-    user_id: str,
-    listing_id,
-) -> dict:
-    """Resolve origin/destination for a Supabase UUID auth user."""
-    from backend.ai_engine import supabase_get
-
-    lid = _resolve_supabase_listing_id(listing_id, user_id) if listing_id is not None else None
-    if not lid and listing_id is not None:
-        raw = str(listing_id).strip().lstrip("#")
-        if _UUID_RE.match(raw):
-            lid = raw
-
-    # No listing id → use most recent claim's food listing.
-    if not lid:
-        try:
-            claims = await supabase_get("food_claims", {
-                "claimer_id": f"eq.{user_id}",
-                "status": "in.(pending,approved)",
-                "select": "food_id,created_at",
-                "order": "created_at.desc",
-                "limit": "1",
-            })
-            if claims:
-                lid = str(claims[0].get("food_id") or "").strip() or None
-        except Exception as exc:
-            logger.warning("show_route: claim lookup failed: %s", exc)
-
-    if not lid:
-        return {
-            "error": (
-                "I need a listing to route to. Search for food, pick a number "
-                "(or claim one), then ask for directions — e.g. 'directions to #1'."
-            ),
-            "reason": "listing_not_resolved",
-        }
-
-    try:
-        users = await supabase_get("users", {
-            "id": f"eq.{user_id}",
-            "select": "id,address,latitude,longitude,location",
-            "limit": "1",
-        })
-    except Exception as exc:
-        return {"error": f"Could not load your profile: {exc}", "reason": "profile_lookup"}
-    if not users:
-        return {"error": "User not found", "reason": "missing_user"}
-    user_row = users[0]
-
-    try:
-        listings = await supabase_get("food_listings", {
-            "id": f"eq.{lid}",
-            "select": "id,title,full_address,location,latitude,longitude",
-            "limit": "1",
-        })
-    except Exception as exc:
-        return {"error": f"Could not load listing: {exc}", "reason": "listing_lookup"}
-    if not listings:
-        return {
-            "error": (
-                f"Listing not found. Search again and ask for directions to a "
-                f"numbered option (e.g. 'show me directions to #1')."
-            ),
-            "reason": "listing_not_found",
-        }
-    listing = listings[0]
-
-    o_lat, o_lng, o_addr = _coords_from_row(
-        user_row, address_keys=("address", "full_address"),
-    )
-    if (o_lat is None or o_lng is None) and o_addr:
-        geo = _geocode_address(o_addr)
-        if geo is not None:
-            o_lat, o_lng = geo
-    if o_lat is None or o_lng is None:
-        return {
-            "error": (
-                "I can't draw a route without your address. Please add a "
-                "home address in Profile, then ask again."
-            ),
-            "reason": "missing_origin",
-        }
-
-    d_lat, d_lng, d_addr = _coords_from_row(
-        listing, address_keys=("full_address", "address"),
-    )
-    if (d_lat is None or d_lng is None) and d_addr:
-        geo = _geocode_address(d_addr)
-        if geo is not None:
-            d_lat, d_lng = geo
-    if d_lat is None or d_lng is None:
-        return {
-            "error": (
-                f"'{listing.get('title') or 'That listing'}' doesn't have a map "
-                "location, so I can't draw directions to it."
-            ),
-            "reason": "missing_destination",
-        }
-
-    return {
-        "_origin": (float(o_lat), float(o_lng), o_addr),
-        "_destination": (
-            float(d_lat),
-            float(d_lng),
-            d_addr,
-            str(listing.get("id") or lid),
-            listing.get("title"),
-        ),
-    }
-
-
 async def _show_route_to_listing(
     user_id: str,
     listing_id=None,
@@ -5494,79 +5239,76 @@ async def _show_route_to_listing(
     """Build a driving route from the user's saved address to a listing.
 
     Returns an envelope the frontend turns into a blue line on the map.
-    Supabase UUID users use food_listings; legacy int users use FoodResource.
+    Food Maps MySQL path only (numeric user_id + FoodResource listing id).
     """
     profile = (mode or "driving").strip().lower()
     if profile not in {"driving", "walking", "cycling"}:
         profile = "driving"
 
-    if _is_supabase_user_id(user_id):
-        pre = await _resolve_supabase_route_endpoints(str(user_id).strip(), listing_id)
-    else:
-        from backend.app import SessionLocal
-        from backend.models import User, FoodResource
+    from backend.app import SessionLocal
+    from backend.models import User, FoodResource
 
-        uid = _to_int(user_id)
-        if uid is None:
-            return {"error": "Invalid user_id"}
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"error": "Invalid user_id"}
+    try:
+        lid = int(str(listing_id).strip().lstrip("#"))
+    except (TypeError, ValueError):
+        return {"error": "Invalid listing_id"}
+
+    def _sync() -> dict:
+        db = SessionLocal()
         try:
-            lid = int(str(listing_id).strip().lstrip("#"))
-        except (TypeError, ValueError):
-            return {"error": "Invalid listing_id"}
+            user = db.query(User).filter(User.id == uid).first()
+            if not user:
+                return {"error": "User not found"}
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found"}
 
-        def _sync() -> dict:
-            db = SessionLocal()
-            try:
-                user = db.query(User).filter(User.id == uid).first()
-                if not user:
-                    return {"error": "User not found"}
-                listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
-                if not listing:
-                    return {"error": f"Listing #{lid} not found"}
-
-                o_lat = user.coords_lat
-                o_lng = user.coords_lng
-                o_addr = (user.address or "").strip() or None
-                if (o_lat is None or o_lng is None) and o_addr:
-                    geo = _geocode_address(o_addr)
-                    if geo is not None:
-                        o_lat, o_lng = geo
-                if o_lat is None or o_lng is None:
-                    return {
-                        "error": (
-                            "I can't draw a route without your address. Please "
-                            "add a pickup/home address to your profile first."
-                        ),
-                        "reason": "missing_origin",
-                    }
-
-                d_lat = listing.coords_lat
-                d_lng = listing.coords_lng
-                d_addr = (listing.address or "").strip() or None
-                if (d_lat is None or d_lng is None) and d_addr:
-                    geo = _geocode_address(d_addr)
-                    if geo is not None:
-                        d_lat, d_lng = geo
-                if d_lat is None or d_lng is None:
-                    return {
-                        "error": (
-                            f"Listing #{lid} doesn't have a map location, so I "
-                            "can't draw directions to it."
-                        ),
-                        "reason": "missing_destination",
-                    }
-
+            o_lat = user.coords_lat
+            o_lng = user.coords_lng
+            o_addr = (user.address or "").strip() or None
+            if (o_lat is None or o_lng is None) and o_addr:
+                geo = _geocode_address(o_addr)
+                if geo is not None:
+                    o_lat, o_lng = geo
+            if o_lat is None or o_lng is None:
                 return {
-                    "_origin": (float(o_lat), float(o_lng), o_addr),
-                    "_destination": (
-                        float(d_lat), float(d_lng), d_addr,
-                        listing.id, getattr(listing, "title", None),
+                    "error": (
+                        "I can't draw a route without your address. Please "
+                        "add a pickup/home address to your profile first."
                     ),
+                    "reason": "missing_origin",
                 }
-            finally:
-                db.close()
 
-        pre = await asyncio.to_thread(_sync)
+            d_lat = listing.coords_lat
+            d_lng = listing.coords_lng
+            d_addr = (listing.address or "").strip() or None
+            if (d_lat is None or d_lng is None) and d_addr:
+                geo = _geocode_address(d_addr)
+                if geo is not None:
+                    d_lat, d_lng = geo
+            if d_lat is None or d_lng is None:
+                return {
+                    "error": (
+                        f"Listing #{lid} doesn't have a map location, so I "
+                        "can't draw directions to it."
+                    ),
+                    "reason": "missing_destination",
+                }
+
+            return {
+                "_origin": (float(o_lat), float(o_lng), o_addr),
+                "_destination": (
+                    float(d_lat), float(d_lng), d_addr,
+                    listing.id, getattr(listing, "title", None),
+                ),
+            }
+        finally:
+            db.close()
+
+    pre = await asyncio.to_thread(_sync)
 
     if "error" in pre:
         return pre

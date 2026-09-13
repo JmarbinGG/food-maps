@@ -10,9 +10,12 @@ function BulkListing({ user, onCancel, onSuccess }) {
 
   React.useEffect(() => {
     const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-bulk-form-guide', {
+      formId: 'bulk-share',
       welcomeMessage: 'Upload a CSV of food listings. I can guide you through each step.',
       fieldHints: {
         csv: 'Choose a CSV file with title, quantity, unit, and category columns.',
+        title: 'Enter the food title for this row.',
+        pickup_location: 'Enter the pickup location for these listings.',
       },
     });
     if (window.FoodMapsNouri?.mountWithRetry) {

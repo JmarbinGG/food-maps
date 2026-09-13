@@ -1,7 +1,8 @@
 #nouri-ai-root {
-  position: fixed;
-  inset: 0;
-  z-index: 10060;
+  /* Do not create a full-viewport stacking context above app modals.
+     Children (FAB / chat) set their own fixed positioning. */
+  position: relative;
+  z-index: 40;
   pointer-events: none;
 }
 
@@ -13,7 +14,7 @@
   position: fixed;
   right: 16px;
   bottom: 16px;
-  z-index: 10050;
+  z-index: 45;
   width: min(420px, calc(100vw - 24px));
   max-height: min(720px, calc(100vh - 80px));
   box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25);
@@ -28,7 +29,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 10040;
+  z-index: 44;
   background: linear-gradient(90deg, #047857, #10b981);
   color: #fff;
   padding: 10px 16px;
@@ -47,4 +48,251 @@ body.has-nouri-guide-bar {
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   border: 0;
+}
+
+/* Accessibility preference classes — applied on <html> via NouriGuideContext */
+.a11y-large-text {
+  font-size: 112.5%;
+}
+
+.a11y-large-text body {
+  line-height: 1.6;
+}
+
+.a11y-large-text input,
+.a11y-large-text select,
+.a11y-large-text textarea,
+.a11y-large-text button {
+  font-size: 1.05rem;
+  min-height: 2.75rem;
+  min-width: 2.75rem;
+}
+
+.a11y-easy-mode button[type="submit"],
+.a11y-easy-mode .easy-mode-nav-btn {
+  min-height: 3rem;
+  padding-left: 1.25rem;
+  padding-right: 1.25rem;
+  font-size: 1.05rem;
+}
+
+.a11y-list-first-find .find-food-map-panel[data-collapsed="true"] {
+  display: none;
+}
+
+.a11y-high-contrast {
+  color-scheme: light;
+}
+
+.a11y-high-contrast body {
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.a11y-high-contrast a {
+  color: #0047ab;
+  text-decoration: underline;
+}
+
+.a11y-high-contrast input,
+.a11y-high-contrast select,
+.a11y-high-contrast textarea {
+  border-color: #000000;
+  background-color: #ffffff;
+  color: #000000;
+}
+
+.a11y-high-contrast button:focus-visible,
+.a11y-high-contrast a:focus-visible,
+.a11y-high-contrast input:focus-visible,
+.a11y-high-contrast select:focus-visible,
+.a11y-high-contrast textarea:focus-visible {
+  outline: 3px solid #000000;
+  outline-offset: 2px;
+}
+
+.a11y-reduce-motion *,
+.a11y-reduce-motion *::before,
+.a11y-reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+.a11y-simple-language {
+  letter-spacing: 0.01em;
+}
+
+.a11y-simple-language p,
+.a11y-simple-language li,
+.a11y-simple-language label {
+  line-height: 1.65;
+}
+
+.nouri-field-guided {
+  outline: 3px solid #2CABE3 !important;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(44, 171, 227, 0.28) !important;
+  border-radius: 0.5rem;
+  position: relative;
+  z-index: 2;
+  animation: nouri-guide-pulse 0.9s ease-in-out 2;
+}
+
+@keyframes nouri-guide-pulse {
+  0%, 100% { box-shadow: 0 0 0 6px rgba(44, 171, 227, 0.28); }
+  50% { box-shadow: 0 0 0 10px rgba(44, 171, 227, 0.12); }
+}
+
+.a11y-high-contrast .nouri-field-guided {
+  outline-color: #000000 !important;
+  box-shadow: 0 0 0 6px #ffff00 !important;
+}
+
+.a11y-high-contrast .nouri-ai-caption-bar,
+.a11y-high-contrast .nouri-guide-bar {
+  background: #000000;
+  color: #ffffff;
+  border-top: 2px solid #ffffff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nouri-field-guided {
+    animation: none;
+  }
+}
+
+/* Accessibility settings panel (mounted in Profile) */
+.nouri-a11y-panel {
+  color: #111827;
+}
+
+.nouri-a11y-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.nouri-a11y-intro {
+  font-size: 0.875rem;
+  color: #4b5563;
+  margin: 0 0 1rem;
+}
+
+.nouri-a11y-lang {
+  margin-bottom: 1rem;
+}
+
+.nouri-a11y-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #111827;
+}
+
+.nouri-a11y-desc {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: #6b7280;
+  line-height: 1.4;
+}
+
+.nouri-a11y-select {
+  display: block;
+  width: 100%;
+  max-width: 16rem;
+  margin-top: 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  background: #fff;
+}
+
+.nouri-a11y-select:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+.nouri-a11y-toggles {
+  border-top: 1px solid #f3f4f6;
+}
+
+.nouri-a11y-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.nouri-a11y-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.nouri-a11y-switch {
+  position: relative;
+  display: inline-flex;
+  height: 1.5rem;
+  width: 2.75rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background: #e5e7eb;
+  transition: background-color 0.15s ease;
+  padding: 0;
+}
+
+.nouri-a11y-switch.is-on {
+  background: #10b981;
+}
+
+.nouri-a11y-switch:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
+}
+
+.nouri-a11y-switch-thumb {
+  pointer-events: none;
+  display: inline-block;
+  height: 1.25rem;
+  width: 1.25rem;
+  transform: translateX(0);
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease;
+}
+
+.nouri-a11y-switch.is-on .nouri-a11y-switch-thumb {
+  transform: translateX(1.25rem);
+}
+
+.nouri-a11y-footer {
+  margin-top: 1rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.nouri-a11y-reset {
+  font-size: 0.875rem;
+  color: #4b5563;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.nouri-a11y-reset:hover {
+  color: #111827;
+}
+
+.nouri-a11y-reset:focus-visible {
+  outline: 2px solid #10b981;
+  outline-offset: 2px;
 }

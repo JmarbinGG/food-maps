@@ -2071,98 +2071,87 @@ class ConversationEngine:
     async def _check_proactive(
         self, user_id: str, profile: Optional[dict], lang: str
     ) -> list[str]:
-        """Post-turn proactive opportunity check against live Supabase listings.
+        """Post-turn proactive opportunity check against live MySQL listings.
 
-        • Recipients: new approved/active listings near them in the last 2 hours
+        • Recipients: new available listings near them in the last 2 hours
         • Donors: their live listings expiring within 48 hours
+
+        Integer Food Maps ids only. Empty DB yields no chips.
         """
         if not profile or not user_id:
             return []
 
         role = (profile.get("role") or profile.get("community_role") or "").lower()
-        results: list[str] = []
         now = _utcnow()
+        uid = str(user_id).strip()
+        if not uid.isdigit():
+            return []
+
+        from backend.app import SessionLocal
+        from backend.models import FoodResource
+
+        def _sync() -> list[str]:
+            out: list[str] = []
+            db = SessionLocal()
+            try:
+                if role in ("recipient", "member", ""):
+                    lat = profile.get("lat") or profile.get("latitude")
+                    lng = profile.get("lng") or profile.get("longitude")
+                    if lat is not None and lng is not None:
+                        two_hours_ago = now - timedelta(hours=2)
+                        rows = (
+                            db.query(FoodResource)
+                            .filter(FoodResource.status == "available")
+                            .filter(FoodResource.created_at >= two_hours_ago)
+                            .filter(FoodResource.donor_id != int(uid))
+                            .filter(FoodResource.coords_lat.isnot(None))
+                            .filter(FoodResource.coords_lng.isnot(None))
+                            .limit(25)
+                            .all()
+                        )
+                        nearby = []
+                        for lx in rows:
+                            try:
+                                rlat = float(lx.coords_lat)
+                                rlng = float(lx.coords_lng)
+                            except (TypeError, ValueError):
+                                continue
+                            if abs(rlat - float(lat)) < 0.15 and abs(rlng - float(lng)) < 0.15:
+                                nearby.append(lx)
+                        if nearby:
+                            count = len(nearby)
+                            if lang == "es":
+                                out.append(f"Ver los {count} anuncio(s) nuevos cerca de ti")
+                            else:
+                                out.append(f"View {count} new listing(s) near you")
+
+                if role in ("donor", "admin", "organizer"):
+                    cutoff = now + timedelta(hours=48)
+                    rows = (
+                        db.query(FoodResource)
+                        .filter(FoodResource.donor_id == int(uid))
+                        .filter(FoodResource.status == "available")
+                        .filter(FoodResource.expiration_date.isnot(None))
+                        .filter(FoodResource.expiration_date <= cutoff)
+                        .filter(FoodResource.expiration_date >= now)
+                        .limit(25)
+                        .all()
+                    )
+                    if rows:
+                        count = len(rows)
+                        if lang == "es":
+                            out.append(f"Tienes {count} anuncio(s) que vencen pronto")
+                        else:
+                            out.append(f"You have {count} listing(s) expiring soon")
+            finally:
+                db.close()
+            return out
 
         try:
-            from backend.ai_engine import supabase_get
-
-            if role in ("recipient", "member", ""):
-                lat = profile.get("lat") or profile.get("latitude")
-                lng = profile.get("lng") or profile.get("longitude")
-                if lat is not None and lng is not None:
-                    two_hours_ago = (now - timedelta(hours=2)).isoformat()
-                    try:
-                        rows = await supabase_get("food_listings", {
-                            "status": "in.(approved,active)",
-                            "created_at": f"gte.{two_hours_ago}",
-                            "select": "id,latitude,longitude,user_id,community_id",
-                            "limit": "25",
-                        })
-                    except Exception as exc:
-                        logger.debug("proactive near-listings fetch failed: %s", exc)
-                        rows = []
-                    from backend.tools import (
-                        _allowed_community_id_strings,
-                        _is_admin_flag,
-                        _listing_in_community_scope,
-                    )
-                    allowed = _allowed_community_id_strings(
-                        _is_admin_flag(profile.get("is_admin")),
-                        profile.get("community_id"),
-                    )
-                    nearby = []
-                    for lx in rows or []:
-                        if str(lx.get("user_id") or "") == str(user_id):
-                            continue
-                        if not _listing_in_community_scope(lx, allowed):
-                            continue
-                        try:
-                            rlat = float(lx.get("latitude"))
-                            rlng = float(lx.get("longitude"))
-                        except (TypeError, ValueError):
-                            continue
-                        if abs(rlat - float(lat)) < 0.15 and abs(rlng - float(lng)) < 0.15:
-                            nearby.append(lx)
-                    if nearby:
-                        count = len(nearby)
-                        if lang == "es":
-                            results.append(f"Ver los {count} anuncio(s) nuevos cerca de ti")
-                        else:
-                            results.append(f"View {count} new listing(s) near you")
-
-            if role in ("donor", "admin", "organizer"):
-                cutoff = (now + timedelta(hours=48)).date().isoformat()
-                today = now.date().isoformat()
-                try:
-                    rows = await supabase_get("food_listings", {
-                        "user_id": f"eq.{user_id}",
-                        "status": "in.(approved,active)",
-                        "expiry_date": f"lte.{cutoff}",
-                        "select": "id,expiry_date,title",
-                        "limit": "25",
-                    })
-                except Exception as exc:
-                    logger.debug("proactive expiring fetch failed: %s", exc)
-                    rows = []
-                expiring_soon = []
-                for lx in rows or []:
-                    raw = lx.get("expiry_date")
-                    if not raw:
-                        continue
-                    day = str(raw)[:10]
-                    if today <= day <= cutoff:
-                        expiring_soon.append(lx)
-                if expiring_soon:
-                    count = len(expiring_soon)
-                    if lang == "es":
-                        results.append(f"Tienes {count} anuncio(s) que vencen pronto")
-                    else:
-                        results.append(f"You have {count} listing(s) expiring soon")
+            return (await asyncio.to_thread(_sync))[:2]
         except Exception as exc:
             logger.debug("Proactive check failed (non-fatal): %s", exc)
             return []
-
-        return results[:2]
 
     # ---- Main chat --------------------------------------------------------
 

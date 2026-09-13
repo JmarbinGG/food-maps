@@ -110,6 +110,7 @@ function RequestHelp({ onClose, onSuccess }) {
 
   React.useEffect(() => {
     const mountGuide = () => window.FoodMapsNouri?.mountFormVoiceGuide('nouri-request-form-guide', {
+      formId: 'request-help',
       welcomeMessage: 'Tell me what food you need and where to deliver it.',
       fieldHints: {
         address: 'Where should food be delivered?',

@@ -35,6 +35,17 @@ class UserRegisterRequest(BaseModel):
     password: str
     role: str
     referral_code: Optional[str] = None
+    approval_code: Optional[str] = None
+
+
+class ApprovalCodeGenerateRequest(BaseModel):
+    community_id: int
+    school_code: str
+    quantity: int = 50
+
+
+class AdminUserCommunityUpdate(BaseModel):
+    community_id: Optional[int] = None
 
 
 class UserLoginRequest(BaseModel):
@@ -79,6 +90,7 @@ class FoodResourceCreate(BaseModel):
     coords_lat: Optional[float] = None
     coords_lng: Optional[float] = None
     images: Optional[List[str]] = None
+    community_id: Optional[int] = None
 
     @field_validator("coords_lat")
     @classmethod
@@ -115,6 +127,7 @@ class FoodResourceResponse(BaseModel):
     address: str
     coords_lat: Optional[float] = None
     coords_lng: Optional[float] = None
+    community_id: Optional[int] = None
     urgency_score: Optional[int] = 0
     created_at: datetime
     verification_status: Optional[str] = None

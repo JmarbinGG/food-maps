@@ -17,11 +17,21 @@ function readStoredUser() {
   }
 }
 
+function clearStoredUser() {
+  try {
+    localStorage.removeItem('current_user');
+  } catch {
+    /* ignore */
+  }
+}
+
 function readAuth() {
   const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
   const stored = readStoredUser();
+  // Authenticated only with a real JWT — never promote tokenless current_user.
   if (!token) {
-    return { user: stored, isAuthenticated: Boolean(stored?.id), isAdmin: Boolean(stored?.is_admin) };
+    if (stored) clearStoredUser();
+    return { user: null, isAuthenticated: false, isAdmin: false };
   }
   try {
     const payload = JSON.parse(atob(token.split('.')[1]));
@@ -32,20 +42,22 @@ function readAuth() {
       role: payload.role || stored?.role || 'recipient',
       is_admin: Boolean(payload.is_admin ?? stored?.is_admin),
       community_id: payload.community_id ?? stored?.community_id ?? null,
+      approval_number: payload.approval_number ?? stored?.approval_number ?? null,
       address: payload.address || stored?.address || null,
     };
-    const user = stored ? { ...jwtUser, ...stored, id: jwtUser.id || stored.id } : jwtUser;
+    // JWT wins identity fields; stored may hold UX extras only when not in JWT.
+    const user = stored ? { ...stored, ...jwtUser, id: jwtUser.id || stored.id } : jwtUser;
+    if (!user.id) {
+      return { user: null, isAuthenticated: false, isAdmin: false };
+    }
     return {
       user,
-      isAuthenticated: Boolean(user.id),
+      isAuthenticated: true,
       isAdmin: Boolean(user.is_admin) || String(user.role || '').toLowerCase() === 'admin',
     };
   } catch {
-    return {
-      user: stored,
-      isAuthenticated: Boolean(stored?.id),
-      isAdmin: Boolean(stored?.is_admin),
-    };
+    clearStoredUser();
+    return { user: null, isAuthenticated: false, isAdmin: false };
   }
 }
 

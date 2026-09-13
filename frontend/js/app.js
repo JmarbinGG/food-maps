@@ -78,6 +78,11 @@ class ErrorBoundary extends React.Component {
 function App() {
   const [user, setUser] = React.useState(() => {
     try {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      if (!token) {
+        localStorage.removeItem('current_user');
+        return null;
+      }
       const stored = localStorage.getItem('current_user');
       return stored ? JSON.parse(stored) : null;
     } catch (_) {
@@ -116,6 +121,7 @@ function App() {
   const [showClaimConfirmationModal, setShowClaimConfirmationModal] = React.useState(false);
   const [pendingClaimListing, setPendingClaimListing] = React.useState(null);
   const [showUserProfile, setShowUserProfile] = React.useState(false);
+  const [userProfileInitialTab, setUserProfileInitialTab] = React.useState('account');
   const [showDistributionMap, setShowDistributionMap] = React.useState(false);
   const [pendingSharedCenterId, setPendingSharedCenterId] = React.useState(null);
   const [showStoreOwnerDashboard, setShowStoreOwnerDashboard] = React.useState(false);
@@ -607,6 +613,13 @@ function App() {
         settings: 'profile',
         login: 'login',
         signup: 'signup',
+        'admin/distribution': 'dispatch',
+        distribution: 'dispatch',
+        donations: 'schedule',
+        sponsors: 'partners',
+        recipes: 'meal-planning',
+        contact: 'emergency',
+        admin: 'admin',
       };
       return ALIASES[base] || base;
     };
@@ -679,7 +692,7 @@ function App() {
         }
         if (target === 'listings') {
           const role = String(user?.role || '').toLowerCase();
-          if (role === 'donor' || role === 'admin') {
+          if (role === 'donor' || role === 'admin' || user?.is_admin === true) {
             setCurrentView('dashboard');
           } else {
             setCurrentView('map');
@@ -732,7 +745,11 @@ function App() {
           setCurrentView(target);
           return;
         }
-        // chat / voice / filters are handled by the chatbot itself.
+        try {
+          if (typeof console !== 'undefined' && console.warn) {
+            console.warn('[foodmaps:navigate_ui] unknown target', target, detail);
+          }
+        } catch (_) { /* ignore */ }
       } catch (_) { /* ignore */ }
     };
     window.addEventListener('foodmaps:navigate_ui', handler);
@@ -1640,8 +1657,9 @@ function App() {
       setShowStoreMenu(true);
     };
 
-    // Setup global user profile callback
-    window.openUserProfile = () => {
+    // Setup global user profile callback (optional tab: 'accessibility', etc.)
+    window.openUserProfile = (tab) => {
+      setUserProfileInitialTab(tab || 'account');
       setShowUserProfile(true);
     };
 
@@ -1889,7 +1907,33 @@ function App() {
     localStorage.setItem('current_user', JSON.stringify(updatedUser));
   };
 
+  // When active role changes, leave role-gated views the user can no longer use.
+  React.useEffect(() => {
+    const ROLE_GATED = {
+      dispatch: ['dispatcher', 'admin'],
+      routes: ['volunteer'],
+      driver: ['driver', 'admin'],
+      admin: ['admin'],
+    };
+    const handler = (event) => {
+      const detail = event?.detail || {};
+      const nextRole = String(detail.role || detail.user?.role || '').toLowerCase();
+      const nextUser = detail.user || user;
+      const isAdmin = nextUser?.is_admin === true || nextRole === 'admin';
+      setCurrentView((prev) => {
+        const allowed = ROLE_GATED[prev];
+        if (!allowed) return prev;
+        if (prev === 'admin' && isAdmin) return prev;
+        if (allowed.includes(nextRole)) return prev;
+        return 'map';
+      });
+    };
+    window.addEventListener('roleChanged', handler);
+    return () => window.removeEventListener('roleChanged', handler);
+  }, [user]);
+
   const renderView = () => {
+    const userIsAdmin = user?.is_admin === true || String(user?.role || '').toLowerCase() === 'admin';
     switch (currentView) {
       case 'create':
         return (
@@ -1964,7 +2008,7 @@ function App() {
           />
         );
       case 'admin':
-        if (String(user?.role || '').toLowerCase() !== 'admin') {
+        if (!userIsAdmin) {
           return (
             <div className="flex h-[calc(100vh-64px)] items-center justify-center bg-[var(--background)]">
               <div className="text-center p-8 bg-white rounded-lg border border-[var(--border-color)] shadow-sm">
@@ -2353,7 +2397,11 @@ function App() {
         {showUserProfile && (
           <UserProfile
             user={user}
-            onClose={() => setShowUserProfile(false)}
+            initialTab={userProfileInitialTab}
+            onClose={() => {
+              setShowUserProfile(false);
+              setUserProfileInitialTab('account');
+            }}
             onUserUpdate={setUser}
           />
         )}

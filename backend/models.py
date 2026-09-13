@@ -42,6 +42,9 @@ class User(Base):
     name = Column(String(255))
     password_hash = Column(String(255))
     role = Column(SQLEnum(UserRole))
+    # Durable privilege flag. Active UX role (donor/recipient/…) can change
+    # without clearing this; admin APIs check is_admin, not role alone.
+    is_admin = Column(Boolean, nullable=True, default=False)
     phone = Column(String(255), nullable=True)
     address = Column(String(255), nullable=True)
     coords_lat = Column(Float, nullable=True)
@@ -50,6 +53,9 @@ class User(Base):
     has_refrigeration = Column(Boolean, default=False)
     referral_code = Column(String(20), unique=True, nullable=True, index=True)
     referred_by_code = Column(String(20), nullable=True, index=True)
+    # Community placement from signup approval code (matches Supabase communities.id)
+    community_id = Column(Integer, nullable=True, index=True)
+    approval_number = Column(String(9), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     # reset_token = Column(String(10), nullable=True)  # Commented out - not in MySQL DB
     # reset_token_expiry = Column(DateTime, nullable=True)  # Commented out - not in MySQL DB
@@ -95,6 +101,23 @@ class User(Base):
     requests = relationship("FoodRequest", back_populates="recipient")
     consumption_logs = relationship("ConsumptionLog", back_populates="user")
 
+
+class ApprovalCode(Base):
+    """Pre-generated school/community approval codes for gated signup."""
+    __tablename__ = "approval_codes"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    code = Column(String(9), unique=True, nullable=False, index=True)  # ABC123456
+    school_code = Column(String(3), nullable=False, index=True)
+    community_id = Column(Integer, nullable=False, index=True)
+    is_claimed = Column(Boolean, default=False, nullable=False, index=True)
+    is_revoked = Column(Boolean, default=False, nullable=False)
+    claimed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    claimed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
 class FoodResource(Base):
     __tablename__ = "food_resources"
     
@@ -116,6 +139,8 @@ class FoodResource(Base):
     address = Column(String(255))
     coords_lat = Column(Float, nullable=True)
     coords_lng = Column(Float, nullable=True)
+    # Per-listing community (nullable; mirrors users.community_id / DistributionCenter id)
+    community_id = Column(Integer, nullable=True, index=True)
     status = Column(String(255), default="available")
     claimed_at = Column(DateTime, nullable=True)
     images = Column(Text, nullable=True)  # JSON array of image URLs

@@ -149,136 +149,59 @@ def _supabase_headers(extra: Optional[dict[str, Any]] = None) -> dict[str, Any]:
 
 
 async def supabase_get(table: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
-    """GET rows from a Supabase table via PostgREST.
-
-    Returns the parsed JSON array. Returns [] (instead of raising) when
-    Supabase isn't configured so the backend degrades gracefully in dev.
-    Also returns [] on 4xx (missing table/column, RLS denial) so a single
-    bad query doesn't take down an entire feature.
-    """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return []
-    client = _get_http_client(SUPABASE_TIMEOUT)
-    try:
-        resp = await client.get(
-            f"{SUPABASE_URL}/rest/v1/{table}",
-            params=params or {},
-            headers=_supabase_headers(),
-            timeout=SUPABASE_TIMEOUT,
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("supabase_get %s network error: %s", table, exc)
-        return []
-    if resp.status_code >= 400:
-        # Log and degrade gracefully instead of raising.
-        logger.warning(
-            "supabase_get %s -> %s: %s",
-            table,
-            resp.status_code,
-            resp.text[:200],
-        )
-        return []
-    try:
-        data = resp.json()
-    except Exception:  # noqa: BLE001
-        return []
-    return data if isinstance(data, list) else []
+    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    raise RuntimeError(
+        f"Supabase PostgREST removed (get {table}). Food Maps uses MySQL only."
+    )
 
 
 async def supabase_post(table: str, body: Any) -> Any:
-    """Insert one or more rows into a Supabase table via PostgREST."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return {}
-    client = _get_http_client(SUPABASE_TIMEOUT)
-    resp = await client.post(
-        f"{SUPABASE_URL}/rest/v1/{table}",
-        json=body,
-        headers=_supabase_headers({
-            "Content-Type": "application/json",
-            "Prefer": "return=representation",
-        }),
-        timeout=SUPABASE_TIMEOUT,
+    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    raise RuntimeError(
+        f"Supabase PostgREST removed (post {table}). Food Maps uses MySQL only."
     )
-    resp.raise_for_status()
-    try:
-        return resp.json()
-    except Exception:
-        return {}
 
 
 async def supabase_patch(table: str, params: dict[str, Any], body: dict[str, Any]) -> Any:
-    """Update rows matching the given PostgREST filter params."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return {}
-    client = _get_http_client(SUPABASE_TIMEOUT)
-    resp = await client.patch(
-        f"{SUPABASE_URL}/rest/v1/{table}",
-        params=params,
-        json=body,
-        headers=_supabase_headers({
-            "Content-Type": "application/json",
-            "Prefer": "return=representation",
-        }),
-        timeout=SUPABASE_TIMEOUT,
+    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    raise RuntimeError(
+        f"Supabase PostgREST removed (patch {table}). Food Maps uses MySQL only."
     )
-    resp.raise_for_status()
-    try:
-        return resp.json()
-    except Exception:
-        return {}
 
 
 async def supabase_delete(table: str, params: dict[str, Any]) -> int:
-    """Delete rows matching the given PostgREST params. Returns row count."""
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return 0
-    client = _get_http_client(SUPABASE_TIMEOUT)
-    resp = await client.delete(
-        f"{SUPABASE_URL}/rest/v1/{table}",
-        params=params,
-        headers=_supabase_headers({"Prefer": "return=representation"}),
-        timeout=SUPABASE_TIMEOUT,
+    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    raise RuntimeError(
+        f"Supabase PostgREST removed (delete {table}). Food Maps uses MySQL only."
     )
-    resp.raise_for_status()
-    try:
-        rows = resp.json()
-        return len(rows) if isinstance(rows, list) else 0
-    except Exception:
-        return 0
 
 
 async def supabase_rpc(fn_name: str, body: dict[str, Any]) -> Any:
-    """Invoke a Postgres function via PostgREST RPC.
-
-    Returns whatever the RPC returned (typically a list of rows). Any
-    Supabase / RLS / missing-function error propagates so callers can
-    decide whether to fall back. Callers that treat RPC as best-effort
-    should wrap in their own try/except.
-    """
-    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        return None
-    client = _get_http_client(SUPABASE_TIMEOUT)
-    resp = await client.post(
-        f"{SUPABASE_URL}/rest/v1/rpc/{fn_name}",
-        json=body or {},
-        headers=_supabase_headers({
-            "Content-Type": "application/json",
-        }),
-        timeout=SUPABASE_TIMEOUT,
+    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    raise RuntimeError(
+        f"Supabase RPC removed ({fn_name}). Food Maps uses MySQL only."
     )
-    resp.raise_for_status()
-    try:
-        return resp.json()
-    except Exception:
-        return None
 
 
 async def fetch_donor_listing_defaults(user_id: str) -> dict[str, Any]:
-    """Load donor profile fields to stamp onto new food_listings rows."""
+    """Load donor profile fields to stamp onto new food_listings rows.
+
+    Integer Food Maps user ids read from MySQL. UUID ids still use Supabase
+    when available; never invent an empty admin/community profile just because
+    Supabase is missing.
+    """
     if not user_id:
         return {}
+    uid = str(user_id).strip()
+    if uid.isdigit():
+        try:
+            from backend.ai.bulk_mysql import fetch_donor_listing_defaults_mysql
+            return fetch_donor_listing_defaults_mysql(uid) or {}
+        except Exception as exc:
+            logger.warning("MySQL donor defaults failed for %s: %s", uid, exc)
+            return {}
     rows = await supabase_get("users", {
-        "id": f"eq.{user_id}",
+        "id": f"eq.{uid}",
         # Only select columns that actually exist on `users`. Requesting
         # missing columns (city/state/zip) makes PostgREST 400 the whole
         # query, which silently returned {} and left AI-posted listings with

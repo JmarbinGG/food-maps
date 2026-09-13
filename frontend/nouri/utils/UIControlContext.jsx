@@ -11,8 +11,10 @@ const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui', 'show_route_to_list
 function dispatchUIAction(action) {
   if (!action) return;
   const act = (action.action || 'open').toLowerCase();
-  const rawPath = (action.path || action.target || '').toString();
-  const pathNoSlash = rawPath.replace(/^\//, '');
+  // Prefer semantic target (e.g. "dispatch") over path ("/admin/distribution")
+  // so SPA view keys match app.js handlers.
+  const rawTarget = (action.target || action.path || '').toString();
+  const pathNoSlash = rawTarget.replace(/^\//, '');
   const tgt = pathNoSlash.split('?')[0].toLowerCase();
   const query = pathNoSlash.includes('?')
     ? pathNoSlash.split('?').slice(1).join('?')

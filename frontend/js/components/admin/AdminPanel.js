@@ -82,6 +82,46 @@ function AdminPanel({ onClose }) {
     const [newsletterLoading, setNewsletterLoading] = React.useState(false);
     const [newsletterError, setNewsletterError] = React.useState('');
 
+    const [communities, setCommunities] = React.useState([]);
+    const [approvalCodes, setApprovalCodes] = React.useState([]);
+    const [approvalStats, setApprovalStats] = React.useState({ total: 0, claimed: 0, unclaimed: 0, revoked: 0 });
+    const [approvalLoading, setApprovalLoading] = React.useState(false);
+    const [approvalError, setApprovalError] = React.useState('');
+    const [approvalGenerating, setApprovalGenerating] = React.useState(false);
+    const [approvalCommunityId, setApprovalCommunityId] = React.useState('');
+    const [approvalSchoolCode, setApprovalSchoolCode] = React.useState('');
+    const [approvalQuantity, setApprovalQuantity] = React.useState(50);
+    const [approvalFilterCommunity, setApprovalFilterCommunity] = React.useState('all');
+    const [approvalFilterStatus, setApprovalFilterStatus] = React.useState('all');
+
+    const SCHOOL_CODES = {
+      'Do Good Warehouse': 'DGW',
+      'Ruby Bridges Elementary CC': 'RBE',
+      'NEA/ACLC CC': 'NEA',
+      'Academy of Alameda CC': 'AOA',
+      'Island HS CC': 'IHS',
+      'Encinal Jr Sr High School': 'ENC',
+      'Madison Park Academy Primary': 'MPP',
+      'Alameda Unified School District': 'AUS',
+      'Markham Elementary': 'MKE',
+      'Madison Park Academy': 'MPA',
+      'McClymonds High School': 'MCH',
+      'Hillside Elementary School': 'HES',
+      'Edendale Middle School': 'EDS',
+      'San Lorenzo High School': 'SLH',
+      'Garfield Elementary': 'GFE',
+      'Lodestar Charter School': 'LCS',
+      'Horace Mann Elementary': 'HME',
+    };
+
+    const communityNameById = React.useMemo(() => {
+      const map = {};
+      (communities || []).forEach((c) => {
+        if (c && c.id != null) map[String(c.id)] = c.name || `Community #${c.id}`;
+      });
+      return map;
+    }, [communities]);
+
     const listingCategoryOptions = listingCategories.length
       ? listingCategories.filter((c) => c.is_active !== false).map((c) => ({ value: c.value, label: c.label }))
       : [
@@ -113,6 +153,10 @@ function AdminPanel({ onClose }) {
         loadCenters();
       } else if (activeTab === 'users') {
         loadUsers();
+        loadCommunities();
+      } else if (activeTab === 'approval_codes') {
+        loadCommunities();
+        loadApprovalCodes();
       } else if (activeTab === 'referrals') {
         loadReferralStats();
       } else if (activeTab === 'listings') {
@@ -129,6 +173,23 @@ function AdminPanel({ onClose }) {
         loadUsers();
       }
     }, [userRoleFilter]);
+
+    React.useEffect(() => {
+      if (!approvalCommunityId) {
+        setApprovalSchoolCode('');
+        return;
+      }
+      const community = communities.find((c) => String(c.id) === String(approvalCommunityId));
+      if (community && SCHOOL_CODES[community.name]) {
+        setApprovalSchoolCode(SCHOOL_CODES[community.name]);
+      }
+    }, [approvalCommunityId, communities]);
+
+    React.useEffect(() => {
+      if (activeTab === 'approval_codes') {
+        loadApprovalCodes();
+      }
+    }, [approvalFilterCommunity, approvalFilterStatus]);
 
     React.useEffect(() => {
       if (activeTab !== 'ai_query') return;
@@ -350,6 +411,169 @@ function AdminPanel({ onClose }) {
         setUsers([]);
       } finally {
         setUsersLoading(false);
+      }
+    };
+
+    const loadCommunities = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/communities', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setCommunities(Array.isArray(data.communities) ? data.communities : []);
+        }
+      } catch (error) {
+        console.error('Error loading communities:', error);
+      }
+    };
+
+    const loadApprovalCodes = async () => {
+      setApprovalLoading(true);
+      try {
+        setApprovalError('');
+        const token = localStorage.getItem('auth_token');
+        const params = new URLSearchParams();
+        if (approvalFilterCommunity && approvalFilterCommunity !== 'all') {
+          params.set('community_id', approvalFilterCommunity);
+        }
+        if (approvalFilterStatus && approvalFilterStatus !== 'all') {
+          params.set('status', approvalFilterStatus);
+        }
+        const qs = params.toString();
+        const response = await fetch(`/api/admin/approval-codes${qs ? `?${qs}` : ''}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setApprovalCodes(Array.isArray(data.codes) ? data.codes : []);
+          setApprovalStats(data.stats || { total: 0, claimed: 0, unclaimed: 0, revoked: 0 });
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setApprovalError(error.detail || 'Failed to load approval codes');
+          setApprovalCodes([]);
+        }
+      } catch (error) {
+        console.error('Error loading approval codes:', error);
+        setApprovalError('Failed to load approval codes');
+        setApprovalCodes([]);
+      } finally {
+        setApprovalLoading(false);
+      }
+    };
+
+    const generateApprovalCodes = async () => {
+      if (!approvalCommunityId || !/^[A-Z]{3}$/.test(String(approvalSchoolCode || '').toUpperCase())) {
+        setApprovalError('Select a community and enter a 3-letter school code.');
+        return;
+      }
+      const qty = Number(approvalQuantity);
+      if (!Number.isFinite(qty) || qty < 1 || qty > 1000) {
+        setApprovalError('Quantity must be between 1 and 1000.');
+        return;
+      }
+      setApprovalGenerating(true);
+      setApprovalError('');
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/approval-codes', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            community_id: Number(approvalCommunityId),
+            school_code: String(approvalSchoolCode).toUpperCase(),
+            quantity: qty,
+          }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          setApprovalError(data.detail || 'Failed to generate codes');
+          return;
+        }
+        await loadApprovalCodes();
+      } catch (error) {
+        console.error('Error generating approval codes:', error);
+        setApprovalError('Failed to generate codes');
+      } finally {
+        setApprovalGenerating(false);
+      }
+    };
+
+    const exportApprovalCodes = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const params = new URLSearchParams();
+        if (approvalFilterCommunity && approvalFilterCommunity !== 'all') {
+          params.set('community_id', approvalFilterCommunity);
+        }
+        const qs = params.toString();
+        const response = await fetch(`/api/admin/approval-codes/export${qs ? `?${qs}` : ''}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          setApprovalError('Failed to export codes');
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'foodmaps-approval-codes.csv';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (error) {
+        console.error('Error exporting approval codes:', error);
+        setApprovalError('Failed to export codes');
+      }
+    };
+
+    const revokeApprovalCode = async (codeId) => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/admin/approval-codes/${codeId}/revoke`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          setApprovalError(error.detail || 'Failed to revoke code');
+          return;
+        }
+        await loadApprovalCodes();
+      } catch (error) {
+        console.error('Error revoking approval code:', error);
+        setApprovalError('Failed to revoke code');
+      }
+    };
+
+    const assignUserCommunity = async (userId, communityId) => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/admin/users/${userId}/community`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            community_id: communityId === '' || communityId == null ? null : Number(communityId),
+          }),
+        });
+        if (!response.ok) {
+          const error = await response.json().catch(() => ({}));
+          setUsersError(error.detail || 'Failed to update community');
+          return;
+        }
+        await loadUsers();
+      } catch (error) {
+        console.error('Error assigning community:', error);
+        setUsersError('Failed to update community');
       }
     };
 
@@ -696,6 +920,7 @@ function AdminPanel({ onClose }) {
               {[
                 { id: 'overview', label: 'Overview', icon: 'layout-dashboard' },
                 { id: 'users', label: 'Users', icon: 'users' },
+                { id: 'approval_codes', label: 'Approval Codes', icon: 'key' },
                 { id: 'centers', label: 'Distribution Centers', icon: 'map-pin' },
                 { id: 'listings', label: 'Listings', icon: 'package' },
                 { id: 'categories', label: 'Categories', icon: 'tags' },
@@ -1210,6 +1435,7 @@ function AdminPanel({ onClose }) {
                               <th className="py-2 pr-3">Email</th>
                               <th className="py-2 pr-3">Role</th>
                               <th className="py-2 pr-3">Phone</th>
+                              <th className="py-2 pr-3">Community</th>
                               <th className="py-2 pr-3">Referral code</th>
                               <th className="py-2 pr-3">Joined</th>
                             </tr>
@@ -1230,6 +1456,21 @@ function AdminPanel({ onClose }) {
                                   </span>
                                 </td>
                                 <td className="py-2.5 pr-3 text-gray-700">{user.phone || '—'}</td>
+                                <td className="py-2.5 pr-3 min-w-[10rem]">
+                                  <select
+                                    className={inputClass + ' text-xs py-1'}
+                                    value={user.community_id != null ? String(user.community_id) : ''}
+                                    onChange={(e) => assignUserCommunity(user.id, e.target.value)}
+                                  >
+                                    <option value="">Unassigned</option>
+                                    {communities.map((c) => (
+                                      <option key={c.id} value={String(c.id)}>{c.name}</option>
+                                    ))}
+                                  </select>
+                                  {user.approval_number && (
+                                    <div className="text-[10px] text-gray-500 mt-0.5 font-mono">{user.approval_number}</div>
+                                  )}
+                                </td>
                                 <td className="py-2.5 pr-3">
                                   {user.referral_code ? (
                                     <code className="bg-gray-100 px-2 py-1 rounded text-xs">{user.referral_code}</code>
@@ -1252,6 +1493,164 @@ function AdminPanel({ onClose }) {
                       </>
                     );
                   })()}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'approval_codes' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h3 className="text-lg font-semibold">Approval Codes</h3>
+                <div className="flex gap-2">
+                  <button type="button" onClick={exportApprovalCodes} className="btn-secondary flex items-center">
+                    Export CSV
+                  </button>
+                  <button type="button" onClick={loadApprovalCodes} className="btn-secondary flex items-center">
+                    <div className="icon-refresh-cw mr-2"></div>
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {approvalError && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">{approvalError}</div>
+              )}
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { label: 'Total', value: approvalStats.total },
+                  { label: 'Unclaimed', value: approvalStats.unclaimed },
+                  { label: 'Claimed', value: approvalStats.claimed },
+                  { label: 'Revoked', value: approvalStats.revoked },
+                ].map((s) => (
+                  <div key={s.label} className="card">
+                    <p className="text-sm text-gray-600">{s.label}</p>
+                    <p className="text-2xl font-bold text-gray-900 tabular-nums">{s.value ?? 0}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="card space-y-3">
+                <h4 className="font-semibold text-gray-900">Generate codes</h4>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  <select
+                    className={inputClass}
+                    value={approvalCommunityId}
+                    onChange={(e) => setApprovalCommunityId(e.target.value)}
+                  >
+                    <option value="">Select community…</option>
+                    {communities.map((c) => (
+                      <option key={c.id} value={String(c.id)}>{c.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    className={inputClass}
+                    maxLength={3}
+                    value={approvalSchoolCode}
+                    onChange={(e) => setApprovalSchoolCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))}
+                    placeholder="School code (e.g. RBE)"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={1000}
+                    className={inputClass}
+                    value={approvalQuantity}
+                    onChange={(e) => setApprovalQuantity(e.target.value)}
+                    placeholder="Quantity"
+                  />
+                  <button
+                    type="button"
+                    className="btn-primary disabled:opacity-50"
+                    disabled={approvalGenerating}
+                    onClick={generateApprovalCodes}
+                  >
+                    {approvalGenerating ? 'Generating…' : 'Generate'}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Codes use a 3-letter school prefix plus 6 digits (example: RBE123456). Each code can be claimed once at signup.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3">
+                <select
+                  className={inputClass + ' sm:w-64'}
+                  value={approvalFilterCommunity}
+                  onChange={(e) => setApprovalFilterCommunity(e.target.value)}
+                >
+                  <option value="all">All communities</option>
+                  {communities.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.name}</option>
+                  ))}
+                </select>
+                <select
+                  className={inputClass + ' sm:w-48'}
+                  value={approvalFilterStatus}
+                  onChange={(e) => setApprovalFilterStatus(e.target.value)}
+                >
+                  <option value="all">All statuses</option>
+                  <option value="unclaimed">Unclaimed</option>
+                  <option value="claimed">Claimed</option>
+                  <option value="revoked">Revoked</option>
+                </select>
+              </div>
+
+              {approvalLoading ? (
+                <div className="text-center py-8 text-gray-500">Loading approval codes…</div>
+              ) : (
+                <div className="card overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-gray-600">
+                        <th className="py-2 pr-3">Code</th>
+                        <th className="py-2 pr-3">Community</th>
+                        <th className="py-2 pr-3">Status</th>
+                        <th className="py-2 pr-3">Created</th>
+                        <th className="py-2 pr-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {approvalCodes.slice(0, 200).map((row) => {
+                        const status = row.is_revoked ? 'revoked' : row.is_claimed ? 'claimed' : 'unclaimed';
+                        return (
+                          <tr key={row.id} className="border-b hover:bg-gray-50">
+                            <td className="py-2.5 pr-3 font-mono text-xs">{row.code}</td>
+                            <td className="py-2.5 pr-3">
+                              {communityNameById[String(row.community_id)] || `#${row.community_id}`}
+                            </td>
+                            <td className="py-2.5 pr-3 capitalize">
+                              <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                status === 'unclaimed' ? 'bg-green-100 text-green-800' :
+                                status === 'claimed' ? 'bg-blue-100 text-blue-800' :
+                                'bg-gray-100 text-gray-700'
+                              }`}>{status}</span>
+                            </td>
+                            <td className="py-2.5 pr-3 text-gray-600 whitespace-nowrap">
+                              {row.created_at ? new Date(row.created_at).toLocaleDateString() : '—'}
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              {status === 'unclaimed' ? (
+                                <button
+                                  type="button"
+                                  className="text-xs text-red-600 hover:underline"
+                                  onClick={() => revokeApprovalCode(row.id)}
+                                >
+                                  Revoke
+                                </button>
+                              ) : (
+                                <span className="text-gray-400 text-xs">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {approvalCodes.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">No approval codes match these filters.</div>
+                  )}
                 </div>
               )}
             </div>

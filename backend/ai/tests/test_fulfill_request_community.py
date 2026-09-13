@@ -9,21 +9,21 @@ from backend.tools import _create_food_listing
 @pytest.mark.asyncio
 async def test_fulfilling_request_id_skips_community_confirm(monkeypatch):
     async def fake_from_request(rid):
-        assert rid == "req-42"
-        return ("comm-uuid", "Alameda Unified", "Bread")
+        assert rid == "99"
+        return ("8", "Alameda Unified", "Bread")
 
     async def fake_resolve(name, cid):
-        return cid or "comm-uuid", name or "Alameda Unified"
+        return cid or "8", name or "Alameda Unified"
 
     posted = {}
 
     async def fake_post(table, row):
         posted["table"] = table
         posted["row"] = row
-        return [{"id": "listing-1", **row}]
+        return [{"id": "101", **row}]
 
     async def fake_donor_defaults(_uid):
-        return {"community_id": "other-comm", "full_address": "1 Main St"}
+        return {"community_id": "9", "full_address": "1 Main St"}
 
     def fake_apply_defaults(row, _donor):
         return row
@@ -58,17 +58,17 @@ async def test_fulfilling_request_id_skips_community_confirm(monkeypatch):
     monkeypatch.setattr("backend.tools._find_recent_duplicate_listing", fake_find_dup)
 
     result = await _create_food_listing(
-        user_id="user-1",
+        user_id="42",
         title="Sourdough",
         quantity=2,
         unit="loaves",
         category="bakery",
         expiry_date="2099-12-31",
         community_confirmed=False,  # normally blocks — should be overridden
-        fulfilling_request_id="req-42",
+        fulfilling_request_id="99",
         image_url="https://example.com/sourdough.jpg",
     )
 
     assert result.get("success") is True
-    assert posted["row"]["community_id"] == "comm-uuid"
+    assert posted["row"]["community_id"] == "8"
     assert posted["row"]["listing_type"] == "donation"

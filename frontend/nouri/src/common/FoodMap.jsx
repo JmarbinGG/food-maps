@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import supabase from '../../utils/supabaseClient';
+import centersClient from '../../utils/centersClient';
 import { API_CONFIG } from '../../utils/config';
 import { bayAreaGeocodeParams, isBayAreaCoord } from '../../utils/mapBounds';
 import { useMapContext } from '../../utils/MapContext.jsx';
@@ -397,7 +397,7 @@ function FoodMap({ onMarkerClick, showSignupPrompt = true, highlightedFoodId = n
 
     const fetchCommunities = async () => {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await centersClient
                 .from('communities')
                 .select('*')
                 .eq('is_active', true)

@@ -1,20 +1,75 @@
-let failureCount = 0;
+/**
+ * Human support escalation — tracks guide/AI failures and opens support chat.
+ */
 
+const STORAGE_KEY = 'nouri.guide.failures.v1'
+const FAILURE_THRESHOLD = 3
+
+/** @returns {number} */
 export function getGuideFailureCount() {
-  return failureCount;
+  if (typeof sessionStorage === 'undefined') return 0
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0
+  } catch {
+    return 0
+  }
+}
+
+function setGuideFailureCount(count) {
+  if (typeof sessionStorage === 'undefined') return
+  try {
+    sessionStorage.setItem(STORAGE_KEY, String(Math.max(0, count)))
+  } catch { /* private mode */ }
+}
+
+/** Reset after a successful interaction. */
+export function recordGuideSuccess() {
+  setGuideFailureCount(0)
+}
+
+/** Clear failure counter (e.g. when the user clears the chat). */
+export function clearGuideFailures() {
+  setGuideFailureCount(0)
+}
+
+/**
+ * Increment failure counter (chat error, repeated validation, stuck field).
+ * @param {string} [reason]
+ */
+export function recordGuideFailure(reason = '') {
+  const next = getGuideFailureCount() + 1
+  setGuideFailureCount(next)
+  if (typeof window !== 'undefined' && next >= FAILURE_THRESHOLD) {
+    window.dispatchEvent(new CustomEvent('nouri:handoff-suggested', {
+      detail: { reason, count: next },
+    }))
+  }
+  return next
 }
 
 export function shouldSuggestHumanHandoff() {
-  return failureCount >= 3;
+  return getGuideFailureCount() >= FAILURE_THRESHOLD
 }
 
-export function openHumanSupport() {
-  window.dispatchEvent(new CustomEvent('foodmaps:navigate_ui', {
-    detail: { action: 'open', target: 'dashboard', summary: 'Support' },
-  }));
+/**
+ * Open the human support widget with optional prefilled message.
+ * @param {{ message?: string, reason?: string }} [opts]
+ */
+export function openHumanSupport(opts = {}) {
+  const count = getGuideFailureCount()
+  const defaultMsg = count >= FAILURE_THRESHOLD
+    ? 'Nouri could not help me after several tries. I need a person to assist.'
+    : 'I need help from a person with Food Maps.'
+
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('nouri:open-human-support', {
+      detail: {
+        message: opts.message || defaultMsg,
+        reason: opts.reason || '',
+      },
+    }))
+  }
 }
 
-export function recordGuideFailure() {
-  failureCount += 1;
-  window.dispatchEvent(new CustomEvent('nouri:handoff-suggested'));
-}
+export const HUMAN_HANDOFF_THRESHOLD = FAILURE_THRESHOLD

@@ -103,7 +103,8 @@ window.databaseService = {
           email: userData.email,
           password: userData.password,
           role: userData.role,
-          referral_code: userData.referral_code || null
+          referral_code: userData.referral_code || null,
+          approval_code: userData.approval_code || null
         })
       });
 

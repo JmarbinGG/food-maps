@@ -256,12 +256,13 @@
           <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
         </svg>`;
+      // Hidden until refreshAdminAccess confirms admin; do not re-hide on later calls.
+      btn.style.display = 'none';
       document.body.appendChild(btn);
     } else {
       btn.classList.add('fm-admin-edit-btn');
       btn.title = 'Edit page content';
     }
-    btn.style.display = 'none';
     btn.onclick = () => toggleEditMode();
 
     let panel = document.getElementById('fm-page-editor-panel');
@@ -413,15 +414,57 @@
       const value = content[key];
       if (value == null) return;
       if (key.startsWith('img_')) {
-        const el = document.querySelector(`[data-editable-img="${cssEscape(key.slice(4))}"]`);
-        if (el) el.src = value;
+        const imgKey = key.slice(4);
+        document.querySelectorAll(`[data-editable-img="${cssEscape(imgKey)}"]`).forEach((el) => {
+          el.src = value;
+        });
       } else if (key.startsWith('bg_')) {
-        const el = document.querySelector(`[data-editable-bg="${cssEscape(key.slice(3))}"]`);
-        if (el) el.style.backgroundImage = value;
+        const bgKey = key.slice(3);
+        document.querySelectorAll(`[data-editable-bg="${cssEscape(bgKey)}"]`).forEach((el) => {
+          el.style.backgroundImage = value;
+        });
       } else {
-        const el = document.querySelector(`[data-editable="${cssEscape(key)}"]`);
-        if (el) el.innerHTML = value;
+        setEditableHtml(key, value);
       }
+    });
+  }
+
+  /** Card ↔ modal field pairs on Impact Story (and similar pages). */
+  const TEXT_CONTENT_ALIASES = {
+    'sarah-title': 'modal-sarah-title',
+    'modal-sarah-title': 'sarah-title',
+    'sarah-quote': 'modal-sarah-content',
+    'modal-sarah-content': 'sarah-quote',
+    'sarah-attribution': 'modal-sarah-attribution',
+    'modal-sarah-attribution': 'sarah-attribution',
+    'michael-title': 'modal-michael-title',
+    'modal-michael-title': 'michael-title',
+    'michael-quote': 'modal-michael-content',
+    'modal-michael-content': 'michael-quote',
+    'michael-attribution': 'modal-michael-attribution',
+    'modal-michael-attribution': 'michael-attribution',
+  };
+
+  function editableKeysFor(key) {
+    const keys = [key];
+    const alias = TEXT_CONTENT_ALIASES[key];
+    if (alias && alias !== key) keys.push(alias);
+    return keys;
+  }
+
+  function setEditableHtml(key, html) {
+    editableKeysFor(key).forEach((k) => {
+      document.querySelectorAll(`[data-editable="${cssEscape(k)}"]`).forEach((el) => {
+        el.innerHTML = html;
+      });
+    });
+  }
+
+  function setEditableText(key, text) {
+    editableKeysFor(key).forEach((k) => {
+      document.querySelectorAll(`[data-editable="${cssEscape(k)}"]`).forEach((el) => {
+        el.textContent = text;
+      });
     });
   }
 
@@ -489,28 +532,25 @@
 
   function applyFieldPreview(field, rawValue) {
     if (field.type === 'text') {
-      const el = document.querySelector(`[data-editable="${cssEscape(field.key)}"]`);
-      if (!el) return;
-      // Preserve simple HTML if admin typed tags; otherwise use plain text
       const val = rawValue;
       if (/[<][a-zA-Z]/.test(val)) {
-        el.innerHTML = val;
+        setEditableHtml(field.key, val);
       } else {
-        // Keep existing inline tags structure when possible by replacing text content
-        el.textContent = val;
+        setEditableText(field.key, val);
       }
       return;
     }
     if (field.type === 'image') {
-      const el = document.querySelector(`[data-editable-img="${cssEscape(field.key)}"]`);
-      if (el && rawValue.trim()) el.src = rawValue.trim();
+      document.querySelectorAll(`[data-editable-img="${cssEscape(field.key)}"]`).forEach((el) => {
+        if (rawValue.trim()) el.src = rawValue.trim();
+      });
       return;
     }
     if (field.type === 'background') {
-      const el = document.querySelector(`[data-editable-bg="${cssEscape(field.key)}"]`);
-      if (!el) return;
       const url = rawValue.trim();
-      el.style.backgroundImage = url ? `url('${url}')` : '';
+      document.querySelectorAll(`[data-editable-bg="${cssEscape(field.key)}"]`).forEach((el) => {
+        el.style.backgroundImage = url ? `url('${url}')` : '';
+      });
     }
   }
 
@@ -562,19 +602,8 @@
       input.addEventListener('focus', () => focusPageElement(field.type, field.key));
       input.addEventListener('input', () => {
         if (field.type === 'text') {
-          // Write plain text back; if original had only text, fine.
-          // If original had markup, replace with escaped text as HTML.
-          const el = document.querySelector(`[data-editable="${cssEscape(field.key)}"]`);
-          if (el) {
-            const hadOnlyText = plainTextFromHtml(field._originalHtml) === (field._originalHtml || '').replace(/\s+/g, ' ').trim()
-              || !/[<][a-zA-Z]/.test(field._originalHtml || '');
-            if (hadOnlyText) {
-              el.textContent = input.value;
-            } else {
-              // Keep a single text update without injecting tags from the form
-              el.textContent = input.value;
-            }
-          }
+          // Write plain text back to this key and any card/modal aliases.
+          setEditableText(field.key, input.value);
         } else {
           applyFieldPreview(field, input.value);
         }
@@ -636,7 +665,9 @@
       });
       if (!res.ok) return false;
       const user = await res.json();
-      return !!(user && user.role && String(user.role).toLowerCase() === 'admin');
+      if (!user) return false;
+      if (user.is_admin === true) return true;
+      return !!(user.role && String(user.role).toLowerCase() === 'admin');
     } catch (_) {
       return false;
     }
@@ -687,21 +718,24 @@
     const body = panel.querySelector('[data-fm-fields]');
     if (body) body.innerHTML = '';
     setStatus('');
+    // Restore Edit FAB for admins without requiring a full page refresh.
+    void refreshAdminAccess();
   }
 
   function restoreOriginal() {
     const snap = state.original || {};
     Object.keys(snap.text || {}).forEach((key) => {
-      const el = document.querySelector(`[data-editable="${cssEscape(key)}"]`);
-      if (el) el.innerHTML = snap.text[key];
+      setEditableHtml(key, snap.text[key]);
     });
     Object.keys(snap.images || {}).forEach((key) => {
-      const el = document.querySelector(`[data-editable-img="${cssEscape(key)}"]`);
-      if (el) el.src = snap.images[key];
+      document.querySelectorAll(`[data-editable-img="${cssEscape(key)}"]`).forEach((el) => {
+        el.src = snap.images[key];
+      });
     });
     Object.keys(snap.backgrounds || {}).forEach((key) => {
-      const el = document.querySelector(`[data-editable-bg="${cssEscape(key)}"]`);
-      if (el) el.style.backgroundImage = snap.backgrounds[key];
+      document.querySelectorAll(`[data-editable-bg="${cssEscape(key)}"]`).forEach((el) => {
+        el.style.backgroundImage = snap.backgrounds[key];
+      });
     });
   }
 
@@ -735,7 +769,11 @@
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;');
           // Preserve line breaks
-          changes[key] = escaped.replace(/\n/g, '<br>');
+          const html = escaped.replace(/\n/g, '<br>');
+          changes[key] = html;
+          // Persist card/modal alias too so both CMS keys stay aligned.
+          const alias = TEXT_CONTENT_ALIASES[key];
+          if (alias) changes[alias] = html;
         }
       } else if (type === 'image') {
         const original = (state.original && state.original.images && state.original.images[key]) || '';

@@ -14,12 +14,7 @@ function Dashboard({ user, onViewChange }) {
   const [recommendedListings, setRecommendedListings] = React.useState([]);
   const [loadingRecommended, setLoadingRecommended] = React.useState(false);
 
-  // API base URL
-  const API_BASE_URL = window.location.hostname === 'localhost'
-    ? 'http://localhost:8000'
-    : 'https://api.foodmaps.com';
-
-  // Load recommended listings for recipients
+  // Load recommended listings for recipients (same-origin /api like Nouri)
   React.useEffect(() => {
     if (user?.role === 'recipient') {
       loadRecommendedListings();
@@ -32,7 +27,7 @@ function Dashboard({ user, onViewChange }) {
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch(`${API_BASE_URL}/api/listings/recommended`, {
+      const response = await fetch('/api/listings/recommended', {
         headers: {
           'Authorization': `Bearer ${token}`
         }

@@ -28,6 +28,8 @@ from backend.schemas import (
     CenterInventoryResponse,
     UserRegisterRequest,
     UserLoginRequest,
+    ApprovalCodeGenerateRequest,
+    AdminUserCommunityUpdate,
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
@@ -36,7 +38,8 @@ from backend.models import (
     DistributionCenter, CenterInventory, Message, DonationSchedule, 
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
-    FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription
+    FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
+    ApprovalCode,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -315,6 +318,14 @@ SIGNUP_RATE_LIMIT_WINDOW = timedelta(minutes=30)
 signup_attempts_by_ip: Dict[str, List[datetime]] = {}
 signup_attempts_lock = Lock()
 
+# Approval-code validate rate limiting: max 20 attempts per 10-minute window.
+APPROVAL_VALIDATE_RATE_LIMIT_MAX_ATTEMPTS = 20
+APPROVAL_VALIDATE_RATE_LIMIT_WINDOW = timedelta(minutes=10)
+approval_validate_attempts_by_ip: Dict[str, List[datetime]] = {}
+approval_validate_attempts_lock = Lock()
+
+APPROVAL_CODE_RE = re.compile(r"^[A-Z]{3}\d{6}$")
+
 # Password reset flow rate limiting.
 FORGOT_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS = 5
 RESET_PASSWORD_RATE_LIMIT_MAX_ATTEMPTS = 5
@@ -352,11 +363,65 @@ def _database_mode() -> str:
     return "local" if db_url.startswith("sqlite") else "cloud"
 
 
+def _user_is_admin(user) -> bool:
+    """Durable admin privilege (column), with legacy role==admin fallback."""
+    if user is None:
+        return False
+    flag = getattr(user, "is_admin", None)
+    if flag is True:
+        return True
+    if flag is False:
+        # Explicit false — still allow legacy rows where role is admin but
+        # the column was never backfilled (None is the common pre-backfill
+        # state; False means intentionally cleared).
+        pass
+    try:
+        return user.role == UserRole.ADMIN
+    except Exception:
+        return False
+
+
+MIN_PASSWORD_LENGTH = 8
+SIGNUP_ALLOWED_ROLES = {UserRole.DONOR, UserRole.RECIPIENT}
+
+
+def _require_password_strength(password: Optional[str]) -> str:
+    pwd = password or ""
+    if len(pwd) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters",
+        )
+    return pwd
+
+
+def _issue_user_token(user: User) -> str:
+    """Mint a 24h JWT from the current DB user row (source of truth)."""
+    now = datetime.utcnow()
+    payload = {
+        "sub": str(user.id),
+        "name": user.name,
+        "email": user.email,
+        "role": user.role.value if user.role else None,
+        "is_admin": _user_is_admin(user),
+        "community_id": user.community_id,
+        "approval_number": user.approval_number,
+        "address": user.address,
+        "iat": now,
+        "exp": now + timedelta(hours=24),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    if isinstance(token, bytes):
+        token = token.decode("utf-8")
+    return token
+
+
 def _resolve_profile_role_update(new_role, *, jwt_is_admin: bool = False):
     """Return a role string to apply, or None if the change is not allowed.
 
     Non-admins may switch among donor/recipient/driver/volunteer.
-    Restoring admin requires an existing JWT is_admin claim (no escalation).
+    Restoring admin requires an existing privilege claim (JWT/DB is_admin).
+    Switching away from admin never clears the durable is_admin flag.
     """
     role = str(new_role or "").strip().lower()
     allowed_roles = {"donor", "recipient", "driver", "volunteer"}
@@ -365,6 +430,26 @@ def _resolve_profile_role_update(new_role, *, jwt_is_admin: bool = False):
     if role == "admin" and jwt_is_admin is True:
         return "admin"
     return None
+
+
+def _backfill_user_is_admin() -> None:
+    """Ensure is_admin is true for every user whose active role is admin."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "UPDATE users SET is_admin = 1 "
+                "WHERE LOWER(CAST(role AS CHAR)) IN ('admin', 'ADMIN') "
+                "AND (is_admin IS NULL OR is_admin = 0)"
+            ))
+    except Exception:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(
+                    "UPDATE users SET is_admin = 1 "
+                    "WHERE role = 'admin' AND (is_admin IS NULL OR is_admin = 0)"
+                ))
+        except Exception as exc:
+            print(f"[warn] is_admin backfill skipped: {exc}")
 
 
 def _client_ip(request: Request) -> str:
@@ -433,6 +518,66 @@ def enforce_signup_rate_limit(request: Request) -> None:
 
         attempts.append(now)
         signup_attempts_by_ip[ip] = attempts
+
+
+def enforce_approval_validate_rate_limit(request: Request) -> None:
+    """Allow up to APPROVAL_VALIDATE_RATE_LIMIT_MAX_ATTEMPTS lookups per window."""
+    now = datetime.utcnow()
+    cutoff = now - APPROVAL_VALIDATE_RATE_LIMIT_WINDOW
+    ip = _client_ip(request)
+
+    with approval_validate_attempts_lock:
+        attempts = [ts for ts in approval_validate_attempts_by_ip.get(ip, []) if ts > cutoff]
+        if len(attempts) >= APPROVAL_VALIDATE_RATE_LIMIT_MAX_ATTEMPTS:
+            retry_after_seconds = int((attempts[0] + APPROVAL_VALIDATE_RATE_LIMIT_WINDOW - now).total_seconds())
+            if retry_after_seconds < 1:
+                retry_after_seconds = 1
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many approval code checks. "
+                    f"Please try again in about {retry_after_seconds // 60 + (1 if retry_after_seconds % 60 else 0)} minute(s)."
+                ),
+            )
+        attempts.append(now)
+        approval_validate_attempts_by_ip[ip] = attempts
+
+
+def _normalize_approval_code(raw: Optional[str]) -> str:
+    return re.sub(r"\s+", "", str(raw or "")).upper()
+
+
+def _approval_code_format_ok(code: str) -> bool:
+    return bool(APPROVAL_CODE_RE.match(code or ""))
+
+
+def _generate_approval_code_suffix() -> str:
+    """Cryptographically random 6-digit suffix in [100000, 999999]."""
+    n = secrets.randbelow(900000) + 100000
+    return f"{n:06d}"
+
+
+async def _community_name_for_id(community_id: Optional[int]) -> Optional[str]:
+    if community_id is None:
+        return None
+    try:
+        from backend.tools import _get_active_communities
+        result = await _get_active_communities(max_results=500)
+        for row in (result.get("communities") or []):
+            if str(row.get("id")) == str(community_id):
+                name = str(row.get("name") or "").strip()
+                return name or None
+    except Exception:
+        pass
+    try:
+        from backend.ai.bulk_mysql import fetch_active_communities_mysql
+        for row in fetch_active_communities_mysql(max_results=500):
+            if str(row.get("id")) == str(community_id):
+                name = str(row.get("name") or "").strip()
+                return name or None
+    except Exception:
+        pass
+    return None
 
 
 def _ip_email_key(request: Request, email: Optional[str]) -> str:
@@ -573,6 +718,7 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "address": getattr(item, "address", None),
         "coords_lat": getattr(item, "coords_lat", None),
         "coords_lng": getattr(item, "coords_lng", None),
+        "community_id": getattr(item, "community_id", None),
         "pickup_window_start": item.pickup_window_start.isoformat() if getattr(item, "pickup_window_start", None) else None,
         "pickup_window_end": item.pickup_window_end.isoformat() if getattr(item, "pickup_window_end", None) else None,
         "status": getattr(item, "status", None),
@@ -601,7 +747,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
-    """Verify user is authenticated and has admin role"""
+    """Verify user is authenticated and has durable admin privilege."""
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
@@ -609,7 +755,7 @@ def verify_admin(credentials: HTTPAuthorizationCredentials = Depends(security), 
             raise HTTPException(status_code=401, detail="Invalid token")
         
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or user.role != UserRole.ADMIN:
+        if not user or not _user_is_admin(user):
             raise HTTPException(status_code=403, detail="Admin access required")
         
         return user
@@ -812,11 +958,16 @@ async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), 
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
+        community_name = await _community_name_for_id(user.community_id)
         return {
             "id": user.id,
             "name": user.name,
             "email": user.email,
             "role": user.role.value if user.role else None,
+            "is_admin": _user_is_admin(user),
+            "community_id": user.community_id,
+            "community_name": community_name,
+            "approval_number": user.approval_number,
             "phone": user.phone,
             "address": user.address,
             "coords_lat": user.coords_lat,
@@ -851,11 +1002,16 @@ async def get_user_profile(credentials: HTTPAuthorizationCredentials = Depends(s
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
 
+        community_name = await _community_name_for_id(user.community_id)
         return {
             "id": user.id,
             "name": user.name,
             "email": user.email,
             "role": user.role.value if user.role else None,
+            "is_admin": _user_is_admin(user),
+            "community_id": user.community_id,
+            "community_name": community_name,
+            "approval_number": user.approval_number,
             "phone": user.phone,
             "address": user.address,
             "coords_lat": user.coords_lat,
@@ -908,11 +1064,17 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        
+
         if 'name' in body:
             user.name = body['name']
         if 'email' in body:
-            user.email = body['email']
+            new_email = _normalize_email(body['email'])
+            if not new_email:
+                raise HTTPException(status_code=400, detail="Email is required")
+            other = _find_user_by_email(db, new_email)
+            if other and other.id != user.id:
+                raise HTTPException(status_code=400, detail="Email already registered")
+            user.email = new_email
         if 'phone' in body:
             user.phone = body['phone']
         if 'address' in body:
@@ -931,18 +1093,25 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
             user.special_needs = body['special_needs']
         
         # Allow role switching between donor, recipient, driver, volunteer.
-        # Restore to admin only when the JWT already carries is_admin (no escalation).
+        # Restore to admin only when the DB already has durable privilege.
+        # Never clear users.is_admin on switch away — stamp it when a
+        # privileged user changes role so legacy admins (is_admin=None)
+        # keep restore rights after leaving role=admin.
         if 'role' in body:
+            privileged = _user_is_admin(user)
             resolved = _resolve_profile_role_update(
                 body['role'],
-                jwt_is_admin=payload.get('is_admin') is True,
+                jwt_is_admin=privileged,
             )
             if resolved:
+                if privileged:
+                    user.is_admin = True
                 user.role = UserRole(resolved)
         
         db.commit()
         db.refresh(user)
-        
+
+        token = _issue_user_token(user)
         return {
             "id": user.id,
             "name": user.name,
@@ -950,11 +1119,15 @@ async def update_profile(request: Request, credentials: HTTPAuthorizationCredent
             "phone": user.phone,
             "address": user.address,
             "role": user.role.value if user.role else None,
+            "is_admin": _user_is_admin(user),
+            "community_id": user.community_id,
+            "approval_number": user.approval_number,
             "dietary_restrictions": user.dietary_restrictions,
             "allergies": user.allergies,
             "household_size": user.household_size,
             "preferred_categories": user.preferred_categories,
-            "special_needs": user.special_needs
+            "special_needs": user.special_needs,
+            "token": token,
         }
     except HTTPException:
         raise
@@ -975,6 +1148,8 @@ async def change_password(request: Request, credentials: HTTPAuthorizationCreden
         
         if not current_password or not new_password:
             raise HTTPException(status_code=400, detail="Current and new passwords required")
+
+        new_password = _require_password_strength(new_password)
         
         user = db.query(User).filter(User.id == user_id).first()
         if not user:
@@ -1011,6 +1186,7 @@ async def make_user_admin(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=404, detail="User not found")
         
         user.role = UserRole.ADMIN
+        user.is_admin = True
         db.commit()
         
         return {
@@ -1076,7 +1252,7 @@ def _add_missing_model_columns(*models):
                 # Adding NOT NULL to a populated table needs a default or a
                 # backfill; that is a decision, not something to guess at.
                 print(
-                    f"⚠️  Schema drift: {table.name}.{column.name} is missing and "
+                    f"[warn] Schema drift: {table.name}.{column.name} is missing and "
                     "NOT NULL - add it manually with a backfill"
                 )
                 continue
@@ -1086,9 +1262,9 @@ def _add_missing_model_columns(*models):
                     conn.execute(text(
                         f"ALTER TABLE {table.name} ADD COLUMN {column.name} {col_type} NULL"
                     ))
-                print(f"✅ Schema: added {table.name}.{column.name}")
+                print(f"[ok] Schema: added {table.name}.{column.name}")
             except Exception as exc:
-                print(f"⚠️  Schema: could not add {table.name}.{column.name}: {exc}")
+                print(f"[warn] Schema: could not add {table.name}.{column.name}: {exc}")
 
 
 @app.on_event("startup")
@@ -1135,9 +1311,11 @@ async def startup_event():
         AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
     )
     _add_missing_model_columns(
-        FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
+        User, FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
+        ApprovalCode,
         AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
     )
+    _backfill_user_is_admin()
 
     # Seed reference data
     try:
@@ -1179,7 +1357,7 @@ async def startup_event():
                             f"UPDATE distribution_centers SET {sets} WHERE id = :id"
                         ), params)
                 conn.commit()
-                print("✅ distribution_centers provider_types/logo_url seeded where missing")
+                print("[ok] distribution_centers provider_types/logo_url seeded where missing")
             except Exception as seed_exc:
                 print(f"Note: provider_types seed skipped: {seed_exc}")
                 try:
@@ -1219,7 +1397,7 @@ async def startup_event():
                             },
                         )
                 conn.commit()
-                print("✅ listing_categories seeded")
+                print("[ok] listing_categories seeded")
             except Exception as e:
                 print(f"Note: listing_categories seed: {e}")
                 try:
@@ -1563,8 +1741,7 @@ async def delete_listing(listing_id: int, db: Session = Depends(get_db), credent
                 raise HTTPException(status_code=401, detail="User not found")
             
             is_owner = str(item.donor_id) == user_id
-            role_value = user.role.value if hasattr(user.role, "value") else str(user.role or "")
-            is_admin = role_value.lower() == UserRole.ADMIN.value
+            is_admin = _user_is_admin(user)
             
             if not (is_owner or is_admin):
                 raise HTTPException(status_code=403, detail="Not authorized to delete this listing")
@@ -1820,8 +1997,7 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
                 raise HTTPException(status_code=401, detail="User not found")
 
             is_owner = str(item.donor_id) == user_id
-            role_value = user.role.value if hasattr(user.role, "value") else str(user.role or "")
-            is_admin = role_value.lower() == UserRole.ADMIN.value
+            is_admin = _user_is_admin(user)
 
             if not (is_owner or is_admin):
                 raise HTTPException(status_code=403, detail="Not authorized to edit this listing")
@@ -1981,17 +2157,46 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
         enforce_signup_rate_limit(request)
 
         email = _normalize_email(payload.email)
-        password = payload.password or ""
+        password = _require_password_strength(payload.password)
         referral_code = payload.referral_code
+        approval_raw = _normalize_approval_code(payload.approval_code)
         try:
             role = UserRole(payload.role)
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid role")
 
+        if role not in SIGNUP_ALLOWED_ROLES:
+            raise HTTPException(
+                status_code=400,
+                detail="Signup role must be donor or recipient",
+            )
+
+        if not approval_raw:
+            raise HTTPException(status_code=400, detail="Approval code is required")
+        if not _approval_code_format_ok(approval_raw):
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid approval code format. Use 3 letters followed by 6 digits (e.g. RBE123456).",
+            )
+
         # Check for existing user (case-insensitive)
         existing_user = _find_user_by_email(db, email)
         if existing_user:
             raise HTTPException(status_code=400, detail="Email already registered")
+
+        # Look up an unclaimed, non-revoked code (CAS claim after user insert)
+        code_row = (
+            db.query(ApprovalCode)
+            .filter(
+                ApprovalCode.code == approval_raw,
+                ApprovalCode.is_claimed == False,  # noqa: E712
+                ApprovalCode.is_revoked == False,  # noqa: E712
+            )
+            .first()
+        )
+        if not code_row:
+            # Same message for missing/claimed/revoked to avoid leaking status
+            raise HTTPException(status_code=400, detail="Invalid or already used approval code")
         
         # Validate referral code if provided
         referrer_id = None
@@ -2006,25 +2211,58 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
         while db.query(User).filter(User.referral_code == new_referral_code).first():
             new_referral_code = generate_referral_code()
         
-        # Create new user
+        # Create new user with community from approval code
         user = User(
             email=email, 
             name=payload.name,
             password_hash=pwd_context.hash(password), 
             role=role,
+            is_admin=False,
             referral_code=new_referral_code,
             referred_by_code=referral_code if referrer_id else None,
+            community_id=code_row.community_id,
+            approval_number=code_row.code,
             created_at=datetime.utcnow()
         )
         
         db.add(user)
+        db.flush()  # get user.id before claim
+
+        # CAS claim: only succeed if still unclaimed
+        claimed = (
+            db.query(ApprovalCode)
+            .filter(
+                ApprovalCode.id == code_row.id,
+                ApprovalCode.is_claimed == False,  # noqa: E712
+                ApprovalCode.is_revoked == False,  # noqa: E712
+            )
+            .update(
+                {
+                    ApprovalCode.is_claimed: True,
+                    ApprovalCode.claimed_by: user.id,
+                    ApprovalCode.claimed_at: datetime.utcnow(),
+                },
+                synchronize_session=False,
+            )
+        )
+        if not claimed:
+            db.rollback()
+            raise HTTPException(status_code=400, detail="Invalid or already used approval code")
+
         db.commit()
         db.refresh(user)
         
-        return {"success": True, "message": "Account created successfully", "referral_code": new_referral_code}
+        return {
+            "success": True,
+            "message": "Account created successfully",
+            "referral_code": new_referral_code,
+            "community_id": user.community_id,
+            "approval_number": user.approval_number,
+        }
     except HTTPException:
         raise
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/user/login")
@@ -2032,8 +2270,6 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
     try:
         email = _normalize_email(payload.email)
         password = payload.password or ""
-
-        enforce_login_rate_limit(request, email)
 
         print("Login attempt received")
         
@@ -2043,12 +2279,14 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
         
         user = _find_user_by_email(db, email)
         if not user:
+            enforce_login_rate_limit(request, email)
             print(f"User not found: {email} (db={_database_mode()})")
             detail = "No account found with this email. Use Create Account below."
             raise HTTPException(status_code=401, detail=detail)
         
         print(f"User found: {user.id}, verifying password...")
         if not user.password_hash or not pwd_context.verify(password, user.password_hash):
+            enforce_login_rate_limit(request, email)
             print("Password verification failed")
             raise HTTPException(
                 status_code=401,
@@ -2056,22 +2294,7 @@ async def login_user(payload: UserLoginRequest, request: Request, db: Session = 
             )
         
         print("Password verified successfully")
-        # Create token with 24 hour expiration
-        now = datetime.utcnow()
-        payload = {
-            "sub": str(user.id),
-            "name": user.name,
-            "email": user.email,
-            "role": user.role.value,
-            "is_admin": user.role == UserRole.ADMIN,
-            "community_id": None,
-            "address": user.address,
-            "iat": now,
-            "exp": now + timedelta(hours=24)
-        }
-        token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
-        if isinstance(token, bytes):
-            token = token.decode("utf-8")
+        token = _issue_user_token(user)
         print(f"Generated token for user {user.id} ({user.email}), expires in 24 hours")
         return {"success": True, "token": token}
     except HTTPException:
@@ -2143,6 +2366,8 @@ async def reset_password(payload: ResetPasswordRequest, request: Request, db: Se
         
         if not email or not code or not new_password:
             raise HTTPException(status_code=400, detail="Missing required fields")
+
+        new_password = _require_password_strength(new_password)
         
         # Check if code exists
         if email not in password_reset_codes:
@@ -2308,6 +2533,8 @@ async def get_admin_users(
                 "address": user.address,
                 "referral_code": user.referral_code,
                 "referred_by_code": user.referred_by_code,
+                "community_id": user.community_id,
+                "approval_number": user.approval_number,
                 "household_size": user.household_size,
                 "email_verified": bool(user.email_verified),
                 "phone_verified": bool(user.phone_verified),
@@ -2321,6 +2548,8 @@ async def get_admin_users(
                     str(row.get("phone") or ""),
                     str(row.get("role") or ""),
                     str(row.get("referral_code") or ""),
+                    str(row.get("approval_number") or ""),
+                    str(row.get("community_id") or ""),
                     str(row.get("address") or ""),
                 ]).lower()
                 if needle not in hay:
@@ -2343,6 +2572,286 @@ async def get_admin_users(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/approval-codes/validate")
+async def validate_approval_code(
+    code: str,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Public lookup: valid only if format matches and code is unclaimed/unrevoked."""
+    enforce_approval_validate_rate_limit(request)
+    normalized = _normalize_approval_code(code)
+    if not _approval_code_format_ok(normalized):
+        return {
+            "valid": False,
+            "community_id": None,
+            "community_name": None,
+            "school_code": None,
+        }
+
+    row = (
+        db.query(ApprovalCode)
+        .filter(
+            ApprovalCode.code == normalized,
+            ApprovalCode.is_claimed == False,  # noqa: E712
+            ApprovalCode.is_revoked == False,  # noqa: E712
+        )
+        .first()
+    )
+    if not row:
+        return {
+            "valid": False,
+            "community_id": None,
+            "community_name": None,
+            "school_code": None,
+        }
+
+    community_name = await _community_name_for_id(row.community_id)
+    return {
+        "valid": True,
+        "community_id": row.community_id,
+        "community_name": community_name,
+        "school_code": row.school_code,
+    }
+
+
+@app.get("/api/admin/communities")
+async def get_admin_communities(admin_user: User = Depends(verify_admin)):
+    """Active communities for approval-code generation and user assignment."""
+    try:
+        from backend.tools import _get_active_communities
+        result = await _get_active_communities(max_results=500)
+        communities = result.get("communities") or []
+        if communities:
+            return {
+                "communities": [
+                    {"id": c.get("id"), "name": c.get("name")}
+                    for c in communities
+                    if c.get("id") is not None and str(c.get("name") or "").strip()
+                ]
+            }
+    except Exception as exc:
+        print(f"admin communities catalog failed: {exc}")
+
+    try:
+        from backend.ai.bulk_mysql import fetch_active_communities_mysql
+        rows = fetch_active_communities_mysql(max_results=500)
+        return {
+            "communities": [
+                {"id": r.get("id"), "name": r.get("name")}
+                for r in rows
+                if r.get("id") is not None and str(r.get("name") or "").strip()
+            ]
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to load communities: {exc}")
+
+
+@app.get("/api/admin/approval-codes")
+async def list_admin_approval_codes(
+    community_id: Optional[int] = None,
+    status: Optional[str] = None,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """List approval codes with aggregate stats (admin)."""
+    query = db.query(ApprovalCode)
+    if community_id is not None:
+        query = query.filter(ApprovalCode.community_id == community_id)
+
+    status_key = (status or "all").strip().lower()
+    if status_key == "unclaimed":
+        query = query.filter(
+            ApprovalCode.is_claimed == False,  # noqa: E712
+            ApprovalCode.is_revoked == False,  # noqa: E712
+        )
+    elif status_key == "claimed":
+        query = query.filter(ApprovalCode.is_claimed == True)  # noqa: E712
+    elif status_key == "revoked":
+        query = query.filter(ApprovalCode.is_revoked == True)  # noqa: E712
+
+    rows = query.order_by(ApprovalCode.created_at.desc()).limit(500).all()
+    all_rows = db.query(ApprovalCode).all()
+    claimed = sum(1 for r in all_rows if r.is_claimed and not r.is_revoked)
+    revoked = sum(1 for r in all_rows if r.is_revoked)
+    unclaimed = sum(1 for r in all_rows if not r.is_claimed and not r.is_revoked)
+
+    return {
+        "stats": {
+            "total": len(all_rows),
+            "claimed": claimed,
+            "unclaimed": unclaimed,
+            "revoked": revoked,
+        },
+        "codes": [
+            {
+                "id": r.id,
+                "code": r.code,
+                "school_code": r.school_code,
+                "community_id": r.community_id,
+                "is_claimed": bool(r.is_claimed),
+                "is_revoked": bool(r.is_revoked),
+                "claimed_by": r.claimed_by,
+                "claimed_at": r.claimed_at.isoformat() if r.claimed_at else None,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "created_by": r.created_by,
+            }
+            for r in rows
+        ],
+    }
+
+
+@app.post("/api/admin/approval-codes")
+async def generate_admin_approval_codes(
+    payload: ApprovalCodeGenerateRequest,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Generate a batch of unclaimed approval codes for a community."""
+    school_code = _normalize_approval_code(payload.school_code)[:3]
+    if not re.match(r"^[A-Z]{3}$", school_code):
+        raise HTTPException(status_code=400, detail="School code must be exactly 3 uppercase letters")
+
+    try:
+        quantity = int(payload.quantity)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid quantity")
+    if quantity < 1 or quantity > 1000:
+        raise HTTPException(status_code=400, detail="Quantity must be between 1 and 1000")
+
+    community_id = int(payload.community_id)
+    if community_id < 1:
+        raise HTTPException(status_code=400, detail="Invalid community_id")
+
+    existing = {
+        r.code
+        for r in db.query(ApprovalCode)
+        .filter(ApprovalCode.school_code == school_code)
+        .all()
+    }
+
+    created: List[ApprovalCode] = []
+    attempts = 0
+    max_attempts = quantity * 50
+    while len(created) < quantity and attempts < max_attempts:
+        attempts += 1
+        candidate = f"{school_code}{_generate_approval_code_suffix()}"
+        if candidate in existing:
+            continue
+        existing.add(candidate)
+        row = ApprovalCode(
+            code=candidate,
+            school_code=school_code,
+            community_id=community_id,
+            is_claimed=False,
+            is_revoked=False,
+            created_at=datetime.utcnow(),
+            created_by=admin_user.id,
+        )
+        db.add(row)
+        created.append(row)
+
+    if len(created) < quantity:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could only generate {len(created)} unique codes; try a different school prefix",
+        )
+
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save codes: {exc}")
+
+    return {
+        "success": True,
+        "generated": len(created),
+        "school_code": school_code,
+        "community_id": community_id,
+        "codes": [r.code for r in created],
+    }
+
+
+@app.get("/api/admin/approval-codes/export")
+async def export_admin_approval_codes(
+    community_id: Optional[int] = None,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """CSV export of unclaimed (and non-revoked) approval codes."""
+    from fastapi.responses import PlainTextResponse
+
+    query = db.query(ApprovalCode).filter(
+        ApprovalCode.is_claimed == False,  # noqa: E712
+        ApprovalCode.is_revoked == False,  # noqa: E712
+    )
+    if community_id is not None:
+        query = query.filter(ApprovalCode.community_id == community_id)
+    rows = query.order_by(ApprovalCode.school_code, ApprovalCode.code).all()
+
+    lines = ["code,school_code,community_id,created_at"]
+    for r in rows:
+        created = r.created_at.isoformat() if r.created_at else ""
+        lines.append(f"{r.code},{r.school_code},{r.community_id},{created}")
+
+    return PlainTextResponse(
+        "\n".join(lines) + ("\n" if lines else ""),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="foodmaps-approval-codes.csv"'
+        },
+    )
+
+
+@app.post("/api/admin/approval-codes/{code_id}/revoke")
+async def revoke_admin_approval_code(
+    code_id: int,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Soft-revoke an unclaimed approval code so it cannot be used at signup."""
+    row = db.query(ApprovalCode).filter(ApprovalCode.id == code_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Approval code not found")
+    if row.is_claimed:
+        raise HTTPException(status_code=400, detail="Cannot revoke a claimed approval code")
+    if row.is_revoked:
+        return {"success": True, "id": row.id, "is_revoked": True}
+
+    row.is_revoked = True
+    db.commit()
+    return {"success": True, "id": row.id, "is_revoked": True}
+
+
+@app.put("/api/admin/users/{user_id}/community")
+async def update_admin_user_community(
+    user_id: int,
+    payload: AdminUserCommunityUpdate,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Manually assign or clear a user's community (queue assignment)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.community_id is not None and int(payload.community_id) < 1:
+        raise HTTPException(status_code=400, detail="Invalid community_id")
+
+    user.community_id = payload.community_id
+    db.commit()
+    db.refresh(user)
+    community_name = await _community_name_for_id(user.community_id)
+    return {
+        "success": True,
+        "id": user.id,
+        "community_id": user.community_id,
+        "community_name": community_name,
+        "approval_number": user.approval_number,
+    }
 
 
 @app.get("/api/admin/stats")
@@ -4030,7 +4539,7 @@ async def get_referral_stats(
             raise HTTPException(status_code=401, detail="User not found")
         
         # Check if user is admin
-        if user.role != UserRole.ADMIN:
+        if not _user_is_admin(user):
             raise HTTPException(status_code=403, detail="Admin access required")
         
         # Get all users with referral codes
@@ -4102,7 +4611,7 @@ async def get_user_referrals(
             raise HTTPException(status_code=401, detail="User not found")
         
         # Check if user is admin or the user themselves
-        if user.role != UserRole.ADMIN and user.id != user_id:
+        if not _user_is_admin(user) and user.id != user_id:
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Get the user's referral code
@@ -4215,7 +4724,7 @@ async def send_message(request: Request, credentials: HTTPAuthorizationCredentia
         if not conversation_id:
             conversation_id = f"user_{user_id}"
         
-        is_from_admin = user.role == UserRole.ADMIN
+        is_from_admin = _user_is_admin(user)
         
         message = Message(
             sender_id=user_id,
@@ -4261,7 +4770,7 @@ async def get_conversations(credentials: HTTPAuthorizationCredentials = Depends(
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        if user.role == UserRole.ADMIN:
+        if _user_is_admin(user):
             # Admin sees all conversations
             conversations = db.query(Message.conversation_id).distinct().all()
             conversation_list = []
@@ -4338,7 +4847,7 @@ async def get_messages(conversation_id: str, credentials: HTTPAuthorizationCrede
             raise HTTPException(status_code=404, detail="User not found")
         
         # Check authorization
-        if user.role != UserRole.ADMIN and conversation_id != f"user_{user_id}":
+        if not _user_is_admin(user) and conversation_id != f"user_{user_id}":
             raise HTTPException(status_code=403, detail="Not authorized")
         
         messages = db.query(Message).filter(
@@ -4346,7 +4855,7 @@ async def get_messages(conversation_id: str, credentials: HTTPAuthorizationCrede
         ).order_by(Message.created_at.asc()).all()
         
         # Mark messages as read
-        if user.role == UserRole.ADMIN:
+        if _user_is_admin(user):
             # Admin reading user messages
             for msg in messages:
                 if not msg.is_from_admin and not msg.is_read:
@@ -4959,7 +5468,7 @@ async def list_feedback(
         user_id = payload.get("sub")
         
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or user.role != UserRole.ADMIN:
+        if not user or not _user_is_admin(user):
             raise HTTPException(status_code=403, detail="Admin access required")
         
         # Build query
@@ -5019,7 +5528,7 @@ async def update_feedback_status(
         user_id = payload.get("sub")
         
         user = db.query(User).filter(User.id == user_id).first()
-        if not user or user.role != UserRole.ADMIN:
+        if not user or not _user_is_admin(user):
             raise HTTPException(status_code=403, detail="Admin access required")
         
         data = await request.json()

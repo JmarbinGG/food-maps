@@ -564,8 +564,7 @@ async def _log_agent_telemetry(
     table, RLS misconfig) can never break a user-facing chat turn.
     """
     try:
-        from backend.ai_engine import supabase_post
-
+        
         state = final_state or {}
         tool_results = state.get("recent_tool_results") or []
         tool_names: List[str] = []
@@ -611,7 +610,7 @@ async def _log_agent_telemetry(
         elif state.get("error"):
             row["error_message"] = str(state.get("error"))[:1000]
 
-        await supabase_post("agent_telemetry", row)
+        pass  # agent_telemetry removed
     except Exception as exc:  # noqa: BLE001 — telemetry must never raise
         logger.warning("agent_telemetry insert failed (non-fatal): %s", exc)
 

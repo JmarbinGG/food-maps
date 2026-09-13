@@ -1,6 +1,7 @@
 function Header({ user, onAuthClick, onLogout, currentView, onViewChange, currentZip, onZipClick }) {
   const [showDropdown, setShowDropdown] = React.useState(false);
   const role = String(user?.role || '').toLowerCase();
+  const isAdmin = user?.is_admin === true || role === 'admin';
   const { t } = (typeof window !== 'undefined' && window.useTranslation)
     ? window.useTranslation()
     : { t: (k, fb) => fb || k, language: 'en' };
@@ -66,7 +67,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
                   if(role === 'donor'){
                     onViewChange?.('create');
                     setShowDropdown(false);
-                  }else if(role === 'admin'){
+                  }else if(isAdmin && role === 'admin'){
                     window.openAdminPanel?.();
                     setShowDropdown(false);
                   }else{
@@ -116,6 +117,15 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
                   >
                     {t('header.profile_settings', 'Profile Settings')}
                   </button>
+                  <button
+                    onClick={() => {
+                      window.openUserProfile?.('accessibility');
+                      setShowDropdown(false);
+                    }}
+                    className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100"
+                  >
+                    {t('header.accessibility', 'Accessibility')}
+                  </button>
                   {role === 'donor' && (
                     <button
                       onClick={() => {
@@ -146,6 +156,17 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
                   >
                     How It Works
                   </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => {
+                        window.openAdminPanel?.();
+                        setShowDropdown(false);
+                      }}
+                      className="block w-full text-left px-4 py-2 text-sm hover:bg-gray-100 text-green-800 font-medium"
+                    >
+                      {t('header.admin_panel', 'Admin Panel')}
+                    </button>
+                  )}
                   {role === 'recipient' && (
                     <div className="border-t-2 border-purple-200 mt-1">
                       <div className="px-4 py-2 text-[11px] font-bold uppercase tracking-wider text-purple-700 bg-gradient-to-r from-purple-50 via-blue-50 to-green-50 flex items-center gap-2">

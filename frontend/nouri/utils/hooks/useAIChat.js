@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthContext } from '../AuthContext.jsx';
 import aiChatService from '../services/aiChatService.js';
 import { useNouriGuide } from '../NouriGuideContext.jsx';
+import { recordGuideSuccess, recordGuideFailure, clearGuideFailures } from '../nouriGuide/humanHandoff.js';
 
 export const AI_TONE_OPTIONS = ['warm', 'professional', 'casual', 'empathetic'];
 export const AI_TONE_LABELS = {
@@ -65,6 +66,7 @@ export function useAIChat() {
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [pageContext, setPageContext] = useState({ pageKey: 'map', path: '/find' });
   const lastUserMessageRef = useRef('');
+  const voiceSeqRef = useRef(0);
 
   useEffect(() => {
     const handler = (ev) => {
@@ -168,7 +170,9 @@ export function useAIChat() {
       const assistant = normalizeAssistantMessage(data);
       setMessages((m) => [...m, assistant]);
       maybeBroadcastListingsChanged(data.actions);
+      recordGuideSuccess();
     } catch (err) {
+      recordGuideFailure(err?.message || 'chat');
       setError(err?.message || 'Chat failed');
     } finally {
       setIsLoading(false);
@@ -180,8 +184,9 @@ export function useAIChat() {
   const sendVoice = useCallback(async (blob) => {
     if (!user?.id) {
       setError('Sign in to use voice');
-      return;
+      return null;
     }
+    const seq = ++voiceSeqRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -190,23 +195,59 @@ export function useAIChat() {
         tone,
         accessibilityProfile: a11ySettings,
         guideState,
+        includeAudio: false,
       });
+      if (seq !== voiceSeqRef.current) return null;
       if (data.transcript) {
-        setMessages((m) => [...m, { id: `u-${Date.now()}`, role: 'user', message: data.transcript }]);
+        setMessages((m) => [...m, {
+          id: `u-${Date.now()}`,
+          role: 'user',
+          message: data.transcript,
+          source: 'voice',
+        }]);
       }
-      const assistant = normalizeAssistantMessage(data);
+      const assistant = {
+        ...normalizeAssistantMessage(data),
+        source: 'voice',
+      };
       setMessages((m) => [...m, assistant]);
       maybeBroadcastListingsChanged(data.actions);
+      recordGuideSuccess();
+      return {
+        transcript: data.transcript || '',
+        text: data.text || '',
+        messageId: assistant.id,
+      };
     } catch (err) {
+      if (seq !== voiceSeqRef.current) return null;
+      const aiErr = err?.aiError?.detail || err?.aiError;
+      const unintelligible = aiErr?.error_code === 'invalid_input'
+        || aiErr?.code === 'invalid_input';
+      if (unintelligible) {
+        const soft = language === 'es'
+          ? 'No te escuché con claridad. Intenta hablar de nuevo o escribe tu mensaje.'
+          : "I didn't quite catch that. Please try speaking again or type your message.";
+        setMessages((m) => [...m, {
+          id: `a-${Date.now()}`,
+          role: 'assistant',
+          message: soft,
+          source: 'voice',
+          isError: false,
+        }]);
+        return { transcript: '', text: soft, unintelligible: true };
+      }
+      recordGuideFailure(err?.message || 'voice');
       setError(err?.message || 'Voice failed');
+      throw err;
     } finally {
-      setIsLoading(false);
+      if (seq === voiceSeqRef.current) setIsLoading(false);
     }
   }, [user?.id, language, tone, a11ySettings, guideState]);
 
   const clearHistory = useCallback(async () => {
     lastUserMessageRef.current = '';
     setError(null);
+    clearGuideFailures();
     if (user?.id) {
       await aiChatService.clearHistory(user.id);
     }

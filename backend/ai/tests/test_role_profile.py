@@ -27,9 +27,9 @@ class TestNormalizeChatProfile:
         assert profile["role"] == "donor"
         assert profile["address"] == "123 Main St"
 
-    def test_supabase_nested_shape(self):
+    def test_nested_profile_shape(self):
         raw = {
-            "user_id": "uuid-123",
+            "user_id": "99",
             "profile": {
                 "name": "Recipient",
                 "community_role": "recipient",
@@ -37,7 +37,7 @@ class TestNormalizeChatProfile:
                 "address": "456 Oak Ave",
             },
         }
-        profile = _normalize_chat_profile(raw, "uuid-123")
+        profile = _normalize_chat_profile(raw, "99")
         assert profile is not None
         assert profile["community_role"] == "recipient"
         assert profile["address"] == "456 Oak Ave"
@@ -49,10 +49,10 @@ class TestNormalizeChatProfile:
 
     def test_role_hint_fills_missing_community_role(self):
         raw = {
-            "user_id": "uuid-456",
+            "user_id": "456",
             "profile": {"name": "User", "community_role": None},
         }
-        profile = _normalize_chat_profile(raw, "uuid-456", role_hint="volunteer")
+        profile = _normalize_chat_profile(raw, "456", role_hint="volunteer")
         assert profile is not None
         assert profile["community_role"] == "volunteer"
 
@@ -93,7 +93,7 @@ async def test_get_user_profile_delegates_to_tools(monkeypatch):
 def test_insights_role_from_nested_profile():
     """Mirror routes.ai_insights role resolution for nested tool profile."""
     profile = {
-        "user_id": "uuid-1",
+        "user_id": "1",
         "profile": {
             "community_role": "donor",
             "is_admin": False,
@@ -104,7 +104,7 @@ def test_insights_role_from_nested_profile():
     assert raw_role == "donor"
 
 
-class TestRoleGuardsSupabasePaths:
+class TestRoleGuardsOnCreateAndClaim:
     @pytest.mark.asyncio
     async def test_create_food_listing_blocks_recipient(self, monkeypatch):
         async def fake_check(user_id, tool_name, **kwargs):
@@ -120,7 +120,7 @@ class TestRoleGuardsSupabasePaths:
             fake_check,
         )
         result = await _create_food_listing(
-            user_id="uuid-recipient",
+            user_id="55",
             title="Bread",
             quantity=2,
             unit="loaves",
@@ -145,8 +145,8 @@ class TestRoleGuardsSupabasePaths:
             fake_check,
         )
         result = await _claim_food_listing(
-            user_id="uuid-donor",
-            listing_id="listing-1",
+            user_id="55",
+            listing_id="101",
             quantity=1,
         )
         assert result.get("success") is False
@@ -158,8 +158,8 @@ class TestClaimingFlowRoleBlock:
         reason = claiming_tool_block_reason(
             "claim listing 1",
             [],
-            {"listing_id": "abc", "_community_role": "donor"},
-            "uuid-donor",
+            {"listing_id": "101", "_community_role": "donor"},
+            "55",
         )
         assert reason is not None
         assert "donor" in reason.lower()

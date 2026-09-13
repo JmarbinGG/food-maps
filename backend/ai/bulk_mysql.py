@@ -82,10 +82,86 @@ def fetch_donor_listing_defaults_mysql(user_id: str | int) -> dict[str, Any]:
             "email": user.email,
             "phone": user.phone,
             "address": user.address,
-            "community_id": None,
+            "community_id": user.community_id,
             "latitude": user.coords_lat,
             "longitude": user.coords_lng,
         }
+    finally:
+        db.close()
+
+
+def resolve_community_mysql(
+    community_name: Optional[str] = None,
+    community_id: Optional[str | int] = None,
+) -> tuple[Optional[str], Optional[str]]:
+    """Resolve community name/id against MySQL DistributionCenter catalog.
+
+    Food Maps has no separate ``communities`` table; active distribution
+    centers are the chip/catalog source of truth for local MySQL.
+    """
+    from backend.app import SessionLocal
+    from backend.models import DistributionCenter
+    from backend.tools import (
+        _best_community_name_match,
+        _looks_like_community_id,
+        _sanitize_community_query,
+    )
+
+    raw_id = str(community_id or "").strip()
+    raw_name = (community_name or "").strip()
+
+    if raw_id and not _looks_like_community_id(raw_id):
+        if not raw_name:
+            raw_name = raw_id
+        raw_id = ""
+
+    db = SessionLocal()
+    try:
+        if raw_id:
+            try:
+                cid_int = int(raw_id)
+            except (TypeError, ValueError):
+                cid_int = None
+            if cid_int is not None:
+                row = (
+                    db.query(DistributionCenter)
+                    .filter(DistributionCenter.id == cid_int)
+                    .filter(DistributionCenter.is_active == True)  # noqa: E712
+                    .first()
+                )
+                if row and str(row.name or "").strip():
+                    return str(row.id), str(row.name).strip()
+
+        name = _sanitize_community_query(raw_name)
+        if not name:
+            return None, None
+
+        centers = (
+            db.query(DistributionCenter)
+            .filter(DistributionCenter.is_active == True)  # noqa: E712
+            .all()
+        )
+        rows = [
+            {"id": c.id, "name": str(c.name).strip()}
+            for c in centers
+            if str(c.name or "").strip()
+        ]
+        if not rows:
+            return None, None
+
+        # Exact / case-insensitive name first
+        lower = name.lower()
+        for row in rows:
+            if str(row["name"]).lower() == lower:
+                return str(row["id"]), row["name"]
+        for row in rows:
+            if lower in str(row["name"]).lower():
+                return str(row["id"]), row["name"]
+
+        hit = _best_community_name_match(name, rows)
+        if hit:
+            return str(hit["id"]), hit.get("name")
+        return None, None
     finally:
         db.close()
 

@@ -7359,7 +7359,7 @@ var require_prop_types = __commonJS({
 });
 
 // src/main.jsx
-var import_react26 = __toESM(require_react(), 1);
+var import_react27 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // node_modules/react-toastify/dist/react-toastify.esm.mjs
@@ -7718,11 +7718,18 @@ function readStoredUser() {
     return null;
   }
 }
+function clearStoredUser() {
+  try {
+    localStorage.removeItem("current_user");
+  } catch {
+  }
+}
 function readAuth() {
   const token = localStorage.getItem("auth_token") || localStorage.getItem("token");
   const stored = readStoredUser();
   if (!token) {
-    return { user: stored, isAuthenticated: Boolean(stored?.id), isAdmin: Boolean(stored?.is_admin) };
+    if (stored) clearStoredUser();
+    return { user: null, isAuthenticated: false, isAdmin: false };
   }
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
@@ -7733,20 +7740,21 @@ function readAuth() {
       role: payload.role || stored?.role || "recipient",
       is_admin: Boolean(payload.is_admin ?? stored?.is_admin),
       community_id: payload.community_id ?? stored?.community_id ?? null,
+      approval_number: payload.approval_number ?? stored?.approval_number ?? null,
       address: payload.address || stored?.address || null
     };
-    const user = stored ? { ...jwtUser, ...stored, id: jwtUser.id || stored.id } : jwtUser;
+    const user = stored ? { ...stored, ...jwtUser, id: jwtUser.id || stored.id } : jwtUser;
+    if (!user.id) {
+      return { user: null, isAuthenticated: false, isAdmin: false };
+    }
     return {
       user,
-      isAuthenticated: Boolean(user.id),
+      isAuthenticated: true,
       isAdmin: Boolean(user.is_admin) || String(user.role || "").toLowerCase() === "admin"
     };
   } catch {
-    return {
-      user: stored,
-      isAuthenticated: Boolean(stored?.id),
-      isAdmin: Boolean(stored?.is_admin)
-    };
+    clearStoredUser();
+    return { user: null, isAuthenticated: false, isAdmin: false };
   }
 }
 function AuthProvider({ children }) {
@@ -7848,8 +7856,8 @@ var UI_CONTROL_TOOLS = /* @__PURE__ */ new Set(["show_map", "navigate_ui", "show
 function dispatchUIAction(action) {
   if (!action) return;
   const act = (action.action || "open").toLowerCase();
-  const rawPath = (action.path || action.target || "").toString();
-  const pathNoSlash = rawPath.replace(/^\//, "");
+  const rawTarget = (action.target || action.path || "").toString();
+  const pathNoSlash = rawTarget.replace(/^\//, "");
   const tgt = pathNoSlash.split("?")[0].toLowerCase();
   const query = pathNoSlash.includes("?") ? pathNoSlash.split("?").slice(1).join("?") : action.query || null;
   if (action.tool === "show_route_to_listing" && action.route) {
@@ -7926,36 +7934,1325 @@ function useUIControl() {
 
 // utils/NouriGuideContext.jsx
 var import_react5 = __toESM(require_react(), 1);
+
+// utils/services/aiRequest.js
+function readLocalToken() {
+  try {
+    return localStorage.getItem("auth_token") || localStorage.getItem("token") || null;
+  } catch {
+    return null;
+  }
+}
+async function getAiAuthHeaders(extra = {}) {
+  const headers = { ...extra };
+  const token = readLocalToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+async function parseAiErrorResponse(response) {
+  if (!response || response.ok) return null;
+  let payload = null;
+  try {
+    payload = await response.clone().json();
+  } catch (err) {
+    console.warn("[aiRequest] response body was not JSON:", err?.message);
+    return null;
+  }
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload.error_code && payload || payload.detail && typeof payload.detail === "object" && payload.detail.error_code && payload.detail || null;
+  if (!body) return null;
+  const requestId = response.headers.get("X-Request-ID") || payload.request_id || body.request_id || null;
+  return {
+    code: body.error_code,
+    message: body.message || payload.message || "AI service error",
+    retryable: !!body.retryable,
+    retryAfter: body.retry_after_seconds ?? payload.retry_after_seconds ?? null,
+    requestId,
+    status: response.status
+  };
+}
+async function throwAiHttpError(response, fallbackMessage = "AI request failed") {
+  const err = await parseAiErrorResponse(response);
+  const message = err?.message || `${fallbackMessage}: ${response.status}`;
+  const e2 = new Error(message);
+  if (err) e2.aiError = err;
+  e2.requestId = err?.requestId || response.headers.get("X-Request-ID") || null;
+  throw e2;
+}
+async function withAiAuth(init = {}) {
+  const authHeaders = await getAiAuthHeaders();
+  return {
+    ...init,
+    headers: {
+      ...authHeaders,
+      ...init.headers || {}
+    }
+  };
+}
+
+// utils/services/aiSelfHealing.js
+var AI_STATUS = {
+  HEALTHY: "healthy",
+  DEGRADED: "degraded",
+  DOWN: "down"
+};
+var AiHealthMonitor = class {
+  constructor() {
+    this.status = { status: AI_STATUS.HEALTHY, lastCheck: null };
+    this.listeners = /* @__PURE__ */ new Set();
+    this._timer = null;
+  }
+  getStatus() {
+    return this.status;
+  }
+  subscribe(fn) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+  _notify() {
+    for (const fn of this.listeners) {
+      try {
+        fn(this.status);
+      } catch (_2) {
+      }
+    }
+  }
+  recordSuccess() {
+    if (this.status.status !== AI_STATUS.HEALTHY) {
+      this.status = { status: AI_STATUS.HEALTHY, lastCheck: Date.now() };
+      this._notify();
+    }
+  }
+  recordFailure() {
+    this.status = { status: AI_STATUS.DEGRADED, lastCheck: Date.now() };
+    this._notify();
+  }
+  async check() {
+    try {
+      const res = await fetch("/api/ai/health", { method: "GET" });
+      if (!res.ok) throw new Error(`health ${res.status}`);
+      const data = await res.json();
+      const openaiOk = data.openai_configured !== false && data.status === "ok";
+      const circuit = String(data.circuit_state || "closed").toLowerCase();
+      let status = AI_STATUS.HEALTHY;
+      if (!openaiOk) status = AI_STATUS.DOWN;
+      else if (circuit === "open") status = AI_STATUS.DEGRADED;
+      this.status = { status, lastCheck: Date.now(), detail: data };
+    } catch (_2) {
+      this.status = { status: AI_STATUS.DEGRADED, lastCheck: Date.now() };
+    }
+    this._notify();
+  }
+  start(intervalMs = 6e4) {
+    this.check();
+    if (this._timer) clearInterval(this._timer);
+    this._timer = setInterval(() => this.check(), intervalMs);
+  }
+  stop() {
+    if (this._timer) clearInterval(this._timer);
+    this._timer = null;
+  }
+};
+var aiHealth = new AiHealthMonitor();
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function isRetryableStatus(status) {
+  return status === 408 || status === 429 || status >= 500;
+}
+async function resilientFetch(url, init = {}, opts = {}) {
+  const {
+    signal: callerSignal = null,
+    timeout = 3e4,
+    retries = 2,
+    backoff = [400, 1200]
+  } = opts;
+  let lastError = null;
+  const attempts = Math.max(1, retries + 1);
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+    if (callerSignal) {
+      if (callerSignal.aborted) {
+        clearTimeout(timer);
+        throw new DOMException("Aborted", "AbortError");
+      }
+      callerSignal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
+    try {
+      const authedInit = await withAiAuth({ ...init, signal: controller.signal });
+      const response = await fetch(url, authedInit);
+      clearTimeout(timer);
+      if (!response.ok && isRetryableStatus(response.status) && attempt < attempts - 1) {
+        aiHealth.recordFailure();
+        await sleep(backoff[Math.min(attempt, backoff.length - 1)] || 800);
+        continue;
+      }
+      if (response.ok) aiHealth.recordSuccess();
+      else aiHealth.recordFailure();
+      return response;
+    } catch (err) {
+      clearTimeout(timer);
+      lastError = err;
+      const aborted = err?.name === "AbortError";
+      if (aborted && callerSignal?.aborted) throw err;
+      aiHealth.recordFailure();
+      if (attempt < attempts - 1) {
+        await sleep(backoff[Math.min(attempt, backoff.length - 1)] || 800);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error(`${opts.label || url} failed`);
+}
+if (typeof window !== "undefined") {
+  aiHealth.start();
+}
+
+// utils/openaiVoice.js
+var EXT_BY_MIME = {
+  "audio/webm": "webm",
+  "video/webm": "webm",
+  "audio/mp4": "mp4",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/mpeg": "mp3",
+  "audio/mp3": "mp3",
+  "audio/ogg": "ogg",
+  "audio/wav": "wav"
+};
+function audioFilenameForBlob(audioBlob, fallbackBase = "audio") {
+  const mime = (audioBlob?.type || "audio/webm").split(";")[0].trim() || "audio/webm";
+  const ext = EXT_BY_MIME[mime] || "webm";
+  return `${fallbackBase}.${ext}`;
+}
+async function transcribeAudio(audioBlob) {
+  const formData = new FormData();
+  formData.append("audio", audioBlob, audioFilenameForBlob(audioBlob));
+  const response = await resilientFetch(
+    "/api/ai/transcribe",
+    { method: "POST", body: formData },
+    { timeout: 45e3, label: "ai/transcribe" }
+  );
+  if (!response.ok) {
+    await throwAiHttpError(response, "Whisper transcription failed");
+  }
+  const data = await response.json();
+  if (data.filtered) return "";
+  return data.transcript || "";
+}
+async function textToSpeech(text, options = {}) {
+  const response = await resilientFetch(
+    "/api/ai/tts",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: String(text || "").slice(0, 4096),
+        lang: options.lang || "en"
+      })
+    },
+    { timeout: 3e4, label: "ai/tts" }
+  );
+  if (!response.ok) {
+    await throwAiHttpError(response, "Text-to-speech failed");
+  }
+  return response.blob();
+}
+var AUTOPLAY_REPLAY_TTL_MS = 3e4;
+function playAudioBlob(audioBlob, onStart, onEnd, onBlocked) {
+  const url = URL.createObjectURL(audioBlob);
+  const audio = new Audio(url);
+  audio.playsInline = true;
+  let revoked = false;
+  const revoke = () => {
+    if (revoked) return;
+    revoked = true;
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+    }
+  };
+  let resolvePlay;
+  const play = new Promise((resolve) => {
+    resolvePlay = resolve;
+  });
+  const settle = () => {
+    if (resolvePlay) {
+      const r3 = resolvePlay;
+      resolvePlay = null;
+      r3();
+    }
+  };
+  let autoplayTtlTimer = null;
+  const clearAutoplayTtl = () => {
+    if (autoplayTtlTimer) {
+      clearTimeout(autoplayTtlTimer);
+      autoplayTtlTimer = null;
+    }
+  };
+  const stop = () => {
+    clearAutoplayTtl();
+    try {
+      audio.pause();
+    } catch {
+    }
+    try {
+      audio.currentTime = 0;
+    } catch {
+    }
+    audio.onplay = audio.onended = audio.onerror = null;
+    revoke();
+    onEnd?.();
+    settle();
+  };
+  audio.onplay = () => {
+    clearAutoplayTtl();
+    onStart?.();
+  };
+  audio.onended = () => {
+    revoke();
+    onEnd?.();
+    settle();
+  };
+  audio.onerror = () => {
+    revoke();
+    onEnd?.();
+    settle();
+  };
+  audio.play().catch((err) => {
+    const isAutoplayBlock = err && (err.name === "NotAllowedError" || err.name === "AbortError");
+    if (isAutoplayBlock && typeof onBlocked === "function" && !revoked) {
+      const replay = () => {
+        if (revoked) return Promise.resolve();
+        clearAutoplayTtl();
+        return audio.play().catch(() => {
+          revoke();
+          onEnd?.();
+          settle();
+        });
+      };
+      onBlocked(replay);
+      autoplayTtlTimer = setTimeout(() => {
+        autoplayTtlTimer = null;
+        if (!revoked) {
+          revoke();
+          onEnd?.();
+          settle();
+        }
+      }, AUTOPLAY_REPLAY_TTL_MS);
+      settle();
+      return;
+    }
+    revoke();
+    onEnd?.();
+    settle();
+  });
+  return { play, stop, audio };
+}
+
+// utils/formFieldGuide.js
+var FORM_GUIDE_DESC_ID = "nouri-form-guide-desc";
+var lastGuidedField = null;
+var pendingGuide = null;
+function escapeFieldName(name) {
+  if (typeof CSS !== "undefined" && CSS.escape) return CSS.escape(name);
+  return String(name).replace(/["\\]/g, "\\$&");
+}
+function mergeDescribedBy(el, guideId) {
+  const prev = el.getAttribute("aria-describedby") || "";
+  const ids = prev.split(/\s+/).filter(Boolean);
+  if (!ids.includes(guideId)) ids.push(guideId);
+  el.setAttribute("aria-describedby", ids.join(" "));
+}
+function restoreDescribedBy(el) {
+  const saved = el.getAttribute("data-nouri-prev-describedby");
+  if (saved === null) return;
+  if (saved) el.setAttribute("aria-describedby", saved);
+  else el.removeAttribute("aria-describedby");
+  el.removeAttribute("data-nouri-prev-describedby");
+}
+function resolveGuideTarget(fieldName) {
+  if (!fieldName || typeof document === "undefined") return null;
+  const key = escapeFieldName(fieldName);
+  const byData = document.querySelector(`[data-guide-field="${key}"]`);
+  if (byData) return byData;
+  const control = document.querySelector(`[name="${key}"]`) || document.querySelector(`#${key}`);
+  if (!control) return null;
+  const wrapper = control.closest('[data-guide-field], [data-name="input-wrapper"], .nouri-guide-target');
+  return wrapper || control;
+}
+function clearPendingGuide() {
+  if (pendingGuide?.timer) clearTimeout(pendingGuide.timer);
+  pendingGuide = null;
+}
+function scheduleRetry(fieldName, guideText, scroll) {
+  if (pendingGuide?.timer) clearTimeout(pendingGuide.timer);
+  const attempts = (pendingGuide?.fieldName === fieldName ? pendingGuide.attempts : 0) + 1;
+  if (attempts > 20) {
+    pendingGuide = { fieldName, guideText, attempts, timer: null };
+    return;
+  }
+  pendingGuide = {
+    fieldName,
+    guideText,
+    attempts,
+    timer: setTimeout(() => {
+      guideFormField(fieldName, { guideText, scroll, _fromRetry: true });
+    }, 150)
+  };
+}
+function guideFormField(fieldName, { guideText = "", scroll = true, _fromRetry = false } = {}) {
+  if (!fieldName || typeof document === "undefined") return null;
+  if (lastGuidedField && lastGuidedField !== fieldName) {
+    clearFormFieldGuide(lastGuidedField);
+  }
+  const el = resolveGuideTarget(fieldName);
+  if (!el) {
+    scheduleRetry(fieldName, guideText, scroll);
+    return null;
+  }
+  clearPendingGuide();
+  const guideEl = document.getElementById(FORM_GUIDE_DESC_ID);
+  if (guideEl && guideText) {
+    guideEl.textContent = guideText;
+  }
+  const focusEl = el.matches("input, select, textarea, button") ? el : el.querySelector("input, select, textarea, button");
+  if (focusEl) {
+    if (!focusEl.hasAttribute("data-nouri-prev-describedby")) {
+      focusEl.setAttribute(
+        "data-nouri-prev-describedby",
+        focusEl.getAttribute("aria-describedby") || ""
+      );
+    }
+    mergeDescribedBy(focusEl, FORM_GUIDE_DESC_ID);
+  }
+  el.classList.add("nouri-field-guided");
+  lastGuidedField = fieldName;
+  if (scroll) {
+    el.scrollIntoView({
+      behavior: "auto",
+      block: "center"
+    });
+  }
+  return el;
+}
+function reapplyPendingGuideField() {
+  if (!pendingGuide?.fieldName && !lastGuidedField) return null;
+  const fieldName = pendingGuide?.fieldName || lastGuidedField;
+  const guideText = pendingGuide?.guideText || "";
+  return guideFormField(fieldName, { guideText, scroll: true });
+}
+function clearFormFieldGuide(fieldName) {
+  const target = fieldName || lastGuidedField;
+  if (!target || typeof document === "undefined") return;
+  if (pendingGuide?.fieldName === target) clearPendingGuide();
+  const el = resolveGuideTarget(target);
+  if (el) {
+    el.classList.remove("nouri-field-guided");
+    const focusEl = el.matches("input, select, textarea, button") ? el : el.querySelector("input, select, textarea, button");
+    if (focusEl) restoreDescribedBy(focusEl);
+  }
+  document.querySelectorAll(".nouri-field-guided").forEach((node) => {
+    const name = node.getAttribute("name") || node.getAttribute("data-guide-field");
+    if (name === target) node.classList.remove("nouri-field-guided");
+  });
+  if (lastGuidedField === target) lastGuidedField = null;
+}
+function clearAllFormFieldGuides() {
+  clearPendingGuide();
+  if (typeof document !== "undefined") {
+    document.querySelectorAll(".nouri-field-guided").forEach((node) => {
+      node.classList.remove("nouri-field-guided");
+    });
+  }
+  if (lastGuidedField) {
+    const t3 = lastGuidedField;
+    lastGuidedField = null;
+    clearFormFieldGuide(t3);
+  }
+}
+function notifyFormFieldFocus(detail) {
+  if (typeof window === "undefined" || !detail || typeof detail !== "object") return;
+  window.dispatchEvent(new CustomEvent("foodmaps:form_focus", { detail }));
+}
+if (typeof window !== "undefined") {
+  window.nouriNotifyFormFocus = notifyFormFieldFocus;
+}
+
+// utils/nouriGuide/registry.js
+var FORM_ID_ALIASES = {
+  "share-listing": "share-food",
+  "request-help": "request-food",
+  "bulk-share": "bulk-upload"
+};
+var FIELD_ALIASES = {
+  qty: "quantity",
+  address: "full_address",
+  pickup_location: "location",
+  csv: "csvFile",
+  notes: "requester_email",
+  household_size: "category"
+};
+var NOURI_GOALS = {
+  "share-food": {
+    formId: "share-food",
+    route: "/share",
+    goal: "share food",
+    welcome: "Welcome! This form has two sections: donor information at the top, and food listing details below. Click or tap any field whenever you need help.",
+    // Keep indices aligned with backend `_SHARE_GUIDED_UI` (one field per step).
+    steps: [
+      { section: "Open Share Food", label: "Open Share Food", fieldName: "" },
+      { section: "Your name", label: "Name / Organization", fieldName: "donor_name" },
+      { section: "Donor type", label: "Donor Type", fieldName: "donor_type" },
+      { section: "ZIP code", label: "ZIP Code", fieldName: "donor_zip" },
+      { section: "City", label: "City", fieldName: "donor_city" },
+      { section: "State", label: "State", fieldName: "donor_state" },
+      { section: "Community", label: "Community", fieldName: "school_district" },
+      { section: "Email or phone", label: "Email", fieldName: "donor_email" },
+      { section: "Pickup address", label: "Pickup Address", fieldName: "full_address" },
+      { section: "Food name", label: "Food Name", fieldName: "title" },
+      { section: "Category", label: "Category", fieldName: "category" },
+      { section: "Description", label: "Description", fieldName: "description" },
+      { section: "Quantity", label: "Quantity", fieldName: "quantity" },
+      { section: "Unit", label: "Unit", fieldName: "unit" },
+      { section: "Expiration", label: "Expiration Date", fieldName: "expiry_date" },
+      { section: "Photo & submit", label: "Photo & Submit", fieldName: "image" }
+    ]
+  },
+  "request-food": {
+    formId: "request-food",
+    route: "/request",
+    goal: "request food",
+    welcome: "Welcome! I'll guide you step by step through your food request. Click or tap any field whenever you need help.",
+    // Aligned with backend `_REQUEST_GUIDED_UI` (6 steps).
+    steps: [
+      { section: "Open Request Food", label: "Open Request Food", fieldName: "title" },
+      { section: "What you need", label: "Food Needed", fieldName: "title" },
+      { section: "How much", label: "Category & Quantity", fieldName: "category" },
+      { section: "Community", label: "Community", fieldName: "school_district" },
+      { section: "Your contact", label: "Contact Info", fieldName: "requester_name" },
+      { section: "Submit", label: "Submit", fieldName: "requester_email" }
+    ]
+  },
+  "claim-food": {
+    formId: "claim-food",
+    route: "/claim",
+    goal: "claim food",
+    welcome: "Welcome! I'll guide you step by step through confirming your claim. Click or tap any field whenever you need help.",
+    steps: [
+      { section: "Claim", label: "Portions", dataGuideField: "claimQty" }
+    ]
+  },
+  "find-food": {
+    formId: "find-food",
+    route: "/find",
+    goal: "find food",
+    welcome: "Browse available food listings or tell Nouri what you need.",
+    // Aligned with backend `_FIND_GUIDED_UI` (4 steps).
+    steps: [
+      { section: "Open Find Food", label: "Browse listings", fieldName: "search" },
+      { section: "What to look for", label: "Search", fieldName: "search" },
+      { section: "Look at results", label: "Results", fieldName: "search" },
+      { section: "Claim it", label: "Claim", fieldName: "claimQty", dataGuideField: "claimQty" }
+    ]
+  },
+  login: {
+    formId: "login",
+    route: "/login",
+    goal: "sign in",
+    welcome: "Sign in with your email and password.",
+    steps: [
+      { section: "Sign in", label: "Email", fieldName: "email" },
+      { section: "Sign in", label: "Password", fieldName: "password" }
+    ]
+  },
+  signup: {
+    formId: "signup",
+    route: "/signup",
+    goal: "sign up",
+    welcome: "Create your Food Maps account.",
+    steps: [
+      { section: "Account", label: "Name", fieldName: "name" },
+      { section: "Account", label: "Email", fieldName: "email" },
+      { section: "Approval", label: "Approval number", fieldName: "approvalNumber" },
+      { section: "Security", label: "Password", fieldName: "password" },
+      { section: "Submit", label: "Terms", fieldName: "agreeToTerms" }
+    ]
+  },
+  receipts: {
+    formId: "receipts",
+    route: "/receipts",
+    goal: "receipts",
+    welcome: "View your food pickup receipts.",
+    steps: [
+      { section: "Receipts", label: "Filter tabs", dataGuideField: "receiptsTabs" }
+    ]
+  },
+  "bulk-upload": {
+    formId: "bulk-upload",
+    route: "/listings",
+    goal: "bulk upload",
+    welcome: "Upload multiple listings with a CSV file.",
+    steps: [
+      { section: "Upload", label: "CSV file", fieldName: "csvFile" },
+      { section: "Details", label: "Location", fieldName: "location" }
+    ]
+  }
+};
+function canonicalFormId(formId) {
+  if (!formId) return null;
+  return FORM_ID_ALIASES[formId] || formId;
+}
+function canonicalFieldName(fieldName) {
+  if (!fieldName) return fieldName;
+  return FIELD_ALIASES[fieldName] || fieldName;
+}
+function getStepMeta(goalKey, stepIndex) {
+  const goal = NOURI_GOALS[goalKey];
+  if (!goal) return null;
+  return goal.steps[stepIndex] || null;
+}
+function getStepIndexForField(goalKey, fieldName) {
+  const goal = NOURI_GOALS[goalKey];
+  if (!goal || !fieldName) return -1;
+  const canonical = canonicalFieldName(fieldName);
+  let idx = goal.steps.findIndex((s2) => s2.fieldName === canonical || s2.dataGuideField === canonical);
+  if (idx >= 0) return idx;
+  idx = goal.steps.findIndex((s2) => s2.fieldName === fieldName || s2.dataGuideField === fieldName);
+  return idx;
+}
+function goalKeyFromFormId(formId) {
+  const id = canonicalFormId(formId);
+  const entry = Object.entries(NOURI_GOALS).find(([, g2]) => g2.formId === id);
+  return entry ? entry[0] : null;
+}
+var SHARE_FOOD_HINTS = {
+  title: "Enter a short name for the food you are sharing.",
+  description: "Add a few details so neighbors know what to expect.",
+  category: "Pick the category that best matches this food.",
+  qty: "How many portions or packages are available?",
+  quantity: "How many portions or packages are available?",
+  unit: "Choose the unit that matches your quantity.",
+  address: "Enter the pickup address where neighbors can collect the food.",
+  full_address: "Enter the pickup address where neighbors can collect the food.",
+  pickup_window_start: "When can pickup start?",
+  pickup_window_end: "When does the pickup window end?",
+  image: "Optional: add a photo of the food.",
+  donor_name: "Enter your name or organization.",
+  donor_type: "Are you sharing as an individual/family or an organization?",
+  donor_zip: "Enter your ZIP code.",
+  donor_city: "Enter your city.",
+  donor_state: "Select your state.",
+  school_district: "Choose your school or community.",
+  donor_email: "Enter an email so neighbors can reach you if needed.",
+  expiry_date: "When should this food be used by?"
+};
+var REQUEST_FOOD_HINTS = {
+  title: "What food do you need?",
+  category: "Pick a category and how much you need.",
+  school_district: "Choose your school or community.",
+  requester_name: "Enter your name so donors know who to help.",
+  requester_email: "Enter an email so we can follow up.",
+  address: "Where should help be delivered or picked up?",
+  notes: "Add any notes about dietary needs or timing.",
+  household_size: "How many people are in your household?"
+};
+var BULK_UPLOAD_HINTS = {
+  csv: "Choose a CSV file with title, quantity, unit, and category columns.",
+  csvFile: "Choose a CSV file with title, quantity, unit, and category columns.",
+  title: "Enter the food title for this row.",
+  pickup_location: "Enter the pickup location for these listings.",
+  location: "Enter the pickup location for these listings."
+};
+
+// utils/nouriGuide/parseGuidedMessage.js
+var STEP_RE = /(?:GUIDED\s*[—–-]\s*STEP|GUIADO\s*[—–-]\s*PASO)\s*(\d+)\s*(?:of|de)\s*(\d+)\s*(?:\(([^)]+)\))?\s*(?:[—–-]\s*([^\n[]+))?/i;
+var FIELD_RE = /\[field:([a-z0-9_]+)\]/i;
+var FIELD_HINTS = [
+  { field: "donor_name", re: /name\s*\/\s*organization|type your name|escribe tu nombre|donor information.*name|caja.*nombre/i },
+  { field: "donor_type", re: /donor type|tipo de donante|individual\s*\/\s*family|individual\s*\/\s*familia/i },
+  { field: "donor_zip", re: /\bzip\b|código postal|codigo postal/i },
+  { field: "donor_city", re: /\bcity\b|ciudad/i },
+  { field: "donor_state", re: /\bstate\b|estado(?!s)/i },
+  { field: "school_district", re: /active communities|comunidades activas|school (?:or )?community|escuela o comunidad/i },
+  { field: "donor_email", re: /\bemail\b|correo|phone|teléfono|telefono/i },
+  { field: "full_address", re: /full address|pickup address|dirección completa|direccion completa|street address/i },
+  { field: "title", re: /what are you donating|qué estás donando|que estas donando|food name|nombre del alimento/i },
+  { field: "category", re: /\bcategory\b|categoría|categoria/i },
+  { field: "description", re: /\bdescription\b|descripción|descripcion/i },
+  { field: "quantity", re: /\bquantity\b|cantidad|how many|cuántos|cuantos/i },
+  { field: "unit", re: /\bunit\b|unidad(?!es de)/i },
+  { field: "expiry_date", re: /expiration|expiry|best-?by|vencimiento|caducidad/i },
+  { field: "image", re: /\bphoto\b|\bfoto\b|upload|submit listing|enviar listado/i },
+  { field: "requester_name", re: /your name|tu nombre|requester/i },
+  { field: "requester_email", re: /submit food request|enviar solicitud/i }
+];
+function parseGuidedStepHeader(message) {
+  if (!message) return null;
+  const m2 = message.match(STEP_RE);
+  if (!m2) return null;
+  const stepIndex = Math.max(1, parseInt(m2[1], 10)) - 1;
+  const stepTotal = parseInt(m2[2], 10);
+  const goalPhrase = (m2[3] || "").trim();
+  const section = (m2[4] || "").trim().replace(/\s*\[field:[^\]]+\]\s*$/i, "").trim();
+  const fieldMatch = message.match(FIELD_RE);
+  let fieldName = fieldMatch ? fieldMatch[1] : null;
+  let goalKey = null;
+  const gp = goalPhrase.toLowerCase();
+  if (gp.includes("share") || gp.includes("compartir")) goalKey = "share-food";
+  else if (gp.includes("request") || gp.includes("solicit")) goalKey = "request-food";
+  else if (gp.includes("claim") || gp.includes("reclamar")) goalKey = "claim-food";
+  else if (gp.includes("find") || gp.includes("buscar")) goalKey = "find-food";
+  else if (gp.includes("sign in") || gp.includes("login")) goalKey = "login";
+  else if (gp.includes("sign up") || gp.includes("signup")) goalKey = "signup";
+  if (!fieldName && goalKey) {
+    const meta = getStepMeta(goalKey, stepIndex);
+    fieldName = meta?.fieldName || null;
+  }
+  return { stepIndex, stepTotal, goalPhrase, section, goalKey, fieldName };
+}
+function inferGuidedFieldFromText(message, fallbackGoalKey = null) {
+  if (!message) return null;
+  const t3 = String(message);
+  const looksGuided = /guided|guiado|baby step|paso de bebé|paso de bebe|say done|di listo|look at the top|mira arriba|tap |pulsa /i.test(t3);
+  if (!looksGuided && !fallbackGoalKey) return null;
+  let goalKey = fallbackGoalKey;
+  if (!goalKey) {
+    if (/share food|compartir|donor information|food listing/i.test(t3)) goalKey = "share-food";
+    else if (/request food|solicitar/i.test(t3)) goalKey = "request-food";
+    else if (/find food|buscar comida|claim/i.test(t3)) goalKey = "find-food";
+    else if (fallbackGoalKey) goalKey = fallbackGoalKey;
+    else goalKey = "share-food";
+  }
+  const goal = NOURI_GOALS[goalKey];
+  if (!goal) return null;
+  let fieldName = null;
+  for (const hint of FIELD_HINTS) {
+    if (hint.re.test(t3)) {
+      if (goal.steps.some((s2) => s2.fieldName === hint.field)) {
+        fieldName = hint.field;
+        break;
+      }
+    }
+  }
+  const stepIndex = fieldName ? Math.max(0, goal.steps.findIndex((s2) => s2.fieldName === fieldName)) : 0;
+  const meta = goal.steps[stepIndex];
+  if (!fieldName && !looksGuided) return null;
+  return {
+    stepIndex,
+    stepTotal: goal.steps.length,
+    goalPhrase: goal.goal,
+    section: meta?.section || "",
+    goalKey,
+    fieldName: fieldName || meta?.fieldName || null
+  };
+}
+function simplifyGuideText(text, simpleLanguage) {
+  if (!simpleLanguage || !text) return text;
+  return text.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "").split(/(?<=[.!?])\s+/).slice(0, 4).join(" ").trim();
+}
+
+// utils/nouriGuide/humanHandoff.js
+var STORAGE_KEY = "nouri.guide.failures.v1";
+var FAILURE_THRESHOLD = 3;
+function getGuideFailureCount() {
+  if (typeof sessionStorage === "undefined") return 0;
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY);
+    return raw ? Math.max(0, parseInt(raw, 10) || 0) : 0;
+  } catch {
+    return 0;
+  }
+}
+function setGuideFailureCount(count) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(STORAGE_KEY, String(Math.max(0, count)));
+  } catch {
+  }
+}
+function recordGuideSuccess() {
+  setGuideFailureCount(0);
+}
+function clearGuideFailures() {
+  setGuideFailureCount(0);
+}
+function recordGuideFailure(reason = "") {
+  const next = getGuideFailureCount() + 1;
+  setGuideFailureCount(next);
+  if (typeof window !== "undefined" && next >= FAILURE_THRESHOLD) {
+    window.dispatchEvent(new CustomEvent("nouri:handoff-suggested", {
+      detail: { reason, count: next }
+    }));
+  }
+  return next;
+}
+function shouldSuggestHumanHandoff() {
+  return getGuideFailureCount() >= FAILURE_THRESHOLD;
+}
+function openHumanSupport(opts = {}) {
+  const count = getGuideFailureCount();
+  const defaultMsg = count >= FAILURE_THRESHOLD ? "Nouri could not help me after several tries. I need a person to assist." : "I need help from a person with Food Maps.";
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("nouri:open-human-support", {
+      detail: {
+        message: opts.message || defaultMsg,
+        reason: opts.reason || ""
+      }
+    }));
+  }
+}
+
+// utils/nouriGuide/stuckDetection.js
+var STUCK_MS = 2 * 60 * 1e3;
+var stuckTimer = null;
+var activeField = null;
+var activeFormId = null;
+function clearStuckTimer() {
+  if (stuckTimer) {
+    clearTimeout(stuckTimer);
+    stuckTimer = null;
+  }
+}
+function buildStuckMessage(fieldName, label) {
+  const name = label || fieldName;
+  return `Need help with ${name}? Take your time. Say "help" in Nouri chat, or check the hint above. You can also tap another field.`;
+}
+function trackFieldFocus(formId, fieldName, label) {
+  if (!fieldName) return;
+  if (activeField === fieldName && activeFormId === formId) return;
+  clearStuckTimer();
+  activeField = fieldName;
+  activeFormId = formId;
+  stuckTimer = setTimeout(() => {
+    recordGuideFailure("stuck_field");
+    updateGuide({
+      source: "system",
+      formId,
+      fieldName,
+      label: label || fieldName,
+      text: buildStuckMessage(fieldName, label),
+      caption: buildStuckMessage(fieldName, label),
+      section: "Need help?"
+    }, { speak: true, focusField: false });
+  }, STUCK_MS);
+}
+function notifyFieldChanged() {
+  clearStuckTimer();
+}
+function reportFieldError(formId, fieldName, errorMessage, label) {
+  clearStuckTimer();
+  recordGuideFailure("field_error");
+  const text = errorMessage ? `That did not work: ${errorMessage}. Fix ${label || fieldName} and try again.` : `Please check ${label || fieldName} and try again.`;
+  updateGuide({
+    source: "system",
+    formId,
+    fieldName,
+    label: label || fieldName,
+    text,
+    caption: text,
+    section: "Fix this field"
+  }, { speak: true, focusField: true });
+}
+function resetStuckTracking() {
+  clearStuckTimer();
+  activeField = null;
+  activeFormId = null;
+}
+
+// utils/guideLang.js
+var SUPPORTED_GUIDE_LANGUAGES = ["en", "es", "fr", "vi", "zh"];
+var GUIDE_LANGUAGE_LABELS = {
+  en: "English",
+  es: "Espa\xF1ol",
+  fr: "Fran\xE7ais",
+  vi: "Ti\u1EBFng Vi\u1EC7t",
+  zh: "\u4E2D\u6587"
+};
+var GUIDE_TTS_LANG = {
+  en: "en-US",
+  es: "es-ES",
+  fr: "fr-FR",
+  vi: "vi-VN",
+  zh: "zh-CN"
+};
+function normalizeGuideLang(code) {
+  const raw = String(code || "en").toLowerCase().trim();
+  if (raw.startsWith("es")) return "es";
+  if (raw.startsWith("fr")) return "fr";
+  if (raw.startsWith("vi")) return "vi";
+  if (raw.startsWith("zh")) return "zh";
+  return "en";
+}
+function resolveGuideLang(override, settingsLang, fallback = "en") {
+  if (override) return normalizeGuideLang(override);
+  if (settingsLang) return normalizeGuideLang(settingsLang);
+  return normalizeGuideLang(fallback);
+}
+function ttsLangTag(lang) {
+  return GUIDE_TTS_LANG[normalizeGuideLang(lang)] || GUIDE_TTS_LANG.en;
+}
+
+// utils/nouriGuide/engine.js
+function defaultGuideLang(lang) {
+  return normalizeGuideLang(lang || a11yPrefs.preferredLanguage || "en");
+}
+var NOURI_GUIDE_STORAGE_KEY = "nouri.guide.v2";
+var NOURI_GUIDE_EVENT = "nouri:guide-update";
+function warmSpeechVoices() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  try {
+    window.speechSynthesis.getVoices();
+    window.speechSynthesis.addEventListener?.("voiceschanged", () => {
+      window.speechSynthesis.getVoices();
+    }, { once: true });
+  } catch {
+  }
+}
+warmSpeechVoices();
+function pickLocalVoice(synth2, langTag) {
+  try {
+    const voices = synth2.getVoices() || [];
+    if (!voices.length) return null;
+    const primary = String(langTag || "en-US").toLowerCase();
+    const base = primary.split("-")[0];
+    return voices.find((v2) => (v2.lang || "").toLowerCase() === primary) || voices.find((v2) => (v2.lang || "").toLowerCase().startsWith(base)) || null;
+  } catch {
+    return null;
+  }
+}
+function speakWithBrowserTTS(caption, guideLang, generation) {
+  const synth2 = typeof window !== "undefined" ? window.speechSynthesis : null;
+  if (!synth2) return false;
+  let started = false;
+  const start = () => {
+    if (started || generation !== speakGeneration) return;
+    started = true;
+    try {
+      synth2.cancel();
+    } catch {
+    }
+    const utt = new SpeechSynthesisUtterance(caption);
+    utt.lang = ttsLangTag(guideLang);
+    utt.rate = 1.05;
+    const voice = pickLocalVoice(synth2, utt.lang);
+    if (voice) utt.voice = voice;
+    utt.onstart = () => {
+      if (generation !== speakGeneration) return;
+      state.isSpeaking = true;
+      notify();
+    };
+    utt.onend = () => {
+      if (generation !== speakGeneration) return;
+      state.isSpeaking = false;
+      activeStop = null;
+      notify();
+    };
+    utt.onerror = () => {
+      if (generation !== speakGeneration) return;
+      state.isSpeaking = false;
+      activeStop = null;
+      notify();
+    };
+    activeStop = () => {
+      try {
+        synth2.cancel();
+      } catch {
+      }
+    };
+    setTimeout(() => {
+      if (generation !== speakGeneration) return;
+      try {
+        synth2.speak(utt);
+      } catch {
+      }
+    }, 0);
+  };
+  if (!(synth2.getVoices() || []).length) {
+    const onVoices = () => {
+      synth2.removeEventListener?.("voiceschanged", onVoices);
+      start();
+    };
+    synth2.addEventListener?.("voiceschanged", onVoices);
+    setTimeout(start, 60);
+  } else {
+    start();
+  }
+  return true;
+}
+var EMPTY_STATE = {
+  source: "system",
+  goalKey: null,
+  formId: null,
+  stepIndex: 0,
+  stepTotal: 0,
+  section: "",
+  label: "",
+  fieldName: "",
+  text: "",
+  caption: "",
+  isSpeaking: false,
+  isMuted: false,
+  isDismissed: false,
+  hasResume: false,
+  updatedAt: 0
+};
+var state = { ...EMPTY_STATE };
+var speakGeneration = 0;
+var activeStop = null;
+var autoplayBlockedHandler = null;
+var listeners = /* @__PURE__ */ new Set();
+function setAutoplayBlockedHandler(fn) {
+  autoplayBlockedHandler = typeof fn === "function" ? fn : null;
+}
+function notifyAutoplayBlocked(replay) {
+  try {
+    autoplayBlockedHandler?.(replay);
+  } catch {
+  }
+}
+function clearAutoplayBlockedUi() {
+  try {
+    autoplayBlockedHandler?.(null);
+  } catch {
+  }
+}
+var a11yPrefs = {
+  preferTextOverVoice: false,
+  formVoiceGuideEnabled: false,
+  simpleLanguage: false,
+  alwaysShowCaptions: true,
+  preferredLanguage: "en"
+};
+function shouldSpeakFormVoice() {
+  return a11yPrefs.formVoiceGuideEnabled && !a11yPrefs.preferTextOverVoice && !state.isMuted && !state.isDismissed;
+}
+function allowGuideSpeech(speak, { force = false } = {}) {
+  if (!speak && !force) return false;
+  if (state.isDismissed || state.isMuted || a11yPrefs.preferTextOverVoice) return false;
+  if (state.source === "form" && !shouldSpeakFormVoice()) return false;
+  return true;
+}
+function notify() {
+  const snapshot = { ...state };
+  listeners.forEach((fn) => {
+    try {
+      fn(snapshot);
+    } catch {
+    }
+  });
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.setItem(NOURI_GUIDE_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+    }
+    window.dispatchEvent(new CustomEvent(NOURI_GUIDE_EVENT, { detail: snapshot }));
+  }
+}
+function subscribeNouriGuide(listener) {
+  listeners.add(listener);
+  listener({ ...state });
+  return () => listeners.delete(listener);
+}
+function loadPersistedGuideState() {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(NOURI_GUIDE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function setNouriA11yPrefs(prefs) {
+  a11yPrefs = { ...a11yPrefs, ...prefs };
+}
+function setGuideMuted(muted) {
+  state.isMuted = muted;
+  if (muted) cancelSpeech();
+  notify();
+}
+function dismissGuide() {
+  cancelSpeech();
+  clearAllFormFieldGuides();
+  resetStuckTracking();
+  state = { ...EMPTY_STATE, isDismissed: true, updatedAt: Date.now() };
+  notify();
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem(NOURI_GUIDE_STORAGE_KEY);
+    } catch {
+    }
+  }
+}
+function cancelSpeech() {
+  speakGeneration += 1;
+  if (activeStop) {
+    activeStop();
+    activeStop = null;
+  }
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+  }
+  state.isSpeaking = false;
+  clearAutoplayBlockedUi();
+  notify();
+}
+function focusFieldForStep(fieldName, dataGuideField, guideText) {
+  const target = fieldName || dataGuideField;
+  if (!target) return;
+  guideFormField(target, { guideText, scroll: true });
+}
+function updateGuide(patch, { speak = false, lang, focusField = true } = {}) {
+  const guideLang = defaultGuideLang(lang);
+  const prevDismissed = state.isDismissed;
+  state = {
+    ...state,
+    ...patch,
+    updatedAt: Date.now(),
+    hasResume: Boolean(patch.formId && patch.stepIndex != null && patch.text)
+  };
+  if (prevDismissed && patch.isDismissed === void 0) {
+    state.isDismissed = false;
+  }
+  if (state.caption || state.text) {
+    state.caption = simplifyGuideText(state.caption || state.text, a11yPrefs.simpleLanguage);
+  }
+  const meta = state.goalKey ? getStepMeta(state.goalKey, state.stepIndex) : null;
+  const fieldName = patch.fieldName ?? meta?.fieldName ?? state.fieldName;
+  const dataGuideField = meta?.dataGuideField;
+  if (fieldName) state.fieldName = fieldName;
+  if (focusField && (fieldName || dataGuideField)) {
+    focusFieldForStep(fieldName, dataGuideField, state.caption || state.text);
+  }
+  if (state.formId && (fieldName || dataGuideField)) {
+    trackFieldFocus(state.formId, fieldName || dataGuideField, state.label);
+  }
+  notify();
+  if (allowGuideSpeech(speak)) {
+    speakGuideText(state.caption || state.text, { lang: guideLang });
+  }
+}
+async function speakGuideText(text, { lang, force = false, preferLocal } = {}) {
+  if (!text) return;
+  const guideLang = defaultGuideLang(lang);
+  const caption = simplifyGuideText(text, a11yPrefs.simpleLanguage);
+  state.caption = caption;
+  state.text = state.text || caption;
+  if (!allowGuideSpeech(true, { force })) {
+    state.isSpeaking = false;
+    notify();
+    return;
+  }
+  cancelSpeech();
+  const generation = speakGeneration;
+  const useLocal = preferLocal === true || preferLocal !== false && state.source === "form";
+  if (useLocal) {
+    state.isSpeaking = true;
+    notify();
+    if (!speakWithBrowserTTS(caption, guideLang, generation)) {
+      state.isSpeaking = false;
+      notify();
+    }
+    return;
+  }
+  try {
+    const blob = await textToSpeech(caption, { lang: guideLang });
+    if (generation !== speakGeneration) return;
+    const { stop } = playAudioBlob(
+      blob,
+      () => {
+        state.isSpeaking = true;
+        notify();
+      },
+      () => {
+        state.isSpeaking = false;
+        activeStop = null;
+        clearAutoplayBlockedUi();
+        notify();
+      },
+      (replay) => {
+        state.isSpeaking = true;
+        notify();
+        notifyAutoplayBlocked(replay);
+      }
+    );
+    activeStop = stop;
+  } catch {
+    if (generation !== speakGeneration) return;
+    speakWithBrowserTTS(caption, guideLang, generation);
+  }
+  notify();
+}
+function handleChatAssistantMessage(message, { lang = "en", speak = false } = {}) {
+  const synced = syncGuideFromChatMessage(message, { lang, speak });
+  if (synced) return true;
+  if (state.source === "form" && state.fieldName && (state.caption || state.text)) {
+    return false;
+  }
+  const body = simplifyGuideText(
+    message.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "").replace(/\n+/g, " ").replace(/\s+/g, " ").trim(),
+    a11yPrefs.simpleLanguage
+  );
+  updateGuide({
+    source: "chat",
+    goalKey: null,
+    formId: state.formId,
+    label: "Nouri",
+    text: body,
+    caption: body
+  }, { speak, lang, focusField: false });
+  return false;
+}
+function syncGuideFromChatMessage(message, { lang = "en", speak = false } = {}) {
+  let parsed = parseGuidedStepHeader(message);
+  if (!parsed?.goalKey) {
+    const inferred = inferGuidedFieldFromText(message, state.goalKey);
+    if (!inferred) return false;
+    parsed = inferred;
+  }
+  const goal = NOURI_GOALS[parsed.goalKey];
+  const meta = getStepMeta(parsed.goalKey, parsed.stepIndex);
+  const bodyText = message.split("\n").slice(1).join("\n").trim() || message;
+  const fieldName = parsed.fieldName || meta?.fieldName || "";
+  updateGuide({
+    source: "chat",
+    goalKey: parsed.goalKey,
+    formId: goal?.formId || null,
+    stepIndex: parsed.stepIndex,
+    stepTotal: parsed.stepTotal || goal?.steps.length || 0,
+    section: parsed.section || meta?.section || "",
+    label: meta?.label || parsed.section || "Nouri",
+    fieldName,
+    text: bodyText,
+    caption: bodyText
+  }, { speak, lang, focusField: Boolean(fieldName) });
+  return true;
+}
+function syncGuideFromFormField({ formId, fieldName, label, text, hints = {} }, { lang = "en" } = {}) {
+  if (state.isDismissed) return;
+  const goalKey = goalKeyFromFormId(formId);
+  const mappedIndex = goalKey ? getStepIndexForField(goalKey, fieldName) : -1;
+  const hintKeys = Object.keys(hints);
+  const hintIndex = hintKeys.indexOf(fieldName);
+  const stepIndex = mappedIndex >= 0 ? mappedIndex : hintIndex >= 0 ? hintIndex : state.stepIndex;
+  const stepTotal = NOURI_GOALS[goalKey]?.steps?.length || hintKeys.length || state.stepTotal;
+  updateGuide({
+    source: "form",
+    goalKey,
+    formId,
+    stepIndex,
+    stepTotal,
+    section: "",
+    label: label || fieldName,
+    fieldName,
+    text,
+    caption: text
+  }, { speak: true, lang, focusField: true });
+}
+function startFormGuide({ formId, welcomeMessage, hints = {} }, { lang = "en" } = {}) {
+  if (state.isDismissed) return;
+  const persisted = loadPersistedGuideState();
+  if (persisted && persisted.formId === formId && persisted.source === "chat" && persisted.text && Date.now() - persisted.updatedAt < 30 * 60 * 1e3) {
+    updateGuide({
+      ...persisted,
+      source: "form",
+      hasResume: true,
+      isDismissed: false
+    }, { speak: false, lang, focusField: true });
+    setTimeout(() => reapplyPendingGuideField(), 50);
+    return;
+  }
+  const goalKey = goalKeyFromFormId(formId);
+  const hintKeys = Object.keys(hints);
+  updateGuide({
+    source: "form",
+    goalKey,
+    formId,
+    stepIndex: 0,
+    stepTotal: hintKeys.length,
+    section: "Welcome",
+    label: "AI guide",
+    fieldName: "",
+    text: welcomeMessage,
+    caption: welcomeMessage,
+    hasResume: false
+  }, { speak: true, lang, focusField: false });
+  setTimeout(() => reapplyPendingGuideField(), 80);
+}
+function resumeGuide({ lang = "en" } = {}) {
+  if (!state.text && !state.caption) return;
+  updateGuide({ hasResume: false }, { speak: true, lang, focusField: true });
+}
+function replayGuide({ lang = "en" } = {}) {
+  speakGuideText(state.caption || state.text, {
+    lang,
+    force: true,
+    preferLocal: state.source === "form"
+  });
+}
+var subscribeAiVoice = (fn) => subscribeNouriGuide((s2) => fn({
+  captionText: s2.caption,
+  isSpeaking: s2.isSpeaking
+}));
+var clearGuideState = () => {
+  cancelSpeech();
+  clearAllFormFieldGuides();
+  resetStuckTracking();
+  state = { ...EMPTY_STATE, updatedAt: Date.now() };
+  notify();
+  if (typeof window !== "undefined") {
+    try {
+      window.sessionStorage.removeItem(NOURI_GUIDE_STORAGE_KEY);
+    } catch {
+    }
+  }
+};
+
+// utils/NouriGuideContext.jsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
-var STORAGE_KEY = "nouri_guide_state_v1";
+var STORAGE_KEY2 = "nouri_guide_state_v1";
 var defaultSettings = {
   easyMode: false,
   voiceOutput: false,
   largeText: false,
   highContrast: false,
-  alwaysShowCaptions: false,
+  alwaysShowCaptions: true,
   preferTextOverVoice: false,
-  formVoiceGuideEnabled: true
+  formVoiceGuideEnabled: true,
+  simpleLanguage: false,
+  preferredLanguage: "en",
+  reduceMotion: false,
+  listFirstFind: true,
+  screenReaderOptimized: false
 };
-var defaultGuide = {
-  source: null,
-  caption: "",
-  text: "",
-  label: "",
-  section: "",
-  stepIndex: 0,
-  stepTotal: 0,
-  formId: null,
-  isSpeaking: false,
-  isMuted: false,
-  isDismissed: false,
-  hasResume: false,
-  goalKey: null
+var A11Y_CLASS_MAP = {
+  largeText: "a11y-large-text",
+  highContrast: "a11y-high-contrast",
+  reduceMotion: "a11y-reduce-motion",
+  simpleLanguage: "a11y-simple-language",
+  easyMode: "a11y-easy-mode",
+  listFirstFind: "a11y-list-first-find",
+  screenReaderOptimized: "a11y-screen-reader"
 };
+function applyAccessibilityClasses(settings) {
+  if (typeof document === "undefined") return;
+  const root = document.documentElement;
+  Object.entries(A11Y_CLASS_MAP).forEach(([key, className]) => {
+    root.classList.toggle(className, Boolean(settings?.[key]));
+  });
+  const lang = String(settings?.preferredLanguage || "en").toLowerCase().slice(0, 2) || "en";
+  root.setAttribute("lang", lang);
+}
 var NouriGuideContext = (0, import_react5.createContext)({
   settings: defaultSettings,
-  guide: defaultGuide,
+  guide: loadPersistedGuideState?.() || {},
   updateSetting: () => {
+  },
+  resetSettings: () => {
   },
   syncFromChat: () => {
   },
@@ -7970,159 +9267,269 @@ var NouriGuideContext = (0, import_react5.createContext)({
   replay: () => {
   },
   resume: () => {
+  },
+  setAutoplayBlockedHandler: () => {
+  },
+  speak: () => {
   }
 });
 function NouriGuideProvider({ children }) {
+  const osMotionApplied = (0, import_react5.useRef)(false);
   const [settings, setSettings] = (0, import_react5.useState)(() => {
+    let initial = { ...defaultSettings };
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return { ...defaultSettings, ...JSON.parse(raw).settings };
+      const raw = localStorage.getItem(STORAGE_KEY2);
+      if (raw) initial = { ...defaultSettings, ...JSON.parse(raw).settings };
     } catch {
     }
-    return defaultSettings;
+    return initial;
   });
-  const [guide, setGuide] = (0, import_react5.useState)(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return { ...defaultGuide, ...JSON.parse(raw).guide };
-    } catch {
-    }
-    return defaultGuide;
+  const [guide, setGuide] = (0, import_react5.useState)(() => loadPersistedGuideState() || {
+    source: "system",
+    caption: "",
+    text: "",
+    isSpeaking: false,
+    isMuted: false,
+    isDismissed: false,
+    hasResume: false,
+    stepIndex: 0,
+    stepTotal: 0,
+    section: "",
+    label: "",
+    fieldName: "",
+    formId: null,
+    goalKey: null
   });
   (0, import_react5.useEffect)(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, guide }));
-  }, [settings, guide]);
+    if (osMotionApplied.current) return;
+    osMotionApplied.current = true;
+    try {
+      if (typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        setSettings((prev) => prev.reduceMotion ? prev : { ...prev, reduceMotion: true });
+      }
+    } catch {
+    }
+  }, []);
+  (0, import_react5.useEffect)(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY2, JSON.stringify({ settings }));
+    } catch {
+    }
+    applyAccessibilityClasses(settings);
+    setNouriA11yPrefs({
+      preferTextOverVoice: settings.preferTextOverVoice,
+      formVoiceGuideEnabled: settings.formVoiceGuideEnabled,
+      simpleLanguage: settings.simpleLanguage,
+      alwaysShowCaptions: settings.alwaysShowCaptions,
+      preferredLanguage: settings.preferredLanguage || "en"
+    });
+    try {
+      window.dispatchEvent(new CustomEvent("foodmaps:a11y_settings", { detail: settings }));
+    } catch {
+    }
+  }, [settings]);
+  (0, import_react5.useEffect)(() => {
+    const onRemote = (ev) => {
+      const next = ev?.detail;
+      if (!next || typeof next !== "object") return;
+      setSettings((prev) => {
+        const merged = { ...defaultSettings, ...next };
+        const keys = Object.keys(defaultSettings);
+        const same = keys.every((k2) => prev[k2] === merged[k2]);
+        return same ? prev : merged;
+      });
+    };
+    window.addEventListener("foodmaps:a11y_settings", onRemote);
+    return () => window.removeEventListener("foodmaps:a11y_settings", onRemote);
+  }, []);
+  (0, import_react5.useEffect)(() => subscribeNouriGuide(setGuide), []);
   (0, import_react5.useEffect)(() => {
     const onFormFocus = (ev) => {
       const detail = ev?.detail;
       if (!detail || typeof detail !== "object") return;
-      setGuide((g2) => ({
-        ...g2,
-        formId: detail.formId ?? g2.formId,
-        fieldName: detail.fieldName ?? g2.fieldName,
-        label: detail.label ?? g2.label,
-        stepIndex: detail.stepIndex ?? g2.stepIndex,
-        stepTotal: detail.stepTotal ?? g2.stepTotal,
-        path: detail.path ?? g2.path,
-        pageKey: detail.pageKey ?? g2.pageKey,
-        source: detail.source ?? "form"
-      }));
+      const lang = settings.preferredLanguage || "en";
+      if (detail.formId && detail.fieldName) {
+        syncGuideFromFormField({
+          formId: detail.formId,
+          fieldName: detail.fieldName,
+          label: detail.label,
+          text: detail.text || detail.label || "",
+          hints: detail.hints || {}
+        }, { lang });
+      }
     };
     window.addEventListener("foodmaps:form_focus", onFormFocus);
     return () => window.removeEventListener("foodmaps:form_focus", onFormFocus);
-  }, []);
+  }, [settings.preferredLanguage]);
   const updateSetting = (0, import_react5.useCallback)((key, value2) => {
-    setSettings((s2) => ({ ...s2, [key]: value2 }));
+    setSettings((prev) => ({ ...prev, [key]: value2 }));
   }, []);
-  const syncFromChat = (0, import_react5.useCallback)((patch) => {
-    if (patch?.settings) setSettings((s2) => ({ ...s2, ...patch.settings }));
-    if (patch?.guide) setGuide((g2) => ({ ...g2, ...patch.guide }));
-  }, []);
-  const cancelVoice = (0, import_react5.useCallback)(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setGuide((g2) => ({ ...g2, isSpeaking: false }));
-  }, []);
-  const resetGuideSession = (0, import_react5.useCallback)(() => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-    setGuide((g2) => ({
-      ...defaultGuide,
-      isMuted: g2.isMuted,
-      isDismissed: g2.isDismissed
-    }));
+  const resetSettings = (0, import_react5.useCallback)(() => {
+    setSettings({ ...defaultSettings });
   }, []);
   const toggleMute = (0, import_react5.useCallback)(() => {
-    setGuide((g2) => ({ ...g2, isMuted: !g2.isMuted }));
-    cancelVoice();
-  }, [cancelVoice]);
+    setGuideMuted(!guide.isMuted);
+  }, [guide.isMuted]);
   const dismiss = (0, import_react5.useCallback)(() => {
-    setGuide((g2) => ({ ...g2, isDismissed: true, isSpeaking: false }));
-    cancelVoice();
-  }, [cancelVoice]);
-  const replay = (0, import_react5.useCallback)(() => {
-    setGuide((g2) => ({ ...g2, isDismissed: false }));
+    dismissGuide();
   }, []);
-  const resume = (0, import_react5.useCallback)(() => {
-    setGuide((g2) => ({ ...g2, isDismissed: false, hasResume: false }));
+  const registerForm = (0, import_react5.useCallback)((opts, lang) => {
+    const resolved = lang || settings.preferredLanguage || "en";
+    startFormGuide(opts, { lang: resolved });
+  }, [settings.preferredLanguage]);
+  const onFieldFocus = (0, import_react5.useCallback)((opts, lang) => {
+    const resolved = lang || settings.preferredLanguage || "en";
+    syncGuideFromFormField(opts, { lang: resolved });
+  }, [settings.preferredLanguage]);
+  const syncFromChat = (0, import_react5.useCallback)((messageOrPatch, opts = {}) => {
+    if (messageOrPatch && typeof messageOrPatch === "object" && (messageOrPatch.guide || messageOrPatch.settings)) {
+      if (messageOrPatch.settings) {
+        setSettings((s2) => ({ ...s2, ...messageOrPatch.settings }));
+      }
+      const patch = messageOrPatch.guide || {};
+      const speak2 = !!patch.isSpeaking;
+      const text = patch.caption || patch.text || "";
+      if (text) {
+        return handleChatAssistantMessage(text, {
+          lang: opts.lang || settings.preferredLanguage || "en",
+          speak: speak2
+        });
+      }
+      return false;
+    }
+    const message = String(messageOrPatch || "");
+    const resolved = opts.lang || settings.preferredLanguage || "en";
+    return handleChatAssistantMessage(message, {
+      lang: resolved,
+      speak: !!opts.speak
+    });
+  }, [settings.preferredLanguage]);
+  const resume = (0, import_react5.useCallback)((lang) => {
+    resumeGuide({ lang: lang || settings.preferredLanguage || "en" });
+  }, [settings.preferredLanguage]);
+  const replay = (0, import_react5.useCallback)((lang) => {
+    replayGuide({ lang: lang || settings.preferredLanguage || "en" });
+  }, [settings.preferredLanguage]);
+  const speak = (0, import_react5.useCallback)((text, lang) => {
+    speakGuideText(text, { lang: lang || settings.preferredLanguage || "en" });
+  }, [settings.preferredLanguage]);
+  const cancelVoice = (0, import_react5.useCallback)(() => {
+    cancelSpeech();
+  }, []);
+  const resetGuideSession = (0, import_react5.useCallback)(() => {
+    clearGuideState();
+  }, []);
+  const setAutoplayBlockedHandlerCb = (0, import_react5.useCallback)((fn) => {
+    setAutoplayBlockedHandler(fn);
+  }, []);
+  const reportFieldErrorFn = (0, import_react5.useCallback)((formId, fieldName, errorMessage, label) => {
+    reportFieldError(formId, fieldName, errorMessage, label);
+  }, []);
+  const notifyFieldActivity = (0, import_react5.useCallback)(() => {
+    notifyFieldChanged();
   }, []);
   const value = (0, import_react5.useMemo)(() => ({
     settings,
     guide,
     updateSetting,
-    syncFromChat,
-    resetGuideSession,
-    cancelVoice,
+    resetSettings,
     toggleMute,
     dismiss,
+    registerForm,
+    onFieldFocus,
+    syncFromChat,
+    resume,
     replay,
-    resume
-  }), [settings, guide, updateSetting, syncFromChat, resetGuideSession, cancelVoice, toggleMute, dismiss, replay, resume]);
+    speak,
+    cancelVoice,
+    resetGuideSession,
+    setAutoplayBlockedHandler: setAutoplayBlockedHandlerCb,
+    reportFieldError: reportFieldErrorFn,
+    notifyFieldActivity
+  }), [
+    settings,
+    guide,
+    updateSetting,
+    resetSettings,
+    toggleMute,
+    dismiss,
+    registerForm,
+    onFieldFocus,
+    syncFromChat,
+    resume,
+    replay,
+    speak,
+    cancelVoice,
+    resetGuideSession,
+    setAutoplayBlockedHandlerCb,
+    reportFieldErrorFn,
+    notifyFieldActivity
+  ]);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(NouriGuideContext.Provider, { value, children });
 }
 function useNouriGuide() {
   return (0, import_react5.useContext)(NouriGuideContext);
 }
-
-// utils/AccessibilityContext.jsx
-var import_react6 = __toESM(require_react(), 1);
-var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
-var AccessibilityContext = (0, import_react6.createContext)({
-  settings: {},
-  updateSetting: () => {
-  }
-});
-function AccessibilityProvider({ children }) {
-  const value = import_react6.default.useMemo(() => ({
-    settings: { alwaysShowCaptions: true },
-    updateSetting: () => {
-    }
-  }), []);
-  return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(AccessibilityContext.Provider, { value, children });
-}
 function useAccessibility() {
-  return (0, import_react6.useContext)(AccessibilityContext);
+  const ctx = (0, import_react5.useContext)(NouriGuideContext);
+  if (!ctx) {
+    return {
+      settings: defaultSettings,
+      updateSetting: () => {
+      },
+      resetSettings: () => {
+      }
+    };
+  }
+  return {
+    settings: ctx.settings,
+    updateSetting: ctx.updateSetting,
+    resetSettings: ctx.resetSettings || (() => {
+    })
+  };
 }
 
 // src/assistant/AIChatPanel.jsx
-var import_react11 = __toESM(require_react(), 1);
+var import_react10 = __toESM(require_react(), 1);
 
 // utils/hooks/useAIChat.js
-var import_react7 = __toESM(require_react(), 1);
+var import_react6 = __toESM(require_react(), 1);
 
 // utils/services/aiChatService.js
-function getToken() {
-  return localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
-}
-async function apiFetch(path, options = {}) {
-  const token = getToken();
-  const headers = {
-    ...options.headers || {}
-  };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  if (options.body && !headers["Content-Type"]) {
+async function resilientJson(path, options = {}, fetchOpts = {}) {
+  const headers = { ...options.headers || {} };
+  if (options.body && !headers["Content-Type"] && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(path, { ...options, headers });
+  const res = await resilientFetch(
+    path,
+    { ...options, headers },
+    { timeout: fetchOpts.timeout || 45e3, retries: fetchOpts.retries ?? 2, label: fetchOpts.label || path }
+  );
   if (!res.ok) {
+    const typed = await parseAiErrorResponse(res);
+    if (typed) {
+      const e2 = new Error(typed.message);
+      e2.aiError = typed;
+      e2.status = typed.status;
+      throw e2;
+    }
     const text = await res.text();
     const err = new Error(text || `${res.status}`);
     err.status = res.status;
-    try {
-      err.aiError = JSON.parse(text);
-    } catch {
-    }
     throw err;
   }
   const ct = res.headers.get("content-type") || "";
   if (ct.includes("application/json")) return res.json();
   return res;
 }
+function isUnintelligibleVoiceDetail(text) {
+  const t3 = String(text || "").toLowerCase();
+  return t3.includes("understand") || t3.includes("empty audio") || t3.includes("unsupported audio") || t3.includes("invalid_input") || t3.includes("didn't quite catch");
+}
 var aiChatService = {
   async chat(userId, message, opts = {}) {
-    return apiFetch("/api/ai/chat", {
+    return resilientJson("/api/ai/chat", {
       method: "POST",
       body: JSON.stringify({
         user_id: userId,
@@ -8133,25 +9540,39 @@ var aiChatService = {
         guide_state: opts.guideState,
         lang: opts.lang
       })
-    });
+    }, { timeout: 6e4, label: "ai/chat" });
   },
   async publicChat(message, lang = "en") {
-    return apiFetch("/api/ai/public_chat", {
+    return resilientJson("/api/ai/public_chat", {
       method: "POST",
       body: JSON.stringify({ message, lang })
-    });
+    }, { timeout: 45e3, label: "ai/public_chat" });
   },
   async confirm(userId, payload = {}) {
-    return apiFetch("/api/ai/confirm", {
+    return resilientJson("/api/ai/confirm", {
       method: "POST",
       body: JSON.stringify({ user_id: userId, ...payload })
-    });
+    }, { timeout: 45e3, label: "ai/confirm" });
   },
   async voice(userId, blob, opts = {}) {
-    const token = getToken();
     const fd = new FormData();
-    fd.append("audio", blob, "voice.webm");
+    const mime = (blob?.type || "audio/webm").split(";")[0].trim() || "audio/webm";
+    const extByMime = {
+      "audio/webm": "webm",
+      "video/webm": "webm",
+      "audio/mp4": "mp4",
+      "audio/m4a": "m4a",
+      "audio/x-m4a": "m4a",
+      "audio/mpeg": "mp3",
+      "audio/mp3": "mp3",
+      "audio/ogg": "ogg",
+      "audio/wav": "wav"
+    };
+    const ext = extByMime[mime] || "webm";
+    const includeAudio = opts.includeAudio === true;
+    fd.append("audio", blob, `voice.${ext}`);
     fd.append("user_id", userId);
+    fd.append("include_audio", includeAudio ? "true" : "false");
     if (opts.lang) fd.append("lang", opts.lang);
     if (opts.tone) fd.append("tone", opts.tone);
     if (opts.accessibilityProfile) {
@@ -8160,29 +9581,61 @@ var aiChatService = {
     if (opts.guideState) {
       fd.append("guide_state", JSON.stringify(opts.guideState));
     }
-    const res = await fetch("/api/ai/voice", {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd
-    });
-    if (!res.ok) throw new Error(await res.text());
+    const res = await resilientFetch(
+      "/api/ai/voice",
+      { method: "POST", body: fd },
+      { timeout: 6e4, label: "ai/voice" }
+    );
+    if (!res.ok) {
+      const typed = await parseAiErrorResponse(res);
+      if (typed) {
+        const e2 = new Error(typed.message);
+        e2.aiError = typed;
+        e2.requestId = typed.requestId;
+        e2.status = typed.status;
+        throw e2;
+      }
+      const text = await res.text().catch(() => "");
+      if (res.status === 400 && isUnintelligibleVoiceDetail(text)) {
+        const e2 = new Error(text || "Could not understand the audio");
+        e2.aiError = {
+          code: "invalid_input",
+          message: text || "Could not understand the audio",
+          retryable: false,
+          status: 400
+        };
+        e2.status = 400;
+        throw e2;
+      }
+      const err = new Error(text || `${res.status}`);
+      err.status = res.status;
+      throw err;
+    }
     return res.json();
   },
   async uploadImage(file, userId) {
-    const token = getToken();
     const fd = new FormData();
     fd.append("image", file);
     if (userId) fd.append("user_id", userId);
-    const res = await fetch("/api/ai/upload_image", {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd
-    });
-    if (!res.ok) throw new Error(await res.text());
+    const res = await resilientFetch(
+      "/api/ai/upload_image",
+      { method: "POST", body: fd },
+      { timeout: 6e4, label: "ai/upload_image" }
+    );
+    if (!res.ok) {
+      const typed = await parseAiErrorResponse(res);
+      if (typed) {
+        const e2 = new Error(typed.message);
+        e2.aiError = typed;
+        e2.status = typed.status;
+        throw e2;
+      }
+      throw new Error(await res.text());
+    }
     return res.json();
   },
   async enrichListings(rows, opts = {}) {
-    return apiFetch("/api/ai/enrich-listings", {
+    return resilientJson("/api/ai/enrich-listings", {
       method: "POST",
       body: JSON.stringify({
         user_id: opts.userId,
@@ -8192,7 +9645,7 @@ var aiChatService = {
     });
   },
   async bulkCreateListings(rows, opts = {}) {
-    return apiFetch("/api/ai/bulk-listings", {
+    return resilientJson("/api/ai/bulk-listings", {
       method: "POST",
       body: JSON.stringify({
         user_id: opts.userId,
@@ -8201,20 +9654,28 @@ var aiChatService = {
     });
   },
   async visionListing(file, opts = {}) {
-    const token = getToken();
     const fd = new FormData();
     fd.append("image", file);
     if (opts.userId) fd.append("user_id", opts.userId);
-    const res = await fetch("/api/ai/vision-listing", {
-      method: "POST",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-      body: fd
-    });
-    if (!res.ok) throw new Error(await res.text());
+    const res = await resilientFetch(
+      "/api/ai/vision-listing",
+      { method: "POST", body: fd },
+      { timeout: 6e4, label: "ai/vision-listing" }
+    );
+    if (!res.ok) {
+      const typed = await parseAiErrorResponse(res);
+      if (typed) {
+        const e2 = new Error(typed.message);
+        e2.aiError = typed;
+        e2.status = typed.status;
+        throw e2;
+      }
+      throw new Error(await res.text());
+    }
     return res.json();
   },
   async recipes(userId, opts = {}) {
-    return apiFetch("/api/ai/recipes", {
+    return resilientJson("/api/ai/recipes", {
       method: "POST",
       body: JSON.stringify({
         user_id: userId,
@@ -8227,13 +9688,13 @@ var aiChatService = {
     });
   },
   async askQuery(userId, question) {
-    return apiFetch("/api/ai/query", {
+    return resilientJson("/api/ai/query", {
       method: "POST",
       body: JSON.stringify({ user_id: userId, question })
     });
   },
   async voiceSearch(userId, opts = {}) {
-    return apiFetch("/api/ai/voice-search", {
+    return resilientJson("/api/ai/voice-search", {
       method: "POST",
       body: JSON.stringify({
         user_id: userId,
@@ -8247,22 +9708,26 @@ var aiChatService = {
   },
   async getInsights(userId, opts = {}) {
     const qs = opts.roleHint ? `?role_hint=${encodeURIComponent(opts.roleHint)}` : "";
-    return apiFetch(`/api/ai/insights/${encodeURIComponent(userId)}${qs}`);
+    return resilientJson(`/api/ai/insights/${encodeURIComponent(userId)}${qs}`);
   },
   async getHistory(userId) {
-    return apiFetch(`/api/ai/history/${encodeURIComponent(userId)}`);
+    return resilientJson(`/api/ai/history/${encodeURIComponent(userId)}`, {
+      method: "GET"
+    }, { timeout: 3e4, label: "ai/history" });
   },
   async clearHistory(userId) {
-    return apiFetch(`/api/ai/history/${encodeURIComponent(userId)}`, { method: "DELETE" });
+    return resilientJson(`/api/ai/history/${encodeURIComponent(userId)}`, {
+      method: "DELETE"
+    }, { timeout: 3e4, label: "ai/clear-history" });
   },
   async setTone(userId, tone) {
-    return apiFetch(`/api/ai/tone/${encodeURIComponent(userId)}`, {
+    return resilientJson(`/api/ai/tone/${encodeURIComponent(userId)}`, {
       method: "PUT",
       body: JSON.stringify({ tone })
     });
   },
   async submitFeedback(payload) {
-    return apiFetch("/api/ai/feedback", {
+    return resilientJson("/api/ai/feedback", {
       method: "POST",
       body: JSON.stringify(payload)
     });
@@ -8319,15 +9784,16 @@ function normalizeAssistantMessage(data) {
 function useAIChat() {
   const { user, isAuthenticated } = useAuthContext();
   const { settings: a11ySettings, guide } = useNouriGuide();
-  const [messages, setMessages] = (0, import_react7.useState)([]);
-  const [isLoading, setIsLoading] = (0, import_react7.useState)(false);
-  const [error, setError] = (0, import_react7.useState)(null);
-  const [language, setLanguage] = (0, import_react7.useState)(() => localStorage.getItem("nouri_chat_lang") || "en");
-  const [tone, setToneState] = (0, import_react7.useState)("warm");
-  const [historyLoaded, setHistoryLoaded] = (0, import_react7.useState)(false);
-  const [pageContext, setPageContext] = (0, import_react7.useState)({ pageKey: "map", path: "/find" });
-  const lastUserMessageRef = (0, import_react7.useRef)("");
-  (0, import_react7.useEffect)(() => {
+  const [messages, setMessages] = (0, import_react6.useState)([]);
+  const [isLoading, setIsLoading] = (0, import_react6.useState)(false);
+  const [error, setError] = (0, import_react6.useState)(null);
+  const [language, setLanguage] = (0, import_react6.useState)(() => localStorage.getItem("nouri_chat_lang") || "en");
+  const [tone, setToneState] = (0, import_react6.useState)("warm");
+  const [historyLoaded, setHistoryLoaded] = (0, import_react6.useState)(false);
+  const [pageContext, setPageContext] = (0, import_react6.useState)({ pageKey: "map", path: "/find" });
+  const lastUserMessageRef = (0, import_react6.useRef)("");
+  const voiceSeqRef = (0, import_react6.useRef)(0);
+  (0, import_react6.useEffect)(() => {
     const handler = (ev) => {
       const detail = ev?.detail;
       if (detail && typeof detail === "object") {
@@ -8337,15 +9803,15 @@ function useAIChat() {
     window.addEventListener("foodmaps:page_context", handler);
     return () => window.removeEventListener("foodmaps:page_context", handler);
   }, []);
-  const guideState = (0, import_react7.useMemo)(() => ({
+  const guideState = (0, import_react6.useMemo)(() => ({
     ...guide,
     pageKey: pageContext.pageKey || guide.pageKey,
     path: pageContext.path || guide.path
   }), [guide, pageContext]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     localStorage.setItem("nouri_chat_lang", language);
   }, [language]);
-  (0, import_react7.useEffect)(() => {
+  (0, import_react6.useEffect)(() => {
     if (!user?.id) {
       setHistoryLoaded(true);
       return;
@@ -8386,7 +9852,7 @@ function useAIChat() {
       cancelled = true;
     };
   }, [user?.id]);
-  const setTone = (0, import_react7.useCallback)(async (next) => {
+  const setTone = (0, import_react6.useCallback)(async (next) => {
     setToneState(next);
     if (user?.id) {
       try {
@@ -8395,7 +9861,7 @@ function useAIChat() {
       }
     }
   }, [user?.id]);
-  const sendMessage = (0, import_react7.useCallback)(async (text, opts = {}) => {
+  const sendMessage = (0, import_react6.useCallback)(async (text, opts = {}) => {
     const trimmed = (text || "").trim();
     if (!trimmed) return;
     setError(null);
@@ -8428,18 +9894,21 @@ function useAIChat() {
       const assistant = normalizeAssistantMessage(data);
       setMessages((m2) => [...m2, assistant]);
       maybeBroadcastListingsChanged(data.actions);
+      recordGuideSuccess();
     } catch (err) {
+      recordGuideFailure(err?.message || "chat");
       setError(err?.message || "Chat failed");
     } finally {
       setIsLoading(false);
     }
   }, [user?.id, isAuthenticated, language, tone, a11ySettings, guideState]);
   const sendSilentMessage = sendMessage;
-  const sendVoice = (0, import_react7.useCallback)(async (blob) => {
+  const sendVoice = (0, import_react6.useCallback)(async (blob) => {
     if (!user?.id) {
       setError("Sign in to use voice");
-      return;
+      return null;
     }
+    const seq = ++voiceSeqRef.current;
     setIsLoading(true);
     setError(null);
     try {
@@ -8447,29 +9916,62 @@ function useAIChat() {
         lang: language,
         tone,
         accessibilityProfile: a11ySettings,
-        guideState
+        guideState,
+        includeAudio: false
       });
+      if (seq !== voiceSeqRef.current) return null;
       if (data.transcript) {
-        setMessages((m2) => [...m2, { id: `u-${Date.now()}`, role: "user", message: data.transcript }]);
+        setMessages((m2) => [...m2, {
+          id: `u-${Date.now()}`,
+          role: "user",
+          message: data.transcript,
+          source: "voice"
+        }]);
       }
-      const assistant = normalizeAssistantMessage(data);
+      const assistant = {
+        ...normalizeAssistantMessage(data),
+        source: "voice"
+      };
       setMessages((m2) => [...m2, assistant]);
       maybeBroadcastListingsChanged(data.actions);
+      recordGuideSuccess();
+      return {
+        transcript: data.transcript || "",
+        text: data.text || "",
+        messageId: assistant.id
+      };
     } catch (err) {
+      if (seq !== voiceSeqRef.current) return null;
+      const aiErr = err?.aiError?.detail || err?.aiError;
+      const unintelligible = aiErr?.error_code === "invalid_input" || aiErr?.code === "invalid_input";
+      if (unintelligible) {
+        const soft = language === "es" ? "No te escuch\xE9 con claridad. Intenta hablar de nuevo o escribe tu mensaje." : "I didn't quite catch that. Please try speaking again or type your message.";
+        setMessages((m2) => [...m2, {
+          id: `a-${Date.now()}`,
+          role: "assistant",
+          message: soft,
+          source: "voice",
+          isError: false
+        }]);
+        return { transcript: "", text: soft, unintelligible: true };
+      }
+      recordGuideFailure(err?.message || "voice");
       setError(err?.message || "Voice failed");
+      throw err;
     } finally {
-      setIsLoading(false);
+      if (seq === voiceSeqRef.current) setIsLoading(false);
     }
   }, [user?.id, language, tone, a11ySettings, guideState]);
-  const clearHistory = (0, import_react7.useCallback)(async () => {
+  const clearHistory = (0, import_react6.useCallback)(async () => {
     lastUserMessageRef.current = "";
     setError(null);
+    clearGuideFailures();
     if (user?.id) {
       await aiChatService_default.clearHistory(user.id);
     }
     setMessages([]);
   }, [user?.id]);
-  const submitFeedback = (0, import_react7.useCallback)(async (conversationId, rating, comment) => {
+  const submitFeedback = (0, import_react6.useCallback)(async (conversationId, rating, comment) => {
     if (!user?.id) return;
     await aiChatService_default.submitFeedback({
       user_id: user.id,
@@ -8478,14 +9980,14 @@ function useAIChat() {
       comment
     });
   }, [user?.id]);
-  const appendLocalMessage = (0, import_react7.useCallback)((msg) => {
+  const appendLocalMessage = (0, import_react6.useCallback)((msg) => {
     setMessages((m2) => [...m2, { id: `l-${Date.now()}`, ...msg }]);
   }, []);
-  const retryMessage = (0, import_react7.useCallback)(() => {
+  const retryMessage = (0, import_react6.useCallback)(() => {
     if (lastUserMessageRef.current) sendMessage(lastUserMessageRef.current);
   }, [sendMessage]);
   const regenerateLast = retryMessage;
-  const confirmPendingAction = (0, import_react7.useCallback)(async (confirm = true) => {
+  const confirmPendingAction = (0, import_react6.useCallback)(async (confirm = true) => {
     if (!user?.id) return;
     setIsLoading(true);
     try {
@@ -8499,7 +10001,7 @@ function useAIChat() {
       setIsLoading(false);
     }
   }, [user?.id]);
-  return (0, import_react7.useMemo)(() => ({
+  return (0, import_react6.useMemo)(() => ({
     messages,
     sendMessage,
     sendVoice,
@@ -8543,25 +10045,30 @@ function useAIChat() {
 function useCommunityRole() {
   const { user, isAdmin } = useAuthContext();
   if (isAdmin) return "admin";
-  const role = String(user?.role || "").toLowerCase();
+  if (!user) return null;
+  const role = String(user?.role || "").toLowerCase().trim();
+  if (!role) return null;
   if (role === "donor") return "donor";
+  if (role === "recipient") return "recipient";
   if (role === "volunteer") return "volunteer";
   if (role === "dispatcher" || role === "organizer") return "organizer";
-  return "recipient";
+  if (role === "driver") return "driver";
+  if (role === "admin") return "admin";
+  return null;
 }
 
 // src/assistant/VoiceOutput.jsx
-var import_react8 = __toESM(require_react(), 1);
-var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
+var import_react7 = __toESM(require_react(), 1);
+var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
 var synth = typeof window !== "undefined" ? window.speechSynthesis : null;
 function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChange }) {
-  const [isSpeaking, setIsSpeaking] = (0, import_react8.useState)(false);
-  const [isMuted, setIsMuted] = (0, import_react8.useState)(false);
-  const [supported, setSupported] = (0, import_react8.useState)(false);
-  const utteranceRef = (0, import_react8.useRef)(null);
-  const prevTextRef = (0, import_react8.useRef)("");
-  const voicesRef = (0, import_react8.useRef)([]);
-  (0, import_react8.useEffect)(() => {
+  const [isSpeaking, setIsSpeaking] = (0, import_react7.useState)(false);
+  const [isMuted, setIsMuted] = (0, import_react7.useState)(false);
+  const [supported, setSupported] = (0, import_react7.useState)(false);
+  const utteranceRef = (0, import_react7.useRef)(null);
+  const prevTextRef = (0, import_react7.useRef)("");
+  const voicesRef = (0, import_react7.useRef)([]);
+  (0, import_react7.useEffect)(() => {
     setSupported(!!synth);
     if (!synth) return void 0;
     const refreshVoices = () => {
@@ -8579,12 +10086,12 @@ function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChang
       synth.cancel();
     };
   }, []);
-  (0, import_react8.useEffect)(() => {
+  (0, import_react7.useEffect)(() => {
     if (!autoSpeak || isMuted || !text || text === prevTextRef.current) return;
     prevTextRef.current = text;
     speak(text);
   }, [text, autoSpeak, isMuted]);
-  const speak = (0, import_react8.useCallback)((textToSpeak) => {
+  const speak = (0, import_react7.useCallback)((textToSpeak) => {
     if (!synth || !textToSpeak) return;
     synth.cancel();
     const cleanText = textToSpeak.replace(/\*\*(.*?)\*\*/g, "$1").replace(/[#*_~`]/g, "").replace(/\n+/g, ". ").replace(/\s+/g, " ").trim();
@@ -8614,35 +10121,35 @@ function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChang
     utteranceRef.current = utterance;
     synth.speak(utterance);
   }, [language, onSpeakingChange]);
-  const stop = (0, import_react8.useCallback)(() => {
+  const stop = (0, import_react7.useCallback)(() => {
     if (synth) {
       synth.cancel();
       setIsSpeaking(false);
       onSpeakingChange?.(false);
     }
   }, [onSpeakingChange]);
-  const toggleMute = (0, import_react8.useCallback)(() => {
+  const toggleMute = (0, import_react7.useCallback)(() => {
     if (isSpeaking) stop();
     setIsMuted((prev) => !prev);
   }, [isSpeaking, stop]);
-  const handleSpeak = (0, import_react8.useCallback)(() => {
+  const handleSpeak = (0, import_react7.useCallback)(() => {
     if (isSpeaking) stop();
     else speak(text);
   }, [isSpeaking, text, speak, stop]);
   if (!supported) {
-    return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       "span",
       {
         className: "inline-flex items-center justify-center h-7 w-7 rounded-md text-slate-300 cursor-not-allowed",
         title: "Voice output isn't supported in this browser",
         "aria-label": "Voice output not supported",
-        children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { fillRule: "evenodd", d: "M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z", clipRule: "evenodd" }) })
+        children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { fillRule: "evenodd", d: "M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z", clipRule: "evenodd" }) })
       }
     );
   }
   const disabledSpeak = !text;
-  return /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "inline-flex items-center gap-0.5", role: "toolbar", "aria-label": "Voice output controls", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("div", { className: "inline-flex items-center gap-0.5", role: "toolbar", "aria-label": "Voice output controls", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       "button",
       {
         type: "button",
@@ -8654,9 +10161,9 @@ function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChang
         "aria-pressed": isSpeaking,
         children: isSpeaking ? (
           // Stop square + tiny equalizer overlay so it's unmistakable.
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "relative inline-flex items-center justify-center", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("rect", { x: "5", y: "5", width: "10", height: "10", rx: "1.5" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "absolute -top-1.5 -right-2 flex items-end gap-[1.5px] h-2.5", "aria-hidden": "true", children: [0, 1, 2].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("span", { className: "relative inline-flex items-center justify-center", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("rect", { x: "5", y: "5", width: "10", height: "10", rx: "1.5" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("span", { className: "absolute -top-1.5 -right-2 flex items-end gap-[1.5px] h-2.5", "aria-hidden": "true", children: [0, 1, 2].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
               "span",
               {
                 className: "w-[2px] rounded-full bg-emerald-500 animate-voice-bar",
@@ -8667,11 +10174,11 @@ function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChang
           ] })
         ) : (
           // Play triangle inside a speaker — distinct from the stop variant.
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { fillRule: "evenodd", d: "M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z", clipRule: "evenodd" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { fillRule: "evenodd", d: "M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z", clipRule: "evenodd" }) })
         )
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(
       "button",
       {
         type: "button",
@@ -8682,13 +10189,13 @@ function VoiceOutput({ text, language = "en", autoSpeak = false, onSpeakingChang
         "aria-pressed": isMuted,
         children: isMuted ? (
           // Bell-with-slash — communicates "notifications/sounds off" cleanly.
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M3.293 2.293a1 1 0 011.414 0l18 18a1 1 0 01-1.414 1.414l-2.012-2.012A2 2 0 0118 20H6a2 2 0 01-1.414-3.414L6 15.172V11c0-1.07.21-2.09.59-3.013L3.293 3.707a1 1 0 010-1.414z" }),
-            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M10 22a2 2 0 104 0h-4zM18 8.586l-9.6-9.6A6 6 0 0118 11v-2.414z", opacity: ".25" })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsxs)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M3.293 2.293a1 1 0 011.414 0l18 18a1 1 0 01-1.414 1.414l-2.012-2.012A2 2 0 0118 20H6a2 2 0 01-1.414-3.414L6 15.172V11c0-1.07.21-2.09.59-3.013L3.293 3.707a1 1 0 010-1.414z" }),
+            /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M10 22a2 2 0 104 0h-4zM18 8.586l-9.6-9.6A6 6 0 0118 11v-2.414z", opacity: ".25" })
           ] })
         ) : (
           // Open bell — auto-read is on.
-          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("path", { d: "M12 2a6 6 0 00-6 6v3.586l-1.707 1.707A1 1 0 005 15h14a1 1 0 00.707-1.707L18 11.586V8a6 6 0 00-6-6zM10 19a2 2 0 104 0h-4z" }) })
+          /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-3.5 w-3.5", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("path", { d: "M12 2a6 6 0 00-6 6v3.586l-1.707 1.707A1 1 0 005 15h14a1 1 0 00.707-1.707L18 11.586V8a6 6 0 00-6-6zM10 19a2 2 0 104 0h-4z" }) })
         )
       }
     )
@@ -8820,11 +10327,11 @@ function assignImagestoRows(rows) {
   return (rows || []).map(assignFoodImage);
 }
 
-// utils/supabaseClient.js
-function getToken2() {
+// utils/centersClient.js
+function getToken() {
   return localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
 }
-var supabase = {
+var centersClient = {
   from(table) {
     const builder = {
       _table: table,
@@ -8846,7 +10353,7 @@ var supabase = {
       async then(resolve, reject) {
         try {
           if (this._table === "communities") {
-            const token = getToken2();
+            const token = getToken();
             const res = await fetch("/api/centers", {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
@@ -8869,7 +10376,7 @@ var supabase = {
     return builder;
   }
 };
-var supabaseClient_default = supabase;
+var centersClient_default = centersClient;
 
 // utils/suggestionChips.js
 function liveAssistantIndex(messages) {
@@ -9104,15 +10611,27 @@ function onlineToneLabel(tone, lang) {
 }
 
 // utils/mediaRecorder.js
+var MIME_CANDIDATES = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg;codecs=opus"
+];
+function pickMediaRecorderMimeType() {
+  if (typeof MediaRecorder === "undefined" || !MediaRecorder.isTypeSupported) {
+    return "";
+  }
+  return MIME_CANDIDATES.find((t3) => MediaRecorder.isTypeSupported(t3)) || "";
+}
 function createMediaRecorder(stream) {
-  const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "";
-  return mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+  const mimeType = pickMediaRecorderMimeType();
+  return mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
 }
 
 // src/assistant/RecipeCard.jsx
-var import_react9 = __toESM(require_react(), 1);
+var import_react8 = __toESM(require_react(), 1);
 var import_prop_types = __toESM(require_prop_types(), 1);
-var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
 function RecipeCard({ recipe }) {
   if (!recipe) {
     reportError2(new Error("Recipe data is required"));
@@ -9131,48 +10650,48 @@ function RecipeCard({ recipe }) {
     reportError2(new Error("Recipe must have a name, ingredients, and instructions"));
     return null;
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
     "article",
     {
       "data-name": "recipe-card",
       className: "bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200",
       "aria-labelledby": "recipe-title",
-      children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "p-4", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h3", { id: "recipe-title", className: "text-lg font-semibold mb-2", children: name }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "flex flex-wrap gap-2 mb-4", role: "list", "aria-label": "Recipe details", children: [
-          prepTime && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", { className: "far fa-clock mr-1", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "sr-only", children: "Preparation time:" }),
+      children: /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "p-4", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h3", { id: "recipe-title", className: "text-lg font-semibold mb-2", children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "flex flex-wrap gap-2 mb-4", role: "list", "aria-label": "Recipe details", children: [
+          prepTime && /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("i", { className: "far fa-clock mr-1", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "sr-only", children: "Preparation time:" }),
             " Prep: ",
             prepTime
           ] }),
-          cookTime && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", { className: "fas fa-fire mr-1", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "sr-only", children: "Cooking time:" }),
+          cookTime && /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("i", { className: "fas fa-fire mr-1", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "sr-only", children: "Cooking time:" }),
             " Cook: ",
             cookTime
           ] }),
-          difficulty && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", { className: "fas fa-chart-line mr-1", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "sr-only", children: "Difficulty level:" }),
+          difficulty && /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("i", { className: "fas fa-chart-line mr-1", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "sr-only", children: "Difficulty level:" }),
             " ",
             difficulty
           ] }),
-          servings && /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("i", { className: "fas fa-utensils mr-1", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "sr-only", children: "Number of servings:" }),
+          servings && /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("span", { className: "bg-primary-50 text-primary-700 text-xs px-2 py-1 rounded-full", role: "listitem", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("i", { className: "fas fa-utensils mr-1", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("span", { className: "sr-only", children: "Number of servings:" }),
             " Serves ",
             servings
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { className: "mb-4", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h4", { id: "ingredients-title", className: "font-medium text-sm text-gray-700 mb-2", children: "Ingredients:" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { className: "mb-4", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { id: "ingredients-title", className: "font-medium text-sm text-gray-700 mb-2", children: "Ingredients:" }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
             "ul",
             {
               "aria-labelledby": "ingredients-title",
               className: "list-disc pl-5 space-y-1",
-              children: ingredients.map((ingredient, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+              children: ingredients.map((ingredient, index) => /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
                 "li",
                 {
                   className: "text-sm text-gray-600",
@@ -9183,9 +10702,9 @@ function RecipeCard({ recipe }) {
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)("div", { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("h4", { id: "instructions-title", className: "font-medium text-sm text-gray-700 mb-2", children: "Instructions:" }),
-          /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime6.jsxs)("div", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)("h4", { id: "instructions-title", className: "font-medium text-sm text-gray-700 mb-2", children: "Instructions:" }),
+          /* @__PURE__ */ (0, import_jsx_runtime6.jsx)(
             "div",
             {
               "aria-labelledby": "instructions-title",
@@ -9215,9 +10734,9 @@ RecipeCard.propTypes = {
 var RecipeCard_default = RecipeCard;
 
 // src/assistant/StorageTipCard.jsx
-var import_react10 = __toESM(require_react(), 1);
+var import_react9 = __toESM(require_react(), 1);
 var import_prop_types2 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
 function StorageTipCard({ foodItem, tips = [] }) {
   if (!foodItem) {
     reportError2(new Error("Food item is required"));
@@ -9227,14 +10746,14 @@ function StorageTipCard({ foodItem, tips = [] }) {
     reportError2(new Error("At least one storage tip is required"));
     return null;
   }
-  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
     "article",
     {
       "data-name": "storage-tip-card",
       className: "bg-white rounded-lg shadow-sm overflow-hidden border border-gray-200",
       "aria-labelledby": "storage-tips-title",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bg-primary-50 px-4 py-3 border-b border-primary-100", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "bg-primary-50 px-4 py-3 border-b border-primary-100", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
           "h3",
           {
             id: "storage-tips-title",
@@ -9245,26 +10764,26 @@ function StorageTipCard({ foodItem, tips = [] }) {
             ]
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "p-4", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("div", { className: "p-4", children: /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
           "ul",
           {
             className: "space-y-2",
             role: "list",
             "aria-label": `Storage tips for ${foodItem}`,
-            children: tips.map((tip, index) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+            children: tips.map((tip, index) => /* @__PURE__ */ (0, import_jsx_runtime7.jsxs)(
               "li",
               {
                 className: "flex items-start",
                 role: "listitem",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)(
                     "i",
                     {
                       className: "fas fa-check-circle text-primary-500 mt-1 mr-2",
                       "aria-hidden": "true"
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-gray-700", children: tip })
+                  /* @__PURE__ */ (0, import_jsx_runtime7.jsx)("span", { className: "text-gray-700", children: tip })
                 ]
               },
               `storage-tip-${index}`
@@ -9282,7 +10801,7 @@ StorageTipCard.propTypes = {
 var StorageTipCard_default = StorageTipCard;
 
 // src/assistant/AIChatPanel.jsx
-var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
 function recipeForCard(raw) {
   if (!raw || typeof raw !== "object") return null;
   const name = String(raw.name || raw.title || raw.recipe_name || "").trim();
@@ -9387,26 +10906,26 @@ function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
   const categories = filterWelcomeCategories(all, communityRole);
   const greeting = welcomeGreeting(language, userName);
   const subtitle = t2(language, "welcomeSubtitle");
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "px-4 pt-3 pb-2", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-3", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h2", { className: "text-base font-semibold text-gray-900 tracking-tight", children: greeting }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-xs text-gray-600 mt-0.5", children: subtitle })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "px-4 pt-3 pb-2", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-3", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h2", { className: "text-base font-semibold text-gray-900 tracking-tight", children: greeting }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "text-xs text-gray-600 mt-0.5", children: subtitle })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "grid grid-cols-2 gap-2", children: categories.map((cat) => {
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "grid grid-cols-2 gap-2", children: categories.map((cat) => {
       const accent = ACCENT_MAP[cat.accent] || ACCENT_MAP.cyan;
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "div",
         {
           className: `rounded-lg p-3 bg-white border transition-all ${accent.border} hover:bg-gray-50 shadow-sm ${accent.glow}`,
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `w-7 h-7 rounded-lg ring-1 flex items-center justify-center ${accent.iconBg}`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${cat.icon} text-xs`, "aria-hidden": "true" }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs font-semibold text-gray-900 truncate", children: cat.title }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-[10px] text-gray-500 truncate", children: cat.blurb })
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `w-7 h-7 rounded-lg ring-1 flex items-center justify-center ${accent.iconBg}`, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${cat.icon} text-xs`, "aria-hidden": "true" }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-xs font-semibold text-gray-900 truncate", children: cat.title }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-[10px] text-gray-500 truncate", children: cat.blurb })
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1", children: cat.prompts.map((p2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1", children: cat.prompts.map((p2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "button",
               {
                 type: "button",
@@ -9438,15 +10957,15 @@ function formatSeparator(iso, language) {
   return d2.toLocaleDateString(loc, { month: "short", day: "numeric" });
 }
 function DateSeparator({ label }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative my-3 flex items-center gap-2", "aria-hidden": "true", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-r from-transparent via-emerald-200 to-transparent" }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white border border-gray-200", children: label }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1 h-px bg-gradient-to-l from-transparent via-emerald-200 to-transparent" })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative my-3 flex items-center gap-2", "aria-hidden": "true", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "flex-1 h-px bg-gradient-to-r from-transparent via-emerald-200 to-transparent" }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-[10px] uppercase tracking-wider text-gray-500 px-2 py-0.5 rounded-full bg-white border border-gray-200", children: label }),
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "flex-1 h-px bg-gradient-to-l from-transparent via-emerald-200 to-transparent" })
   ] });
 }
 function ScrollToBottomPill({ visible, onClick, language }) {
   if (!visible) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
     "button",
     {
       type: "button",
@@ -9454,14 +10973,14 @@ function ScrollToBottomPill({ visible, onClick, language }) {
       className: "absolute bottom-3 right-3 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white border border-gray-200 text-emerald-700 text-xs shadow-md hover:bg-gray-50 hover:border-emerald-300 active:scale-95 transition-all animate-fade-in",
       "aria-label": t2(language, "jumpLatest"),
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-arrow-down text-[10px]", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-arrow-down text-[10px]", "aria-hidden": "true" }),
         t2(language, "latest")
       ]
     }
   );
 }
 function TypingIndicator() {
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex px-4 py-1.5", "aria-live": "polite", "aria-label": "Nouri is typing", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "inline-flex items-center gap-1 rounded-2xl bg-white border border-gray-200 px-3 py-2 shadow-sm", children: [0, 180, 360].map((delay) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex px-4 py-1.5", "aria-live": "polite", "aria-label": "Nouri is typing", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "inline-flex items-center gap-1 rounded-2xl bg-white border border-gray-200 px-3 py-2 shadow-sm", children: [0, 180, 360].map((delay) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
     "span",
     {
       className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-emerald-600/70",
@@ -9592,17 +11111,17 @@ var TOOL_CARD_TOKENS = {
 function ToolCardShell({ kind, language = "en", titleOverride, children }) {
   const t3 = TOOL_CARD_TOKENS[kind] || TOOL_CARD_TOKENS.claim;
   const title = titleOverride || t3.title[language] || t3.title.en;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
     "div",
     {
       role: "status",
       className: `mt-2 ${t3.bg} border rounded-xl p-3 text-sm shadow-md`,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `inline-flex w-6 h-6 rounded-full bg-emerald-50 ring-1 ${t3.ring} items-center justify-center`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${t3.icon} text-[11px] ${t3.accent}`, "aria-hidden": "true" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `font-semibold text-xs uppercase tracking-wide ${t3.accent}`, children: title })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2 mb-1.5", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `inline-flex w-6 h-6 rounded-full bg-emerald-50 ring-1 ${t3.ring} items-center justify-center`, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${t3.icon} text-[11px] ${t3.accent}`, "aria-hidden": "true" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `font-semibold text-xs uppercase tracking-wide ${t3.accent}`, children: title })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `text-xs leading-relaxed ${t3.sub}`, children })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `text-xs leading-relaxed ${t3.sub}`, children })
       ]
     }
   );
@@ -9617,7 +11136,7 @@ function SearchResultsClaimList({
 }) {
   const isEs = language === "es";
   const claimable = tool === "search_food_near_user" || tool === "search_food_nearby" || tool === "get_recent_listings" || tool === "get_community_listings";
-  const [selected, setSelected] = (0, import_react11.useState)(() => /* @__PURE__ */ new Set());
+  const [selected, setSelected] = (0, import_react10.useState)(() => /* @__PURE__ */ new Set());
   const toggle = (displayNum) => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -9655,11 +11174,11 @@ function SearchResultsClaimList({
     }
   };
   const titleOverride = claimable && searchItems.length >= 2 ? isEs ? `Comida cerca \xB7 ${searchItems.length} \xB7 puedes reclamar varios` : `Food nearby \xB7 ${searchItems.length} \xB7 claim several at once` : `${t3.title[language] || t3.title.en} \xB7 ${searchItems.length}`;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: cardKind, language, titleOverride, children: [
-    claimable && searchItems.length >= 2 && onSuggestionClick && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-2 space-y-1.5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: `text-[11px] ${t3.accent} font-medium`, children: isEs ? "Marca varios y recl\xE1malos juntos \u2014 o usa Reclamar en uno solo." : "Select several items and claim them together \u2014 or Claim one at a time." }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-wrap items-center gap-1.5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: cardKind, language, titleOverride, children: [
+    claimable && searchItems.length >= 2 && onSuggestionClick && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-2 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-2 space-y-1.5", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: `text-[11px] ${t3.accent} font-medium`, children: isEs ? "Marca varios y recl\xE1malos juntos \u2014 o usa Reclamar en uno solo." : "Select several items and claim them together \u2014 or Claim one at a time." }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-wrap items-center gap-1.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -9668,16 +11187,16 @@ function SearchResultsClaimList({
             children: isEs ? "Seleccionar visibles" : "Select visible"
           }
         ),
-        selected.size > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        selected.size > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
             onClick: clearSelection,
-            className: "text-[11px] px-2 py-0.5 rounded-md border border-slate-500 text-slate-100 hover:bg-slate-800/60",
+            className: "text-[11px] px-2 py-0.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-100",
             children: isEs ? "Limpiar" : "Clear"
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
           "button",
           {
             type: "button",
@@ -9685,14 +11204,14 @@ function SearchResultsClaimList({
             disabled: selected.size === 0,
             className: "ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-emerald-600 border border-emerald-600 text-white text-[11px] font-semibold hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
               selected.size === 0 ? isEs ? "Reclamar seleccionados" : "Claim selected" : isEs ? `Reclamar ${selected.size} seleccionados` : `Claim ${selected.size} selected`
             ]
           }
         )
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("ul", { className: "space-y-1.5", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("ul", { className: "space-y-1.5", children: [
       searchItems.slice(0, 25).map((item, idx) => {
         const displayNum = item.display_index ?? idx + 1;
         const miles = item.distance_miles != null ? Number(item.distance_miles) : item.distance_km != null ? Number(item.distance_km) * 0.621371 : null;
@@ -9704,22 +11223,22 @@ function SearchResultsClaimList({
         const address = item.address || item.full_address || item.pickup_location || null;
         const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
         const isSelected = selected.has(displayNum);
-        return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "li",
           {
             className: `rounded-lg px-2.5 py-2 border ${isSelected ? "bg-emerald-500/15 border-emerald-400/40" : "bg-emerald-50 border-emerald-100"}`,
-            children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
-              claimable && onSuggestionClick && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("label", { className: "flex-shrink-0 mt-0.5 cursor-pointer", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
+              claimable && onSuggestionClick && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("label", { className: "flex-shrink-0 mt-0.5 cursor-pointer", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "input",
                 {
                   type: "checkbox",
                   checked: isSelected,
                   onChange: () => toggle(displayNum),
-                  className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40",
+                  className: "rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40",
                   "aria-label": isEs ? `Seleccionar #${displayNum}` : `Select #${displayNum}`
                 }
               ) }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "span",
                 {
                   className: `flex-shrink-0 w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-[12px] font-bold ${t3.accent}`,
@@ -9727,31 +11246,31 @@ function SearchResultsClaimList({
                   children: displayNum
                 }
               ),
-              photoUrl && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "img",
                 {
                   src: photoUrl,
                   alt: item.title || "",
                   loading: "lazy",
-                  className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800",
+                  className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
                   onError: (e2) => {
                     e2.currentTarget.style.display = "none";
                   }
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
-                meta && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
-                address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-start gap-1`, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: address })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
+                meta && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
+                address && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-start gap-1`, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "break-words", children: address })
                 ] }),
-                item.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-center gap-1`, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: item.community_name })
+                item.community_name && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-center gap-1`, children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: item.community_name })
                 ] }),
-                item.dietary_tags?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex gap-1 mt-1.5 flex-wrap", children: item.dietary_tags.map((tag) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `${t3.tag} text-[10px] px-1.5 py-0.5 rounded border`, children: tag }, tag)) }),
-                onSuggestionClick && item.id && claimable && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                item.dietary_tags?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex gap-1 mt-1.5 flex-wrap", children: item.dietary_tags.map((tag) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `${t3.tag} text-[10px] px-1.5 py-0.5 rounded border`, children: tag }, tag)) }),
+                onSuggestionClick && item.id && claimable && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                   "button",
                   {
                     type: "button",
@@ -9760,7 +11279,7 @@ function SearchResultsClaimList({
                     ),
                     className: "mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors",
                     children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
                       isEs ? "Reclamar solo este" : "Claim this one"
                     ]
                   }
@@ -9771,7 +11290,7 @@ function SearchResultsClaimList({
           item.id || displayNum
         );
       }),
-      searchItems.length > 25 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("li", { className: `text-[11px] ${t3.sub} text-center pt-0.5`, children: isEs ? `+${searchItems.length - 25} m\xE1s` : `+${searchItems.length - 25} more` })
+      searchItems.length > 25 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { className: `text-[11px] ${t3.sub} text-center pt-0.5`, children: isEs ? `+${searchItems.length - 25} m\xE1s` : `+${searchItems.length - 25} more` })
     ] })
   ] });
 }
@@ -9795,7 +11314,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const cardKind = tool === "get_user_listings" ? "mylistings" : tool === "get_my_claims" ? "myclaims" : tool === "get_community_listings" ? "community" : "search";
     const t3 = TOOL_CARD_TOKENS[cardKind] || TOOL_CARD_TOKENS.search;
     if (["search_food_near_user", "search_food_nearby", "get_recent_listings", "get_community_listings"].includes(tool)) {
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         SearchResultsClaimList,
         {
           searchItems,
@@ -9816,7 +11335,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         return iso;
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: cardKind, language, titleOverride: `${t3.title[language] || t3.title.en} \xB7 ${searchItems.length}`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5", children: searchItems.slice(0, 25).map((item, idx) => {
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: cardKind, language, titleOverride: `${t3.title[language] || t3.title.en} \xB7 ${searchItems.length}`, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1.5", children: searchItems.slice(0, 25).map((item, idx) => {
       const displayNum = item.display_index ?? idx + 1;
       const miles = item.distance_miles != null ? Number(item.distance_miles) : item.distance_km != null ? Number(item.distance_km) * 0.621371 : null;
       const distance = miles != null && Number.isFinite(miles) ? `${miles.toFixed(miles < 10 ? 1 : 0)} mi` : null;
@@ -9826,8 +11345,8 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
       const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(" \xB7 ");
       const address = item.address || item.full_address || item.pickup_location || null;
       const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
-      return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("li", { className: "rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { className: "rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "span",
           {
             className: `flex-shrink-0 w-7 h-7 rounded-full bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-[12px] font-bold ${t3.accent}`,
@@ -9835,24 +11354,24 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
             children: displayNum
           }
         ),
-        photoUrl && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "img",
           {
             src: photoUrl,
             alt: item.title || "",
             loading: "lazy",
-            className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800",
+            className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
             onError: (e2) => {
               e2.currentTarget.style.display = "none";
             }
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
-          meta && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
-          address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-start gap-1`, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: address })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
+          meta && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
+          address && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `${t3.sub} text-[11px] mt-0.5 flex items-start gap-1`, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "break-words", children: address })
           ] })
         ] })
       ] }) }, item.id || displayNum);
@@ -9862,149 +11381,149 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const claimed = Array.isArray(result.claimed) ? result.claimed : [];
     const failed = Array.isArray(result.failed) ? result.failed : [];
     if (claimed.length === 0 && failed.length === 0 && !result.summary) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       ToolCardShell,
       {
         kind: failed.length && !claimed.length ? "claimfail" : "claim",
         language,
         titleOverride: language === "es" ? `Reclamos \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} fallaron` : ""}` : `Multi-claim \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} failed` : ""}`,
         children: [
-          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: c2.title || c2.listing_id || "Listing" }),
-            c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
+          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: c2.title || c2.listing_id || "Listing" }),
+            c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-600", children: [
               " \xB7 ",
               c2.quantity,
               " ",
               c2.unit || ""
             ] })
           ] }, c2.listing_id || c2.claim_id || i2)) }),
-          failed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1 text-red-100 text-[11px]", children: failed.map((f2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { children: [
+          failed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1 text-red-100 text-[11px]", children: failed.map((f2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
             f2.title || f2.listing_id || `#${f2.index ?? i2 + 1}`,
             ": ",
             f2.error || "failed"
           ] }, f2.listing_id || i2)) }),
-          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
+          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
         ]
       }
     );
   }
   if ((tool === "claim_listing" || tool === "claim_food") && !ok && (result?.error || toolResult.summary)) {
     const errText = result?.error || toolResult.summary;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "claimfail", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: errText }),
-      result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "claimfail", language, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800", children: errText }),
+      result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
     ] });
   }
   if ((tool === "claim_listing" || tool === "claim_food") && ok) {
     const photoUrl = typeof result.image_url === "string" && /^https?:\/\//i.test(result.image_url) ? result.image_url : null;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "claim", language, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
-      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "claim", language, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
+      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         "img",
         {
           src: photoUrl,
           alt: result.title || "",
           loading: "lazy",
-          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-emerald-500/15 bg-slate-800",
+          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
           onError: (e2) => {
             e2.currentTarget.style.display = "none";
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-        result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-800", children: [
-          result.quantity ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "font-medium", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
+        result.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-800", children: [
+          result.quantity ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "font-medium", children: [
             result.quantity,
             " ",
             result.unit || "",
             " "
           ] }) : null,
           result.quantity ? language === "es" ? "de " : "of " : null,
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title }),
-          result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: result.title }),
+          result.category && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-600", children: [
             " \xB7 ",
             result.category
           ] })
         ] }),
-        result.pickup_location && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-location-dot text-[10px] mt-[2px] opacity-70", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: result.pickup_location })
+        result.pickup_location && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-location-dot text-[10px] mt-[2px] opacity-70", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "break-words", children: result.pickup_location })
         ] }),
-        result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: result.community_name })
+        result.community_name && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: result.community_name })
         ] }),
-        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
+        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
       ] })
     ] }) });
   }
   if (tool === "create_reminder" && (result?.success || result?.created)) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "reminder", language, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-800", children: result.summary || (language === "es" ? "Te avisar\xE9." : "I'll ping you.") }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "reminder", language, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-gray-800", children: result.summary || (language === "es" ? "Te avisar\xE9." : "I'll ping you.") }) });
   }
   if ((tool === "post_food_listings" || tool === "bulk_post_food_listings" || tool === "bulk_import_listings") && ok) {
     const posted = Array.isArray(result.posted) ? result.posted : Array.isArray(result.listings) ? result.listings : [];
     const failed = Array.isArray(result.failed) ? result.failed : [];
     const count = result.count_posted ?? posted.length;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       ToolCardShell,
       {
         kind: "post",
         language,
         titleOverride: language === "es" ? `Publicado \xB7 ${count} listado${count === 1 ? "" : "s"}` : `Posted \xB7 ${count} listing${count === 1 ? "" : "s"}`,
         children: [
-          posted.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1.5 mb-2", children: posted.slice(0, 12).map((row, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: row.title || row.listing_id || `Item ${i2 + 1}` }),
-            row.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-600", children: [
+          posted.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1.5 mb-2", children: posted.slice(0, 12).map((row, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: row.title || row.listing_id || `Item ${i2 + 1}` }),
+            row.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-600", children: [
               " \xB7 ",
               row.quantity,
               " ",
               row.unit || ""
             ] })
           ] }, row.listing_id || row.id || i2)) }),
-          failed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ul", { className: "space-y-1 text-red-100 text-[11px] mb-1", children: failed.slice(0, 8).map((f2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("li", { children: [
+          failed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1 text-red-100 text-[11px] mb-1", children: failed.slice(0, 8).map((f2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
             f2.title || f2.listing_id || `#${i2 + 1}`,
             ": ",
             f2.error || "failed"
           ] }, f2.listing_id || i2)) }),
-          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
+          (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px] mt-1", children: result.summary || result.message })
         ]
       }
     );
   }
   if ((tool === "create_food_listing" || tool === "post_food_listing") && !ok && (result?.error || toolResult.summary)) {
     const errText = result?.error || toolResult.summary;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo publicar" : "Could not post", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: errText }),
-      result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo publicar" : "Could not post", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800", children: errText }),
+      result?.next_step && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${TOOL_CARD_TOKENS.claimfail.sub} text-[11px] mt-1.5`, children: result.next_step })
     ] });
   }
   if ((tool === "create_food_listing" || tool === "post_food_listing") && ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "post", language, children: [
-      result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-800", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title }),
-        result.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-800", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "post", language, children: [
+      result.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-800", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: result.title }),
+        result.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-800", children: [
           " \xB7 ",
           result.quantity,
           " ",
           result.unit || ""
         ] }),
-        result.category && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-gray-800", children: [
+        result.category && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-800", children: [
           " \xB7 ",
           result.category
         ] })
       ] }),
-      result.address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: result.address })
+      result.address && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-700 text-[11px] mt-1 flex items-start gap-1", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "break-words", children: result.address })
       ] }),
-      result.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: result.community_name })
+      result.community_name && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-700 text-[11px] mt-0.5 flex items-center gap-1", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: result.community_name })
       ] }),
-      result.on_map === false && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-amber-50 text-[11px] mt-1 flex items-center gap-1", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-triangle-exclamation text-[10px]", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: language === "es" ? "Sin coordenadas \u2014 no aparecer\xE1 en el mapa" : "No coordinates \u2014 listing will not appear on the map" })
+      result.on_map === false && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-amber-50 text-[11px] mt-1 flex items-center gap-1", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-triangle-exclamation text-[10px]", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: language === "es" ? "Sin coordenadas \u2014 no aparecer\xE1 en el mapa" : "No coordinates \u2014 listing will not appear on the map" })
       ] }),
-      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
+      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
     ] });
   }
   if ((tool === "update_food_listing" || tool === "update_listing" || tool === "edit_listing") && ok) {
@@ -10022,8 +11541,8 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const expiryLabel = fmtDate(item.expiry_date || item.pickup_by);
     const address = item.address || item.full_address || item.location || null;
     const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "updated", language, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex gap-2.5", children: [
-      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "updated", language, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
+      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         "img",
         {
           src: photoUrl,
@@ -10035,82 +11554,82 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "min-w-0 flex-1", children: [
-        item.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-900 font-semibold", children: item.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `${TOOL_CARD_TOKENS.updated.sub} text-[11px] mt-0.5 space-y-0.5`, children: [
-          qtyLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
+        item.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-900 font-semibold", children: item.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `${TOOL_CARD_TOKENS.updated.sub} text-[11px] mt-0.5 space-y-0.5`, children: [
+          qtyLabel && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
             language === "es" ? "Cantidad: " : "Quantity: ",
             qtyLabel
           ] }),
-          expiryLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
+          expiryLabel && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
             language === "es" ? "Vence: " : "Expires: ",
             expiryLabel
           ] }),
-          item.community_name && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-1", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: item.community_name })
+          item.community_name && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-1", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-[10px] opacity-70", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: item.community_name })
           ] }),
-          address && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-start gap-1", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "break-words", children: address })
+          address && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-start gap-1", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-map-marker-alt mt-[2px] text-[10px] opacity-70", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "break-words", children: address })
           ] }),
-          item.description && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "italic opacity-90", children: item.description })
+          item.description && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "italic opacity-90", children: item.description })
         ] }),
-        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-700 text-[11px] mt-1", children: result.summary || result.message })
+        (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-700 text-[11px] mt-1", children: result.summary || result.message })
       ] })
     ] }) });
   }
   if ((tool === "update_food_listing" || tool === "update_listing" || tool === "edit_listing") && !ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo actualizar" : "Could not update", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: result?.error || result?.message || result?.summary }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "claimfail", language, titleOverride: language === "es" ? "No se pudo actualizar" : "Could not update", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800", children: result?.error || result?.message || result?.summary }) });
   }
   if (tool === "delete_listing" && ok) {
     const count = result.deleted_count || 1;
     const titles = result.titles || (result.title ? [result.title] : []);
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "deleted", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800", children: count > 1 ? language === "es" ? `Eliminados ${count} listados duplicados.` : `Removed ${count} duplicate listings.` : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "deleted", language, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800", children: count > 1 ? language === "es" ? `Eliminados ${count} listados duplicados.` : `Removed ${count} duplicate listings.` : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
         language === "es" ? "Eliminado: " : "Removed: ",
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title || titles[0] || "listing" })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: result.title || titles[0] || "listing" })
       ] }) }),
-      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
+      (result.summary || result.message) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary || result.message })
     ] });
   }
   if (tool === "delete_listing" && !ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "error", language, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-900 font-medium", children: language === "es" ? "No se pudo eliminar" : "Could not delete listing" }),
-      (result.error || result.message || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.error || result.message || result.summary })
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "error", language, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-900 font-medium", children: language === "es" ? "No se pudo eliminar" : "Could not delete listing" }),
+      (result.error || result.message || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 mt-1", children: result.error || result.message || result.summary })
     ] });
   }
   if (tool === "cancel_claim" && ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "cancel", language, children: [
-      result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-amber-100", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "cancel", language, children: [
+      result.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-amber-100", children: [
         language === "es" ? "Liberado: " : "Released: ",
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: result.title })
       ] }),
-      result.summary && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-amber-50 mt-1", children: result.summary })
+      result.summary && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-amber-50 mt-1", children: result.summary })
     ] });
   }
   if (tool === "confirm_claim" && ok) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(ToolCardShell, { kind: "pickup", language, children: [
-      result.title && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-sky-100", children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(ToolCardShell, { kind: "pickup", language, children: [
+      result.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-sky-100", children: [
         language === "es" ? "Completado: " : "Completed: ",
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-semibold", children: result.title })
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: result.title })
       ] }),
-      result.summary && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary })
+      result.summary && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 mt-1", children: result.summary })
     ] });
   }
   if (tool === "get_recipes" && !result?.error) {
     const recipes = Array.isArray(result.recipes) ? result.recipes : [];
     const cards = recipes.map(recipeForCard).filter(Boolean);
     if (cards.length === 0 && !result.summary && !result.headline) return null;
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       ToolCardShell,
       {
         kind: "generic",
         language,
         titleOverride: language === "es" ? "Recetas sugeridas" : "Recipe suggestions",
         children: [
-          (result.headline || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px] mb-3", children: result.headline || result.summary }),
-          cards.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "space-y-3", children: cards.map((recipe, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(RecipeCard_default, { recipe }, `${recipe.name}-${idx}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.headline })
+          (result.headline || result.summary) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px] mb-3", children: result.headline || result.summary }),
+          cards.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "space-y-3", children: cards.map((recipe, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(RecipeCard_default, { recipe }, `${recipe.name}-${idx}`)) }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.headline })
         ]
       }
     );
@@ -10119,23 +11638,23 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const entries = parseStorageTipEntries(result, language);
     if (entries.length === 0) {
       if (result.summary || result.message) {
-        return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: language === "es" ? "Conservaci\xF3n" : "Storage tips", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
+        return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: language === "es" ? "Conservaci\xF3n" : "Storage tips", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
       }
       return null;
     }
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
       ToolCardShell,
       {
         kind: "generic",
         language,
         titleOverride: language === "es" ? "Consejos de conservaci\xF3n" : "Storage tips",
-        children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "space-y-3", children: entries.map((entry, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(StorageTipCard_default, { foodItem: entry.foodItem, tips: entry.tips }, `${entry.foodItem}-${idx}`)) })
+        children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "space-y-3", children: entries.map((entry, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(StorageTipCard_default, { foodItem: entry.foodItem, tips: entry.tips }, `${entry.foodItem}-${idx}`)) })
       }
     );
   }
   const SILENT_UI_TOOLS = /* @__PURE__ */ new Set(["ui_action", "navigate_ui", "mark_notifications_read"]);
   if (ok && !SILENT_UI_TOOLS.has(tool) && (result?.summary || result?.message)) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: tool?.replace(/_/g, " ") || (language === "es" ? "Acci\xF3n" : "Action"), children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: tool?.replace(/_/g, " ") || (language === "es" ? "Acci\xF3n" : "Action"), children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
   }
   return null;
 }
@@ -10182,13 +11701,13 @@ function describeErrorCode(code, language = "en") {
 function ConfirmationBar({ language, pendingAction, onConfirm, onCancel, onEdit, disabled }) {
   const summary = pendingAction?.summary || "";
   const isEs = language === "es";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 ring-1 ring-amber-200/60", children: [
-    summary && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-amber-950 text-xs mb-2.5 leading-snug font-medium", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-2 p-3 rounded-xl bg-amber-50 border border-amber-200 ring-1 ring-amber-200/60", children: [
+    summary && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-amber-950 text-xs mb-2.5 leading-snug font-medium", children: [
       isEs ? "Acci\xF3n pendiente: " : "Pending: ",
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-medium", children: summary })
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-medium", children: summary })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-wrap gap-2", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-wrap gap-2", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           type: "button",
@@ -10196,12 +11715,12 @@ function ConfirmationBar({ language, pendingAction, onConfirm, onCancel, onEdit,
           disabled,
           className: "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white disabled:opacity-40",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-check text-[10px]", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-check text-[10px]", "aria-hidden": "true" }),
             isEs ? "Confirmar" : "Confirm"
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           type: "button",
@@ -10209,12 +11728,12 @@ function ConfirmationBar({ language, pendingAction, onConfirm, onCancel, onEdit,
           disabled,
           className: "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-gray-50 text-gray-900 border border-gray-400 disabled:opacity-40",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-pen text-[10px]", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-pen text-[10px]", "aria-hidden": "true" }),
             isEs ? "Editar" : "Edit"
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           type: "button",
@@ -10222,7 +11741,7 @@ function ConfirmationBar({ language, pendingAction, onConfirm, onCancel, onEdit,
           disabled,
           className: "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white hover:bg-gray-50 text-gray-800 border border-gray-400 disabled:opacity-40",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-xmark text-[10px]", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-xmark text-[10px]", "aria-hidden": "true" }),
             isEs ? "Cancelar" : "Cancel"
           ]
         }
@@ -10245,11 +11764,11 @@ function MessageBubble({
   showRegenerate = false,
   showSuggestionChips = false
 }) {
-  const [feedbackGiven, setFeedbackGiven] = (0, import_react11.useState)(null);
-  const [avatarBroken, setAvatarBroken] = (0, import_react11.useState)(false);
-  const [copied, setCopied] = (0, import_react11.useState)(false);
+  const [feedbackGiven, setFeedbackGiven] = (0, import_react10.useState)(null);
+  const [avatarBroken, setAvatarBroken] = (0, import_react10.useState)(false);
+  const [copied, setCopied] = (0, import_react10.useState)(false);
   const isUser = msg.role === "user";
-  const suggestionItems = (0, import_react11.useMemo)(() => {
+  const suggestionItems = (0, import_react10.useMemo)(() => {
     const raw = msg.suggestions || msg.suggestedActions || [];
     return resolveInputChips(raw, language, null, {
       allowLazy: false
@@ -10261,7 +11780,7 @@ function MessageBubble({
     setFeedbackGiven(rating);
     onFeedback?.(msg.id, rating);
   };
-  const handleCopy = (0, import_react11.useCallback)(() => {
+  const handleCopy = (0, import_react10.useCallback)(() => {
     if (!msg.message) return;
     try {
       const copy = navigator?.clipboard?.writeText?.bind(navigator.clipboard);
@@ -10278,7 +11797,7 @@ function MessageBubble({
     } catch {
     }
   }, [msg.message]);
-  const userInitials = (0, import_react11.useMemo)(() => {
+  const userInitials = (0, import_react10.useMemo)(() => {
     const src = (currentUser?.name || currentUser?.email || "").trim();
     if (!src) return "\u{1F64B}";
     const parts = src.split(/[\s@._-]+/).filter(Boolean);
@@ -10287,20 +11806,20 @@ function MessageBubble({
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
   }, [currentUser?.name, currentUser?.email]);
   const userAvatarUrl = !avatarBroken ? currentUser?.avatar_url : null;
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `flex ${isUser ? "justify-end" : "justify-start"} mb-3`, children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `max-w-[85%] flex items-start gap-2 ${isUser ? "flex-row-reverse" : ""}`, children: [
-    !isUser && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex-shrink-0 w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center mt-1 shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-5 h-5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `flex ${isUser ? "justify-end" : "justify-start"} mb-3`, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `max-w-[85%] flex items-start gap-2 ${isUser ? "flex-row-reverse" : ""}`, children: [
+    !isUser && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex-shrink-0 w-7 h-7 rounded-full bg-emerald-600 flex items-center justify-center mt-1 shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-5 h-5", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
     ] }) }),
-    isUser && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    isUser && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
       "div",
       {
         className: "flex-shrink-0 w-7 h-7 rounded-full overflow-hidden mt-1 ring-1 ring-emerald-200 bg-emerald-600 flex items-center justify-center",
         title: currentUser?.name || currentUser?.email || "You",
         "aria-label": `Message from ${currentUser?.name || "you"}`,
-        children: userAvatarUrl ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        children: userAvatarUrl ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "img",
           {
             src: userAvatarUrl,
@@ -10308,17 +11827,17 @@ function MessageBubble({
             className: "w-full h-full object-cover",
             onError: () => setAvatarBroken(true)
           }
-        ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] font-semibold text-white tracking-wide", children: userInitials })
+        ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-[10px] font-semibold text-white tracking-wide", children: userInitials })
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "group/msg min-w-0 flex-1", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "group/msg min-w-0 flex-1", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "div",
         {
           className: `px-4 py-2.5 rounded-2xl text-[13px] leading-relaxed ${isUser ? "bg-emerald-600 text-white rounded-br-md shadow-sm" : msg.isError ? "bg-red-50 text-red-800 border border-red-200 rounded-bl-md backdrop-blur-sm" : "bg-white text-gray-900 rounded-bl-md border border-gray-200 shadow-sm"}`,
           children: [
-            /^image:\s*https?:\/\//i.test(msg.message) ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /^image:\s*https?:\/\//i.test(msg.message) ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "img",
                 {
                   src: msg.message.replace(/^image:\s*/i, ""),
@@ -10329,20 +11848,20 @@ function MessageBubble({
                   }
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[11px] opacity-70", children: "\u{1F4F7}" })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-[11px] opacity-70", children: "\u{1F4F7}" })
             ] }) : (
               // Defensive: if the model emits markdown image syntax
               // (`![alt](url)`) — typically a hallucinated photo URL — strip
               // it before rendering. Real listing photos are shown in the
               // search tool card from `item.image_url`, never in prose.
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "whitespace-pre-wrap", children: String(msg.message || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").trim() })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "whitespace-pre-wrap", children: String(msg.message || "").replace(/!\[[^\]]*\]\([^)]*\)/g, "").trim() })
             ),
-            msg.isError && msg.errorCode && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2.5 pt-2.5 border-t border-red-200 flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-semibold tracking-wide ring-1 ring-red-200", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-circle-exclamation text-[9px]", "aria-hidden": "true" }),
+            msg.isError && msg.errorCode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-2.5 pt-2.5 border-t border-red-200 flex flex-wrap items-center gap-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-[10px] font-semibold tracking-wide ring-1 ring-red-200", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-circle-exclamation text-[9px]", "aria-hidden": "true" }),
                 describeErrorCode(msg.errorCode, language).eyebrow
               ] }),
-              msg.errorRetryable && onRetry && msg.retryText && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+              msg.errorRetryable && onRetry && msg.retryText && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                 "button",
                 {
                   type: "button",
@@ -10351,9 +11870,9 @@ function MessageBubble({
                   className: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-red-600 hover:bg-red-700 text-white text-[11px] font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300",
                   "aria-label": language === "es" ? "Reintentar mensaje" : "Retry message",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${isLoading ? "fa-spinner fa-spin" : "fa-rotate-right"} text-[10px]`, "aria-hidden": "true" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${isLoading ? "fa-spinner fa-spin" : "fa-rotate-right"} text-[10px]`, "aria-hidden": "true" }),
                     language === "es" ? "Reintentar" : "Retry",
-                    msg.errorRetryAfter ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-white/80 font-normal", children: [
+                    msg.errorRetryAfter ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-white/80 font-normal", children: [
                       "\xB7 ",
                       msg.errorRetryAfter,
                       "s"
@@ -10361,7 +11880,7 @@ function MessageBubble({
                   ]
                 }
               ),
-              msg.requestId && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              msg.requestId && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "span",
                 {
                   className: "ml-auto text-[9px] font-mono text-red-400 tracking-wider truncate max-w-[120px]",
@@ -10373,7 +11892,7 @@ function MessageBubble({
           ]
         }
       ),
-      !isUser && msg.requiresConfirmation && showSuggestionChips && onConfirmAction && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      !isUser && msg.requiresConfirmation && showSuggestionChips && onConfirmAction && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         ConfirmationBar,
         {
           language,
@@ -10384,7 +11903,7 @@ function MessageBubble({
           onEdit: () => onSuggestionClick?.(language === "es" ? "Espera, ed\xEDtalo" : "Wait, edit it")
         }
       ),
-      msg.toolResults?.map((tr, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      msg.toolResults?.map((tr, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         ToolResultCard,
         {
           toolResult: tr,
@@ -10394,7 +11913,7 @@ function MessageBubble({
         },
         i2
       )),
-      showSuggestionChips && suggestionItems.length > 0 && !isUser && !msg.isError && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: `flex flex-wrap gap-1 mt-2 ${suggestionItems.length > 4 ? "max-h-36 overflow-y-auto pr-1" : ""}`, children: suggestionItems.map((action, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      showSuggestionChips && suggestionItems.length > 0 && !isUser && !msg.isError && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `flex flex-wrap gap-1 mt-2 ${suggestionItems.length > 4 ? "max-h-36 overflow-y-auto pr-1" : ""}`, children: suggestionItems.map((action, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         SuggestedActionButton,
         {
           action,
@@ -10405,15 +11924,15 @@ function MessageBubble({
         },
         i2
       )) }),
-      !isUser && !msg.isError && msg.id !== "welcome" && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      !isUser && !msg.isError && msg.id !== "welcome" && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "div",
         {
           className: "flex items-center gap-1 mt-1.5 opacity-80 md:opacity-70 md:group-hover/msg:opacity-100 transition-opacity",
           role: "toolbar",
           "aria-label": language === "es" ? "Acciones del mensaje" : "Message actions",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(VoiceOutput_default, { text: msg.message, language }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(VoiceOutput_default, { text: msg.message, language }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "button",
               {
                 type: "button",
@@ -10421,11 +11940,11 @@ function MessageBubble({
                 className: "inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors",
                 title: copied ? language === "es" ? "Copiado" : "Copied" : language === "es" ? "Copiar" : "Copy",
                 "aria-label": language === "es" ? "Copiar mensaje" : "Copy message",
-                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${copied ? "fa-check text-emerald-600" : "fa-copy"} text-[11px]`, "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${copied ? "fa-check text-emerald-600" : "fa-copy"} text-[11px]`, "aria-hidden": "true" })
               }
             ),
-            !feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            !feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "button",
                 {
                   type: "button",
@@ -10433,10 +11952,10 @@ function MessageBubble({
                   className: "inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors",
                   title: language === "es" ? "\xDAtil" : "Helpful",
                   "aria-label": language === "es" ? "Marcar como \xFAtil" : "Mark as helpful",
-                  children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-thumbs-up text-[11px]", "aria-hidden": "true" })
+                  children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-thumbs-up text-[11px]", "aria-hidden": "true" })
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "button",
                 {
                   type: "button",
@@ -10444,12 +11963,12 @@ function MessageBubble({
                   className: "inline-flex items-center justify-center w-6 h-6 rounded-md text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-colors",
                   title: language === "es" ? "No \xFAtil" : "Not helpful",
                   "aria-label": language === "es" ? "Marcar como no \xFAtil" : "Mark as not helpful",
-                  children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-thumbs-down text-[11px]", "aria-hidden": "true" })
+                  children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-thumbs-down text-[11px]", "aria-hidden": "true" })
                 }
               )
             ] }),
-            feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[10px] text-[#059669] px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200", children: feedbackGiven === "helpful" ? language === "es" ? "Gracias \u{1F44D}" : "Thanks \u{1F44D}" : language === "es" ? "Anotado \u{1F44E}" : "Noted \u{1F44E}" }),
-            showRegenerate && onRegenerate && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+            feedbackGiven && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-[10px] text-[#059669] px-1.5 py-0.5 rounded-md bg-emerald-50 border border-emerald-200", children: feedbackGiven === "helpful" ? language === "es" ? "Gracias \u{1F44D}" : "Thanks \u{1F44D}" : language === "es" ? "Anotado \u{1F44E}" : "Noted \u{1F44E}" }),
+            showRegenerate && onRegenerate && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
               "button",
               {
                 type: "button",
@@ -10459,20 +11978,20 @@ function MessageBubble({
                 title: language === "es" ? "Regenerar respuesta" : "Regenerate response",
                 "aria-label": language === "es" ? "Regenerar respuesta" : "Regenerate response",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${isLoading ? "fa-spinner fa-spin" : "fa-arrows-rotate"} text-[10px]`, "aria-hidden": "true" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "hidden sm:inline", children: language === "es" ? "Regenerar" : "Regenerate" })
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${isLoading ? "fa-spinner fa-spin" : "fa-arrows-rotate"} text-[10px]`, "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "hidden sm:inline", children: language === "es" ? "Regenerar" : "Regenerate" })
                 ]
               }
             )
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `text-[10px] mt-1 flex items-center gap-1 ${isUser ? "justify-end text-white/75" : "text-gray-500"}`, children: [
-        isVoiceMessage && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "px-1.5 py-0.5 rounded-full border border-white/30 bg-white/15 text-white/90 text-[9px] uppercase tracking-wide inline-flex items-center gap-1", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-microphone text-[8px]", "aria-hidden": "true" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `text-[10px] mt-1 flex items-center gap-1 ${isUser ? "justify-end text-white/75" : "text-gray-500"}`, children: [
+        isVoiceMessage && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "px-1.5 py-0.5 rounded-full border border-white/30 bg-white/15 text-white/90 text-[9px] uppercase tracking-wide inline-flex items-center gap-1", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-microphone text-[8px]", "aria-hidden": "true" }),
           language === "es" ? "Voz" : "Voice"
         ] }),
-        timeLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: timeLabel })
+        timeLabel && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: timeLabel })
       ] })
     ] })
   ] }) });
@@ -10511,7 +12030,7 @@ function SuggestedActionButton({ action, onSuggestionClick, onAttachPhoto, disab
   };
   if (!label) return null;
   const styleClass = actionType === "navigate" ? "bg-blue-50 text-blue-800 hover:bg-blue-100 border-blue-300 font-medium" : "bg-[#10b981]/15 text-[#047857] hover:bg-[#10b981]/25 border-[#10b981]/30 font-medium";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
     "button",
     {
       onClick: handleClick,
@@ -10538,22 +12057,22 @@ function BulkUploadPreview({
   const icon = pending.kind === "photo" ? "fa-camera" : "fa-file-csv";
   const ringClass = "border-gray-200";
   const headerClass = "text-emerald-800";
-  const [communities, setCommunities] = (0, import_react11.useState)([]);
-  const [communitiesError, setCommunitiesError] = (0, import_react11.useState)(null);
-  const [communitiesLoading, setCommunitiesLoading] = (0, import_react11.useState)(true);
-  const [selectedRowIndexes, setSelectedRowIndexes] = (0, import_react11.useState)(() => /* @__PURE__ */ new Set());
-  const [bulkLocation, setBulkLocation] = (0, import_react11.useState)(() => String(preferredLocation || "").trim());
-  const [bulkCommunityId, setBulkCommunityId] = (0, import_react11.useState)(
+  const [communities, setCommunities] = (0, import_react10.useState)([]);
+  const [communitiesError, setCommunitiesError] = (0, import_react10.useState)(null);
+  const [communitiesLoading, setCommunitiesLoading] = (0, import_react10.useState)(true);
+  const [selectedRowIndexes, setSelectedRowIndexes] = (0, import_react10.useState)(() => /* @__PURE__ */ new Set());
+  const [bulkLocation, setBulkLocation] = (0, import_react10.useState)(() => String(preferredLocation || "").trim());
+  const [bulkCommunityId, setBulkCommunityId] = (0, import_react10.useState)(
     () => preferredCommunityId != null && preferredCommunityId !== "" ? String(preferredCommunityId) : ""
   );
-  const [bulkCategory, setBulkCategory] = (0, import_react11.useState)("");
-  const [bulkExpiry, setBulkExpiry] = (0, import_react11.useState)("");
-  const [fillEmptyOnly, setFillEmptyOnly] = (0, import_react11.useState)(true);
-  const loadCommunities = (0, import_react11.useCallback)(async () => {
+  const [bulkCategory, setBulkCategory] = (0, import_react10.useState)("");
+  const [bulkExpiry, setBulkExpiry] = (0, import_react10.useState)("");
+  const [fillEmptyOnly, setFillEmptyOnly] = (0, import_react10.useState)(true);
+  const loadCommunities = (0, import_react10.useCallback)(async () => {
     setCommunitiesLoading(true);
     setCommunitiesError(null);
     try {
-      const { data, error } = await supabaseClient_default.from("communities").select("id, name").eq("is_active", true).order("name", { ascending: true });
+      const { data, error } = await centersClient_default.from("communities").select("id, name").eq("is_active", true).order("name", { ascending: true });
       if (error) throw error;
       setCommunities(data || []);
     } catch (err) {
@@ -10563,10 +12082,10 @@ function BulkUploadPreview({
       setCommunitiesLoading(false);
     }
   }, [isEs]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     loadCommunities();
   }, [loadCommunities]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (pending?.kind !== "csv") return;
     const n2 = pending?.rows?.length || 0;
     setSelectedRowIndexes(new Set(Array.from({ length: n2 }, (_2, i2) => i2)));
@@ -10579,7 +12098,7 @@ function BulkUploadPreview({
       return preferredCommunityId != null && preferredCommunityId !== "" ? String(preferredCommunityId) : "";
     });
   }, [pending?.kind, pending?.rows?.length, preferredLocation, preferredCommunityId]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!communities.length) return;
     const currentRows = pending?.rows || [];
     if (!currentRows.length) return;
@@ -10611,7 +12130,7 @@ function BulkUploadPreview({
     });
   }, [communities, preferredCommunityId, pending?.rows?.length, pending?.kind]);
   const filledLog = Array.isArray(pending.filledLog) ? pending.filledLog : [];
-  const filledByIndex = (0, import_react11.useMemo)(() => {
+  const filledByIndex = (0, import_react10.useMemo)(() => {
     const m2 = /* @__PURE__ */ new Map();
     for (const f2 of filledLog) {
       if (f2 && typeof f2.index === "number") m2.set(f2.index, f2.fields || []);
@@ -10693,15 +12212,15 @@ function BulkUploadPreview({
   };
   if (pending.error) {
     const allErrors = [pending.error, ...(pending.parseErrors || []).slice(1)].filter(Boolean);
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass} mt-0.5`, "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs font-semibold text-slate-100", children: kindLabel }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs text-slate-300 truncate mb-1", children: pending.filename }),
-          allErrors.map((e2, i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-sm text-rose-300", children: e2 }, i2))
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${icon} ${headerClass} mt-0.5`, "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 min-w-0", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-xs font-semibold text-gray-900", children: kindLabel }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-xs text-slate-300 truncate mb-1", children: pending.filename }),
+          allErrors.map((e2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-sm text-rose-300", children: e2 }, i2))
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -10711,14 +12230,14 @@ function BulkUploadPreview({
           }
         )
       ] }),
-      pending.kind === "csv" && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      pending.kind === "csv" && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           type: "button",
           onClick: downloadCsvTemplate,
           className: "mt-2 w-full flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-download text-[10px]", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-download text-[10px]", "aria-hidden": "true" }),
             isEs ? "Descargar plantilla CSV" : "Download CSV template"
           ]
         }
@@ -10726,13 +12245,13 @@ function BulkUploadPreview({
     ] });
   }
   if (pending.analyzing || pending.enriching) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 flex items-center gap-3 shadow-sm`, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs font-semibold text-slate-100", children: kindLabel }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-xs text-slate-300 truncate", children: pending.filename }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 text-sm text-slate-200", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1.5 text-emerald-300 animate-pulse", "aria-hidden": "true" }),
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 flex items-center gap-3 shadow-sm`, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 min-w-0", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-xs font-semibold text-gray-900", children: kindLabel }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-xs text-slate-300 truncate", children: pending.filename }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1 text-sm text-slate-200", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1.5 text-emerald-300 animate-pulse", "aria-hidden": "true" }),
           pending.enriching ? isEs ? "Rellenando huecos con IA\u2026" : "Filling gaps with AI\u2026" : isEs ? "Analizando con IA..." : "Analyzing with AI\u2026"
         ] })
       ] })
@@ -10745,32 +12264,32 @@ function BulkUploadPreview({
   const selectAllRef = (el) => {
     if (el) el.indeterminate = someSelected;
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mb-2", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "text-xs font-semibold text-slate-200", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `mx-3 mb-2 rounded-xl border ${ringClass} bg-white p-3 shadow-sm`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2 mb-2", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas ${icon} ${headerClass}`, "aria-hidden": "true" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-xs font-semibold text-slate-200", children: [
         kindLabel,
         " \xB7 ",
         rows.length,
         " ",
         rows.length === 1 ? isEs ? "fila" : "row" : isEs ? "filas" : "rows"
       ] }),
-      typeof pending.confidence === "number" && pending.kind === "photo" && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-[10px] text-slate-300 ml-auto", children: [
+      typeof pending.confidence === "number" && pending.kind === "photo" && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-[10px] text-slate-300 ml-auto", children: [
         isEs ? "Confianza" : "Confidence",
         ": ",
         Math.round(pending.confidence * 100),
         "%"
       ] })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-[11px] text-slate-300 mb-2 truncate", title: pending.filename, children: pending.filename }),
-    pending.enriched && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mt-0.5", "aria-hidden": "true" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "flex-1", children: pending.enrichSummary || (totalFilled ? isEs ? `IA rellen\xF3 huecos en ${totalFilled} fila(s). Revisa y confirma.` : `AI filled gaps on ${totalFilled} row(s). Review and confirm.` : isEs ? "IA revis\xF3 tus filas \u2014 no hab\xEDa huecos que rellenar." : "AI reviewed your rows \u2014 no gaps to fill.") })
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-[11px] text-slate-300 mb-2 truncate", title: pending.filename, children: pending.filename }),
+    pending.enriched && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-wand-magic-sparkles mt-0.5", "aria-hidden": "true" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "flex-1", children: pending.enrichSummary || (totalFilled ? isEs ? `IA rellen\xF3 huecos en ${totalFilled} fila(s). Revisa y confirma.` : `AI filled gaps on ${totalFilled} row(s). Review and confirm.` : isEs ? "IA revis\xF3 tus filas \u2014 no hab\xEDa huecos que rellenar." : "AI reviewed your rows \u2014 no gaps to fill.") })
     ] }),
-    isCsv && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mb-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-2 space-y-1.5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1.5", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex items-center gap-2 text-[11px] text-slate-200 cursor-pointer select-none", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    isCsv && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-2 rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-2 space-y-1.5", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-2 text-[11px] text-slate-200 cursor-pointer select-none", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
             "input",
             {
               ref: selectAllRef,
@@ -10778,12 +12297,12 @@ function BulkUploadPreview({
               checked: allSelected,
               onChange: toggleSelectAll,
               disabled: busy || rows.length === 0,
-              className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40",
+              className: "rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40",
               "aria-label": isEs ? "Seleccionar todas las filas" : "Select all rows"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "font-medium", children: isEs ? "Seleccionar todas" : "Select all" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "text-slate-300", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-medium", children: isEs ? "Seleccionar todas" : "Select all" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-slate-300", children: [
             "(",
             selectedRowIndexes.size,
             "/",
@@ -10791,24 +12310,24 @@ function BulkUploadPreview({
             ")"
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex items-center gap-1.5 text-[11px] text-slate-200 cursor-pointer select-none", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1.5 text-[11px] text-slate-200 cursor-pointer select-none", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
             "input",
             {
               type: "checkbox",
               checked: fillEmptyOnly,
               onChange: (e2) => setFillEmptyOnly(e2.target.checked),
               disabled: busy,
-              className: "rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40"
+              className: "rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: isEs ? "Solo rellenar vac\xEDos" : "Only fill empty" })
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: isEs ? "Solo rellenar vac\xEDos" : "Only fill empty" })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
             "select",
             {
               value: bulkCommunityId,
@@ -10817,13 +12336,13 @@ function BulkUploadPreview({
               className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Comunidad compartida" : "Shared community",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : isEs ? "Una comunidad para las seleccionadas\u2026" : "One community for selected rows\u2026" }),
-                communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : isEs ? "Una comunidad para las seleccionadas\u2026" : "One community for selected rows\u2026" }),
+                communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
               ]
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -10834,10 +12353,10 @@ function BulkUploadPreview({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-location-dot text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-location-dot text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
             "input",
             {
               type: "text",
@@ -10850,7 +12369,7 @@ function BulkUploadPreview({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -10861,10 +12380,10 @@ function BulkUploadPreview({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-tag text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex flex-col sm:flex-row gap-1.5 items-stretch sm:items-center", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-tag text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
             "select",
             {
               value: bulkCategory,
@@ -10873,15 +12392,15 @@ function BulkUploadPreview({
               className: "flex-1 min-w-0 bg-white border border-gray-300 rounded px-2 py-1 text-gray-900 outline-none focus:border-emerald-500/50",
               "aria-label": isEs ? "Categor\xEDa compartida" : "Shared category",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: isEs ? "Categor\xEDa (opcional)\u2026" : "Category (optional)\u2026" }),
-                ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"].map((c2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: c2, children: c2 }, c2))
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: isEs ? "Categor\xEDa (opcional)\u2026" : "Category (optional)\u2026" }),
+                ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"].map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2, children: c2 }, c2))
               ]
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-calendar-day text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex-1 flex items-center gap-1.5 min-w-0 text-[11px]", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-calendar-day text-emerald-300 flex-shrink-0", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
             "input",
             {
               type: "date",
@@ -10893,7 +12412,7 @@ function BulkUploadPreview({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -10907,7 +12426,7 @@ function BulkUploadPreview({
           }
         )
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         "button",
         {
           type: "button",
@@ -10918,20 +12437,20 @@ function BulkUploadPreview({
         }
       )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: `space-y-1.5 overflow-y-auto nourish-scrollbar pr-1 ${isCsv ? "max-h-64" : "max-h-44"}`, children: [
-      previewRows.map((row, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "rounded-lg border border-slate-700/60 bg-slate-800/40 p-2 flex items-start gap-2", children: [
-        isCsv && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `space-y-1.5 overflow-y-auto nourish-scrollbar pr-1 ${isCsv ? "max-h-64" : "max-h-44"}`, children: [
+      previewRows.map((row, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "rounded-lg border border-gray-200 bg-gray-50 p-2 flex items-start gap-2", children: [
+        isCsv && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "input",
           {
             type: "checkbox",
             checked: selectedRowIndexes.has(idx),
             onChange: () => toggleRowSelected(idx),
             disabled: busy,
-            className: "mt-1 rounded border-slate-600 bg-slate-900 text-gray-6000 focus:ring-emerald-500/40 flex-shrink-0",
+            className: "mt-1 rounded border-gray-300 bg-white text-emerald-700 focus:ring-emerald-500/40 flex-shrink-0",
             "aria-label": isEs ? `Seleccionar fila ${idx + 1}` : `Select row ${idx + 1}`
           }
         ),
-        row.image_url && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        row.image_url && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "img",
           {
             src: row.image_url,
@@ -10942,9 +12461,9 @@ function BulkUploadPreview({
             }
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-1.5", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 min-w-0", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-1.5", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 type: "text",
@@ -10955,21 +12474,21 @@ function BulkUploadPreview({
                 "aria-label": `Row ${idx + 1} title`
               }
             ),
-            filledByIndex.has(idx) && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+            filledByIndex.has(idx) && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
               "span",
               {
                 className: "text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 whitespace-nowrap",
                 title: `${isEs ? "IA rellen\xF3" : "AI filled"}: ${filledByIndex.get(idx).join(", ")}`,
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-0.5", "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-0.5", "aria-hidden": "true" }),
                   "AI +",
                   filledByIndex.get(idx).length
                 ]
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-300", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-1.5 mt-0.5 text-[11px] text-slate-300", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 type: "number",
@@ -10982,7 +12501,7 @@ function BulkUploadPreview({
                 "aria-label": "Quantity"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 type: "text",
@@ -10993,8 +12512,8 @@ function BulkUploadPreview({
                 "aria-label": "Unit"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-slate-300", children: "\xB7" }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-slate-300", children: "\xB7" }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "select",
               {
                 value: row.category || "other",
@@ -11002,14 +12521,14 @@ function BulkUploadPreview({
                 disabled: busy,
                 className: "bg-white border border-gray-300 rounded px-1 py-0.5 text-gray-900",
                 "aria-label": "Category",
-                children: ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"].map((c2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: c2, children: c2 }, c2))
+                children: ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"].map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2, children: c2 }, c2))
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 grid grid-cols-1 sm:grid-cols-3 gap-1 text-[11px]", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-location-dot text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1 grid grid-cols-1 sm:grid-cols-3 gap-1 text-[11px]", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-location-dot text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "input",
                 {
                   type: "text",
@@ -11022,9 +12541,9 @@ function BulkUploadPreview({
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-calendar-day text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-calendar-day text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "input",
                 {
                   type: "date",
@@ -11036,9 +12555,9 @@ function BulkUploadPreview({
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-people-group text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
-              communities.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
+              communities.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                 "select",
                 {
                   value: row.community_id || "",
@@ -11055,11 +12574,11 @@ function BulkUploadPreview({
                   "aria-label": isEs ? "Comunidad / escuela" : "Community / school",
                   required: true,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: "", children: isEs ? "Elige escuela o comunidad\u2026" : "Choose school or community\u2026" }),
-                    communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: isEs ? "Elige escuela o comunidad\u2026" : "Choose school or community\u2026" }),
+                    communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
                   ]
                 }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "input",
                 {
                   type: "text",
@@ -11076,9 +12595,9 @@ function BulkUploadPreview({
               )
             ] })
           ] }),
-          communitiesError && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-1 flex items-center gap-2 text-[10px] text-amber-700", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: communitiesError }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+          communitiesError && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1 flex items-center gap-2 text-[10px] text-amber-700", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: communitiesError }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "button",
               {
                 type: "button",
@@ -11090,7 +12609,7 @@ function BulkUploadPreview({
             )
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "button",
           {
             type: "button",
@@ -11099,24 +12618,24 @@ function BulkUploadPreview({
             className: "text-slate-400 hover:text-rose-300 text-xs p-1 disabled:opacity-40",
             "aria-label": `Remove row ${idx + 1}`,
             title: isEs ? "Quitar" : "Remove",
-            children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-times", "aria-hidden": "true" })
+            children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-times", "aria-hidden": "true" })
           }
         )
       ] }, idx)),
-      extra > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "text-[11px] text-slate-300 italic px-1", children: isEs ? `\u2026y ${extra} m\xE1s` : `\u2026and ${extra} more` })
+      extra > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-[11px] text-slate-300 italic px-1", children: isEs ? `\u2026y ${extra} m\xE1s` : `\u2026and ${extra} more` })
     ] }),
-    pending.parseErrors && pending.parseErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2 text-[11px] text-amber-200", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
+    pending.parseErrors && pending.parseErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-2 text-[11px] text-amber-200", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
       pending.parseErrors.length,
       " ",
       isEs ? "fila(s) omitida(s)" : "row(s) skipped"
     ] }),
-    missingCommunity && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "mt-2 text-[11px] text-amber-200", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
+    missingCommunity && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-2 text-[11px] text-amber-200", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
       isEs ? "Elige una escuela o comunidad para cada fila (usa \u201CAplicar comunidad\u201D arriba para todas a la vez)." : "Choose a school or community for each row (use \u201CApply community\u201D above to set them all at once)."
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-2 mt-3", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2 mt-3", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         "button",
         {
           type: "button",
@@ -11126,7 +12645,7 @@ function BulkUploadPreview({
           children: isEs ? "Cancelar" : "Cancel"
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
         "button",
         {
           type: "button",
@@ -11164,18 +12683,18 @@ function AIChatPanel() {
   const { applyToolResults, clearAIOverlays } = useMapContext();
   const { registerHandler, executeUIActionsFromToolResults, executeUIAction } = useUIControl();
   const { user: authUser, isAdmin } = useAuthContext() || {};
-  const allowedCommunityIds = (0, import_react11.useMemo)(
+  const allowedCommunityIds = (0, import_react10.useMemo)(
     () => browseCommunityIdsForUser(authUser, { isAdmin }),
     [authUser?.community_id, isAdmin]
   );
   const communityRole = useCommunityRole();
-  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting } = useNouriGuide();
+  const { settings: a11ySettings, guide, syncFromChat, resetGuideSession, cancelVoice, updateSetting, setAutoplayBlockedHandler: setAutoplayBlockedHandler2 } = useNouriGuide();
   const canAttachFiles = communityRole === "donor" || communityRole === "admin";
-  const [pendingChatPhotos, setPendingChatPhotos] = (0, import_react11.useState)([]);
-  const prevCommunityRoleRef = (0, import_react11.useRef)(null);
-  const lastAppliedToolMsgRef = (0, import_react11.useRef)(null);
-  const lastSurfacedErrorRef = (0, import_react11.useRef)(null);
-  (0, import_react11.useEffect)(() => {
+  const [pendingChatPhotos, setPendingChatPhotos] = (0, import_react10.useState)([]);
+  const prevCommunityRoleRef = (0, import_react10.useRef)(null);
+  const lastAppliedToolMsgRef = (0, import_react10.useRef)(null);
+  const lastSurfacedErrorRef = (0, import_react10.useRef)(null);
+  (0, import_react10.useEffect)(() => {
     if (!error || error === lastSurfacedErrorRef.current) return;
     lastSurfacedErrorRef.current = error;
     B.error(
@@ -11183,8 +12702,8 @@ function AIChatPanel() {
       { autoClose: 4e3, position: "top-center" }
     );
   }, [error, language]);
-  const lastToastedClaimRef = (0, import_react11.useRef)(null);
-  (0, import_react11.useEffect)(() => {
+  const lastToastedClaimRef = (0, import_react10.useRef)(null);
+  (0, import_react10.useEffect)(() => {
     if (!messages?.length) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant" || !last.toolResults?.length) return;
@@ -11217,7 +12736,7 @@ function AIChatPanel() {
       }
     }
   }, [messages, language]);
-  const MAP_TOOLS2 = (0, import_react11.useMemo)(() => /* @__PURE__ */ new Set([
+  const MAP_TOOLS2 = (0, import_react10.useMemo)(() => /* @__PURE__ */ new Set([
     "search_food_near_user",
     "search_food_nearby",
     "get_recent_listings",
@@ -11229,7 +12748,7 @@ function AIChatPanel() {
     "query_distribution_centers",
     "optimize_pickup_route"
   ]), []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!messages || messages.length === 0) return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== "assistant") return;
@@ -11266,33 +12785,33 @@ function AIChatPanel() {
       }
     }
   }, [messages, applyToolResults, executeUIActionsFromToolResults, executeUIAction, MAP_TOOLS2]);
-  const [isOpen, setIsOpen] = (0, import_react11.useState)(false);
-  const [isExpanded, setIsExpanded] = (0, import_react11.useState)(false);
-  const [inputText, setInputText] = (0, import_react11.useState)("");
-  const [showMenu, setShowMenu] = (0, import_react11.useState)(false);
-  const [suggestionIndex, setSuggestionIndex] = (0, import_react11.useState)(-1);
-  const [suggestionsOpen, setSuggestionsOpen] = (0, import_react11.useState)(false);
-  const [voiceMode, setVoiceMode] = (0, import_react11.useState)(false);
-  const [audioLevel, setAudioLevel] = (0, import_react11.useState)(0);
-  const [isVoiceListening, setIsVoiceListening] = (0, import_react11.useState)(false);
-  const [isVoiceSpeaking, setIsVoiceSpeaking] = (0, import_react11.useState)(false);
-  const [tapToHear, setTapToHear] = (0, import_react11.useState)(null);
-  const [voiceError, setVoiceError] = (0, import_react11.useState)(null);
-  const [voiceTranscript, setVoiceTranscript] = (0, import_react11.useState)("");
-  const [wakeWordEnabled, setWakeWordEnabled] = (0, import_react11.useState)(false);
-  const [wakeActive, setWakeActive] = (0, import_react11.useState)(false);
-  const [pendingUpload, setPendingUpload] = (0, import_react11.useState)(null);
-  const [uploadBusy, setUploadBusy] = (0, import_react11.useState)(false);
-  const uploadSessionRef = (0, import_react11.useRef)(0);
-  const photoInputRef = (0, import_react11.useRef)(null);
-  const csvInputRef = (0, import_react11.useRef)(null);
-  const inlinePhotoInputRef = (0, import_react11.useRef)(null);
-  const messagesEndRef = (0, import_react11.useRef)(null);
-  const messagesContainerRef = (0, import_react11.useRef)(null);
-  const [showScrollPill, setShowScrollPill] = (0, import_react11.useState)(false);
-  const wasOpenRef = (0, import_react11.useRef)(false);
-  const historyScrollDoneRef = (0, import_react11.useRef)(false);
-  const scrollMessagesToEnd = (0, import_react11.useCallback)(() => {
+  const [isOpen, setIsOpen] = (0, import_react10.useState)(false);
+  const [isExpanded, setIsExpanded] = (0, import_react10.useState)(false);
+  const [inputText, setInputText] = (0, import_react10.useState)("");
+  const [showMenu, setShowMenu] = (0, import_react10.useState)(false);
+  const [suggestionIndex, setSuggestionIndex] = (0, import_react10.useState)(-1);
+  const [suggestionsOpen, setSuggestionsOpen] = (0, import_react10.useState)(false);
+  const [voiceMode, setVoiceMode] = (0, import_react10.useState)(false);
+  const [audioLevel, setAudioLevel] = (0, import_react10.useState)(0);
+  const [isVoiceListening, setIsVoiceListening] = (0, import_react10.useState)(false);
+  const [isVoiceSpeaking, setIsVoiceSpeaking] = (0, import_react10.useState)(false);
+  const [tapToHear, setTapToHear] = (0, import_react10.useState)(null);
+  const [voiceError, setVoiceError] = (0, import_react10.useState)(null);
+  const [voiceTranscript, setVoiceTranscript] = (0, import_react10.useState)("");
+  const [wakeWordEnabled, setWakeWordEnabled] = (0, import_react10.useState)(false);
+  const [wakeActive, setWakeActive] = (0, import_react10.useState)(false);
+  const [pendingUpload, setPendingUpload] = (0, import_react10.useState)(null);
+  const [uploadBusy, setUploadBusy] = (0, import_react10.useState)(false);
+  const uploadSessionRef = (0, import_react10.useRef)(0);
+  const photoInputRef = (0, import_react10.useRef)(null);
+  const csvInputRef = (0, import_react10.useRef)(null);
+  const inlinePhotoInputRef = (0, import_react10.useRef)(null);
+  const messagesEndRef = (0, import_react10.useRef)(null);
+  const messagesContainerRef = (0, import_react10.useRef)(null);
+  const [showScrollPill, setShowScrollPill] = (0, import_react10.useState)(false);
+  const wasOpenRef = (0, import_react10.useRef)(false);
+  const historyScrollDoneRef = (0, import_react10.useRef)(false);
+  const scrollMessagesToEnd = (0, import_react10.useCallback)(() => {
     const run = () => {
       const el = messagesContainerRef.current;
       if (el) {
@@ -11304,12 +12823,12 @@ function AIChatPanel() {
     };
     requestAnimationFrame(() => requestAnimationFrame(run));
   }, []);
-  const [showAttachMenu, setShowAttachMenu] = (0, import_react11.useState)(false);
-  const attachMenuRef = (0, import_react11.useRef)(null);
-  (0, import_react11.useEffect)(() => {
+  const [showAttachMenu, setShowAttachMenu] = (0, import_react10.useState)(false);
+  const attachMenuRef = (0, import_react10.useRef)(null);
+  (0, import_react10.useEffect)(() => {
     if (!canAttachFiles) setShowAttachMenu(false);
   }, [canAttachFiles]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const role = String(communityRole || "").toLowerCase();
     const prev = prevCommunityRoleRef.current;
     prevCommunityRoleRef.current = role || null;
@@ -11339,33 +12858,32 @@ function AIChatPanel() {
       );
     })();
   }, [communityRole, clearHistory, clearAIOverlays, language, resetGuideSession]);
-  const inputRef = (0, import_react11.useRef)(null);
-  const panelRef = (0, import_react11.useRef)(null);
-  const previousFocusRef = (0, import_react11.useRef)(null);
-  const currentAudioRef = (0, import_react11.useRef)(null);
-  const lastSpokenIdRef = (0, import_react11.useRef)(null);
-  const voiceModeRef = (0, import_react11.useRef)(false);
-  const sendVoiceRef = (0, import_react11.useRef)(sendVoice);
-  const mediaStreamRef = (0, import_react11.useRef)(null);
-  const mediaRecorderRef = (0, import_react11.useRef)(null);
-  const audioChunksRef = (0, import_react11.useRef)([]);
-  const analyserRef = (0, import_react11.useRef)(null);
-  const silenceTimerRef = (0, import_react11.useRef)(null);
-  const vadFrameRef = (0, import_react11.useRef)(null);
-  const wakeRecognitionRef = (0, import_react11.useRef)(null);
-  const wakeWordEnabledRef = (0, import_react11.useRef)(false);
-  const handsFreeRef = (0, import_react11.useRef)(false);
-  const wakeCooldownRef = (0, import_react11.useRef)(0);
-  const isVoiceSpeakingRef = (0, import_react11.useRef)(false);
-  const startWakeListeningRef = (0, import_react11.useRef)(null);
-  const triggerWakeRef = (0, import_react11.useRef)(null);
-  const endHandsFreeTurnRef = (0, import_react11.useRef)(null);
-  const prevSpeakingRef = (0, import_react11.useRef)(false);
+  const inputRef = (0, import_react10.useRef)(null);
+  const panelRef = (0, import_react10.useRef)(null);
+  const previousFocusRef = (0, import_react10.useRef)(null);
+  const lastSpokenIdRef = (0, import_react10.useRef)(null);
+  const voiceModeRef = (0, import_react10.useRef)(false);
+  const sendVoiceRef = (0, import_react10.useRef)(sendVoice);
+  const mediaStreamRef = (0, import_react10.useRef)(null);
+  const mediaRecorderRef = (0, import_react10.useRef)(null);
+  const audioChunksRef = (0, import_react10.useRef)([]);
+  const analyserRef = (0, import_react10.useRef)(null);
+  const silenceTimerRef = (0, import_react10.useRef)(null);
+  const vadFrameRef = (0, import_react10.useRef)(null);
+  const wakeRecognitionRef = (0, import_react10.useRef)(null);
+  const wakeWordEnabledRef = (0, import_react10.useRef)(false);
+  const handsFreeRef = (0, import_react10.useRef)(false);
+  const wakeCooldownRef = (0, import_react10.useRef)(0);
+  const isVoiceSpeakingRef = (0, import_react10.useRef)(false);
+  const startWakeListeningRef = (0, import_react10.useRef)(null);
+  const triggerWakeRef = (0, import_react10.useRef)(null);
+  const endHandsFreeTurnRef = (0, import_react10.useRef)(null);
+  const prevSpeakingRef = (0, import_react10.useRef)(false);
   const wakeWordSupported = typeof window !== "undefined" && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     sendVoiceRef.current = sendVoice;
   }, [sendVoice]);
-  const closeAssistant = (0, import_react11.useCallback)(() => {
+  const closeAssistant = (0, import_react10.useCallback)(() => {
     setIsOpen(false);
     setIsExpanded(false);
     setShowMenu(false);
@@ -11373,7 +12891,7 @@ function AIChatPanel() {
     setSuggestionsOpen(false);
     setSuggestionIndex(-1);
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const u1 = registerHandler("setAssistantOpen", (open) => {
       if (open) setIsOpen(true);
       else closeAssistant();
@@ -11390,7 +12908,7 @@ function AIChatPanel() {
       u4();
     };
   }, [registerHandler, clearAIOverlays, setLanguage, closeAssistant]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const onOpenChat = (event) => {
       setIsOpen(true);
       const msg = event?.detail?.message;
@@ -11402,7 +12920,7 @@ function AIChatPanel() {
     window.addEventListener("nouri:open-chat", onOpenChat);
     return () => window.removeEventListener("nouri:open-chat", onOpenChat);
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!isOpen) return void 0;
     previousFocusRef.current = document.activeElement;
     const prevOverflow = document.body.style.overflow;
@@ -11421,7 +12939,7 @@ function AIChatPanel() {
       previousFocusRef.current = null;
     };
   }, [isOpen]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!isOpen) return void 0;
     const getFocusable = () => {
       if (!panelRef.current) return [];
@@ -11466,14 +12984,14 @@ function AIChatPanel() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [isOpen, closeAssistant, showMenu, showAttachMenu, suggestionsOpen]);
-  const lastAssistantMessage = (0, import_react11.useMemo)(() => {
+  const lastAssistantMessage = (0, import_react10.useMemo)(() => {
     for (let i2 = messages.length - 1; i2 >= 0; i2--) {
       if (messages[i2].role === "assistant" && !messages[i2].isError) return messages[i2];
     }
     return null;
   }, [messages]);
   const suggestionPool = getSuggestions(language);
-  const filteredSuggestions = (0, import_react11.useMemo)(() => {
+  const filteredSuggestions = (0, import_react10.useMemo)(() => {
     const q2 = inputText.trim().toLowerCase();
     if (!q2) return [];
     const scored = [];
@@ -11487,17 +13005,17 @@ function AIChatPanel() {
     return scored.slice(0, 6).map((x2) => x2.s);
   }, [inputText, suggestionPool]);
   const showSuggestions = suggestionsOpen && filteredSuggestions.length > 0 && !isLoading;
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     setSuggestionIndex(-1);
   }, [inputText]);
-  const acceptSuggestion = (0, import_react11.useCallback)((value) => {
+  const acceptSuggestion = (0, import_react10.useCallback)((value) => {
     if (!value) return;
     setInputText(value);
     setSuggestionsOpen(false);
     setSuggestionIndex(-1);
     setTimeout(() => inputRef.current?.focus(), 0);
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!isOpen) return;
     const el = messagesContainerRef.current;
     if (!el) {
@@ -11509,23 +13027,23 @@ function AIChatPanel() {
       messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
     }
   }, [messages, isOpen, isLoading]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (isOpen && !wasOpenRef.current) {
       scrollMessagesToEnd();
     }
     wasOpenRef.current = isOpen;
   }, [isOpen, scrollMessagesToEnd]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     historyScrollDoneRef.current = false;
   }, [authUser?.id]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (!historyLoaded || historyScrollDoneRef.current) return;
     historyScrollDoneRef.current = true;
     if (isOpen) {
       scrollMessagesToEnd();
     }
   }, [historyLoaded, isOpen, scrollMessagesToEnd]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
     const onScroll = () => {
@@ -11536,23 +13054,23 @@ function AIChatPanel() {
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => el.removeEventListener("scroll", onScroll);
   }, [isOpen, voiceMode]);
-  const jumpToLatest = (0, import_react11.useCallback)(() => {
+  const jumpToLatest = (0, import_react10.useCallback)(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (isOpen && inputRef.current) {
       setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [isOpen]);
-  const prevLoadingRef = (0, import_react11.useRef)(isLoading);
-  (0, import_react11.useEffect)(() => {
+  const prevLoadingRef = (0, import_react10.useRef)(isLoading);
+  (0, import_react10.useEffect)(() => {
     const wasLoading = prevLoadingRef.current;
     prevLoadingRef.current = isLoading;
     if (wasLoading && !isLoading && isOpen && !voiceMode) {
       requestAnimationFrame(() => inputRef.current?.focus());
     }
   }, [isLoading, isOpen, voiceMode]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const handleClickOutside = (e2) => {
       if (showMenu && panelRef.current && !panelRef.current.contains(e2.target)) {
         setShowMenu(false);
@@ -11564,7 +13082,7 @@ function AIChatPanel() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showMenu, showAttachMenu]);
-  const handleSend = (0, import_react11.useCallback)(async (e2) => {
+  const handleSend = (0, import_react10.useCallback)(async (e2) => {
     e2?.preventDefault();
     if (isLoading || uploadBusy) return;
     const text = inputText.trim();
@@ -11628,7 +13146,7 @@ ${imageBlock}` : imageBlock;
     appendLocalMessage,
     language
   ]);
-  const removePendingChatPhoto = (0, import_react11.useCallback)((id) => {
+  const removePendingChatPhoto = (0, import_react10.useCallback)((id) => {
     setPendingChatPhotos((prev) => {
       const next = [];
       for (const p2 of prev) {
@@ -11641,7 +13159,7 @@ ${imageBlock}` : imageBlock;
       return next;
     });
   }, []);
-  const handleQuickAction = (0, import_react11.useCallback)((msg) => {
+  const handleQuickAction = (0, import_react10.useCallback)((msg) => {
     if (isLoading) return;
     const text = String(msg || "").trim();
     if (!text) return;
@@ -11674,8 +13192,8 @@ ${imageBlock}` : imageBlock;
     sendMessage(text);
     requestAnimationFrame(() => inputRef.current?.focus());
   }, [isLoading, sendMessage, executeUIAction, messages]);
-  const liveChipIdx = (0, import_react11.useMemo)(() => liveAssistantIndex(messages), [messages]);
-  const railChips = (0, import_react11.useMemo)(() => {
+  const liveChipIdx = (0, import_react10.useMemo)(() => liveAssistantIndex(messages), [messages]);
+  const railChips = (0, import_react10.useMemo)(() => {
     if (isLoading || pendingUpload || voiceMode || pendingChatPhotos.length > 0) return [];
     if (messages.length <= 1) {
       return resolveInputChips([], language, communityRole, { allowLazy: true });
@@ -11688,7 +13206,7 @@ ${imageBlock}` : imageBlock;
       allowLazy: false
     });
   }, [messages, liveChipIdx, isLoading, pendingUpload, voiceMode, language, communityRole, pendingChatPhotos.length]);
-  const requireAuthForUpload = (0, import_react11.useCallback)(() => {
+  const requireAuthForUpload = (0, import_react10.useCallback)(() => {
     if (authUser?.id) return true;
     appendLocalMessage({
       role: "assistant",
@@ -11697,22 +13215,22 @@ ${imageBlock}` : imageBlock;
     });
     return false;
   }, [appendLocalMessage, authUser?.id, language]);
-  const triggerPhotoUpload = (0, import_react11.useCallback)(() => {
+  const triggerPhotoUpload = (0, import_react10.useCallback)(() => {
     if (uploadBusy || isLoading) return;
     if (!requireAuthForUpload()) return;
     photoInputRef.current?.click();
   }, [uploadBusy, isLoading, requireAuthForUpload]);
-  const triggerCsvUpload = (0, import_react11.useCallback)(() => {
+  const triggerCsvUpload = (0, import_react10.useCallback)(() => {
     if (uploadBusy || isLoading) return;
     if (!requireAuthForUpload()) return;
     csvInputRef.current?.click();
   }, [uploadBusy, isLoading, requireAuthForUpload]);
-  const triggerInlinePhotoUpload = (0, import_react11.useCallback)(() => {
+  const triggerInlinePhotoUpload = (0, import_react10.useCallback)(() => {
     if (uploadBusy || isLoading) return;
     if (!requireAuthForUpload()) return;
     inlinePhotoInputRef.current?.click();
   }, [uploadBusy, isLoading, requireAuthForUpload]);
-  const handleInlinePhotoSelected = (0, import_react11.useCallback)(async (e2) => {
+  const handleInlinePhotoSelected = (0, import_react10.useCallback)(async (e2) => {
     const files = Array.from(e2.target.files || []);
     e2.target.value = "";
     if (!files.length) return;
@@ -11753,12 +13271,12 @@ ${imageBlock}` : imageBlock;
     if (!accepted.length) return;
     setPendingChatPhotos((prev) => [...prev, ...accepted].slice(0, 8));
   }, [appendLocalMessage, language]);
-  const cancelPendingUpload = (0, import_react11.useCallback)(() => {
+  const cancelPendingUpload = (0, import_react10.useCallback)(() => {
     if (uploadBusy) return;
     uploadSessionRef.current += 1;
     setPendingUpload(null);
   }, [uploadBusy]);
-  const handleClearConversation = (0, import_react11.useCallback)(async () => {
+  const handleClearConversation = (0, import_react10.useCallback)(async () => {
     setShowMenu(false);
     cancelPendingUpload();
     setPendingChatPhotos((prev) => {
@@ -11789,7 +13307,7 @@ ${imageBlock}` : imageBlock;
     }
     scrollMessagesToEnd();
   }, [cancelPendingUpload, clearAIOverlays, clearHistory, language, resetGuideSession, scrollMessagesToEnd]);
-  const handlePhotoSelected = (0, import_react11.useCallback)(async (e2) => {
+  const handlePhotoSelected = (0, import_react10.useCallback)(async (e2) => {
     const file = e2.target.files?.[0];
     e2.target.value = "";
     if (!file) return;
@@ -11877,7 +13395,7 @@ ${imageBlock}` : imageBlock;
       if (sessionId === uploadSessionRef.current) setUploadBusy(false);
     }
   }, [appendLocalMessage, authUser?.id, authUser?.community_id, authUser?.address, language]);
-  const handleCsvSelected = (0, import_react11.useCallback)(async (e2) => {
+  const handleCsvSelected = (0, import_react10.useCallback)(async (e2) => {
     const file = e2.target.files?.[0];
     e2.target.value = "";
     if (!file) return;
@@ -11984,7 +13502,7 @@ ${imageBlock}` : imageBlock;
       if (!isStale()) setUploadBusy(false);
     }
   }, [appendLocalMessage, language, authUser?.id]);
-  const confirmBulkCreate = (0, import_react11.useCallback)(async () => {
+  const confirmBulkCreate = (0, import_react10.useCallback)(async () => {
     if (!pendingUpload?.rows?.length || uploadBusy) return;
     if (!authUser?.id) {
       appendLocalMessage({
@@ -12046,14 +13564,14 @@ ${imageBlock}` : imageBlock;
       setUploadBusy(false);
     }
   }, [pendingUpload, uploadBusy, authUser?.id, appendLocalMessage, sendSilentMessage, language]);
-  const updatePendingRow = (0, import_react11.useCallback)((idx, patch) => {
+  const updatePendingRow = (0, import_react10.useCallback)((idx, patch) => {
     setPendingUpload((prev) => {
       if (!prev?.rows) return prev;
       const rows = prev.rows.map((r3, i2) => i2 === idx ? { ...r3, ...patch } : r3);
       return { ...prev, rows };
     });
   }, []);
-  const updatePendingRows = (0, import_react11.useCallback)((indices, patch) => {
+  const updatePendingRows = (0, import_react10.useCallback)((indices, patch) => {
     const indexSet = new Set(Array.isArray(indices) ? indices : []);
     if (!indexSet.size || !patch || typeof patch !== "object") return;
     setPendingUpload((prev) => {
@@ -12062,7 +13580,7 @@ ${imageBlock}` : imageBlock;
       return { ...prev, rows };
     });
   }, []);
-  const removePendingRow = (0, import_react11.useCallback)((idx) => {
+  const removePendingRow = (0, import_react10.useCallback)((idx) => {
     setPendingUpload((prev) => {
       if (!prev?.rows) return prev;
       const rows = prev.rows.filter((_2, i2) => i2 !== idx);
@@ -12070,7 +13588,7 @@ ${imageBlock}` : imageBlock;
       return { ...prev, rows };
     });
   }, []);
-  const stopRecording = (0, import_react11.useCallback)(() => {
+  const stopRecording = (0, import_react10.useCallback)(() => {
     if (vadFrameRef.current) {
       cancelAnimationFrame(vadFrameRef.current);
       vadFrameRef.current = null;
@@ -12083,7 +13601,7 @@ ${imageBlock}` : imageBlock;
       mediaRecorderRef.current.stop();
     }
   }, []);
-  const startVoiceListening = (0, import_react11.useCallback)(async () => {
+  const startVoiceListening = (0, import_react10.useCallback)(async () => {
     setVoiceError(null);
     setVoiceTranscript("");
     audioChunksRef.current = [];
@@ -12128,8 +13646,12 @@ ${imageBlock}` : imageBlock;
         setIsVoiceListening(false);
         setVoiceTranscript(language === "es" ? "Procesando audio..." : "Processing audio...");
         try {
-          await sendVoiceRef.current(audioBlob);
-          setVoiceTranscript("");
+          const result = await sendVoiceRef.current(audioBlob);
+          if (result?.transcript) {
+            setVoiceTranscript(result.transcript);
+          } else {
+            setVoiceTranscript("");
+          }
         } catch (err) {
           console.error("[Voice] Backend voice processing failed:", err);
           setVoiceError(language === "es" ? "Error de voz" : "Voice processing failed");
@@ -12184,11 +13706,11 @@ ${imageBlock}` : imageBlock;
       );
     }
   }, [language, stopRecording]);
-  const enterVoiceMode = (0, import_react11.useCallback)(() => {
+  const enterVoiceMode = (0, import_react10.useCallback)(() => {
     setVoiceMode(true);
     voiceModeRef.current = true;
   }, []);
-  const exitVoiceMode = (0, import_react11.useCallback)(() => {
+  const exitVoiceMode = (0, import_react10.useCallback)(() => {
     setVoiceMode(false);
     voiceModeRef.current = false;
     setIsVoiceSpeaking(false);
@@ -12198,30 +13720,18 @@ ${imageBlock}` : imageBlock;
     setTapToHear(null);
     setAudioLevel(0);
     stopRecording();
+    cancelVoice();
     if (mediaStreamRef.current) {
       mediaStreamRef.current.getTracks().forEach((t3) => t3.stop());
       mediaStreamRef.current = null;
     }
-    if (currentAudioRef.current) {
-      currentAudioRef.current();
-      currentAudioRef.current = null;
-    }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-  }, [stopRecording]);
-  const interruptSpeaking = (0, import_react11.useCallback)(() => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current();
-      currentAudioRef.current = null;
-    }
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+  }, [stopRecording, cancelVoice]);
+  const interruptSpeaking = (0, import_react10.useCallback)(() => {
+    cancelVoice();
     setIsVoiceSpeaking(false);
     setTapToHear(null);
-  }, []);
-  const handleOrbTap = (0, import_react11.useCallback)(() => {
+  }, [cancelVoice]);
+  const handleOrbTap = (0, import_react10.useCallback)(() => {
     if (isVoiceSpeaking) {
       interruptSpeaking();
     } else if (isVoiceListening) {
@@ -12230,10 +13740,10 @@ ${imageBlock}` : imageBlock;
       startVoiceListening();
     }
   }, [isVoiceSpeaking, isVoiceListening, isLoading, interruptSpeaking, stopRecording, startVoiceListening]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     isVoiceSpeakingRef.current = isVoiceSpeaking;
   }, [isVoiceSpeaking]);
-  const stopWakeListening = (0, import_react11.useCallback)(() => {
+  const stopWakeListening = (0, import_react10.useCallback)(() => {
     setWakeActive(false);
     const rec = wakeRecognitionRef.current;
     wakeRecognitionRef.current = null;
@@ -12247,7 +13757,7 @@ ${imageBlock}` : imageBlock;
       }
     }
   }, []);
-  const startWakeListening = (0, import_react11.useCallback)(() => {
+  const startWakeListening = (0, import_react10.useCallback)(() => {
     if (!wakeWordEnabledRef.current) return;
     if (wakeRecognitionRef.current) return;
     if (voiceModeRef.current || handsFreeRef.current) return;
@@ -12304,7 +13814,7 @@ ${imageBlock}` : imageBlock;
       wakeRecognitionRef.current = null;
     }
   }, [language]);
-  const triggerWake = (0, import_react11.useCallback)(() => {
+  const triggerWake = (0, import_react10.useCallback)(() => {
     const now = Date.now();
     if (now - wakeCooldownRef.current < 3e3) return;
     wakeCooldownRef.current = now;
@@ -12318,28 +13828,29 @@ ${imageBlock}` : imageBlock;
       }
     }, 450);
   }, [stopWakeListening, enterVoiceMode, startVoiceListening]);
-  const endHandsFreeTurn = (0, import_react11.useCallback)(() => {
+  const endHandsFreeTurn = (0, import_react10.useCallback)(() => {
     handsFreeRef.current = false;
     if (voiceModeRef.current) exitVoiceMode();
     if (wakeWordEnabledRef.current) {
       setTimeout(() => startWakeListeningRef.current?.(), 700);
     }
   }, [exitVoiceMode]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     startWakeListeningRef.current = startWakeListening;
   }, [startWakeListening]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     triggerWakeRef.current = triggerWake;
   }, [triggerWake]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     endHandsFreeTurnRef.current = endHandsFreeTurn;
   }, [endHandsFreeTurn]);
-  const toggleWakeWord = (0, import_react11.useCallback)(() => {
+  const toggleWakeWord = (0, import_react10.useCallback)(() => {
     setWakeWordEnabled((prev) => {
       const next = !prev;
       wakeWordEnabledRef.current = next;
       try {
-        localStorage.setItem("dg.ai.wakeword", next ? "1" : "0");
+        localStorage.setItem("fm.ai.wakeword", next ? "1" : "0");
+        localStorage.removeItem("dg.ai.wakeword");
       } catch {
       }
       if (next) {
@@ -12353,10 +13864,14 @@ ${imageBlock}` : imageBlock;
       return next;
     });
   }, [stopWakeListening]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     let saved = "0";
     try {
-      saved = localStorage.getItem("dg.ai.wakeword") || "0";
+      saved = localStorage.getItem("fm.ai.wakeword") || localStorage.getItem("dg.ai.wakeword") || "0";
+      if (saved === "1" && !localStorage.getItem("fm.ai.wakeword")) {
+        localStorage.setItem("fm.ai.wakeword", "1");
+        localStorage.removeItem("dg.ai.wakeword");
+      }
     } catch {
     }
     if (saved === "1" && wakeWordSupported) {
@@ -12365,19 +13880,19 @@ ${imageBlock}` : imageBlock;
       setTimeout(() => startWakeListeningRef.current?.(), 300);
     }
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     const was = prevSpeakingRef.current;
     prevSpeakingRef.current = isVoiceSpeaking;
-    if (was && !isVoiceSpeaking && voiceMode && handsFreeRef.current && !isLoading) {
+    if (was && !isVoiceSpeaking && voiceMode && handsFreeRef.current && !isLoading && !tapToHear) {
       const t3 = setTimeout(() => {
-        if (voiceModeRef.current && handsFreeRef.current && !isVoiceSpeakingRef.current && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording")) {
+        if (voiceModeRef.current && handsFreeRef.current && !isVoiceSpeakingRef.current && !tapToHear && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== "recording")) {
           startVoiceListening();
         }
       }, 700);
       return () => clearTimeout(t3);
     }
-  }, [isVoiceSpeaking, voiceMode, isLoading, startVoiceListening]);
-  (0, import_react11.useEffect)(() => {
+  }, [isVoiceSpeaking, voiceMode, isLoading, startVoiceListening, tapToHear]);
+  (0, import_react10.useEffect)(() => {
     return () => {
       wakeWordEnabledRef.current = false;
       const rec = wakeRecognitionRef.current;
@@ -12391,7 +13906,7 @@ ${imageBlock}` : imageBlock;
       }
     };
   }, []);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
     if (voiceMode) {
       stopWakeListening();
     } else if (wakeWordEnabledRef.current && !handsFreeRef.current) {
@@ -12399,8 +13914,8 @@ ${imageBlock}` : imageBlock;
       return () => clearTimeout(t3);
     }
   }, [voiceMode, stopWakeListening]);
-  const lastGuideMsgRef = (0, import_react11.useRef)(null);
-  (0, import_react11.useEffect)(() => {
+  const lastGuideMsgRef = (0, import_react10.useRef)(null);
+  (0, import_react10.useEffect)(() => {
     if (!lastAssistantMessage || isLoading) return;
     if (lastAssistantMessage.id === "welcome") return;
     if (lastAssistantMessage.id === lastGuideMsgRef.current) return;
@@ -12415,28 +13930,26 @@ ${imageBlock}` : imageBlock;
         });
       }
     }
-    syncFromChat({
-      guide: {
-        caption: lastAssistantMessage.message,
-        text: lastAssistantMessage.message,
-        isSpeaking: shouldSpeak
-      }
-    });
-    if (shouldSpeak) {
-      const micTimer = setTimeout(() => {
-        if (voiceModeRef.current && mediaStreamRef.current) {
-          mediaStreamRef.current.getAudioTracks().forEach((t3) => {
-            t3.enabled = true;
-          });
-        }
-      }, 3500);
-      return () => clearTimeout(micTimer);
-    }
-  }, [voiceMode, lastAssistantMessage, isLoading, language, a11ySettings.preferTextOverVoice, syncFromChat]);
-  (0, import_react11.useEffect)(() => {
+    syncFromChat(lastAssistantMessage.message, { lang, speak: shouldSpeak });
+  }, [voiceMode, lastAssistantMessage, isLoading, language, a11ySettings.preferTextOverVoice, a11ySettings.preferredLanguage, syncFromChat]);
+  (0, import_react10.useEffect)(() => {
     if (voiceMode) setIsVoiceSpeaking(guide.isSpeaking);
   }, [guide.isSpeaking, voiceMode]);
-  (0, import_react11.useEffect)(() => {
+  (0, import_react10.useEffect)(() => {
+    if (!voiceMode || !mediaStreamRef.current) return;
+    mediaStreamRef.current.getAudioTracks().forEach((t3) => {
+      t3.enabled = !isVoiceSpeaking;
+    });
+    if (isVoiceSpeaking) setVoiceTranscript("");
+  }, [isVoiceSpeaking, voiceMode]);
+  (0, import_react10.useEffect)(() => {
+    if (!setAutoplayBlockedHandler2) return void 0;
+    setAutoplayBlockedHandler2((replay) => {
+      setTapToHear(() => typeof replay === "function" ? replay : null);
+    });
+    return () => setAutoplayBlockedHandler2(null);
+  }, [setAutoplayBlockedHandler2]);
+  (0, import_react10.useEffect)(() => {
     return () => {
       voiceModeRef.current = false;
       if (vadFrameRef.current) cancelAnimationFrame(vadFrameRef.current);
@@ -12450,14 +13963,10 @@ ${imageBlock}` : imageBlock;
       if (mediaStreamRef.current) {
         mediaStreamRef.current.getTracks().forEach((t3) => t3.stop());
       }
-      if (currentAudioRef.current) {
-        currentAudioRef.current();
-        currentAudioRef.current = null;
-      }
       cancelVoice();
     };
-  }, []);
-  const handleKeyDown = (0, import_react11.useCallback)((e2) => {
+  }, [cancelVoice]);
+  const handleKeyDown = (0, import_react10.useCallback)((e2) => {
     if (suggestionsOpen && filteredSuggestions.length > 0) {
       if (e2.key === "ArrowDown") {
         e2.preventDefault();
@@ -12492,13 +14001,13 @@ ${imageBlock}` : imageBlock;
     }
   }, [handleSend, isLoading, suggestionsOpen, filteredSuggestions, suggestionIndex, acceptSuggestion]);
   if (!isOpen) {
-    return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[10060] group fab-base pointer-events-auto", style: { perspective: "600px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-gray-6000 font-bold text-lg", children: "?" }),
-        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-emerald-200/50 transform rotate-45" })
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[46] group fab-base pointer-events-auto", style: { perspective: "600px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-gray-600 font-bold text-lg", children: "?" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute -bottom-2 right-4 w-4 h-4 bg-white border-r border-b border-emerald-200/50 transform rotate-45" })
       ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 m-auto w-16 h-16 rounded-full bg-emerald-100/80" }),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 m-auto w-16 h-16 rounded-full bg-emerald-100/80" }),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
         "button",
         {
           onClick: () => setIsOpen(true),
@@ -12506,49 +14015,49 @@ ${imageBlock}` : imageBlock;
           "aria-label": "Open Nouri AI Assistant",
           style: { transformStyle: "preserve-3d" },
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-full h-full drop-shadow-2xl", style: { filter: "drop-shadow(0 8px 16px rgba(16,185,129,0.2))" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("defs", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "bodyGrad", cx: "40%", cy: "35%", r: "60%", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#ffffff" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "60%", stopColor: "#f0f4f8" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#d1dbe6" })
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-full h-full drop-shadow-2xl", style: { filter: "drop-shadow(0 8px 16px rgba(16,185,129,0.2))" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("defs", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("radialGradient", { id: "bodyGrad", cx: "40%", cy: "35%", r: "60%", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "0%", stopColor: "#ffffff" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "60%", stopColor: "#f0f4f8" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "100%", stopColor: "#d1dbe6" })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "eyeGrad", cx: "50%", cy: "40%", r: "50%", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#34d399" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#059669" })
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("radialGradient", { id: "eyeGrad", cx: "50%", cy: "40%", r: "50%", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "0%", stopColor: "#34d399" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "100%", stopColor: "#059669" })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("radialGradient", { id: "cheekGrad", cx: "50%", cy: "50%", r: "50%", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "0%", stopColor: "#10b981", stopOpacity: "0.35" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("stop", { offset: "100%", stopColor: "#10b981", stopOpacity: "0" })
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("radialGradient", { id: "cheekGrad", cx: "50%", cy: "50%", r: "50%", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "0%", stopColor: "#10b981", stopOpacity: "0.35" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("stop", { offset: "100%", stopColor: "#10b981", stopOpacity: "0" })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("filter", { id: "glow", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("feGaussianBlur", { stdDeviation: "2", result: "coloredBlur" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("feMerge", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("feMergeNode", { in: "coloredBlur" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("feMergeNode", { in: "SourceGraphic" })
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("filter", { id: "glow", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("feGaussianBlur", { stdDeviation: "2", result: "coloredBlur" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("feMerge", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("feMergeNode", { in: "coloredBlur" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("feMergeNode", { in: "SourceGraphic" })
                   ] })
                 ] })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("line", { x1: "30", y1: "22", x2: "22", y2: "6", stroke: "#b0bec5", strokeWidth: "2.5", strokeLinecap: "round" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "22", cy: "5", r: "3.5", fill: "url(#eyeGrad)", filter: "url(#glow)", className: "animate-antenna-glow" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("line", { x1: "70", y1: "22", x2: "78", y2: "6", stroke: "#b0bec5", strokeWidth: "2.5", strokeLinecap: "round" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "78", cy: "5", r: "3.5", fill: "url(#eyeGrad)", filter: "url(#glow)", className: "animate-antenna-glow" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "url(#bodyGrad)", stroke: "#cfd8dc", strokeWidth: "1" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M44 57 Q50 61 56 57", stroke: "#34d399", strokeWidth: "1.5", strokeLinecap: "round", fill: "none", opacity: "0.7" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "14", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "14", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "86", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "86", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("ellipse", { cx: "38", cy: "36", rx: "10", ry: "5", fill: "white", opacity: "0.5" })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("line", { x1: "30", y1: "22", x2: "22", y2: "6", stroke: "#b0bec5", strokeWidth: "2.5", strokeLinecap: "round" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "22", cy: "5", r: "3.5", fill: "url(#eyeGrad)", filter: "url(#glow)", className: "animate-antenna-glow" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("line", { x1: "70", y1: "22", x2: "78", y2: "6", stroke: "#b0bec5", strokeWidth: "2.5", strokeLinecap: "round" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "78", cy: "5", r: "3.5", fill: "url(#eyeGrad)", filter: "url(#glow)", className: "animate-antenna-glow" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "url(#bodyGrad)", stroke: "#cfd8dc", strokeWidth: "1" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "url(#eyeGrad)", strokeWidth: "3", strokeLinecap: "round", fill: "none", filter: "url(#glow)" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M44 57 Q50 61 56 57", stroke: "#34d399", strokeWidth: "1.5", strokeLinecap: "round", fill: "none", opacity: "0.7" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ellipse", { cx: "14", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ellipse", { cx: "14", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ellipse", { cx: "86", cy: "52", rx: "5", ry: "8", fill: "#e2e8f0", stroke: "#b0bec5", strokeWidth: "0.8" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ellipse", { cx: "86", cy: "52", rx: "3", ry: "5", fill: "url(#eyeGrad)", opacity: "0.4" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ellipse", { cx: "38", cy: "36", rx: "10", ry: "5", fill: "white", opacity: "0.5" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 rounded-full ring-2 ring-emerald-300/0 group-hover:ring-emerald-300/40 transition-all duration-300" })
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 rounded-full ring-2 ring-emerald-300/0 group-hover:ring-emerald-300/40 transition-all duration-300" })
           ]
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("style", { children: `
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("style", { children: `
           @keyframes bob {
             0%, 100% { transform: translateY(0) rotateY(0deg); }
             25% { transform: translateY(-6px) rotateY(3deg); }
@@ -12580,8 +14089,8 @@ ${imageBlock}` : imageBlock;
     ] });
   }
   const panelClasses = isExpanded ? "fixed inset-2 z-[1] sm:inset-4 md:inset-8" : "fixed z-[1] inset-x-2 top-2 bottom-2 sm:inset-x-auto sm:left-auto sm:top-auto sm:bottom-20 sm:right-4 sm:w-[540px] sm:max-w-[calc(100vw-2rem)] sm:h-[820px] sm:max-h-[calc(100vh-6rem)]";
-  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "fixed inset-0 z-[60]", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "fixed inset-0 z-[60]", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
       "div",
       {
         className: "fixed inset-0 bg-black/50",
@@ -12589,7 +14098,7 @@ ${imageBlock}` : imageBlock;
         "aria-hidden": "true"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       "div",
       {
         ref: panelRef,
@@ -12598,31 +14107,31 @@ ${imageBlock}` : imageBlock;
         "aria-label": language === "es" ? "Asistente Nouri" : "Nouri AI Assistant",
         className: `${panelClasses} flex flex-col rounded-2xl shadow-xl overflow-hidden transition-all duration-300 border border-gray-200 bg-white`,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative z-30 flex-shrink-0 bg-white text-gray-900 px-4 py-3 flex items-center justify-between border-b border-gray-200", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-3", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-6 h-6", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative z-30 flex-shrink-0 bg-white text-gray-900 px-4 py-3 flex items-center justify-between border-b border-gray-200", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-3", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center shadow-sm", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { viewBox: "0 0 100 100", className: "w-6 h-6", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("circle", { cx: "50", cy: "52", r: "36", fill: "#f0f4f8" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("rect", { x: "26", y: "38", rx: "12", ry: "12", width: "48", height: "24", fill: "#1e293b", opacity: "0.85" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M35 53 Q38 46 41 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M59 53 Q62 46 65 53", stroke: "#34d399", strokeWidth: "4", strokeLinecap: "round", fill: "none" })
               ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("h3", { className: "font-semibold text-sm text-gray-900 leading-tight", children: "Nouri" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("p", { className: "text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { className: "font-semibold text-sm text-gray-900 leading-tight", children: "Nouri" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { className: "text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "span",
                     {
                       className: "w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400/60",
                       "aria-hidden": "true"
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: isAuthenticated ? onlineToneLabel(language, getToneLabels(language)[tone] || tone) : t2(language, "signInForFeatures") })
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: isAuthenticated ? onlineToneLabel(language, getToneLabels(language)[tone] || tone) : t2(language, "signInForFeatures") })
                 ] })
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-1", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("label", { className: "sr-only", htmlFor: "nouri-chat-language", children: t2(language, "chatLanguage") }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-1", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("label", { className: "sr-only", htmlFor: "nouri-chat-language", children: t2(language, "chatLanguage") }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "select",
                 {
                   id: "nouri-chat-language",
@@ -12636,27 +14145,27 @@ ${imageBlock}` : imageBlock;
                   },
                   className: "text-emerald-600 hover:text-emerald-700 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 hover:border-emerald-300 max-w-[5.5rem] truncate",
                   "aria-label": t2(language, "chatLanguage"),
-                  children: CHAT_UI_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("option", { value: code, children: CHAT_LANGUAGE_LABELS[code] }, code))
+                  children: CHAT_UI_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: code, children: CHAT_LANGUAGE_LABELS[code] }, code))
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative z-40", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative z-40", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     onClick: () => setShowMenu(!showMenu),
                     className: "text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors",
                     "aria-label": "Chat menu",
                     "aria-expanded": showMenu,
-                    children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-5 w-5", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" }) })
+                    children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-5 w-5", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" }) })
                   }
                 ),
-                showMenu && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-52 z-50", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "px-2 pt-1 pb-0.5", children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-[10px] uppercase tracking-wider text-gray-400 px-2 py-1", children: t2(language, "conversationTone") }),
+                showMenu && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 w-52 z-50", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "px-2 pt-1 pb-0.5", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "text-[10px] uppercase tracking-wider text-gray-400 px-2 py-1", children: t2(language, "conversationTone") }),
                     AI_TONE_OPTIONS.map((t3) => {
                       const labels = getToneLabels(language);
                       const active = tone === t3;
-                      return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                      return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                         "button",
                         {
                           type: "button",
@@ -12674,8 +14183,8 @@ ${imageBlock}` : imageBlock;
                       );
                     })
                   ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "border-t border-gray-100 my-1" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "border-t border-gray-100 my-1" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "button",
                     {
                       onClick: handleClearConversation,
@@ -12683,7 +14192,7 @@ ${imageBlock}` : imageBlock;
                       children: "\u{1F5D1}\uFE0F Clear conversation"
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "button",
                     {
                       onClick: () => {
@@ -12696,58 +14205,58 @@ ${imageBlock}` : imageBlock;
                   )
                 ] })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "button",
                 {
                   onClick: () => setIsExpanded(!isExpanded),
                   className: "text-emerald-600/70 hover:text-emerald-600 p-1 rounded hover:bg-emerald-50 transition-colors hidden md:block",
                   "aria-label": isExpanded ? "Compact view" : "Expand",
-                  children: isExpanded ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z", clipRule: "evenodd" }) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 11-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L5.414 15H7a1 1 0 110 2H3a1 1 0 01-1-1v-4zm13.707.707a1 1 0 00-1.414-1.414L13 13.586V12a1 1 0 10-2 0v4a1 1 0 001 1h4a1 1 0 100-2h-1.586l2.293-2.293z", clipRule: "evenodd" }) })
+                  children: isExpanded ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { fillRule: "evenodd", d: "M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z", clipRule: "evenodd" }) }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { fillRule: "evenodd", d: "M3 4a1 1 0 011-1h4a1 1 0 010 2H6.414l2.293 2.293a1 1 0 11-1.414 1.414L5 6.414V8a1 1 0 01-2 0V4zm9 1a1 1 0 010-2h4a1 1 0 011 1v4a1 1 0 11-2 0V6.414l-2.293 2.293a1 1 0 11-1.414-1.414L13.586 5H12zm-9 7a1 1 0 012 0v1.586l2.293-2.293a1 1 0 111.414 1.414L5.414 15H7a1 1 0 110 2H3a1 1 0 01-1-1v-4zm13.707.707a1 1 0 00-1.414-1.414L13 13.586V12a1 1 0 10-2 0v4a1 1 0 001 1h4a1 1 0 100-2h-1.586l2.293-2.293z", clipRule: "evenodd" }) })
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "button",
                 {
                   onClick: closeAssistant,
                   className: "text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors",
                   "aria-label": "Close chat",
-                  children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-5 w-5", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z", clipRule: "evenodd" }) })
+                  children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-5 w-5", viewBox: "0 0 20 20", fill: "currentColor", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { fillRule: "evenodd", d: "M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z", clipRule: "evenodd" }) })
                 }
               )
             ] })
           ] }),
-          voiceMode ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+          voiceMode ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
             "div",
             {
               className: "relative z-0 flex-1 flex flex-col items-center justify-between py-5 px-6 overflow-hidden bg-emerald-50/40",
               role: "region",
               "aria-label": language === "es" ? "Modo de voz" : "Voice mode",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative w-full flex items-center justify-between gap-2 z-10", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative w-full flex items-center justify-between gap-2 z-10", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "button",
                     {
                       onClick: exitVoiceMode,
                       className: "inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 px-2.5 py-1.5 rounded-lg hover:bg-slate-900/5 transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400/50",
                       "aria-label": language === "es" ? "Salir del modo de voz" : "Exit voice mode",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { fillRule: "evenodd", d: "M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z", clipRule: "evenodd" }) }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 20 20", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { fillRule: "evenodd", d: "M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z", clipRule: "evenodd" }) }),
                         language === "es" ? "Volver al chat" : "Back to chat"
                       ]
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "span",
                     {
                       className: "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/5 ring-1 ring-slate-300/60 text-[10px] font-semibold tracking-wider uppercase text-slate-700 backdrop-blur-sm",
                       title: language === "es" ? "Idioma del modo de voz" : "Voice mode language",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { "aria-hidden": "true", children: language === "es" ? "\u{1F1EA}\u{1F1F8}" : "\u{1F1FA}\u{1F1F8}" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": "true", children: language === "es" ? "\u{1F1EA}\u{1F1F8}" : "\u{1F1FA}\u{1F1F8}" }),
                         language === "es" ? "Espa\xF1ol" : "English"
                       ]
                     }
                   ),
-                  wakeWordSupported && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  wakeWordSupported && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "button",
                     {
                       onClick: toggleWakeWord,
@@ -12755,56 +14264,56 @@ ${imageBlock}` : imageBlock;
                       title: wakeWordEnabled ? language === "es" ? "Manos libres activado \u2014 di \u201CNouri\u201D" : "Hands-free on \u2014 say \u201CNouri\u201D" : language === "es" ? "Activar manos libres \u201CNouri\u201D" : "Enable hands-free \u201CNouri\u201D",
                       "aria-pressed": wakeWordEnabled,
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-assistive-listening-systems", "aria-hidden": "true" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-assistive-listening-systems", "aria-hidden": "true" }),
                         wakeWordEnabled ? language === "es" ? "Manos libres" : "Hands-free" : "\u201CNouri\u201D"
                       ]
                     }
                   )
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "relative flex-1 flex items-center justify-center z-10", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "relative flex-1 flex items-center justify-center z-10", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                   "button",
                   {
                     onClick: handleOrbTap,
                     className: "relative focus:outline-none focus-visible:ring-4 focus-visible:ring-emerald-400/30 rounded-full group",
                     "aria-label": isVoiceSpeaking ? language === "es" ? "Toca para interrumpir" : "Tap to interrupt" : isVoiceListening ? language === "es" ? "Toca para enviar" : "Tap to send now" : language === "es" ? "Toca para hablar" : "Tap to speak",
                     children: [
-                      isVoiceListening && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-8 rounded-full border-2 border-emerald-400/40 animate-voice-ring-1 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-14 rounded-full border border-emerald-400/20 animate-voice-ring-2 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-20 rounded-full border border-emerald-400/10 animate-voice-ring-3 pointer-events-none" })
+                      isVoiceListening && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 -m-8 rounded-full border-2 border-emerald-400/40 animate-voice-ring-1 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 -m-14 rounded-full border border-emerald-400/20 animate-voice-ring-2 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 -m-20 rounded-full border border-emerald-400/10 animate-voice-ring-3 pointer-events-none" })
                       ] }),
-                      isVoiceSpeaking && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-6 rounded-full border-2 border-emerald-400/40 animate-voice-speak-ring-1 pointer-events-none" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 -m-10 rounded-full border border-emerald-400/20 animate-voice-speak-ring-2 pointer-events-none" })
+                      isVoiceSpeaking && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 -m-6 rounded-full border-2 border-emerald-400/40 animate-voice-speak-ring-1 pointer-events-none" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 -m-10 rounded-full border border-emerald-400/20 animate-voice-speak-ring-2 pointer-events-none" })
                       ] }),
-                      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                         "div",
                         {
                           className: `absolute -inset-8 rounded-full blur-2xl transition-all duration-700 pointer-events-none ${isVoiceSpeaking ? "bg-emerald-500/20" : isVoiceListening ? "bg-emerald-500/20" : isLoading ? "bg-emerald-500/15" : "bg-slate-600/10"}`
                         }
                       ),
-                      /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                         "div",
                         {
                           className: `relative w-36 h-36 rounded-full transition-all duration-300 flex items-center justify-center cursor-pointer ${isVoiceListening ? "bg-emerald-600 shadow-md" : isVoiceSpeaking ? "bg-emerald-700 shadow-md scale-110" : isLoading ? "bg-emerald-500 shadow-sm" : "bg-emerald-600/90 shadow-sm scale-95 group-hover:scale-100"}`,
                           style: isVoiceListening ? { transform: `scale(${(1.05 + audioLevel * 0.18).toFixed(3)})` } : void 0,
                           children: [
-                            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-transparent to-white/15 pointer-events-none" }),
-                            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "relative z-10 flex items-center justify-center", children: isVoiceSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex items-end gap-[3px] h-8", "aria-hidden": "true", children: [0, 1, 2, 3, 4].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute inset-0 rounded-full bg-gradient-to-t from-transparent via-transparent to-white/15 pointer-events-none" }),
+                            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "relative z-10 flex items-center justify-center", children: isVoiceSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex items-end gap-[3px] h-8", "aria-hidden": "true", children: [0, 1, 2, 3, 4].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                               "span",
                               {
                                 className: "w-1.5 bg-white/90 rounded-full animate-voice-bar",
                                 style: { animationDelay: `${i2 * 0.12}s` }
                               },
                               i2
-                            )) }) : isLoading ? /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex items-center gap-2", "aria-hidden": "true", children: [0, 1, 2].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                            )) }) : isLoading ? /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex items-center gap-2", "aria-hidden": "true", children: [0, 1, 2].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                               "span",
                               {
                                 className: "w-2.5 h-2.5 bg-white/90 rounded-full animate-voice-dot",
                                 style: { animationDelay: `${i2 * 0.18}s` }
                               },
                               i2
-                            )) }) : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                            )) }) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                               "svg",
                               {
                                 xmlns: "http://www.w3.org/2000/svg",
@@ -12813,8 +14322,8 @@ ${imageBlock}` : imageBlock;
                                 fill: "currentColor",
                                 "aria-hidden": "true",
                                 children: [
-                                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" }),
-                                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" })
+                                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" }),
+                                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" })
                                 ]
                               }
                             ) })
@@ -12824,10 +14333,10 @@ ${imageBlock}` : imageBlock;
                     ]
                   }
                 ) }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "relative z-10 h-6 flex items-end justify-center gap-1 mb-1", "aria-hidden": "true", children: isVoiceListening && [0, 1, 2, 3, 4, 5, 6].map((i2) => {
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "relative z-10 h-6 flex items-end justify-center gap-1 mb-1", "aria-hidden": "true", children: isVoiceListening && [0, 1, 2, 3, 4, 5, 6].map((i2) => {
                   const phase = Math.sin(Date.now() / 180 + i2 * 0.7) * 0.5 + 0.5;
                   const h2 = Math.max(4, (audioLevel * 22 + 3) * (0.4 + phase * 0.6));
-                  return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "span",
                     {
                       className: "w-[3px] rounded-full bg-emerald-400/80 transition-[height] duration-75",
@@ -12836,8 +14345,8 @@ ${imageBlock}` : imageBlock;
                     i2
                   );
                 }) }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative flex flex-col items-center gap-3 z-10 w-full", children: [
-                  tapToHear && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative flex flex-col items-center gap-3 z-10 w-full", children: [
+                  tapToHear && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "button",
                     {
                       type: "button",
@@ -12850,12 +14359,12 @@ ${imageBlock}` : imageBlock;
                       className: "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200 hover:bg-emerald-100 transition-colors",
                       "aria-label": language === "es" ? "Toca para escuchar la respuesta" : "Tap to hear the response",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("path", { d: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" }) }),
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "currentColor", "aria-hidden": "true", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("path", { d: "M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" }) }),
                         language === "es" ? "Toca para escuchar" : "Tap to hear"
                       ]
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "min-h-[40px] flex items-center justify-center px-4", children: voiceTranscript ? /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "min-h-[40px] flex items-center justify-center px-4", children: voiceTranscript ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "p",
                     {
                       className: `text-sm italic text-center max-w-[300px] leading-snug transition-colors duration-300 ${isVoiceListening ? "text-white/90" : "text-slate-600"}`,
@@ -12866,15 +14375,15 @@ ${imageBlock}` : imageBlock;
                         "\u201D"
                       ]
                     }
-                  ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-[12px] text-slate-500 italic text-center max-w-[280px]", children: isVoiceListening ? language === "es" ? "Te estoy escuchando..." : "I&apos;m listening..." : isVoiceSpeaking ? language === "es" ? "Habla cuando quieras interrumpir" : "Speak any time to interrupt" : isLoading ? "" : language === "es" ? "Tu transcripci\xF3n aparecer\xE1 aqu\xED" : "Your transcript will appear here" }) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("p", { className: "text-[12px] text-slate-500 italic text-center max-w-[280px]", children: isVoiceListening ? language === "es" ? "Te estoy escuchando..." : "I&apos;m listening..." : isVoiceSpeaking ? language === "es" ? "Habla cuando quieras interrumpir" : "Speak any time to interrupt" : isLoading ? "" : language === "es" ? "Tu transcripci\xF3n aparecer\xE1 aqu\xED" : "Your transcript will appear here" }) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "div",
                     {
                       className: `inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-medium tracking-wide transition-all duration-300 ring-1 ${voiceError ? "bg-red-50 text-red-700 ring-red-200" : isVoiceSpeaking ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : isLoading ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : isVoiceListening ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-gray-50 text-gray-600 ring-gray-200"}`,
                       role: "status",
                       "aria-live": "polite",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                           "span",
                           {
                             className: `h-1.5 w-1.5 rounded-full ${voiceError ? "bg-red-500" : isVoiceSpeaking ? "bg-emerald-500 animate-pulse" : isLoading ? "bg-emerald-400 animate-pulse" : isVoiceListening ? "bg-emerald-500 animate-pulse" : "bg-gray-400"}`,
@@ -12885,27 +14394,27 @@ ${imageBlock}` : imageBlock;
                       ]
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "button",
                     {
                       onClick: exitVoiceMode,
                       className: "group/end inline-flex items-center gap-2 pl-3 pr-4 h-12 rounded-full bg-red-50 hover:bg-red-600 border border-red-200 hover:border-red-600 text-red-700 hover:text-white transition-all shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50",
                       "aria-label": language === "es" ? "Terminar conversaci\xF3n de voz" : "End voice conversation",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/25 group-hover/end:bg-white/15", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
-                          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("line", { x1: "6", y1: "6", x2: "18", y2: "18" })
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "inline-flex h-7 w-7 items-center justify-center rounded-full bg-rose-500/25 group-hover/end:bg-white/15", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("svg", { xmlns: "http://www.w3.org/2000/svg", className: "h-4 w-4", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: "2.5", strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("line", { x1: "18", y1: "6", x2: "6", y2: "18" }),
+                          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("line", { x1: "6", y1: "6", x2: "18", y2: "18" })
                         ] }) }),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "text-[12px] font-semibold tracking-wide", children: language === "es" ? "Terminar" : "End conversation" })
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "text-[12px] font-semibold tracking-wide", children: language === "es" ? "Terminar" : "End conversation" })
                       ]
                     }
                   )
                 ] })
               ]
             }
-          ) : /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 relative min-h-0 z-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+          ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 relative min-h-0 z-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                 "div",
                 {
                   ref: messagesContainerRef,
@@ -12914,7 +14423,7 @@ ${imageBlock}` : imageBlock;
                   "aria-label": "Chat messages",
                   "aria-live": "polite",
                   children: [
-                    messages.length <= 1 && !isLoading && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                    messages.length <= 1 && !isLoading && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                       WelcomeHero,
                       {
                         language,
@@ -12937,20 +14446,20 @@ ${imageBlock}` : imageBlock;
                         let separator = null;
                         const sepLabel = formatSeparator(msg.timestamp, language);
                         if (idx === 0 && sepLabel) {
-                          separator = /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(DateSeparator, { label: sepLabel }, `sep-${idx}`);
+                          separator = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(DateSeparator, { label: sepLabel }, `sep-${idx}`);
                         } else if (idx > 0) {
                           const prev = messages[idx - 1];
                           if (prev?.timestamp && msg.timestamp) {
                             const prevDay = new Date(prev.timestamp).toDateString();
                             const curDay = new Date(msg.timestamp).toDateString();
                             if (prevDay !== curDay && sepLabel) {
-                              separator = /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(DateSeparator, { label: sepLabel }, `sep-${idx}`);
+                              separator = /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(DateSeparator, { label: sepLabel }, `sep-${idx}`);
                             }
                           }
                         }
-                        return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_react11.default.Fragment, { children: [
+                        return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_react10.default.Fragment, { children: [
                           separator,
-                          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                             MessageBubble,
                             {
                               msg,
@@ -12971,12 +14480,12 @@ ${imageBlock}` : imageBlock;
                         ] }, msg.id);
                       });
                     })(),
-                    isLoading && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(TypingIndicator, {}),
-                    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { ref: messagesEndRef })
+                    isLoading && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(TypingIndicator, {}),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { ref: messagesEndRef })
                   ]
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 ScrollToBottomPill,
                 {
                   visible: showScrollPill,
@@ -12985,7 +14494,7 @@ ${imageBlock}` : imageBlock;
                 }
               )
             ] }),
-            pendingUpload && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            pendingUpload && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               BulkUploadPreview,
               {
                 pending: pendingUpload,
@@ -13000,7 +14509,7 @@ ${imageBlock}` : imageBlock;
                 onRemoveRow: removePendingRow
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 ref: photoInputRef,
@@ -13012,7 +14521,7 @@ ${imageBlock}` : imageBlock;
                 tabIndex: -1
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 ref: inlinePhotoInputRef,
@@ -13025,7 +14534,7 @@ ${imageBlock}` : imageBlock;
                 tabIndex: -1
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
               "input",
               {
                 ref: csvInputRef,
@@ -13037,9 +14546,9 @@ ${imageBlock}` : imageBlock;
                 tabIndex: -1
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("form", { onSubmit: handleSend, className: "relative z-0 border-t border-gray-200 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white", children: [
-              pendingChatPhotos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("div", { className: "flex gap-2 overflow-x-auto pb-1 nourish-scrollbar-h", "aria-label": language === "es" ? "Fotos adjuntas" : "Attached photos", children: pendingChatPhotos.map((photo) => /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("form", { onSubmit: handleSend, className: "relative z-0 border-t border-gray-200 px-3 pt-2.5 pb-2 flex flex-col gap-1 flex-shrink-0 bg-white", children: [
+              pendingChatPhotos.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex gap-2 overflow-x-auto pb-1 nourish-scrollbar-h", "aria-label": language === "es" ? "Fotos adjuntas" : "Attached photos", children: pendingChatPhotos.map((photo) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-200 bg-white shadow-sm", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "img",
                   {
                     src: photo.previewUrl,
@@ -13047,7 +14556,7 @@ ${imageBlock}` : imageBlock;
                     className: "w-full h-full object-cover"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     type: "button",
@@ -13059,7 +14568,7 @@ ${imageBlock}` : imageBlock;
                   }
                 )
               ] }, photo.id)) }),
-              railChips.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              railChips.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                 "div",
                 {
                   role: "toolbar",
@@ -13069,7 +14578,7 @@ ${imageBlock}` : imageBlock;
                     const label = typeof chip === "string" ? chip : chip?.label || chip?.message || "";
                     const message = typeof chip === "string" ? chip : chip?.message || chip?.label || "";
                     if (!label) return null;
-                    return /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                       "button",
                       {
                         type: "button",
@@ -13083,9 +14592,9 @@ ${imageBlock}` : imageBlock;
                   })
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-end gap-2", children: [
-                canAttachFiles && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { ref: attachMenuRef, className: "relative flex-shrink-0", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-end gap-2", children: [
+                canAttachFiles && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { ref: attachMenuRef, className: "relative flex-shrink-0", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "button",
                     {
                       type: "button",
@@ -13096,16 +14605,16 @@ ${imageBlock}` : imageBlock;
                       "aria-label": language === "es" ? "Adjuntar foto o CSV" : "Attach photo or CSV",
                       "aria-expanded": showAttachMenu,
                       "aria-haspopup": "menu",
-                      children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-plus text-sm", "aria-hidden": "true" })
+                      children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-plus text-sm", "aria-hidden": "true" })
                     }
                   ),
-                  showAttachMenu && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                  showAttachMenu && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                     "div",
                     {
                       role: "menu",
                       className: "absolute bottom-full left-0 mb-2 min-w-[200px] rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-xl shadow-[#10b981]/10 overflow-hidden z-30 animate-fade-in",
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                           "button",
                           {
                             type: "button",
@@ -13116,15 +14625,15 @@ ${imageBlock}` : imageBlock;
                             },
                             className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors",
                             children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-camera text-[13px]", "aria-hidden": "true" }) }),
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "Foto \u2192 publicar" : "Photo \u2192 list food" }),
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "IA detecta art\xEDculos" : "AI auto-detects items" })
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-camera text-[13px]", "aria-hidden": "true" }) }),
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "flex-1 text-left", children: [
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "Foto \u2192 publicar" : "Photo \u2192 list food" }),
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "IA detecta art\xEDculos" : "AI auto-detects items" })
                               ] })
                             ]
                           }
                         ),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                           "button",
                           {
                             type: "button",
@@ -13135,15 +14644,15 @@ ${imageBlock}` : imageBlock;
                             },
                             className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100",
                             children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-sky-500/15 text-sky-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-image text-[13px]", "aria-hidden": "true" }) }),
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "Adjuntar fotos al mensaje" : "Attach photo(s) to message" }),
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "Puedes a\xF1adir texto y enviar juntas" : "Add a caption, then send together" })
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-sky-500/15 text-sky-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-image text-[13px]", "aria-hidden": "true" }) }),
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "flex-1 text-left", children: [
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "Adjuntar fotos al mensaje" : "Attach photo(s) to message" }),
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "Puedes a\xF1adir texto y enviar juntas" : "Add a caption, then send together" })
                               ] })
                             ]
                           }
                         ),
-                        /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                           "button",
                           {
                             type: "button",
@@ -13154,10 +14663,10 @@ ${imageBlock}` : imageBlock;
                             },
                             className: "w-full flex items-center gap-3 px-3 py-2.5 text-sm text-gray-700 hover:bg-[#10b981]/5 hover:text-emerald-600 transition-colors border-t border-gray-100",
                             children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-file-csv text-[13px]", "aria-hidden": "true" }) }),
-                              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "flex-1 text-left", children: [
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "CSV en lote" : "Bulk import CSV" }),
-                                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "Sube varios listados a la vez" : "Upload many listings at once" })
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "inline-flex w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-600 items-center justify-center", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-file-csv text-[13px]", "aria-hidden": "true" }) }),
+                              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "flex-1 text-left", children: [
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block font-medium leading-tight", children: language === "es" ? "CSV en lote" : "Bulk import CSV" }),
+                                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "block text-[10px] text-gray-500 leading-tight mt-0.5", children: language === "es" ? "Sube varios listados a la vez" : "Upload many listings at once" })
                               ] })
                             ]
                           }
@@ -13166,14 +14675,14 @@ ${imageBlock}` : imageBlock;
                     }
                   )
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 relative", children: [
-                  showSuggestions && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex-1 relative", children: [
+                  showSuggestions && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "ul",
                     {
                       role: "listbox",
                       "aria-label": language === "es" ? "Sugerencias" : "Suggestions",
                       className: "absolute bottom-full left-0 right-0 mb-2 max-h-56 overflow-y-auto rounded-xl border border-[#10b981]/15 bg-white/95 backdrop-blur-md shadow-lg shadow-[#10b981]/10 z-20 nourish-scrollbar",
-                      children: filteredSuggestions.map((s2, idx) => /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                      children: filteredSuggestions.map((s2, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                         "li",
                         {
                           role: "option",
@@ -13190,7 +14699,7 @@ ${imageBlock}` : imageBlock;
                       ))
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                     "textarea",
                     {
                       ref: inputRef,
@@ -13216,7 +14725,7 @@ ${imageBlock}` : imageBlock;
                     }
                   )
                 ] }),
-                wakeWordSupported && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                wakeWordSupported && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     type: "button",
@@ -13225,13 +14734,13 @@ ${imageBlock}` : imageBlock;
                     title: wakeWordEnabled ? language === "es" ? "Palabra de activaci\xF3n activada \u2014 di \u201CNouri\u201D" : "Wake word on \u2014 say \u201CNouri\u201D" : language === "es" ? "Activar manos libres con \u201CNouri\u201D" : "Enable hands-free wake word \u201CNouri\u201D",
                     "aria-label": language === "es" ? "Alternar palabra de activaci\xF3n Nouri" : "Toggle Nouri wake word",
                     "aria-pressed": wakeWordEnabled,
-                    children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { className: "relative inline-flex items-center justify-center", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas fa-assistive-listening-systems text-[13px] ${wakeActive ? "animate-pulse" : ""}`, "aria-hidden": "true" }),
-                      wakeActive && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "absolute -top-1.5 -right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping", "aria-hidden": "true" })
+                    children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "relative inline-flex items-center justify-center", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: `fas fa-assistive-listening-systems text-[13px] ${wakeActive ? "animate-pulse" : ""}`, "aria-hidden": "true" }),
+                      wakeActive && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "absolute -top-1.5 -right-1.5 h-2 w-2 rounded-full bg-emerald-400 animate-ping", "aria-hidden": "true" })
                     ] })
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     type: "button",
@@ -13240,27 +14749,27 @@ ${imageBlock}` : imageBlock;
                     className: "flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all border border-gray-200 bg-white text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 hover:border-emerald-300 disabled:opacity-40 disabled:cursor-not-allowed",
                     title: language === "es" ? "Modo voz" : "Voice mode",
                     "aria-label": "Switch to voice mode",
-                    children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-microphone text-[13px]", "aria-hidden": "true" })
+                    children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-microphone text-[13px]", "aria-hidden": "true" })
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
                   "button",
                   {
                     type: "submit",
                     disabled: !inputText.trim() && pendingChatPhotos.length === 0 || isLoading || uploadBusy,
                     className: `flex-shrink-0 inline-flex items-center justify-center w-9 h-9 rounded-full transition-all ${(inputText.trim() || pendingChatPhotos.length > 0) && !isLoading && !uploadBusy ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm" : "bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed"}`,
                     "aria-label": language === "es" ? "Enviar mensaje" : "Send message",
-                    children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-paper-plane text-[12px]", "aria-hidden": "true" })
+                    children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-paper-plane text-[12px]", "aria-hidden": "true" })
                   }
                 )
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center justify-between px-1 text-[10px] text-slate-600", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: "hidden sm:inline", children: language === "es" ? "Enter para enviar \xB7 Shift+Enter para l\xEDnea nueva" : "Enter to send \xB7 Shift+Enter for new line" }),
-                /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { className: `ml-auto tabular-nums transition-colors ${inputText.length > 4e3 ? "text-rose-600 font-medium" : inputText.length > 2e3 ? "text-amber-700" : "text-slate-500"}`, children: inputText.length > 0 ? `${inputText.length}` : "" })
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center justify-between px-1 text-[10px] text-slate-600", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "hidden sm:inline", children: language === "es" ? "Enter para enviar \xB7 Shift+Enter para l\xEDnea nueva" : "Enter to send \xB7 Shift+Enter for new line" }),
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `ml-auto tabular-nums transition-colors ${inputText.length > 4e3 ? "text-rose-600 font-medium" : inputText.length > 2e3 ? "text-amber-700" : "text-slate-500"}`, children: inputText.length > 0 ? `${inputText.length}` : "" })
               ] })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("style", { children: `
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("style", { children: `
         .nourish-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .nourish-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .nourish-scrollbar::-webkit-scrollbar-thumb { background: rgba(16,185,129,0.2); border-radius: 4px; }
@@ -13317,37 +14826,8 @@ ${imageBlock}` : imageBlock;
 var AIChatPanel_default = AIChatPanel;
 
 // src/common/NouriGuideBar.jsx
-var import_react12 = __toESM(require_react(), 1);
-
-// utils/formFieldGuide.js
-var FORM_GUIDE_DESC_ID = "nouri-form-guide-desc";
-function notifyFormFieldFocus(detail) {
-  if (typeof window === "undefined" || !detail || typeof detail !== "object") return;
-  window.dispatchEvent(new CustomEvent("foodmaps:form_focus", { detail }));
-}
-if (typeof window !== "undefined") {
-  window.nouriNotifyFormFocus = notifyFormFieldFocus;
-}
-
-// utils/nouriGuide/registry.js
-var NOURI_GOALS = {};
-
-// utils/nouriGuide/humanHandoff.js
-var failureCount = 0;
-function getGuideFailureCount() {
-  return failureCount;
-}
-function shouldSuggestHumanHandoff() {
-  return failureCount >= 3;
-}
-function openHumanSupport() {
-  window.dispatchEvent(new CustomEvent("foodmaps:navigate_ui", {
-    detail: { action: "open", target: "dashboard", summary: "Support" }
-  }));
-}
-
-// src/common/NouriGuideBar.jsx
-var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
+var import_react11 = __toESM(require_react(), 1);
+var import_jsx_runtime9 = __toESM(require_jsx_runtime(), 1);
 function NouriGuideBar() {
   const {
     settings,
@@ -13357,9 +14837,9 @@ function NouriGuideBar() {
     replay,
     resume
   } = useNouriGuide();
-  const [failureCount2, setFailureCount] = (0, import_react12.useState)(() => getGuideFailureCount());
+  const [failureCount, setFailureCount] = (0, import_react11.useState)(() => getGuideFailureCount());
   const showHandoffHint = shouldSuggestHumanHandoff();
-  (0, import_react12.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     const refresh = () => setFailureCount(getGuideFailureCount());
     window.addEventListener("nouri:handoff-suggested", refresh);
     return () => window.removeEventListener("nouri:handoff-suggested", refresh);
@@ -13380,7 +14860,7 @@ function NouriGuideBar() {
   } = guide;
   const displayText = caption || text;
   const showBar = !isDismissed && (settings.alwaysShowCaptions || settings.preferTextOverVoice || isSpeaking || hasResume || source === "form" && displayText || source === "chat" && displayText);
-  (0, import_react12.useEffect)(() => {
+  (0, import_react11.useEffect)(() => {
     if (typeof document === "undefined") return;
     document.body.classList.toggle("has-nouri-guide-bar", Boolean(showBar && displayText));
     return () => document.body.classList.remove("has-nouri-guide-bar");
@@ -13388,37 +14868,37 @@ function NouriGuideBar() {
   if (!showBar || !displayText) return null;
   const stepLabel = stepTotal > 0 ? `Step ${stepIndex + 1} of ${stepTotal}` : null;
   const goalWelcome = guide.goalKey && NOURI_GOALS[guide.goalKey]?.welcome;
-  return /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(import_jsx_runtime10.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: displayText }),
-    /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(import_jsx_runtime9.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: displayText }),
+    /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
       "div",
       {
         className: "nouri-ai-caption-bar nouri-guide-bar",
         role: "region",
         "aria-label": "Nouri accessibility guide",
-        children: /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "max-w-5xl mx-auto flex items-start gap-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+        children: /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "max-w-5xl mx-auto flex items-start gap-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
             "div",
             {
               className: `flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center ${isSpeaking ? "bg-[#2CABE3] text-white" : "bg-white/15 text-[#2CABE3]"}`,
               "aria-hidden": "true",
-              children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: `fas ${isSpeaking ? "fa-volume-high" : "fa-robot"}` })
+              children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${isSpeaking ? "fa-volume-high" : "fa-robot"}` })
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide opacity-80 mb-1", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { children: "Nouri guide" }),
-              stepLabel && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("span", { "aria-label": `${stepLabel}`, children: stepLabel }),
-              section && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex flex-wrap items-center gap-2 text-xs uppercase tracking-wide opacity-80 mb-1", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { children: "Nouri guide" }),
+              stepLabel && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("span", { "aria-label": `${stepLabel}`, children: stepLabel }),
+              section && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
                 "\xB7 ",
                 section
               ] }),
-              label && label !== "AI guide" && /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("span", { children: [
+              label && label !== "AI guide" && /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("span", { children: [
                 "\xB7 ",
                 label
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "p",
               {
                 role: "status",
@@ -13428,27 +14908,27 @@ function NouriGuideBar() {
                 children: displayText
               }
             ),
-            hasResume && goalWelcome && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "text-xs mt-1 opacity-80", children: "Continuing where you left off in chat." }),
-            settings.preferTextOverVoice && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "text-xs mt-1 opacity-70", children: "Text-only mode \u2014 voice is off in accessibility settings." }),
-            source === "form" && !settings.formVoiceGuideEnabled && !settings.preferTextOverVoice && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "text-xs mt-1 opacity-70", children: "Voice guide is off \u2014 enable Form voice guide in Accessibility settings." }),
-            showHandoffHint && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("p", { className: "text-xs mt-1 opacity-90", children: "Having trouble? A team member can help." })
+            hasResume && goalWelcome && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-xs mt-1 opacity-80", children: "Continuing where you left off in chat." }),
+            settings.preferTextOverVoice && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-xs mt-1 opacity-70", children: "Text-only mode \u2014 voice is off in accessibility settings." }),
+            source === "form" && !settings.formVoiceGuideEnabled && !settings.preferTextOverVoice && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-xs mt-1 opacity-70", children: "Voice guide is off \u2014 enable Form voice guide in Accessibility settings." }),
+            showHandoffHint && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("p", { className: "text-xs mt-1 opacity-90", children: "Having trouble? A team member can help." })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsxs)(
               "button",
               {
                 type: "button",
                 onClick: () => openHumanSupport(),
                 className: "px-2 py-1 text-xs rounded bg-white/20 hover:bg-white/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
                 "aria-label": "Talk to a person for help",
-                title: failureCount2 >= 3 ? "Nouri suggested human help" : "Contact support",
+                title: failureCount >= 3 ? "Nouri suggested human help" : "Contact support",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: "fas fa-user-headset mr-1", "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-user-headset mr-1", "aria-hidden": "true" }),
                   "Person"
                 ]
               }
             ),
-            hasResume && /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            hasResume && /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "button",
               {
                 type: "button",
@@ -13458,7 +14938,7 @@ function NouriGuideBar() {
                 children: "Continue"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "button",
               {
                 type: "button",
@@ -13466,10 +14946,10 @@ function NouriGuideBar() {
                 title: "Replay",
                 "aria-label": "Replay current guide step",
                 className: "w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "button",
               {
                 type: "button",
@@ -13477,10 +14957,10 @@ function NouriGuideBar() {
                 title: isMuted ? "Unmute" : "Mute",
                 "aria-label": isMuted ? "Unmute guide voice" : "Mute guide voice",
                 className: "w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime10.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime9.jsx)(
               "button",
               {
                 type: "button",
@@ -13488,7 +14968,7 @@ function NouriGuideBar() {
                 title: "Dismiss",
                 "aria-label": "Dismiss guide",
                 className: "w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white",
-                children: /* @__PURE__ */ (0, import_jsx_runtime10.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime9.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
               }
             )
           ] })
@@ -13499,12 +14979,12 @@ function NouriGuideBar() {
 }
 
 // src/assistant/RoleInsightsPanel.jsx
-var import_react15 = __toESM(require_react(), 1);
+var import_react14 = __toESM(require_react(), 1);
 var import_prop_types4 = __toESM(require_prop_types(), 1);
 
 // utils/react-router-shim.js
-var import_react13 = __toESM(require_react(), 1);
-var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
+var import_react12 = __toESM(require_react(), 1);
+var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
 function useNavigate() {
   return (href) => {
     if (!href) return;
@@ -13529,9 +15009,9 @@ function useNavigate() {
 }
 
 // src/common/AIThinking.jsx
-var import_react14 = __toESM(require_react(), 1);
+var import_react13 = __toESM(require_react(), 1);
 var import_prop_types3 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
 var DEFAULT_STAGES = [
   { icon: "brain", label: "Analyzing your request" },
   { icon: "database", label: "Searching knowledge base" },
@@ -13539,8 +15019,8 @@ var DEFAULT_STAGES = [
   { icon: "wand-magic-sparkles", label: "Generating response" }
 ];
 function useCyclingStage(stages, intervalMs = 1400) {
-  const [idx, setIdx] = (0, import_react14.useState)(0);
-  (0, import_react14.useEffect)(() => {
+  const [idx, setIdx] = (0, import_react13.useState)(0);
+  (0, import_react13.useEffect)(() => {
     if (!stages || stages.length <= 1) return void 0;
     const t3 = setInterval(() => setIdx((i2) => (i2 + 1) % stages.length), intervalMs);
     return () => clearInterval(t3);
@@ -13549,8 +15029,8 @@ function useCyclingStage(stages, intervalMs = 1400) {
 }
 function OrbitingAvatar({ size = 40 }) {
   const px = `${size}px`;
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "relative flex-shrink-0", style: { width: px, height: px }, children: [
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "relative flex-shrink-0", style: { width: px, height: px }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "div",
       {
         className: "absolute inset-0 rounded-full ai-typing-orbit-fast",
@@ -13562,7 +15042,7 @@ function OrbitingAvatar({ size = 40 }) {
         "aria-hidden": "true"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "div",
       {
         className: "absolute inset-1 rounded-full ai-typing-orbit-slow",
@@ -13574,8 +15054,8 @@ function OrbitingAvatar({ size = 40 }) {
         "aria-hidden": "true"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "absolute inset-2 rounded-full bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center ai-typing-core", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-sparkles text-[9px] text-white", "aria-hidden": "true" }) }),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "absolute inset-2 rounded-full bg-gradient-to-br from-cyan-400 via-blue-500 to-purple-600 flex items-center justify-center ai-typing-core", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("i", { className: "fas fa-sparkles text-[9px] text-white", "aria-hidden": "true" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "span",
       {
         className: "ai-typing-particle absolute top-0 left-1 w-1 h-1 rounded-full bg-cyan-300",
@@ -13583,7 +15063,7 @@ function OrbitingAvatar({ size = 40 }) {
         "aria-hidden": "true"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "span",
       {
         className: "ai-typing-particle absolute top-0 right-1 w-1 h-1 rounded-full bg-fuchsia-300",
@@ -13591,7 +15071,7 @@ function OrbitingAvatar({ size = 40 }) {
         "aria-hidden": "true"
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
       "span",
       {
         className: "ai-typing-particle absolute top-1 left-4 w-0.5 h-0.5 rounded-full bg-white",
@@ -13606,13 +15086,13 @@ function StageBubble({ stage, dark = true }) {
   const wrap = dark ? "bg-slate-800/60 border-cyan-500/30 shadow-cyan-500/10" : "bg-white/80 border-cyan-400/40 shadow-cyan-400/10";
   const labelColor = dark ? "text-cyan-100" : "text-cyan-900";
   const iconColor = dark ? "text-cyan-300" : "text-cyan-600";
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
     "div",
     {
       className: `ai-typing-shimmer relative backdrop-blur-md rounded-2xl px-3.5 py-2 border shadow-lg overflow-hidden ${wrap}`,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex items-center gap-2 relative z-10", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "flex items-center gap-2 relative z-10", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
             "i",
             {
               className: `fas fa-${stage.icon} ${iconColor} text-[11px] ai-typing-status`,
@@ -13620,7 +15100,7 @@ function StageBubble({ stage, dark = true }) {
             },
             `icon-${stage.icon}`
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
             "span",
             {
               className: `text-[11px] ${labelColor} font-medium tracking-wide truncate ai-typing-status`,
@@ -13632,22 +15112,22 @@ function StageBubble({ stage, dark = true }) {
             `label-${stage.label}`
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex items-center gap-1 mt-1 relative z-10", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "flex items-center gap-1 mt-1 relative z-10", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
             "span",
             {
               className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-300",
               style: { animationDelay: "0ms" }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
             "span",
             {
               className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-blue-400",
               style: { animationDelay: "180ms" }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
             "span",
             {
               className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-fuchsia-400",
@@ -13668,7 +15148,7 @@ StageBubble.propTypes = {
 };
 function AIThinkingInline({ stages = DEFAULT_STAGES, dark = true, size = 40, className = "" }) {
   const stage = useCyclingStage(stages);
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
     "div",
     {
       className: `flex items-center gap-3 ${className}`,
@@ -13676,8 +15156,8 @@ function AIThinkingInline({ stages = DEFAULT_STAGES, dark = true, size = 40, cla
       "aria-live": "polite",
       "aria-label": `AI: ${stage.label}`,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(OrbitingAvatar, { size }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "relative flex-1 min-w-0 max-w-[280px]", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(StageBubble, { stage, dark }) })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(OrbitingAvatar, { size }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "relative flex-1 min-w-0 max-w-[280px]", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(StageBubble, { stage, dark }) })
       ]
     }
   );
@@ -13692,7 +15172,7 @@ AIThinkingInline.propTypes = {
 };
 function AIThinkingPanel({ stages = DEFAULT_STAGES, title = "AI at work", className = "" }) {
   const stage = useCyclingStage(stages);
-  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
     "div",
     {
       className: `relative overflow-hidden rounded-xl border border-cyan-400/30 bg-gradient-to-br from-slate-50 via-cyan-50/40 to-indigo-50/40 p-4 ${className}`,
@@ -13700,17 +15180,17 @@ function AIThinkingPanel({ stages = DEFAULT_STAGES, title = "AI at work", classN
       "aria-live": "polite",
       "aria-label": `${title}: ${stage.label}`,
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "pointer-events-none absolute inset-0 ai-typing-shimmer", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "relative z-10 flex items-center gap-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(OrbitingAvatar, { size: 44 }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "text-[11px] font-semibold uppercase tracking-wider text-cyan-700/80", children: title }),
-            /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "pointer-events-none absolute inset-0 ai-typing-shimmer", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "relative z-10 flex items-center gap-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(OrbitingAvatar, { size: 44 }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "min-w-0 flex-1", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("p", { className: "text-[11px] font-semibold uppercase tracking-wider text-cyan-700/80", children: title }),
+            /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)(
               "p",
               {
                 className: "ai-typing-status mt-0.5 truncate text-sm font-medium text-slate-800",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: `fas fa-${stage.icon} mr-2 text-cyan-600`, "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("i", { className: `fas fa-${stage.icon} mr-2 text-cyan-600`, "aria-hidden": "true" }),
                   stage.label,
                   "\u2026"
                 ]
@@ -13719,7 +15199,7 @@ function AIThinkingPanel({ stages = DEFAULT_STAGES, title = "AI at work", classN
             )
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "relative z-10 mt-3 h-1.5 w-full overflow-hidden rounded-full bg-cyan-100/70", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("div", { className: "relative z-10 mt-3 h-1.5 w-full overflow-hidden rounded-full bg-cyan-100/70", children: /* @__PURE__ */ (0, import_jsx_runtime11.jsx)(
           "div",
           {
             className: "h-full w-1/3 rounded-full bg-gradient-to-r from-cyan-400 via-blue-500 to-fuchsia-500",
@@ -13728,11 +15208,11 @@ function AIThinkingPanel({ stages = DEFAULT_STAGES, title = "AI at work", classN
             }
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "relative z-10 mt-3 flex items-center gap-1.5", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-500", style: { animationDelay: "0ms" } }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-blue-500", style: { animationDelay: "180ms" } }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-fuchsia-500", style: { animationDelay: "360ms" } }),
-          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "ml-2 text-[10px] uppercase tracking-wider text-slate-500", children: "Powered by GPT-4o" })
+        /* @__PURE__ */ (0, import_jsx_runtime11.jsxs)("div", { className: "relative z-10 mt-3 flex items-center gap-1.5", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-cyan-500", style: { animationDelay: "0ms" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-blue-500", style: { animationDelay: "180ms" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ai-typing-dot w-1.5 h-1.5 rounded-full bg-fuchsia-500", style: { animationDelay: "360ms" } }),
+          /* @__PURE__ */ (0, import_jsx_runtime11.jsx)("span", { className: "ml-2 text-[10px] uppercase tracking-wider text-slate-500", children: "Powered by GPT-4o" })
         ] })
       ]
     }
@@ -13747,7 +15227,7 @@ AIThinkingPanel.propTypes = {
 };
 
 // src/assistant/RoleInsightsPanel.jsx
-var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
 var ROLE_LABELS = {
   admin: "Admin coach",
   donor: "Donor coach",
@@ -13772,7 +15252,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
   const { user, isAdmin } = useAuthContext();
   const communityRole = useCommunityRole();
   const effectiveRoleHint = roleHint || communityRole;
-  const [state, setState] = import_react15.default.useState({
+  const [state2, setState] = import_react14.default.useState({
     loading: true,
     refreshing: false,
     error: null,
@@ -13784,7 +15264,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
     profileGaps: [],
     generatedAt: null
   });
-  const load = import_react15.default.useCallback(async (isInitial = false) => {
+  const load = import_react14.default.useCallback(async (isInitial = false) => {
     if (!user?.id) return;
     setState((prev) => ({
       ...prev,
@@ -13823,7 +15303,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
       }));
     }
   }, [user?.id, effectiveRoleHint]);
-  import_react15.default.useEffect(() => {
+  import_react14.default.useEffect(() => {
     load(true);
   }, [load]);
   const handleAction = (action) => {
@@ -13834,78 +15314,78 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
     }
     navigate(action.href);
   };
-  const roleLabel = ROLE_LABELS[state.role] || "AI assistant";
-  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+  const roleLabel = ROLE_LABELS[state2.role] || "AI assistant";
+  return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
     "section",
     {
       className: `rounded-lg border border-gray-200 bg-white shadow-sm ${className}`,
       "aria-label": "AI dashboard insights",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("header", { className: "flex items-center justify-between border-b border-gray-100 px-5 py-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex items-center gap-3", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#2CABE3]/10 text-[#2CABE3]", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-sparkles", "aria-hidden": "true" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("h2", { className: "text-sm font-semibold text-gray-900 flex items-center gap-1.5", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("header", { className: "flex items-center justify-between border-b border-gray-100 px-5 py-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex items-center gap-3", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#2CABE3]/10 text-[#2CABE3]", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-sparkles", "aria-hidden": "true" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("h2", { className: "text-sm font-semibold text-gray-900 flex items-center gap-1.5", children: [
                 "AI Insights \xB7 ",
                 roleLabel,
-                state.degraded && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+                state2.degraded && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
                   "span",
                   {
                     title: "AI link recovering \u2014 showing best-effort data",
                     className: "inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200",
                     children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-bolt text-[8px]", "aria-hidden": "true" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-bolt text-[8px]", "aria-hidden": "true" }),
                       "recovering"
                     ]
                   }
                 )
               ] }),
-              state.generatedAt && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "text-xs text-gray-500", children: [
+              state2.generatedAt && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "text-xs text-gray-500", children: [
                 "Updated ",
-                formatTimestamp(state.generatedAt),
-                state.refreshing && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "ml-2 inline-flex items-center gap-1 text-[#2CABE3]", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-circle-notch fa-spin text-[10px]", "aria-hidden": "true" }),
+                formatTimestamp(state2.generatedAt),
+                state2.refreshing && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { className: "ml-2 inline-flex items-center gap-1 text-[#2CABE3]", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-circle-notch fa-spin text-[10px]", "aria-hidden": "true" }),
                   "refreshing"
                 ] })
               ] })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
             "button",
             {
               type: "button",
               onClick: () => load(false),
-              disabled: state.loading || state.refreshing,
+              disabled: state2.loading || state2.refreshing,
               className: "rounded-md border border-gray-200 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50",
-              children: state.refreshing ? "Refreshing..." : "Refresh"
+              children: state2.refreshing ? "Refreshing..." : "Refresh"
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "px-5 py-4", children: [
-          state.role !== "admin" && typeof state.profileCompletion === "number" && !state.loading && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "mb-4 rounded-md border border-gray-100 bg-gray-50 p-3", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex items-center justify-between text-xs text-gray-600", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "font-medium", children: "Profile completion" }),
-              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { children: [
-                state.profileCompletion,
+        /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "px-5 py-4", children: [
+          state2.role !== "admin" && typeof state2.profileCompletion === "number" && !state2.loading && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "mb-4 rounded-md border border-gray-100 bg-gray-50 p-3", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex items-center justify-between text-xs text-gray-600", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "font-medium", children: "Profile completion" }),
+              /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("span", { children: [
+                state2.profileCompletion,
                 "%"
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("div", { className: "mt-2 h-2 w-full overflow-hidden rounded-full bg-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
               "div",
               {
                 className: "h-full rounded-full bg-[#2CABE3] transition-all",
-                style: { width: `${Math.max(0, Math.min(100, state.profileCompletion))}%` }
+                style: { width: `${Math.max(0, Math.min(100, state2.profileCompletion))}%` }
               }
             ) }),
-            state.profileGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "mt-2 text-[11px] text-gray-500", children: [
-              state.profileGaps.length,
+            state2.profileGaps.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("p", { className: "mt-2 text-[11px] text-gray-500", children: [
+              state2.profileGaps.length,
               " profile item",
-              state.profileGaps.length === 1 ? "" : "s",
+              state2.profileGaps.length === 1 ? "" : "s",
               " missing \u2014 see suggestions below."
             ] })
           ] }),
-          state.headline && !state.loading && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "mb-3 text-sm font-medium text-gray-800", children: state.headline }),
-          state.loading ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
+          state2.headline && !state2.loading && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "mb-3 text-sm font-medium text-gray-800", children: state2.headline }),
+          state2.loading ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)(
             AIThinkingPanel,
             {
               title: "Generating insights",
@@ -13916,39 +15396,39 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
                 { icon: "wand-magic-sparkles", label: "Drafting recommendations" }
               ]
             }
-          ) : state.error ? /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "rounded-md border border-amber-200 bg-amber-50 p-4 text-center", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-exclamation-triangle text-amber-500 mb-2" }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "text-sm text-amber-800 mb-3", children: state.error }),
-            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+          ) : state2.error ? /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "rounded-md border border-amber-200 bg-amber-50 p-4 text-center", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-exclamation-triangle text-amber-500 mb-2" }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "text-sm text-amber-800 mb-3", children: state2.error }),
+            /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
               "button",
               {
                 type: "button",
                 onClick: () => load(false),
-                disabled: state.refreshing,
+                disabled: state2.refreshing,
                 className: "inline-flex items-center gap-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: `fas fa-${state.refreshing ? "spinner fa-spin" : "redo"} text-[10px]` }),
-                  state.refreshing ? "Retrying\u2026" : "Try again"
+                  /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: `fas fa-${state2.refreshing ? "spinner fa-spin" : "redo"} text-[10px]` }),
+                  state2.refreshing ? "Retrying\u2026" : "Try again"
                 ]
               }
             )
-          ] }) : state.insights.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "text-sm text-gray-500", children: "No personalized insights yet \u2014 check back after some activity." }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("ul", { className: "space-y-3", children: state.insights.filter((insight) => state.role !== "admin" || insight.source !== "profile_gap").map((insight, idx) => {
+          ] }) : state2.insights.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "text-sm text-gray-500", children: "No personalized insights yet \u2014 check back after some activity." }) : /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("ul", { className: "space-y-3", children: state2.insights.filter((insight) => state2.role !== "admin" || insight.source !== "profile_gap").map((insight, idx) => {
             const priorityClass = PRIORITY_BADGE[insight.priority] || PRIORITY_BADGE.low;
             const iconClass = insight.icon ? `fas fa-${insight.icon}` : "fas fa-lightbulb";
             const isProfileGap = insight.source === "profile_gap";
-            return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+            return /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
               "li",
               {
                 className: `flex items-start gap-3 rounded-md border p-3 hover:border-[#2CABE3]/40 ${isProfileGap ? "border-[#2CABE3]/30 bg-[#2CABE3]/5" : "border-gray-100"}`,
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: `mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${isProfileGap ? "bg-[#2CABE3]/15 text-[#2CABE3]" : "bg-gray-50 text-gray-700"}`, children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: iconClass, "aria-hidden": "true" }) }),
-                  /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex-1", children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h3", { className: "text-sm font-semibold text-gray-900", children: insight.title }),
-                      isProfileGap ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "rounded-full bg-[#2CABE3]/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#2CABE3]", children: "Profile" }) : insight.priority && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: `rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${priorityClass}`, children: insight.priority })
+                  /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: `mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md ${isProfileGap ? "bg-[#2CABE3]/15 text-[#2CABE3]" : "bg-gray-50 text-gray-700"}`, children: /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: iconClass, "aria-hidden": "true" }) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex-1", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("h3", { className: "text-sm font-semibold text-gray-900", children: insight.title }),
+                      isProfileGap ? /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: "rounded-full bg-[#2CABE3]/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#2CABE3]", children: "Profile" }) : insight.priority && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("span", { className: `rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${priorityClass}`, children: insight.priority })
                     ] }),
-                    insight.message && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("p", { className: "mt-1 text-sm text-gray-600", children: insight.message }),
-                    insight.action?.label && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
+                    insight.message && /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("p", { className: "mt-1 text-sm text-gray-600", children: insight.message }),
+                    insight.action?.label && /* @__PURE__ */ (0, import_jsx_runtime12.jsxs)(
                       "button",
                       {
                         type: "button",
@@ -13956,7 +15436,7 @@ function RoleInsightsPanel({ roleHint = null, className = "" }) {
                         className: "mt-2 inline-flex items-center gap-1 rounded-md bg-[#2CABE3] px-3 py-1 text-xs font-medium text-white hover:opacity-90",
                         children: [
                           insight.action.label,
-                          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-arrow-right text-[10px]", "aria-hidden": "true" })
+                          /* @__PURE__ */ (0, import_jsx_runtime12.jsx)("i", { className: "fas fa-arrow-right text-[10px]", "aria-hidden": "true" })
                         ]
                       }
                     )
@@ -13978,9 +15458,9 @@ RoleInsightsPanel.propTypes = {
 var RoleInsightsPanel_default = RoleInsightsPanel;
 
 // src/food/ShareBulkCsvPanel.jsx
-var import_react16 = __toESM(require_react(), 1);
+var import_react15 = __toESM(require_react(), 1);
 var import_prop_types5 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime13 = __toESM(require_jsx_runtime(), 1);
 var MAX_CSV_BYTES = 2 * 1024 * 1024;
 var MAX_ROWS = 100;
 var CATEGORIES = ["produce", "bakery", "dairy", "pantry", "meat", "prepared", "other"];
@@ -13991,31 +15471,31 @@ function ShareBulkCsvPanel({
   lockToUserCommunity = false,
   onSuccess
 }) {
-  const fileInputRef = (0, import_react16.useRef)(null);
-  const [busy, setBusy] = (0, import_react16.useState)(false);
-  const [enriching, setEnriching] = (0, import_react16.useState)(false);
-  const [filename, setFilename] = (0, import_react16.useState)("");
-  const [rows, setRows] = (0, import_react16.useState)([]);
-  const [parseErrors, setParseErrors] = (0, import_react16.useState)([]);
-  const [fatalError, setFatalError] = (0, import_react16.useState)("");
-  const [enrichSummary, setEnrichSummary] = (0, import_react16.useState)("");
-  const [apiErrors, setApiErrors] = (0, import_react16.useState)([]);
-  const [communities, setCommunities] = (0, import_react16.useState)([]);
-  const [communitiesLoading, setCommunitiesLoading] = (0, import_react16.useState)(true);
-  const [communitiesError, setCommunitiesError] = (0, import_react16.useState)(null);
-  const [selectedRowIndexes, setSelectedRowIndexes] = (0, import_react16.useState)(() => /* @__PURE__ */ new Set());
-  const [bulkLocation, setBulkLocation] = (0, import_react16.useState)(() => String(preferredLocation || "").trim());
-  const [bulkCommunityId, setBulkCommunityId] = (0, import_react16.useState)(
+  const fileInputRef = (0, import_react15.useRef)(null);
+  const [busy, setBusy] = (0, import_react15.useState)(false);
+  const [enriching, setEnriching] = (0, import_react15.useState)(false);
+  const [filename, setFilename] = (0, import_react15.useState)("");
+  const [rows, setRows] = (0, import_react15.useState)([]);
+  const [parseErrors, setParseErrors] = (0, import_react15.useState)([]);
+  const [fatalError, setFatalError] = (0, import_react15.useState)("");
+  const [enrichSummary, setEnrichSummary] = (0, import_react15.useState)("");
+  const [apiErrors, setApiErrors] = (0, import_react15.useState)([]);
+  const [communities, setCommunities] = (0, import_react15.useState)([]);
+  const [communitiesLoading, setCommunitiesLoading] = (0, import_react15.useState)(true);
+  const [communitiesError, setCommunitiesError] = (0, import_react15.useState)(null);
+  const [selectedRowIndexes, setSelectedRowIndexes] = (0, import_react15.useState)(() => /* @__PURE__ */ new Set());
+  const [bulkLocation, setBulkLocation] = (0, import_react15.useState)(() => String(preferredLocation || "").trim());
+  const [bulkCommunityId, setBulkCommunityId] = (0, import_react15.useState)(
     () => preferredCommunityId != null && preferredCommunityId !== "" ? String(preferredCommunityId) : ""
   );
-  const [bulkCategory, setBulkCategory] = (0, import_react16.useState)("");
-  const [bulkExpiry, setBulkExpiry] = (0, import_react16.useState)("");
-  const [fillEmptyOnly, setFillEmptyOnly] = (0, import_react16.useState)(true);
-  const loadCommunities = (0, import_react16.useCallback)(async () => {
+  const [bulkCategory, setBulkCategory] = (0, import_react15.useState)("");
+  const [bulkExpiry, setBulkExpiry] = (0, import_react15.useState)("");
+  const [fillEmptyOnly, setFillEmptyOnly] = (0, import_react15.useState)(true);
+  const loadCommunities = (0, import_react15.useCallback)(async () => {
     setCommunitiesLoading(true);
     setCommunitiesError(null);
     try {
-      const { data, error } = await supabaseClient_default.from("communities").select("id, name").eq("is_active", true).order("name", { ascending: true });
+      const { data, error } = await centersClient_default.from("communities").select("id, name").eq("is_active", true).order("name", { ascending: true });
       if (error) throw error;
       setCommunities(data || []);
     } catch (err) {
@@ -14025,10 +15505,10 @@ function ShareBulkCsvPanel({
       setCommunitiesLoading(false);
     }
   }, []);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react15.useEffect)(() => {
     loadCommunities();
   }, [loadCommunities]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react15.useEffect)(() => {
     if (!communities.length || !rows.length) return;
     const preferred = preferredCommunityId ? communities.find((c2) => String(c2.id) === String(preferredCommunityId)) : null;
     let changed = false;
@@ -14078,7 +15558,7 @@ function ShareBulkCsvPanel({
     });
     if (changed) setRows(next);
   }, [communities, preferredCommunityId, rows.length, lockToUserCommunity]);
-  (0, import_react16.useEffect)(() => {
+  (0, import_react15.useEffect)(() => {
     const n2 = rows.length;
     setSelectedRowIndexes(new Set(Array.from({ length: n2 }, (_2, i2) => i2)));
     setBulkLocation((prev) => {
@@ -14090,13 +15570,13 @@ function ShareBulkCsvPanel({
       return preferredCommunityId != null && preferredCommunityId !== "" ? String(preferredCommunityId) : "";
     });
   }, [rows.length, preferredLocation, preferredCommunityId]);
-  const selectableCommunities = (0, import_react16.useMemo)(() => {
+  const selectableCommunities = (0, import_react15.useMemo)(() => {
     if (!lockToUserCommunity || preferredCommunityId == null || preferredCommunityId === "") {
       return communities;
     }
     return communities.filter((c2) => String(c2.id) === String(preferredCommunityId));
   }, [communities, lockToUserCommunity, preferredCommunityId]);
-  const missingCommunity = (0, import_react16.useMemo)(
+  const missingCommunity = (0, import_react15.useMemo)(
     () => rows.some((r3) => !r3?.community_id && !String(r3?.community_name || "").trim()),
     [rows]
   );
@@ -14105,15 +15585,15 @@ function ShareBulkCsvPanel({
   const selectAllRef = (el) => {
     if (el) el.indeterminate = someSelected;
   };
-  const updateRow = (0, import_react16.useCallback)((idx, patch) => {
+  const updateRow = (0, import_react15.useCallback)((idx, patch) => {
     setRows((prev) => prev.map((r3, i2) => i2 === idx ? { ...r3, ...patch } : r3));
   }, []);
-  const updateRows = (0, import_react16.useCallback)((indices, patch) => {
+  const updateRows = (0, import_react15.useCallback)((indices, patch) => {
     const indexSet = new Set(Array.isArray(indices) ? indices : []);
     if (!indexSet.size || !patch) return;
     setRows((prev) => prev.map((r3, i2) => indexSet.has(i2) ? { ...r3, ...patch } : r3));
   }, []);
-  const removeRow = (0, import_react16.useCallback)((idx) => {
+  const removeRow = (0, import_react15.useCallback)((idx) => {
     setRows((prev) => prev.filter((_2, i2) => i2 !== idx));
     setSelectedRowIndexes((prev) => {
       const next = /* @__PURE__ */ new Set();
@@ -14277,21 +15757,21 @@ function ShareBulkCsvPanel({
       setBusy(false);
     }
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "space-y-5", "data-name": "share-bulk-csv-panel", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "rounded-xl border border-[#2CABE3]/20 bg-gradient-to-br from-[#2CABE3]/5 to-emerald-50/50 p-4 sm:p-5", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h2", { className: "text-lg font-semibold text-gray-900", children: "Bulk CSV upload" }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { className: "mt-1 text-sm text-gray-600", children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "space-y-5", "data-name": "share-bulk-csv-panel", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "rounded-xl border border-[#2CABE3]/20 bg-gradient-to-br from-[#2CABE3]/5 to-emerald-50/50 p-4 sm:p-5", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("h2", { className: "text-lg font-semibold text-gray-900", children: "Bulk CSV upload" }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "mt-1 text-sm text-gray-600", children: [
         "Upload up to ",
         MAX_ROWS,
         " listings at once. Same rules as a single share \u2014 each row needs a school/community, and listings may wait for admin approval before Find Food."
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("ul", { className: "mt-3 text-xs text-gray-500 space-y-1 list-disc list-inside", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { children: "Required columns: title, quantity, unit, category" }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { children: "Optional: description, expiry_date (MM/DD/YYYY), location, community, dietary_tags, allergens" }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { children: "Images are assigned automatically when missing (you can still edit rows below)" })
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("ul", { className: "mt-3 text-xs text-gray-500 space-y-1 list-disc list-inside", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { children: "Required columns: title, quantity, unit, category" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { children: "Optional: description, expiry_date (MM/DD/YYYY), location, community, dietary_tags, allergens" }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("li", { children: "Images are assigned automatically when missing (you can still edit rows below)" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "mt-4 flex flex-wrap gap-2", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "mt-4 flex flex-wrap gap-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
           "button",
           {
             type: "button",
@@ -14299,12 +15779,12 @@ function ShareBulkCsvPanel({
             disabled: busy,
             className: "inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium border border-[#2CABE3]/30 bg-white text-[#1a7a9e] hover:bg-[#2CABE3]/10 disabled:opacity-50",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-download text-xs", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-download text-xs", "aria-hidden": "true" }),
               "Download template"
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
           "button",
           {
             type: "button",
@@ -14312,12 +15792,12 @@ function ShareBulkCsvPanel({
             disabled: busy,
             className: "inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-[#2CABE3] text-white hover:bg-[#2299c7] disabled:opacity-50 shadow-sm",
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-file-csv text-xs", "aria-hidden": "true" }),
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-file-csv text-xs", "aria-hidden": "true" }),
               rows.length ? "Replace CSV" : "Choose CSV"
             ]
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "input",
           {
             ref: fileInputRef,
@@ -14328,32 +15808,32 @@ function ShareBulkCsvPanel({
           }
         )
       ] }),
-      filename && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { className: "mt-2 text-xs text-gray-500 truncate", title: filename, children: [
+      filename && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("p", { className: "mt-2 text-xs text-gray-500 truncate", title: filename, children: [
         "File: ",
         filename,
         rows.length ? ` \xB7 ${rows.length} row${rows.length === 1 ? "" : "s"}` : ""
       ] })
     ] }),
-    (busy || enriching) && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-center gap-2 text-sm text-[#1a7a9e]", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-spinner fa-spin", "aria-hidden": "true" }),
+    (busy || enriching) && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex items-center gap-2 text-sm text-[#1a7a9e]", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-spinner fa-spin", "aria-hidden": "true" }),
       enriching ? "AI is filling gaps\u2026" : "Working\u2026"
     ] }),
-    fatalError && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700", children: fatalError }),
-    parseErrors.length > 0 && !fatalError && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
+    fatalError && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700", children: fatalError }),
+    parseErrors.length > 0 && !fatalError && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
       parseErrors.length,
       " row(s) skipped",
       parseErrors[0] ? `: ${parseErrors[0]}` : ""
     ] }),
-    enrichSummary && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1", "aria-hidden": "true" }),
+    enrichSummary && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-xs text-cyan-900", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-wand-magic-sparkles mr-1", "aria-hidden": "true" }),
       enrichSummary
     ] }),
-    rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1.5", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { className: "flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+    rows.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(import_jsx_runtime13.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "rounded-xl border border-emerald-200 bg-emerald-50/60 p-3 space-y-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1.5", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "input",
               {
                 ref: selectAllRef,
@@ -14367,8 +15847,8 @@ function ShareBulkCsvPanel({
                 className: "rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "font-medium", children: "Select all" }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "text-gray-500", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { className: "font-medium", children: "Select all" }),
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("span", { className: "text-gray-500", children: [
               "(",
               selectedRowIndexes.size,
               "/",
@@ -14376,8 +15856,8 @@ function ShareBulkCsvPanel({
               ")"
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("label", { className: "flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer select-none", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("label", { className: "flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer select-none", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -14390,8 +15870,8 @@ function ShareBulkCsvPanel({
             "Only fill empty"
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "select",
             {
               value: bulkCommunityId,
@@ -14400,12 +15880,12 @@ function ShareBulkCsvPanel({
               className: "flex-1 min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm",
               "aria-label": "Shared community",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: communitiesLoading ? "Loading communities\u2026" : "One community for selected\u2026" }),
-                selectableCommunities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: communitiesLoading ? "Loading communities\u2026" : "One community for selected\u2026" }),
+                selectableCommunities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "button",
             {
               type: "button",
@@ -14420,8 +15900,8 @@ function ShareBulkCsvPanel({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "text",
@@ -14432,7 +15912,7 @@ function ShareBulkCsvPanel({
               className: "flex-1 min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "button",
             {
               type: "button",
@@ -14447,8 +15927,8 @@ function ShareBulkCsvPanel({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
             "select",
             {
               value: bulkCategory,
@@ -14456,12 +15936,12 @@ function ShareBulkCsvPanel({
               disabled: busy,
               className: "flex-1 min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "Category (optional)\u2026" }),
-                CATEGORIES.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: c2, children: c2 }, c2))
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "Category (optional)\u2026" }),
+                CATEGORIES.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: c2, children: c2 }, c2))
               ]
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "input",
             {
               type: "date",
@@ -14471,7 +15951,7 @@ function ShareBulkCsvPanel({
               className: "flex-1 min-w-0 rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-sm"
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
             "button",
             {
               type: "button",
@@ -14485,7 +15965,7 @@ function ShareBulkCsvPanel({
             }
           )
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "button",
           {
             type: "button",
@@ -14496,16 +15976,16 @@ function ShareBulkCsvPanel({
           }
         )
       ] }),
-      communitiesError && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "text-xs text-amber-700 flex items-center gap-2", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { children: communitiesError }),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("button", { type: "button", onClick: loadCommunities, className: "underline", children: "Retry" })
+      communitiesError && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "text-xs text-amber-700 flex items-center gap-2", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { children: communitiesError }),
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("button", { type: "button", onClick: loadCommunities, className: "underline", children: "Retry" })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "space-y-2 max-h-[28rem] overflow-y-auto pr-1", children: rows.map((row, idx) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "space-y-2 max-h-[28rem] overflow-y-auto pr-1", children: rows.map((row, idx) => /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
         "div",
         {
           className: "rounded-xl border border-gray-200 bg-white p-3 flex gap-2 shadow-sm",
           children: [
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "input",
               {
                 type: "checkbox",
@@ -14523,7 +16003,7 @@ function ShareBulkCsvPanel({
                 "aria-label": `Select row ${idx + 1}`
               }
             ),
-            row.image_url && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            row.image_url && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "img",
               {
                 src: row.image_url,
@@ -14534,8 +16014,8 @@ function ShareBulkCsvPanel({
                 }
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex-1 min-w-0 space-y-1.5", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex-1 min-w-0 space-y-1.5", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                 "input",
                 {
                   type: "text",
@@ -14546,8 +16026,8 @@ function ShareBulkCsvPanel({
                   "aria-label": `Row ${idx + 1} title`
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-wrap gap-1.5 text-xs", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-wrap gap-1.5 text-xs", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                   "input",
                   {
                     type: "number",
@@ -14560,7 +16040,7 @@ function ShareBulkCsvPanel({
                     "aria-label": "Quantity"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                   "input",
                   {
                     type: "text",
@@ -14571,7 +16051,7 @@ function ShareBulkCsvPanel({
                     "aria-label": "Unit"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                   "select",
                   {
                     value: row.category || "other",
@@ -14579,12 +16059,12 @@ function ShareBulkCsvPanel({
                     disabled: busy,
                     className: "border border-gray-200 rounded-md px-1.5 py-1",
                     "aria-label": "Category",
-                    children: CATEGORIES.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: c2, children: c2 }, c2))
+                    children: CATEGORIES.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: c2, children: c2 }, c2))
                   }
                 )
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-xs", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "grid grid-cols-1 sm:grid-cols-3 gap-1.5 text-xs", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                   "input",
                   {
                     type: "text",
@@ -14595,7 +16075,7 @@ function ShareBulkCsvPanel({
                     className: "border border-gray-200 rounded-md px-1.5 py-1"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
                   "input",
                   {
                     type: "date",
@@ -14605,7 +16085,7 @@ function ShareBulkCsvPanel({
                     className: "border border-gray-200 rounded-md px-1.5 py-1"
                   }
                 ),
-                /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
+                /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)(
                   "select",
                   {
                     value: row.community_id || "",
@@ -14621,14 +16101,14 @@ function ShareBulkCsvPanel({
                     className: `border rounded-md px-1.5 py-1 ${row.community_id ? "border-gray-200" : "border-amber-400"}`,
                     required: true,
                     children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: "", children: "Choose school or community\u2026" }),
-                      selectableCommunities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
+                      /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: "", children: "Choose school or community\u2026" }),
+                      selectableCommunities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
                     ]
                   }
                 )
               ] })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
               "button",
               {
                 type: "button",
@@ -14636,20 +16116,20 @@ function ShareBulkCsvPanel({
                 disabled: busy,
                 className: "text-gray-400 hover:text-rose-500 self-start p-1 disabled:opacity-40",
                 "aria-label": `Remove row ${idx + 1}`,
-                children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-times", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-times", "aria-hidden": "true" })
               }
             )
           ]
         },
         `bulk-row-${idx}`
       )) }),
-      missingCommunity && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "text-sm text-amber-700", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
+      missingCommunity && /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "text-sm text-amber-700", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("i", { className: "fas fa-triangle-exclamation mr-1", "aria-hidden": "true" }),
         "Choose a school or community for each row (use Apply community above to set them all at once)."
       ] }),
-      apiErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 space-y-1", children: apiErrors.map((err, i2) => /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { children: typeof err === "string" ? err : err?.error || err?.message || JSON.stringify(err) }, i2)) }),
-      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-wrap gap-2 pt-1", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+      apiErrors.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { className: "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700 space-y-1", children: apiErrors.map((err, i2) => /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { children: typeof err === "string" ? err : err?.error || err?.message || JSON.stringify(err) }, i2)) }),
+      /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { className: "flex flex-wrap gap-2 pt-1", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "button",
           {
             type: "button",
@@ -14659,7 +16139,7 @@ function ShareBulkCsvPanel({
             children: "Cancel"
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(
           "button",
           {
             type: "button",
@@ -14683,34 +16163,15 @@ ShareBulkCsvPanel.propTypes = {
 var ShareBulkCsvPanel_default = ShareBulkCsvPanel;
 
 // src/food/VoiceLocationSearch.jsx
-var import_react18 = __toESM(require_react(), 1);
+var import_react17 = __toESM(require_react(), 1);
 var import_prop_types6 = __toESM(require_prop_types(), 1);
 
-// utils/openaiVoice.js
-function getToken3() {
-  return localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
-}
-async function transcribeAudio(blob) {
-  const token = getToken3();
-  const fd = new FormData();
-  fd.append("audio", blob, "voice.webm");
-  const res = await fetch("/api/ai/transcribe", {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: fd
-  });
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
-  if (data.filtered) return "";
-  return data.transcript || "";
-}
-
 // utils/hooks/useLocation.js
-var import_react17 = __toESM(require_react(), 1);
+var import_react16 = __toESM(require_react(), 1);
 function useEffectiveLocation() {
-  const [location, setLocation] = (0, import_react17.useState)(null);
-  const [error, setError] = (0, import_react17.useState)(null);
-  const enableLocation = (0, import_react17.useCallback)(() => {
+  const [location, setLocation] = (0, import_react16.useState)(null);
+  const [error, setError] = (0, import_react16.useState)(null);
+  const enableLocation = (0, import_react16.useCallback)(() => {
     if (!navigator.geolocation) {
       setError("Geolocation not supported");
       return;
@@ -14725,14 +16186,14 @@ function useEffectiveLocation() {
     );
   }, []);
   const refreshLocation = enableLocation;
-  (0, import_react17.useEffect)(() => {
+  (0, import_react16.useEffect)(() => {
     enableLocation();
   }, [enableLocation]);
   return { location, error, enableLocation, refreshLocation };
 }
 
 // src/food/VoiceLocationSearch.jsx
-var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
 var URGENCY_BADGE = {
   critical: "bg-red-100 text-red-700 ring-red-200",
   expired: "bg-red-100 text-red-700 ring-red-200",
@@ -14758,10 +16219,10 @@ var RADIUS_OPTIONS = [5, 10, 25, 50, 100];
 var MAX_RECORD_MS = 3e4;
 var SILENCE_MS = 1500;
 function WaveformBars({ level = 0, active = false, bars = 5 }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "vls-waveform", "aria-hidden": "true", children: Array.from({ length: bars }).map((_2, i2) => {
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "vls-waveform", "aria-hidden": "true", children: Array.from({ length: bars }).map((_2, i2) => {
     const phase = i2 / bars * Math.PI;
     const scale = active ? 0.25 + level * 0.75 * (0.6 + 0.4 * Math.sin(phase + level * 6)) : 0.2;
-    return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
       "span",
       {
         className: "vls-waveform-bar",
@@ -14780,22 +16241,22 @@ function VoiceLocationSearch({
   const { user, isAuthenticated } = useAuthContext();
   const navigate = useNavigate();
   const { location, error: locationError, enableLocation, refreshLocation } = useEffectiveLocation();
-  const [typedQuery, setTypedQuery] = import_react18.default.useState("");
-  const [radiusKm, setRadiusKm] = import_react18.default.useState(defaultRadiusKm);
-  const [isRecording, setIsRecording] = import_react18.default.useState(false);
-  const [isSearching, setIsSearching] = import_react18.default.useState(false);
-  const [recordingError, setRecordingError] = import_react18.default.useState(null);
-  const [searchResult, setSearchResult] = import_react18.default.useState(null);
-  const [lastError, setLastError] = import_react18.default.useState(null);
-  const [lastErrorMeta, setLastErrorMeta] = import_react18.default.useState(null);
-  const [audioLevel, setAudioLevel] = import_react18.default.useState(0);
-  const mediaRecorderRef = import_react18.default.useRef(null);
-  const chunksRef = import_react18.default.useRef([]);
-  const streamRef = import_react18.default.useRef(null);
-  const silenceTimerRef = import_react18.default.useRef(null);
-  const maxDurationTimerRef = import_react18.default.useRef(null);
-  const rafRef = import_react18.default.useRef(null);
-  const stopRecording = import_react18.default.useCallback(() => {
+  const [typedQuery, setTypedQuery] = import_react17.default.useState("");
+  const [radiusKm, setRadiusKm] = import_react17.default.useState(defaultRadiusKm);
+  const [isRecording, setIsRecording] = import_react17.default.useState(false);
+  const [isSearching, setIsSearching] = import_react17.default.useState(false);
+  const [recordingError, setRecordingError] = import_react17.default.useState(null);
+  const [searchResult, setSearchResult] = import_react17.default.useState(null);
+  const [lastError, setLastError] = import_react17.default.useState(null);
+  const [lastErrorMeta, setLastErrorMeta] = import_react17.default.useState(null);
+  const [audioLevel, setAudioLevel] = import_react17.default.useState(0);
+  const mediaRecorderRef = import_react17.default.useRef(null);
+  const chunksRef = import_react17.default.useRef([]);
+  const streamRef = import_react17.default.useRef(null);
+  const silenceTimerRef = import_react17.default.useRef(null);
+  const maxDurationTimerRef = import_react17.default.useRef(null);
+  const rafRef = import_react17.default.useRef(null);
+  const stopRecording = import_react17.default.useCallback(() => {
     if (rafRef.current) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -14821,8 +16282,8 @@ function VoiceLocationSearch({
     setIsRecording(false);
     setAudioLevel(0);
   }, []);
-  import_react18.default.useEffect(() => () => stopRecording(), [stopRecording]);
-  const runSearch = import_react18.default.useCallback(async (transcript) => {
+  import_react17.default.useEffect(() => () => stopRecording(), [stopRecording]);
+  const runSearch = import_react17.default.useCallback(async (transcript) => {
     const cleaned = (transcript || "").trim();
     if (!cleaned) {
       setLastError("Please say or type what you are looking for.");
@@ -14853,7 +16314,7 @@ function VoiceLocationSearch({
       setIsSearching(false);
     }
   }, [user?.id, location, radiusKm, defaultRadiusKm]);
-  const handleAudioBlob = import_react18.default.useCallback(async (blob) => {
+  const handleAudioBlob = import_react17.default.useCallback(async (blob) => {
     if (!blob || blob.size < 2e3) {
       setRecordingError("Didn't catch that \u2014 try speaking a bit longer.");
       return;
@@ -14965,56 +16426,56 @@ function VoiceLocationSearch({
   const busy = isSearching && !isRecording;
   const micDisabled = busy || !isAuthenticated;
   const statusLine = isRecording ? "Listening\u2026 tap the mic when you're done" : isSearching ? "Finding food that matches your request" : "Tap the mic and describe what you need";
-  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
     "section",
     {
       className: `vls-card relative overflow-hidden ${embedded ? "" : "rounded-2xl shadow-md border border-gray-100/80"} ${className}`,
       "aria-label": "Voice and location food search",
       children: [
-        !embedded && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("header", { className: "relative z-10 flex items-center justify-between gap-3 px-5 py-3.5 border-b border-white/60 bg-white/50 backdrop-blur-sm", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "min-w-0", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-center gap-2 text-gray-900", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2CABE3]/15 text-[#2CABE3]", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-microphone-lines text-sm", "aria-hidden": "true" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h2", { className: "text-sm font-semibold leading-tight", children: "Search with your voice" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-[11px] text-gray-500 mt-0.5", children: "Speak naturally \u2014 we rank by urgency & distance" })
+        !embedded && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("header", { className: "relative z-10 flex items-center justify-between gap-3 px-5 py-3.5 border-b border-white/60 bg-white/50 backdrop-blur-sm", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "min-w-0", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-center gap-2 text-gray-900", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#2CABE3]/15 text-[#2CABE3]", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-microphone-lines text-sm", "aria-hidden": "true" }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h2", { className: "text-sm font-semibold leading-tight", children: "Search with your voice" }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-[11px] text-gray-500 mt-0.5", children: "Speak naturally \u2014 we rank by urgency & distance" })
             ] })
           ] }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "flex items-center gap-1.5 shrink-0", children: hasLocation ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200/80", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "flex items-center gap-1.5 shrink-0", children: hasLocation ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200/80", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse", "aria-hidden": "true" }),
               "GPS on"
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
               "button",
               {
                 type: "button",
                 onClick: refreshLocation,
                 className: "inline-flex h-8 w-8 items-center justify-center rounded-full text-gray-500 hover:bg-white hover:text-[#2CABE3] transition",
                 "aria-label": "Refresh location",
-                children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-rotate text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-rotate text-xs", "aria-hidden": "true" })
               }
             )
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
             "button",
             {
               type: "button",
               onClick: enableLocation,
               className: "inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100 transition",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-location-crosshairs", "aria-hidden": "true" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-location-crosshairs", "aria-hidden": "true" }),
                 "Enable GPS"
               ]
             }
           ) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "relative z-10 px-4 sm:px-5 py-4 sm:py-5 space-y-4", children: [
-          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-3 text-sm text-amber-900", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-user-lock mt-0.5 text-amber-600", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex-1 min-w-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "font-medium", children: "Sign in to search with your voice" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-amber-800/80 mt-0.5", children: "We use your account to rank listings near you." })
+        /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "relative z-10 px-4 sm:px-5 py-4 sm:py-5 space-y-4", children: [
+          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-start gap-3 rounded-xl border border-amber-200/80 bg-amber-50/90 px-3.5 py-3 text-sm text-amber-900", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-user-lock mt-0.5 text-amber-600", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex-1 min-w-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "font-medium", children: "Sign in to search with your voice" }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs text-amber-800/80 mt-0.5", children: "We use your account to rank listings near you." })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
               "button",
               {
                 type: "button",
@@ -15024,27 +16485,27 @@ function VoiceLocationSearch({
               }
             )
           ] }),
-          embedded && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "flex flex-wrap items-center justify-center gap-2", children: hasLocation ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200/80", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse", "aria-hidden": "true" }),
+          embedded && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "flex flex-wrap items-center justify-center gap-2", children: hasLocation ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200/80", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse", "aria-hidden": "true" }),
             "Using your location"
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
             "button",
             {
               type: "button",
               onClick: enableLocation,
               className: "inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 ring-1 ring-amber-200 hover:bg-amber-100",
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-location-crosshairs", "aria-hidden": "true" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-location-crosshairs", "aria-hidden": "true" }),
                 "Use my location for nearby results"
               ]
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "vls-mic-zone", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "vls-mic-orb-wrap", children: [
-              isRecording && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(import_jsx_runtime15.Fragment, { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "vls-mic-ring animate-voice-ring-1", "aria-hidden": "true" }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "vls-mic-ring animate-voice-ring-2", "aria-hidden": "true" }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "vls-mic-zone", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "vls-mic-orb-wrap", children: [
+              isRecording && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(import_jsx_runtime14.Fragment, { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "vls-mic-ring animate-voice-ring-1", "aria-hidden": "true" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "vls-mic-ring animate-voice-ring-2", "aria-hidden": "true" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                   "span",
                   {
                     className: "vls-mic-ring",
@@ -15053,7 +16514,7 @@ function VoiceLocationSearch({
                   }
                 )
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                 "button",
                 {
                   type: "button",
@@ -15063,18 +16524,18 @@ function VoiceLocationSearch({
                   style: isRecording ? { transform: `scale(${1 + audioLevel * 0.06})` } : void 0,
                   "aria-pressed": isRecording,
                   "aria-label": isRecording ? "Stop recording" : "Start voice search",
-                  children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: `fas ${isRecording ? "fa-stop" : "fa-microphone"}`, "aria-hidden": "true" })
+                  children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: `fas ${isRecording ? "fa-stop" : "fa-microphone"}`, "aria-hidden": "true" })
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(WaveformBars, { level: audioLevel, active: isRecording }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-base font-semibold text-gray-900 text-center", children: statusLine }),
-            !isRecording && !isSearching && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-500 text-center max-w-xs", children: "Try a Quick Search below, or speak naturally \u2014 e.g. \u201Cvegan meals expiring soon\u201D." }),
-            isRecording && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-500 text-center max-w-xs", children: "Pause briefly when finished \u2014 we\u2019ll stop automatically." })
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(WaveformBars, { level: audioLevel, active: isRecording }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-base font-semibold text-gray-900 text-center", children: statusLine }),
+            !isRecording && !isSearching && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs text-gray-500 text-center max-w-xs", children: "Try a Quick Search below, or speak naturally \u2014 e.g. \u201Cvegan meals expiring soon\u201D." }),
+            isRecording && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs text-gray-500 text-center max-w-xs", children: "Pause briefly when finished \u2014 we\u2019ll stop automatically." })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "space-y-1.5", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs font-medium text-gray-600 px-0.5", children: "Search within" }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "flex flex-wrap gap-1.5", role: "group", "aria-label": "Search radius", children: RADIUS_OPTIONS.map((km) => /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "space-y-1.5", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs font-medium text-gray-600 px-0.5", children: "Search within" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "flex flex-wrap gap-1.5", role: "group", "aria-label": "Search radius", children: RADIUS_OPTIONS.map((km) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
               "button",
               {
                 type: "button",
@@ -15090,9 +16551,9 @@ function VoiceLocationSearch({
               km
             )) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "space-y-1.5", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs font-medium text-gray-600 px-0.5", children: "Quick searches" }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "flex flex-wrap gap-1.5", children: QUICK_SEARCHES.map(({ label, query }) => /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "space-y-1.5", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs font-medium text-gray-600 px-0.5", children: "Quick searches" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "flex flex-wrap gap-1.5", children: QUICK_SEARCHES.map(({ label, query }) => /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
               "button",
               {
                 type: "button",
@@ -15100,19 +16561,19 @@ function VoiceLocationSearch({
                 onClick: () => applyQuickSearch(query),
                 className: "vls-chip",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-bolt text-[9px] text-[#2CABE3]", "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-bolt text-[9px] text-[#2CABE3]", "aria-hidden": "true" }),
                   label
                 ]
               },
               label
             )) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("form", { onSubmit, className: "space-y-1.5", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("label", { htmlFor: "vls-query", className: "text-xs font-medium text-gray-600 px-0.5 block", children: "Or type your search" }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "relative flex-1", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-keyboard absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none", "aria-hidden": "true" }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("form", { onSubmit, className: "space-y-1.5", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("label", { htmlFor: "vls-query", className: "text-xs font-medium text-gray-600 px-0.5 block", children: "Or type your search" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex flex-col sm:flex-row gap-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "relative flex-1", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-keyboard absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none", "aria-hidden": "true" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                   "input",
                   {
                     id: "vls-query",
@@ -15125,29 +16586,29 @@ function VoiceLocationSearch({
                   }
                 )
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "submit",
                   disabled: busy || !typedQuery.trim() || !isAuthenticated,
                   className: "inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black disabled:bg-gray-300 disabled:cursor-not-allowed transition",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: `fas ${busy ? "fa-spinner fa-spin" : "fa-magnifying-glass"}`, "aria-hidden": "true" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: `fas ${busy ? "fa-spinner fa-spin" : "fa-magnifying-glass"}`, "aria-hidden": "true" }),
                     busy ? "Searching\u2026" : "Search"
                   ]
                 }
               )
             ] })
           ] }),
-          (recordingError || locationError || lastError) && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "rounded-xl border border-red-100 bg-red-50/90 px-3.5 py-3 text-sm text-red-800", role: "alert", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-start gap-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-circle-exclamation mt-0.5 text-red-500 shrink-0", "aria-hidden": "true" }),
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "min-w-0 flex-1", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { children: recordingError || lastError || locationError }),
-              lastErrorMeta?.code && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "mt-1 text-[10px] text-red-600/80", children: [
+          (recordingError || locationError || lastError) && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("div", { className: "rounded-xl border border-red-100 bg-red-50/90 px-3.5 py-3 text-sm text-red-800", role: "alert", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-start gap-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-circle-exclamation mt-0.5 text-red-500 shrink-0", "aria-hidden": "true" }),
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { children: recordingError || lastError || locationError }),
+              lastErrorMeta?.code && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { className: "mt-1 text-[10px] text-red-600/80", children: [
                 lastErrorMeta.code,
                 lastErrorMeta.requestId ? ` \xB7 ${lastErrorMeta.requestId.slice(0, 8)}` : ""
               ] }),
-              lastError && (lastErrorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+              lastError && (lastErrorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "button",
@@ -15155,18 +16616,18 @@ function VoiceLocationSearch({
                   disabled: busy || !typedQuery.trim(),
                   className: "mt-2 inline-flex items-center gap-1 rounded-lg bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700 disabled:opacity-50",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: `fas fa-${busy ? "spinner fa-spin" : "redo"}`, "aria-hidden": "true" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: `fas fa-${busy ? "spinner fa-spin" : "redo"}`, "aria-hidden": "true" }),
                     "Retry"
                   ]
                 }
               )
             ] })
           ] }) }),
-          !hasLocation && !locationError && isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "text-xs text-gray-500 text-center", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-lightbulb text-amber-500 mr-1", "aria-hidden": "true" }),
+          !hasLocation && !locationError && isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("p", { className: "text-xs text-gray-500 text-center", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-lightbulb text-amber-500 mr-1", "aria-hidden": "true" }),
             "Enable GPS to sort results by how close they are to you."
           ] }),
-          isSearching && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+          isSearching && /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
             AIThinkingPanel,
             {
               title: "Voice search",
@@ -15178,79 +16639,79 @@ function VoiceLocationSearch({
               ]
             }
           ),
-          searchResult && !isSearching && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "space-y-3 pt-1", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-end justify-between gap-3 border-t border-gray-100 pt-4", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-[11px] font-semibold uppercase tracking-wide text-[#2CABE3]", children: "Results" }),
-                /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-sm font-semibold text-gray-900 mt-0.5", children: searchResult.headline })
+          searchResult && !isSearching && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "space-y-3 pt-1", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-end justify-between gap-3 border-t border-gray-100 pt-4", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { children: [
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-[11px] font-semibold uppercase tracking-wide text-[#2CABE3]", children: "Results" }),
+                /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-sm font-semibold text-gray-900 mt-0.5", children: searchResult.headline })
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-600", children: [
                 searchResult.totalMatched,
                 " match",
                 searchResult.totalMatched === 1 ? "" : "es"
               ] })
             ] }),
-            searchResult.results.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "rounded-xl border border-dashed border-gray-200 bg-white/60 px-4 py-8 text-center", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 mb-3", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-search text-lg", "aria-hidden": "true" }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-sm font-medium text-gray-700", children: "No listings matched" }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-500 mt-1 max-w-xs mx-auto", children: "Widen your radius or try different words like \u201Cproduce\u201D or \u201Cexpires today\u201D." }),
-              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+            searchResult.results.length === 0 ? /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "rounded-xl border border-dashed border-gray-200 bg-white/60 px-4 py-8 text-center", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "inline-flex h-12 w-12 items-center justify-center rounded-full bg-gray-100 text-gray-400 mb-3", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-search text-lg", "aria-hidden": "true" }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-sm font-medium text-gray-700", children: "No listings matched" }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "text-xs text-gray-500 mt-1 max-w-xs mx-auto", children: "Widen your radius or try different words like \u201Cproduce\u201D or \u201Cexpires today\u201D." }),
+              /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "button",
                   onClick: () => setRadiusKm(Math.min(100, radiusKm * 2 || 50)),
                   className: "mt-3 inline-flex items-center gap-1 rounded-lg bg-[#2CABE3] px-3 py-1.5 text-xs font-medium text-white hover:opacity-90",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-expand-arrows-alt", "aria-hidden": "true" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-expand-arrows-alt", "aria-hidden": "true" }),
                     "Widen to ",
                     Math.min(100, radiusKm * 2 || 50),
                     " km"
                   ]
                 }
               )
-            ] }) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "space-y-2.5", children: searchResult.results.map((r3, idx) => {
+            ] }) : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("ul", { className: "space-y-2.5", children: searchResult.results.map((r3, idx) => {
               const badgeClass = URGENCY_BADGE[r3.urgency_label] || URGENCY_BADGE.normal;
               const isTop = idx < 3;
-              return /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
+              return /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("li", { children: /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)(
                 "button",
                 {
                   type: "button",
                   onClick: () => openListing(r3.id, r3),
                   className: "vls-result-card w-full text-left flex items-start gap-3 rounded-xl border border-gray-100 bg-white/90 p-3.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2CABE3]/40",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: `vls-result-rank ${isTop ? "vls-result-rank--top" : ""}`, children: idx + 1 }),
-                    r3.image_url ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: `vls-result-rank ${isTop ? "vls-result-rank--top" : ""}`, children: idx + 1 }),
+                    r3.image_url ? /* @__PURE__ */ (0, import_jsx_runtime14.jsx)(
                       "img",
                       {
                         src: r3.image_url,
                         alt: "",
                         className: "h-14 w-14 flex-shrink-0 rounded-lg object-cover ring-1 ring-gray-100"
                       }
-                    ) : /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "h-14 w-14 flex-shrink-0 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center text-gray-400 ring-1 ring-gray-100", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-utensils", "aria-hidden": "true" }) }),
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex-1 min-w-0", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { className: "text-sm font-semibold text-gray-900 line-clamp-1", children: r3.title || "Untitled listing" }),
-                        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: `inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${badgeClass}`, children: URGENCY_LABEL[r3.urgency_label] || r3.urgency_label })
+                    ) : /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: "h-14 w-14 flex-shrink-0 rounded-lg bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center text-gray-400 ring-1 ring-gray-100", children: /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-utensils", "aria-hidden": "true" }) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex-1 min-w-0", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("h3", { className: "text-sm font-semibold text-gray-900 line-clamp-1", children: r3.title || "Untitled listing" }),
+                        /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("span", { className: `inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${badgeClass}`, children: URGENCY_LABEL[r3.urgency_label] || r3.urgency_label })
                       ] }),
-                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "mt-0.5 text-xs text-gray-500 line-clamp-2", children: r3.description || r3.location || "No description" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600", children: [
-                        r3.distance_km != null && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "inline-flex items-center gap-1 font-medium text-[#2CABE3]", children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-route", "aria-hidden": "true" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("p", { className: "mt-0.5 text-xs text-gray-500 line-clamp-2", children: r3.description || r3.location || "No description" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("div", { className: "mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600", children: [
+                        r3.distance_km != null && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "inline-flex items-center gap-1 font-medium text-[#2CABE3]", children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-route", "aria-hidden": "true" }),
                           r3.distance_km,
                           " km away"
                         ] }),
-                        r3.hours_until_deadline != null && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "inline-flex items-center gap-1 text-amber-700", children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-clock", "aria-hidden": "true" }),
+                        r3.hours_until_deadline != null && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { className: "inline-flex items-center gap-1 text-amber-700", children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-clock", "aria-hidden": "true" }),
                           r3.hours_until_deadline < 1 ? "<1h left" : `${Math.round(r3.hours_until_deadline)}h left`
                         ] }),
-                        r3.quantity && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-box-open mr-1 text-gray-400", "aria-hidden": "true" }),
+                        r3.quantity && /* @__PURE__ */ (0, import_jsx_runtime14.jsxs)("span", { children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-box-open mr-1 text-gray-400", "aria-hidden": "true" }),
                           r3.quantity,
                           r3.unit ? ` ${r3.unit}` : ""
                         ] })
                       ] })
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-chevron-right text-gray-300 text-xs mt-1 shrink-0", "aria-hidden": "true" })
+                    /* @__PURE__ */ (0, import_jsx_runtime14.jsx)("i", { className: "fas fa-chevron-right text-gray-300 text-xs mt-1 shrink-0", "aria-hidden": "true" })
                   ]
                 }
               ) }, r3.id);
@@ -15269,23 +16730,23 @@ VoiceLocationSearch.propTypes = {
 };
 
 // src/food/AIRecipePanel.jsx
-var import_react19 = __toESM(require_react(), 1);
+var import_react18 = __toESM(require_react(), 1);
 var import_prop_types7 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
 function AIRecipePanel({ className = "" }) {
   const { user, isAuthenticated } = useAuthContext();
-  const [ingredientsText, setIngredientsText] = import_react19.default.useState("");
-  const [useClaimed, setUseClaimed] = import_react19.default.useState(true);
-  const [lowResource, setLowResource] = import_react19.default.useState(true);
-  const [householdSize, setHouseholdSize] = import_react19.default.useState(2);
-  const [maxRecipes, setMaxRecipes] = import_react19.default.useState(3);
-  const [dietaryText, setDietaryText] = import_react19.default.useState("");
-  const [notes, setNotes] = import_react19.default.useState("");
-  const [loading, setLoading] = import_react19.default.useState(false);
-  const [error, setError] = import_react19.default.useState(null);
-  const [errorMeta, setErrorMeta] = import_react19.default.useState(null);
-  const [result, setResult] = import_react19.default.useState(null);
-  const [expandedIdx, setExpandedIdx] = import_react19.default.useState(null);
+  const [ingredientsText, setIngredientsText] = import_react18.default.useState("");
+  const [useClaimed, setUseClaimed] = import_react18.default.useState(true);
+  const [lowResource, setLowResource] = import_react18.default.useState(true);
+  const [householdSize, setHouseholdSize] = import_react18.default.useState(2);
+  const [maxRecipes, setMaxRecipes] = import_react18.default.useState(3);
+  const [dietaryText, setDietaryText] = import_react18.default.useState("");
+  const [notes, setNotes] = import_react18.default.useState("");
+  const [loading, setLoading] = import_react18.default.useState(false);
+  const [error, setError] = import_react18.default.useState(null);
+  const [errorMeta, setErrorMeta] = import_react18.default.useState(null);
+  const [result, setResult] = import_react18.default.useState(null);
+  const [expandedIdx, setExpandedIdx] = import_react18.default.useState(null);
   const handleGenerate = async () => {
     if (!isAuthenticated || !user?.id) {
       setError("Please sign in to generate recipes.");
@@ -15324,22 +16785,22 @@ function AIRecipePanel({ className = "" }) {
       setLoading(false);
     }
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
     "section",
     {
       className: `bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden ${className}`,
       "aria-label": "AI recipe generator",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("header", { className: "px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-center gap-2 text-gray-800", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: "fas fa-utensils text-amber-600", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { className: "text-sm font-semibold", children: "AI recipe ideas" }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ml-2 text-xs text-gray-500", children: "household-aware \xB7 low-resource" })
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("header", { className: "px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-amber-50 to-white", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-center gap-2 text-gray-800", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-utensils text-amber-600", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h2", { className: "text-sm font-semibold", children: "AI recipe ideas" }),
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ml-2 text-xs text-gray-500", children: "household-aware \xB7 low-resource" })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "px-5 py-4 space-y-4", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-3", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "block text-xs text-gray-600", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "px-5 py-4 space-y-4", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "grid grid-cols-1 md:grid-cols-2 gap-3", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "block text-xs text-gray-600", children: [
               "Ingredients (comma or newline)",
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
                 "textarea",
                 {
                   value: ingredientsText,
@@ -15350,9 +16811,9 @@ function AIRecipePanel({ className = "" }) {
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "block text-xs text-gray-600", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "block text-xs text-gray-600", children: [
               "Dietary restrictions (optional)",
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
                 "textarea",
                 {
                   value: dietaryText,
@@ -15364,10 +16825,10 @@ function AIRecipePanel({ className = "" }) {
               )
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex flex-wrap items-end gap-3 text-xs text-gray-700", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "inline-flex items-center gap-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Household" }),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex flex-wrap items-end gap-3 text-xs text-gray-700", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "inline-flex items-center gap-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Household" }),
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
                 "input",
                 {
                   type: "number",
@@ -15379,26 +16840,26 @@ function AIRecipePanel({ className = "" }) {
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "inline-flex items-center gap-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Recipes" }),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "inline-flex items-center gap-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Recipes" }),
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
                 "select",
                 {
                   value: maxRecipes,
                   onChange: (e2) => setMaxRecipes(Number(e2.target.value)),
                   className: "rounded border border-gray-200 px-2 py-1 text-sm",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: 1, children: "1" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: 2, children: "2" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: 3, children: "3" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: 4, children: "4" }),
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("option", { value: 5, children: "5" })
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: 1, children: "1" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: 2, children: "2" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: 3, children: "3" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: 4, children: "4" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("option", { value: 5, children: "5" })
                   ]
                 }
               )
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "inline-flex items-center gap-2 cursor-pointer", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "inline-flex items-center gap-2 cursor-pointer", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
                 "input",
                 {
                   type: "checkbox",
@@ -15407,10 +16868,10 @@ function AIRecipePanel({ className = "" }) {
                   className: "rounded text-amber-600 focus:ring-amber-500"
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Use my claimed items" })
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Use my claimed items" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "inline-flex items-center gap-2 cursor-pointer", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "inline-flex items-center gap-2 cursor-pointer", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
                 "input",
                 {
                   type: "checkbox",
@@ -15419,12 +16880,12 @@ function AIRecipePanel({ className = "" }) {
                   className: "rounded text-amber-600 focus:ring-amber-500"
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { children: "Low-resource mode" })
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { children: "Low-resource mode" })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("label", { className: "block text-xs text-gray-600", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("label", { className: "block text-xs text-gray-600", children: [
             "Notes for the chef (optional)",
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
               "input",
               {
                 value: notes,
@@ -15434,8 +16895,8 @@ function AIRecipePanel({ className = "" }) {
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-center justify-between gap-3", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-center justify-between gap-3", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
               "button",
               {
                 type: "button",
@@ -15443,26 +16904,26 @@ function AIRecipePanel({ className = "" }) {
                 disabled: loading || !isAuthenticated,
                 className: "inline-flex items-center gap-2 rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:bg-gray-300",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: `fas ${loading ? "fa-spinner animate-spin" : "fa-wand-magic-sparkles"}`, "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: `fas ${loading ? "fa-spinner animate-spin" : "fa-wand-magic-sparkles"}`, "aria-hidden": "true" }),
                   loading ? "Generating\u2026" : "Generate recipes"
                 ]
               }
             ),
-            result?.headline && !loading && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "text-xs text-gray-600 truncate", children: result.headline })
+            result?.headline && !loading && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-600 truncate", children: result.headline })
           ] }),
-          error && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "min-w-0", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "font-medium leading-snug", children: error }),
-              (errorMeta?.code || errorMeta?.requestId) && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "mt-0.5 text-[10px] text-red-500/80 truncate", children: [
-                errorMeta?.code ? /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "uppercase", children: errorMeta.code }) : null,
+          error && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("div", { className: "rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700", children: /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-start justify-between gap-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "font-medium leading-snug", children: error }),
+              (errorMeta?.code || errorMeta?.requestId) && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "mt-0.5 text-[10px] text-red-500/80 truncate", children: [
+                errorMeta?.code ? /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "uppercase", children: errorMeta.code }) : null,
                 errorMeta?.code && errorMeta?.requestId ? " \xB7 " : null,
-                errorMeta?.requestId ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { children: [
+                errorMeta?.requestId ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
                   "req ",
                   errorMeta.requestId
                 ] }) : null
               ] })
             ] }),
-            (errorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+            (errorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
               "button",
               {
                 type: "button",
@@ -15473,8 +16934,8 @@ function AIRecipePanel({ className = "" }) {
               }
             )
           ] }) }),
-          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "text-xs text-gray-500", children: "Sign in to anchor recipes to your claimed pickups." }),
-          loading && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
+          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-500", children: "Sign in to anchor recipes to your claimed pickups." }),
+          loading && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)(
             AIThinkingPanel,
             {
               title: "AI recipe ideas",
@@ -15486,14 +16947,14 @@ function AIRecipePanel({ className = "" }) {
               ]
             }
           ),
-          !loading && result?.recipes?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "space-y-3 pt-2", children: result.recipes.map((r3, idx) => {
+          !loading && result?.recipes?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "space-y-3 pt-2", children: result.recipes.map((r3, idx) => {
             const open = expandedIdx === idx;
-            return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+            return /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
               "li",
               {
                 className: "rounded-lg border border-gray-100 bg-white",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
+                  /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)(
                     "button",
                     {
                       type: "button",
@@ -15501,57 +16962,57 @@ function AIRecipePanel({ className = "" }) {
                       className: "flex w-full items-start justify-between gap-3 px-4 py-3 text-left",
                       "aria-expanded": open,
                       children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "min-w-0", children: [
-                          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-center gap-2", children: [
-                            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h3", { className: "text-sm font-semibold text-gray-900 truncate", children: r3.title }),
-                            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { className: "rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800", children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "min-w-0", children: [
+                          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "flex items-center gap-2", children: [
+                            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h3", { className: "text-sm font-semibold text-gray-900 truncate", children: r3.title }),
+                            /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800", children: [
                               r3.cost_tier,
                               " cost"
                             ] }),
-                            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700", children: r3.difficulty })
+                            /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700", children: r3.difficulty })
                           ] }),
-                          r3.summary && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "mt-1 text-xs text-gray-600 line-clamp-2", children: r3.summary }),
-                          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600", children: [
-                            r3.servings && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: "fas fa-user-group mr-1 text-gray-400", "aria-hidden": "true" }),
+                          r3.summary && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "mt-1 text-xs text-gray-600 line-clamp-2", children: r3.summary }),
+                          /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-600", children: [
+                            r3.servings && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
+                              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-user-group mr-1 text-gray-400", "aria-hidden": "true" }),
                               r3.servings,
                               " servings"
                             ] }),
-                            r3.time_minutes && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { children: [
-                              /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: "fas fa-clock mr-1 text-gray-400", "aria-hidden": "true" }),
+                            r3.time_minutes && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { children: [
+                              /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-clock mr-1 text-gray-400", "aria-hidden": "true" }),
                               r3.time_minutes,
                               " min"
                             ] }),
-                            r3.dietary_tags?.slice(0, 3).map((t3) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 ring-1 ring-emerald-200", children: t3 }, t3))
+                            r3.dietary_tags?.slice(0, 3).map((t3) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] text-emerald-700 ring-1 ring-emerald-200", children: t3 }, t3))
                           ] })
                         ] }),
-                        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: `fas fa-chevron-${open ? "up" : "down"} text-gray-400 mt-1`, "aria-hidden": "true" })
+                        /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: `fas fa-chevron-${open ? "up" : "down"} text-gray-400 mt-1`, "aria-hidden": "true" })
                       ]
                     }
                   ),
-                  open && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "border-t border-gray-100 px-4 py-3 text-sm text-gray-700 space-y-3", children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { className: "text-xs font-semibold uppercase tracking-wide text-gray-500", children: "Ingredients" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "mt-1 list-disc pl-5 space-y-0.5 text-sm", children: r3.ingredients.map((ing, i2) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("li", { className: ing.optional ? "text-gray-500" : "", children: [
-                        ing.quantity ? /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("span", { className: "text-gray-500", children: [
+                  open && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { className: "border-t border-gray-100 px-4 py-3 text-sm text-gray-700 space-y-3", children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h4", { className: "text-xs font-semibold uppercase tracking-wide text-gray-500", children: "Ingredients" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ul", { className: "mt-1 list-disc pl-5 space-y-0.5 text-sm", children: r3.ingredients.map((ing, i2) => /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("li", { className: ing.optional ? "text-gray-500" : "", children: [
+                        ing.quantity ? /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("span", { className: "text-gray-500", children: [
                           ing.quantity,
                           " "
                         ] }) : null,
                         ing.name,
-                        ing.optional && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ml-1 text-[10px] uppercase tracking-wide text-gray-400", children: "optional" })
+                        ing.optional && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "ml-1 text-[10px] uppercase tracking-wide text-gray-400", children: "optional" })
                       ] }, i2)) })
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h4", { className: "text-xs font-semibold uppercase tracking-wide text-gray-500", children: "Steps" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ol", { className: "mt-1 list-decimal pl-5 space-y-1 text-sm", children: r3.steps.map((s2, i2) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("li", { children: s2 }, i2)) })
+                    /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("div", { children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("h4", { className: "text-xs font-semibold uppercase tracking-wide text-gray-500", children: "Steps" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("ol", { className: "mt-1 list-decimal pl-5 space-y-1 text-sm", children: r3.steps.map((s2, i2) => /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("li", { children: s2 }, i2)) })
                     ] }),
-                    r3.equipment?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "text-xs text-gray-500", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "font-semibold uppercase tracking-wide", children: "Equipment:" }),
+                    r3.equipment?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "text-xs text-gray-500", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("span", { className: "font-semibold uppercase tracking-wide", children: "Equipment:" }),
                       " ",
                       r3.equipment.join(", ")
                     ] }),
-                    r3.tips && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: "fas fa-lightbulb mr-1", "aria-hidden": "true" }),
+                    r3.tips && /* @__PURE__ */ (0, import_jsx_runtime15.jsxs)("p", { className: "rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900 ring-1 ring-amber-200", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("i", { className: "fas fa-lightbulb mr-1", "aria-hidden": "true" }),
                       r3.tips
                     ] })
                   ] })
@@ -15560,7 +17021,7 @@ function AIRecipePanel({ className = "" }) {
               `${r3.title}-${idx}`
             );
           }) }),
-          result && result.recipes?.length === 0 && !loading && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "text-xs text-gray-500", children: result.headline || "No recipes generated." })
+          result && result.recipes?.length === 0 && !loading && /* @__PURE__ */ (0, import_jsx_runtime15.jsx)("p", { className: "text-xs text-gray-500", children: result.headline || "No recipes generated." })
         ] })
       ]
     }
@@ -15571,9 +17032,9 @@ AIRecipePanel.propTypes = {
 };
 
 // src/assistant/AIQueryPanel.jsx
-var import_react20 = __toESM(require_react(), 1);
+var import_react19 = __toESM(require_react(), 1);
 var import_prop_types8 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
 var SUGGESTIONS = [
   "How many active claims do I have?",
   "Show my listings that expire this week",
@@ -15587,12 +17048,12 @@ var ADMIN_SUGGESTIONS = [
 ];
 function AIQueryPanel({ className = "" }) {
   const { user, isAuthenticated, isAdmin } = useAuthContext();
-  const [question, setQuestion] = import_react20.default.useState("");
-  const [loading, setLoading] = import_react20.default.useState(false);
-  const [error, setError] = import_react20.default.useState(null);
-  const [errorMeta, setErrorMeta] = import_react20.default.useState(null);
-  const [result, setResult] = import_react20.default.useState(null);
-  const [showTrace, setShowTrace] = import_react20.default.useState(false);
+  const [question, setQuestion] = import_react19.default.useState("");
+  const [loading, setLoading] = import_react19.default.useState(false);
+  const [error, setError] = import_react19.default.useState(null);
+  const [errorMeta, setErrorMeta] = import_react19.default.useState(null);
+  const [result, setResult] = import_react19.default.useState(null);
+  const [showTrace, setShowTrace] = import_react19.default.useState(false);
   const submit = async (q2) => {
     const value = (q2 ?? question).trim();
     if (!value) return;
@@ -15620,20 +17081,20 @@ function AIQueryPanel({ className = "" }) {
     submit();
   };
   const suggestions = isAdmin ? [...SUGGESTIONS, ...ADMIN_SUGGESTIONS] : SUGGESTIONS;
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
     "section",
     {
       className: `bg-white rounded-2xl shadow-md border border-gray-100 overflow-hidden ${className}`,
       "aria-label": "Natural language query",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("header", { className: "px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "flex items-center gap-2 text-gray-800", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: "fas fa-database text-indigo-600", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("h2", { className: "text-sm font-semibold", children: "Ask about your data" }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ml-2 text-xs text-gray-500", children: "function-calling \xB7 read-only" })
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("header", { className: "px-5 py-3 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white", children: /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-center gap-2 text-gray-800", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: "fas fa-database text-indigo-600", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("h2", { className: "text-sm font-semibold", children: "Ask about your data" }),
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "ml-2 text-xs text-gray-500", children: "function-calling \xB7 read-only" })
         ] }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "px-5 py-4 space-y-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("form", { onSubmit: handleSubmit, className: "flex flex-col sm:flex-row gap-2", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "px-5 py-4 space-y-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("form", { onSubmit: handleSubmit, className: "flex flex-col sm:flex-row gap-2", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
               "input",
               {
                 type: "text",
@@ -15645,20 +17106,20 @@ function AIQueryPanel({ className = "" }) {
                 maxLength: 500
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+            /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
               "button",
               {
                 type: "submit",
                 disabled: loading || !question.trim(),
                 className: "inline-flex items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:bg-gray-300",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: `fas ${loading ? "fa-spinner animate-spin" : "fa-paper-plane"}`, "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: `fas ${loading ? "fa-spinner animate-spin" : "fa-paper-plane"}`, "aria-hidden": "true" }),
                   loading ? "Thinking\u2026" : "Ask"
                 ]
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "flex flex-wrap gap-2", children: suggestions.map((s2) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "flex flex-wrap gap-2", children: suggestions.map((s2) => /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
             "button",
             {
               type: "button",
@@ -15672,13 +17133,13 @@ function AIQueryPanel({ className = "" }) {
             },
             s2
           )) }),
-          error && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { children: error }),
-            errorMeta?.code && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("p", { className: "mt-1 text-[10px] text-red-500", children: [
+          error && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "rounded-md border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { children: error }),
+            errorMeta?.code && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("p", { className: "mt-1 text-[10px] text-red-500", children: [
               errorMeta.code,
               errorMeta.requestId ? ` \xB7 ${errorMeta.requestId.slice(0, 8)}` : ""
             ] }),
-            (errorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+            (errorMeta?.retryable ?? true) && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
               "button",
               {
                 type: "button",
@@ -15686,14 +17147,14 @@ function AIQueryPanel({ className = "" }) {
                 disabled: loading || !question.trim(),
                 className: "mt-2 inline-flex items-center gap-1 rounded-md bg-red-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-red-700 disabled:opacity-50",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: `fas fa-${loading ? "spinner fa-spin" : "redo"}`, "aria-hidden": "true" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: `fas fa-${loading ? "spinner fa-spin" : "redo"}`, "aria-hidden": "true" }),
                   "Retry"
                 ]
               }
             )
           ] }),
-          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { className: "text-xs text-gray-500", children: "Sign in to query your data." }),
-          loading && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          !isAuthenticated && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "text-xs text-gray-500", children: "Sign in to query your data." }),
+          loading && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)(
             AIThinkingPanel,
             {
               title: "Querying your data",
@@ -15705,11 +17166,11 @@ function AIQueryPanel({ className = "" }) {
               ]
             }
           ),
-          result && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("article", { className: "rounded-lg border border-indigo-100 bg-indigo-50/40 p-4", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("p", { className: "text-xs uppercase tracking-wide text-indigo-600 font-semibold mb-1", children: "Answer" }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "text-sm text-gray-800 whitespace-pre-wrap", children: result.answer || "No answer." }),
-            result.toolTrace?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "mt-3 border-t border-indigo-100 pt-2", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+          result && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("article", { className: "rounded-lg border border-indigo-100 bg-indigo-50/40 p-4", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("p", { className: "text-xs uppercase tracking-wide text-indigo-600 font-semibold mb-1", children: "Answer" }),
+            /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("div", { className: "text-sm text-gray-800 whitespace-pre-wrap", children: result.answer || "No answer." }),
+            result.toolTrace?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "mt-3 border-t border-indigo-100 pt-2", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
                 "button",
                 {
                   type: "button",
@@ -15717,7 +17178,7 @@ function AIQueryPanel({ className = "" }) {
                   className: "text-[11px] text-indigo-700 hover:underline inline-flex items-center gap-1",
                   "aria-expanded": showTrace,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: `fas fa-chevron-${showTrace ? "up" : "down"}`, "aria-hidden": "true" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("i", { className: `fas fa-chevron-${showTrace ? "up" : "down"}`, "aria-hidden": "true" }),
                     showTrace ? "Hide" : "Show",
                     " ",
                     result.toolTrace.length,
@@ -15726,16 +17187,16 @@ function AIQueryPanel({ className = "" }) {
                   ]
                 }
               ),
-              showTrace && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("ul", { className: "mt-2 space-y-2", children: result.toolTrace.map((t3, idx) => /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
+              showTrace && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("ul", { className: "mt-2 space-y-2", children: result.toolTrace.map((t3, idx) => /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)(
                 "li",
                 {
                   className: "rounded-md bg-white ring-1 ring-gray-100 p-2 text-[11px] text-gray-700",
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "flex items-center gap-2", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "rounded bg-indigo-100 px-1.5 py-0.5 font-mono text-indigo-700", children: t3.tool }),
-                      t3.arguments && Object.keys(t3.arguments).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("code", { className: "truncate text-gray-500", children: JSON.stringify(t3.arguments) })
+                    /* @__PURE__ */ (0, import_jsx_runtime16.jsxs)("div", { className: "flex items-center gap-2", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("span", { className: "rounded bg-indigo-100 px-1.5 py-0.5 font-mono text-indigo-700", children: t3.tool }),
+                      t3.arguments && Object.keys(t3.arguments).length > 0 && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("code", { className: "truncate text-gray-500", children: JSON.stringify(t3.arguments) })
                     ] }),
-                    t3.result_preview && /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { className: "mt-1 whitespace-pre-wrap break-words text-gray-600", children: t3.result_preview })
+                    t3.result_preview && /* @__PURE__ */ (0, import_jsx_runtime16.jsx)("pre", { className: "mt-1 whitespace-pre-wrap break-words text-gray-600", children: t3.result_preview })
                   ]
                 },
                 idx
@@ -15752,71 +17213,11 @@ AIQueryPanel.propTypes = {
 };
 
 // src/common/AIHealthBanner.jsx
-var import_react21 = __toESM(require_react(), 1);
-
-// utils/services/aiSelfHealing.js
-var AI_STATUS = {
-  HEALTHY: "healthy",
-  DEGRADED: "degraded",
-  DOWN: "down"
-};
-var AiHealthMonitor = class {
-  constructor() {
-    this.status = { status: AI_STATUS.HEALTHY, lastCheck: null };
-    this.listeners = /* @__PURE__ */ new Set();
-    this._timer = null;
-  }
-  getStatus() {
-    return this.status;
-  }
-  subscribe(fn) {
-    this.listeners.add(fn);
-    return () => this.listeners.delete(fn);
-  }
-  _notify() {
-    for (const fn of this.listeners) {
-      try {
-        fn(this.status);
-      } catch (_2) {
-      }
-    }
-  }
-  async check() {
-    try {
-      const res = await fetch("/api/ai/health", { method: "GET" });
-      if (!res.ok) throw new Error(`health ${res.status}`);
-      const data = await res.json();
-      const openaiOk = data.openai_configured !== false && data.status === "ok";
-      const circuit = String(data.circuit_state || "closed").toLowerCase();
-      let status = AI_STATUS.HEALTHY;
-      if (!openaiOk) status = AI_STATUS.DOWN;
-      else if (circuit === "open") status = AI_STATUS.DEGRADED;
-      this.status = { status, lastCheck: Date.now(), detail: data };
-    } catch (_2) {
-      this.status = { status: AI_STATUS.DEGRADED, lastCheck: Date.now() };
-    }
-    this._notify();
-  }
-  start(intervalMs = 6e4) {
-    this.check();
-    if (this._timer) clearInterval(this._timer);
-    this._timer = setInterval(() => this.check(), intervalMs);
-  }
-  stop() {
-    if (this._timer) clearInterval(this._timer);
-    this._timer = null;
-  }
-};
-var aiHealth = new AiHealthMonitor();
-if (typeof window !== "undefined") {
-  aiHealth.start();
-}
-
-// src/common/AIHealthBanner.jsx
-var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
+var import_react20 = __toESM(require_react(), 1);
+var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
 function AIHealthBanner() {
-  const [status, setStatus] = (0, import_react21.useState)(aiHealth.getStatus());
-  (0, import_react21.useEffect)(() => {
+  const [status, setStatus] = (0, import_react20.useState)(aiHealth.getStatus());
+  (0, import_react20.useEffect)(() => {
     const unsub = aiHealth.subscribe(setStatus);
     return unsub;
   }, []);
@@ -15825,38 +17226,38 @@ function AIHealthBanner() {
   const title = isDown ? "Repairing AI link" : "Healing AI link";
   const subtitle = isDown ? "Reconnecting circuits to the neural backbone" : "Patching the connection in the background";
   const accent = isDown ? "from-rose-400 via-fuchsia-400 to-cyan-400" : "from-amber-300 via-cyan-300 to-violet-400";
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
     "div",
     {
       role: "status",
       "aria-live": "polite",
       "aria-label": `${title}. ${subtitle}`,
       className: "fixed top-4 right-4 z-[9999] w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none",
-      children: /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "ai-heal-card relative px-4 py-3 text-white pointer-events-auto", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-scan", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "relative z-10 flex items-center gap-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "relative w-14 h-14 flex-shrink-0", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+      children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "ai-heal-card relative px-4 py-3 text-white pointer-events-auto", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-scan", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "relative z-10 flex items-center gap-3", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "relative w-14 h-14 flex-shrink-0", "aria-hidden": "true", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
               "svg",
               {
                 viewBox: "0 0 56 56",
                 className: "absolute inset-0 w-full h-full",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("defs", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("linearGradient", { id: "aiHealWire", x1: "0", y1: "0", x2: "1", y2: "0", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "0%", stopColor: "#22d3ee" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "50%", stopColor: "#a78bfa" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "100%", stopColor: "#ec4899" })
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("defs", { children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("linearGradient", { id: "aiHealWire", x1: "0", y1: "0", x2: "1", y2: "0", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "0%", stopColor: "#22d3ee" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "50%", stopColor: "#a78bfa" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "100%", stopColor: "#ec4899" })
                     ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("radialGradient", { id: "aiHealNode", cx: "0.5", cy: "0.5", r: "0.5", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "0%", stopColor: "#fff", stopOpacity: "1" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "60%", stopColor: "#22d3ee", stopOpacity: "0.9" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("stop", { offset: "100%", stopColor: "#22d3ee", stopOpacity: "0" })
+                    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("radialGradient", { id: "aiHealNode", cx: "0.5", cy: "0.5", r: "0.5", children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "0%", stopColor: "#fff", stopOpacity: "1" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "60%", stopColor: "#22d3ee", stopOpacity: "0.9" }),
+                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "100%", stopColor: "#22d3ee", stopOpacity: "0" })
                     ] })
                   ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("path", { d: "M4 28 L18 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("path", { d: "M38 28 L52 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("path", { d: "M4 28 L18 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("path", { d: "M38 28 L52 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                     "path",
                     {
                       d: "M18 28 L38 28",
@@ -15867,9 +17268,9 @@ function AIHealthBanner() {
                       className: "ai-heal-weld"
                     }
                   ),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("circle", { cx: "4", cy: "28", r: "2.5", fill: "#22d3ee", className: "ai-heal-node" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("circle", { cx: "52", cy: "28", r: "2.5", fill: "#ec4899", className: "ai-heal-node" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: "4", cy: "28", r: "2.5", fill: "#22d3ee", className: "ai-heal-node" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: "52", cy: "28", r: "2.5", fill: "#ec4899", className: "ai-heal-node" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
                     "circle",
                     {
                       cx: "28",
@@ -15883,27 +17284,27 @@ function AIHealthBanner() {
                 ]
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "absolute top-1/2 left-1/2 w-0 h-0", "aria-hidden": "true", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(34,211,238,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-fuchsia-300 shadow-[0_0_6px_rgba(232,121,249,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,1)]" })
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "absolute top-1/2 left-1/2 w-0 h-0", "aria-hidden": "true", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(34,211,238,1)]" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,1)]" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-fuchsia-300 shadow-[0_0_6px_rgba(232,121,249,1)]" }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,1)]" })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "ai-heal-tool-orbit", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", { className: "fas fa-wrench text-[10px] text-cyan-200 ai-heal-tool-shake drop-shadow-[0_0_4px_rgba(34,211,238,0.9)]" }) }) })
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "ai-heal-tool-orbit", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: "fas fa-wrench text-[10px] text-cyan-200 ai-heal-tool-shake drop-shadow-[0_0_4px_rgba(34,211,238,0.9)]" }) }) })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "flex items-center gap-1.5", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: `text-[13px] font-semibold tracking-wide bg-gradient-to-r ${accent} bg-clip-text text-transparent`, children: title }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-300/90", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "truncate", children: subtitle }),
-              /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("span", { className: "inline-flex items-end gap-[2px] ml-0.5", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-cyan-300" }),
-                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-fuchsia-300" }),
-                /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-violet-300" })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "flex items-center gap-1.5", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: `text-[13px] font-semibold tracking-wide bg-gradient-to-r ${accent} bg-clip-text text-transparent`, children: title }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-300/90", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "truncate", children: subtitle }),
+              /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { className: "inline-flex items-end gap-[2px] ml-0.5", children: [
+                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-cyan-300" }),
+                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-fuchsia-300" }),
+                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-violet-300" })
               ] })
             ] })
           ] })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "relative z-10 mt-2 h-[3px] rounded-full bg-slate-700/60 overflow-hidden", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "relative z-10 mt-2 h-[3px] rounded-full bg-slate-700/60 overflow-hidden", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           "div",
           {
             className: `h-full w-1/3 rounded-full bg-gradient-to-r ${accent}`,
@@ -15917,28 +17318,20 @@ function AIHealthBanner() {
 var AIHealthBanner_default = AIHealthBanner;
 
 // src/common/AICaptionBar.jsx
-var import_react22 = __toESM(require_react(), 1);
-
-// utils/aiVoiceService.js
-function subscribeAiVoice() {
-  return () => {
-  };
-}
-
-// src/common/AICaptionBar.jsx
-var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+var import_react21 = __toESM(require_react(), 1);
+var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
 function AICaptionBar() {
   const { settings } = useAccessibility();
-  const [caption, setCaption] = (0, import_react22.useState)("");
-  const [speaking, setSpeaking] = (0, import_react22.useState)(false);
-  (0, import_react22.useEffect)(() => {
+  const [caption, setCaption] = (0, import_react21.useState)("");
+  const [speaking, setSpeaking] = (0, import_react21.useState)(false);
+  (0, import_react21.useEffect)(() => {
     return subscribeAiVoice(({ captionText, isSpeaking }) => {
       setCaption(captionText || "");
       setSpeaking(isSpeaking);
     });
   }, []);
   if (!settings.alwaysShowCaptions || !caption) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
     "div",
     {
       className: "nouri-ai-caption-bar",
@@ -15947,7 +17340,7 @@ function AICaptionBar() {
       "aria-atomic": "true",
       "aria-label": speaking ? "AI is speaking" : "AI caption",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "sr-only", children: speaking ? "Speaking: " : "Caption: " }),
+        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "sr-only", children: speaking ? "Speaking: " : "Caption: " }),
         caption
       ]
     }
@@ -15955,12 +17348,12 @@ function AICaptionBar() {
 }
 
 // src/common/FormVoiceGuideHost.jsx
-var import_react25 = __toESM(require_react(), 1);
+var import_react24 = __toESM(require_react(), 1);
 
 // src/common/FormVoiceGuide.jsx
-var import_react23 = __toESM(require_react(), 1);
+var import_react22 = __toESM(require_react(), 1);
 var import_prop_types9 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
 function FormVoiceGuide({ guide, className = "" }) {
   const {
     welcomeMessage,
@@ -15979,33 +17372,33 @@ function FormVoiceGuide({ guide, className = "" }) {
   const showingField = Boolean(activeHint?.text);
   const displayText = currentCaption || (showingField ? activeHint.text : welcomeMessage);
   const showCaptionBlock = alwaysShowCaptions || preferText || isMuted;
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(import_jsx_runtime20.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: showingField ? activeHint.text : "" }),
-    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(import_jsx_runtime19.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: showingField ? activeHint.text : "" }),
+    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
       "div",
       {
         className: `relative flex items-start gap-3 rounded-xl border border-[#2CABE3]/40 bg-[#2CABE3]/10 px-4 py-3 shadow-sm ${className}`,
         role: "region",
         "aria-label": "AI form guide",
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "flex-shrink-0 mt-0.5", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "flex-shrink-0 mt-0.5", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
             "div",
             {
               className: `w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 ${isSpeaking ? "bg-[#2CABE3] shadow-lg shadow-[#2CABE3]/40" : "bg-[#2CABE3]/15"}`,
               "aria-hidden": "true",
-              children: isSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "flex items-end gap-0.5 h-4", children: [1, 2, 3].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+              children: isSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "flex items-end gap-0.5 h-4", children: [1, 2, 3].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
                 "span",
                 {
                   className: "w-1 bg-white rounded-full animate-bounce",
                   style: { height: `${8 + i2 * 4}px`, animationDelay: `${i2 * 0.12}s` }
                 },
                 i2
-              )) }) : /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "fas fa-robot text-[#2CABE3] text-sm" })
+              )) }) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-robot text-[#2CABE3] text-sm" })
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "text-xs font-semibold text-[#2CABE3] mb-0.5 uppercase tracking-wide", children: showingField ? activeHint.label || "Field help" : "AI guide" }),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs font-semibold text-[#2CABE3] mb-0.5 uppercase tracking-wide", children: showingField ? activeHint.label || "Field help" : "AI guide" }),
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "p",
               {
                 className: "text-sm text-gray-800 leading-snug",
@@ -16015,22 +17408,22 @@ function FormVoiceGuide({ guide, className = "" }) {
                 children: showingField ? activeHint.text : welcomeMessage
               }
             ),
-            !showingField && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "text-xs text-gray-500 mt-1.5", children: "Click or tap any field for step-by-step help." }),
-            showCaptionBlock && displayText && /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
+            !showingField && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs text-gray-500 mt-1.5", children: "Click or tap any field for step-by-step help." }),
+            showCaptionBlock && displayText && /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
               "p",
               {
                 className: "mt-2 text-sm font-medium text-gray-900 border-t border-[#2CABE3]/25 pt-2",
                 "aria-label": "Caption",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "text-xs uppercase tracking-wide text-gray-500 mr-2", children: "Caption" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "text-xs uppercase tracking-wide text-gray-500 mr-2", children: "Caption" }),
                   displayText
                 ]
               }
             ),
-            preferText && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "text-xs text-gray-600 mt-1", children: "Voice is off in accessibility settings. Text captions are shown instead." })
+            preferText && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs text-gray-600 mt-1", children: "Voice is off in accessibility settings. Text captions are shown instead." })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "button",
               {
                 type: "button",
@@ -16038,10 +17431,10 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: "Replay welcome",
                 "aria-label": "Replay welcome message",
                 className: "w-7 h-7 rounded-full flex items-center justify-center text-[#2CABE3] hover:bg-[#2CABE3]/15 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2CABE3]",
-                children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "button",
               {
                 type: "button",
@@ -16049,10 +17442,10 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: isMuted ? "Unmute voice guide" : "Mute voice guide",
                 "aria-label": isMuted ? "Unmute voice guide" : "Mute voice guide",
                 className: `w-7 h-7 rounded-full flex items-center justify-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2CABE3] ${isMuted ? "bg-rose-100 text-rose-600 hover:bg-rose-200" : "text-gray-500 hover:bg-gray-100"}`,
-                children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
               "button",
               {
                 type: "button",
@@ -16060,7 +17453,7 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: "Dismiss guide",
                 "aria-label": "Dismiss voice guide",
                 className: "w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500",
-                children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
               }
             )
           ] })
@@ -16091,86 +17484,320 @@ FormVoiceGuide.propTypes = {
 };
 
 // utils/hooks/useFormVoiceGuide.js
-var import_react24 = __toESM(require_react(), 1);
+var import_react23 = __toESM(require_react(), 1);
+var SHARE_FOOD_WELCOME = "Welcome! I can guide you through sharing food step by step.";
+var REQUEST_FOOD_WELCOME = "Welcome! I can help you request food from the community.";
+var BULK_UPLOAD_WELCOME = "Upload a CSV of food listings. I can guide you through each step.";
+var FIELD_DEBOUNCE_MS = 80;
 function useFormVoiceGuide({
+  hints,
+  fieldHints,
   welcomeMessage = "",
-  fieldHints = {},
-  preferText = false,
-  alwaysShowCaptions = true
+  lang = "en",
+  formId = "share-food",
+  preferText = false
 } = {}) {
-  const [activeField, setActiveField] = (0, import_react24.useState)(null);
-  const [isMuted, setIsMuted] = (0, import_react24.useState)(false);
-  const [isDismissed, setIsDismissed] = (0, import_react24.useState)(false);
-  const [isSpeaking, setIsSpeaking] = (0, import_react24.useState)(false);
-  const [currentCaption, setCurrentCaption] = (0, import_react24.useState)("");
-  const activeHint = activeField && fieldHints[activeField] ? { text: fieldHints[activeField] } : null;
-  const speak = (0, import_react24.useCallback)((text) => {
-    if (!text || isMuted || typeof window === "undefined") return;
-    setCurrentCaption(text);
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.onstart = () => setIsSpeaking(true);
-      utter.onend = () => setIsSpeaking(false);
-      utter.onerror = () => setIsSpeaking(false);
-      window.speechSynthesis.speak(utter);
-    }
-  }, [isMuted]);
-  const speakField = (0, import_react24.useCallback)((fieldName) => {
-    setActiveField(fieldName);
-    const hint = fieldHints[fieldName];
-    if (hint) speak(hint);
-  }, [fieldHints, speak]);
-  const speakWelcome = (0, import_react24.useCallback)(() => {
-    if (welcomeMessage) speak(welcomeMessage);
-  }, [welcomeMessage, speak]);
-  const toggleMute = (0, import_react24.useCallback)(() => setIsMuted((m2) => !m2), []);
-  const dismiss = (0, import_react24.useCallback)(() => {
-    setIsDismissed(true);
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
-  }, []);
-  const reportError3 = (0, import_react24.useCallback)((message) => {
-    speak(typeof message === "string" ? message : "Please check this field.");
-  }, [speak]);
-  const guide = (0, import_react24.useMemo)(() => ({
-    welcomeMessage,
-    activeHint,
-    currentCaption,
-    isMuted,
-    isSpeaking,
-    isDismissed,
-    preferText,
-    alwaysShowCaptions,
+  const resolvedHints = hints || fieldHints || {};
+  const {
+    settings,
+    guide,
+    registerForm,
+    onFieldFocus,
     toggleMute,
-    speakWelcome,
-    dismiss
-  }), [
+    dismiss,
+    replay,
+    reportFieldError: reportFieldError2,
+    notifyFieldActivity
+  } = useNouriGuide();
+  const guideLang = resolveGuideLang(null, settings.preferredLanguage, lang);
+  const welcomedRef = (0, import_react23.useRef)(false);
+  const fieldTimerRef = (0, import_react23.useRef)(null);
+  (0, import_react23.useEffect)(() => {
+    if (welcomedRef.current || guide.isDismissed || !welcomeMessage) return;
+    if (settings.preferTextOverVoice && preferText) {
+    }
+    welcomedRef.current = true;
+    const timer = setTimeout(() => {
+      registerForm({ formId, welcomeMessage, hints: resolvedHints }, guideLang);
+    }, 80);
+    return () => clearTimeout(timer);
+  }, [
+    formId,
     welcomeMessage,
-    activeHint,
-    currentCaption,
-    isMuted,
-    isSpeaking,
-    isDismissed,
-    preferText,
-    alwaysShowCaptions,
-    toggleMute,
-    speakWelcome,
-    dismiss
+    resolvedHints,
+    guideLang,
+    registerForm,
+    guide.isDismissed,
+    settings.preferTextOverVoice,
+    preferText
   ]);
-  return { guide, speakField, reportError: reportError3, speakWelcome, toggleMute, dismiss };
+  const speakField = (0, import_react23.useCallback)((fieldName) => {
+    if (guide.isDismissed) return;
+    const entry = resolvedHints[fieldName];
+    if (!entry) return;
+    const text = typeof entry === "string" ? entry : entry.text;
+    const label = typeof entry === "string" ? null : entry.label;
+    if (!text) return;
+    notifyFieldActivity();
+    if (fieldTimerRef.current) clearTimeout(fieldTimerRef.current);
+    fieldTimerRef.current = setTimeout(() => {
+      fieldTimerRef.current = null;
+      onFieldFocus({ formId, fieldName, label, text, hints: resolvedHints }, guideLang);
+    }, FIELD_DEBOUNCE_MS);
+  }, [guide.isDismissed, resolvedHints, formId, guideLang, onFieldFocus, notifyFieldActivity]);
+  const speakWelcome = (0, import_react23.useCallback)(() => {
+    if (guide.isDismissed || !welcomeMessage) return;
+    registerForm({ formId, welcomeMessage, hints: resolvedHints }, guideLang);
+  }, [guide.isDismissed, welcomeMessage, formId, resolvedHints, guideLang, registerForm]);
+  const reportError3 = (0, import_react23.useCallback)((fieldName, errorMessage) => {
+    const entry = resolvedHints[fieldName];
+    const label = entry && typeof entry !== "string" ? entry.label : fieldName;
+    reportFieldError2(formId, fieldName, errorMessage, label);
+  }, [formId, resolvedHints, reportFieldError2]);
+  (0, import_react23.useEffect)(() => () => {
+    if (fieldTimerRef.current) clearTimeout(fieldTimerRef.current);
+  }, []);
+  (0, import_react23.useEffect)(() => {
+    if (guide.isDismissed) return;
+    const t3 = setTimeout(() => reapplyPendingGuideField(), 60);
+    return () => clearTimeout(t3);
+  }, [formId, guide.fieldName, guide.isDismissed]);
+  return {
+    welcomeMessage,
+    guide: {
+      welcomeMessage,
+      activeHint: guide.fieldName && resolvedHints[guide.fieldName] ? { text: typeof resolvedHints[guide.fieldName] === "string" ? resolvedHints[guide.fieldName] : resolvedHints[guide.fieldName].text } : guide.caption ? { text: guide.caption } : null,
+      activeField: guide.fieldName,
+      currentCaption: guide.caption || guide.text || "",
+      isSpeaking: guide.isSpeaking,
+      isMuted: guide.isMuted,
+      isDismissed: guide.isDismissed,
+      preferText: settings.preferTextOverVoice || preferText,
+      alwaysShowCaptions: settings.alwaysShowCaptions !== false,
+      speakField,
+      speakWelcome,
+      toggleMute,
+      dismiss,
+      replay,
+      reportError: reportError3
+    },
+    speakField,
+    speakWelcome,
+    toggleMute,
+    dismiss,
+    replay,
+    reportError: reportError3,
+    settings
+  };
 }
 
 // src/common/FormVoiceGuideHost.jsx
-var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+var DEFAULTS_BY_FORM = {
+  "share-food": { welcome: SHARE_FOOD_WELCOME, hints: SHARE_FOOD_HINTS },
+  "share-listing": { welcome: SHARE_FOOD_WELCOME, hints: SHARE_FOOD_HINTS },
+  "request-food": { welcome: REQUEST_FOOD_WELCOME, hints: REQUEST_FOOD_HINTS },
+  "request-help": { welcome: REQUEST_FOOD_WELCOME, hints: REQUEST_FOOD_HINTS },
+  "bulk-upload": { welcome: BULK_UPLOAD_WELCOME, hints: BULK_UPLOAD_HINTS },
+  "bulk-share": { welcome: BULK_UPLOAD_WELCOME, hints: BULK_UPLOAD_HINTS }
+};
 function FormVoiceGuideHost({
-  welcomeMessage = "I can guide you through this form.",
-  fieldHints = {},
+  welcomeMessage,
+  fieldHints,
+  formId = "share-food",
   className = ""
 }) {
-  const { guide } = useFormVoiceGuide({ welcomeMessage, fieldHints });
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(FormVoiceGuide, { guide, className });
+  const defaults = DEFAULTS_BY_FORM[formId] || DEFAULTS_BY_FORM["share-food"];
+  const { guide } = useFormVoiceGuide({
+    formId,
+    welcomeMessage: welcomeMessage || defaults.welcome,
+    fieldHints: fieldHints && Object.keys(fieldHints).length ? { ...defaults.hints, ...fieldHints } : defaults.hints
+  });
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(FormVoiceGuide, { guide, className });
+}
+
+// src/common/HumanSupportBridge.jsx
+var import_react25 = __toESM(require_react(), 1);
+function HumanSupportBridge() {
+  (0, import_react25.useEffect)(() => {
+    const openWithPrefill = (message) => {
+      window.dispatchEvent(new CustomEvent("nouri:open-chat", {
+        detail: { message: message || "" }
+      }));
+      if (typeof window.showAlert === "function" && message) {
+        window.showAlert(
+          "Opening Nouri chat so you can reach a person for help. Describe what you need and an admin can follow up.",
+          { title: "Human support", variant: "info" }
+        );
+      }
+    };
+    const onOpenSupport = (event) => {
+      openWithPrefill(event?.detail?.message || "I need help from a person with Food Maps.");
+    };
+    const onHandoffSuggested = () => {
+      openWithPrefill("Nouri could not help me after several tries. I need a person to assist.");
+    };
+    window.addEventListener("nouri:open-human-support", onOpenSupport);
+    window.addEventListener("nouri:handoff-suggested", onHandoffSuggested);
+    return () => {
+      window.removeEventListener("nouri:open-human-support", onOpenSupport);
+      window.removeEventListener("nouri:handoff-suggested", onHandoffSuggested);
+    };
+  }, []);
+  return null;
+}
+
+// src/common/AccessibilitySettings.jsx
+var import_react26 = __toESM(require_react(), 1);
+var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+function ToggleRow({ id, label, description, checked, onChange }) {
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-row", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-row-text", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("label", { htmlFor: id, className: "nouri-a11y-label", children: label }),
+      description && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { id: `${id}-desc`, className: "nouri-a11y-desc", children: description })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+      "button",
+      {
+        id,
+        type: "button",
+        role: "switch",
+        "aria-checked": checked,
+        "aria-describedby": description ? `${id}-desc` : void 0,
+        onClick: () => onChange(!checked),
+        className: `nouri-a11y-switch ${checked ? "is-on" : ""}`,
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "nouri-a11y-switch-thumb", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "sr-only", children: label })
+        ]
+      }
+    )
+  ] });
+}
+function AccessibilitySettings() {
+  const { settings, updateSetting, resetSettings } = useNouriGuide();
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-panel", role: "region", "aria-labelledby": "nouri-a11y-heading", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("h2", { id: "nouri-a11y-heading", className: "nouri-a11y-title", children: "Accessibility" }),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { className: "nouri-a11y-intro", children: "Customize display, motion, and how Nouri speaks. Settings save on this device." }),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-lang", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("label", { htmlFor: "a11y-preferred-language", className: "nouri-a11y-label", children: "Preferred language" }),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { id: "a11y-preferred-language-desc", className: "nouri-a11y-desc", children: "Nouri will try to respond in this language in chat and guided steps." }),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        "select",
+        {
+          id: "a11y-preferred-language",
+          "aria-describedby": "a11y-preferred-language-desc",
+          value: settings.preferredLanguage || "en",
+          onChange: (e2) => updateSetting("preferredLanguage", e2.target.value),
+          className: "nouri-a11y-select",
+          children: SUPPORTED_GUIDE_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("option", { value: code, children: GUIDE_LANGUAGE_LABELS[code] }, code))
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-toggles", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-large-text",
+          label: "Large text",
+          description: "Increases text size across the app.",
+          checked: !!settings.largeText,
+          onChange: (v2) => updateSetting("largeText", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-high-contrast",
+          label: "High contrast",
+          description: "Stronger text and focus outlines for easier reading.",
+          checked: !!settings.highContrast,
+          onChange: (v2) => updateSetting("highContrast", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-reduce-motion",
+          label: "Reduce motion",
+          description: "Minimizes animations and smooth scrolling.",
+          checked: !!settings.reduceMotion,
+          onChange: (v2) => updateSetting("reduceMotion", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-captions",
+          label: "Always show captions",
+          description: "Shows a text bar whenever Nouri speaks in chat or on forms.",
+          checked: !!settings.alwaysShowCaptions,
+          onChange: (v2) => updateSetting("alwaysShowCaptions", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-form-voice",
+          label: "Form voice guide",
+          description: settings.preferTextOverVoice ? 'Turn off "Prefer text over voice" above to enable spoken form hints.' : "Nouri reads form field hints aloud when you focus a field. Text hints still appear when this is off.",
+          checked: !!settings.formVoiceGuideEnabled,
+          onChange: (v2) => updateSetting("formVoiceGuideEnabled", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-prefer-text",
+          label: "Prefer text over voice",
+          description: "Nouri shows instructions as text instead of playing audio automatically.",
+          checked: !!settings.preferTextOverVoice,
+          onChange: (v2) => updateSetting("preferTextOverVoice", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-simple-language",
+          label: "Simple language",
+          description: "Uses clearer spacing; Nouri will favor shorter phrases when this is on.",
+          checked: !!settings.simpleLanguage,
+          onChange: (v2) => updateSetting("simpleLanguage", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-easy-mode",
+          label: "Easy mode",
+          description: "Larger controls and simpler layouts where supported.",
+          checked: !!settings.easyMode,
+          onChange: (v2) => updateSetting("easyMode", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-list-first-find",
+          label: "List-first Find Food",
+          description: "Shows food listings first; map is optional (better for screen readers).",
+          checked: !!settings.listFirstFind,
+          onChange: (v2) => updateSetting("listFirstFind", v2)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+        ToggleRow,
+        {
+          id: "a11y-screen-reader",
+          label: "Screen reader optimized",
+          description: "Clearer labels and fewer visual-only cues in Nouri replies.",
+          checked: !!settings.screenReaderOptimized,
+          onChange: (v2) => updateSetting("screenReaderOptimized", v2)
+        }
+      )
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "nouri-a11y-footer", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { type: "button", onClick: resetSettings, className: "nouri-a11y-reset", children: "Reset accessibility settings" }) })
+  ] });
 }
 
 // src/main.jsx
@@ -16181,12 +17808,13 @@ function NouriShell() {
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIHealthBanner_default, {}),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AICaptionBar, {}),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriGuideBar, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(HumanSupportBridge, {}),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIChatPanel_default, {}),
     /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Q, { position: "top-center", autoClose: 4e3, hideProgressBar: true, theme: "colored" })
   ] });
 }
 function Providers({ children }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AccessibilityProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriGuideProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MapProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(UIControlProvider, { children }) }) }) }) });
+  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriGuideProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MapProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(UIControlProvider, { children }) }) }) });
 }
 function mountChat(hostId) {
   let host = document.getElementById(hostId);
@@ -16240,12 +17868,23 @@ window.FoodMapsNouri = {
   AIRecipePanel,
   AIQueryPanel,
   FormVoiceGuideHost,
+  AccessibilitySettings,
   mountRoleInsights: (hostId, props) => mountPanel(RoleInsightsPanel_default, hostId, props),
   mountBulkCsv: (hostId, props) => mountPanel(ShareBulkCsvPanel_default, hostId, props),
   mountVoiceSearch: (hostId, props) => mountPanel(VoiceLocationSearch, hostId, props),
   mountRecipePanel: (hostId, props) => mountPanel(AIRecipePanel, hostId, props),
   mountQueryPanel: (hostId, props) => mountPanel(AIQueryPanel, hostId, props),
-  mountFormVoiceGuide: (hostId, props) => mountPanel(FormVoiceGuideHost, hostId, props)
+  mountFormVoiceGuide: (hostId, props) => mountPanel(FormVoiceGuideHost, hostId, props),
+  mountAccessibilitySettings: (hostId, props) => mountPanel(AccessibilitySettings, hostId, props),
+  unmountAccessibilitySettings: (hostId = "nouri-a11y-settings-root") => {
+    const root = mountRoots.get(hostId);
+    if (!root) return;
+    try {
+      root.unmount();
+    } catch {
+    }
+    mountRoots.delete(hostId);
+  }
 };
 function bootNouriChat() {
   mountChat("nouri-ai-root");

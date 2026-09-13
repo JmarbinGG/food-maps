@@ -1,4 +1,9 @@
-"""Community-scoped Find Food / Nouri search."""
+"""Community-scoped Find Food / Nouri search.
+
+These cover ``backend.tools`` community filters. The PostgREST helpers are
+stubs that raise; tests inject fake row fetchers via ``supabase_get`` mocks
+so the scoping logic can be exercised without a live DB.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -39,8 +44,8 @@ async def _run_search(fake_get, user_id):
 
 def test_search_ignores_legacy_radius_km_arg():
     """Passing radius_km must not drop far same-community listings."""
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -51,7 +56,6 @@ def test_search_ignores_legacy_radius_km_arg():
         "community_id": 8,
         "is_admin": False,
     }]
-    # ~80+ km from user coords
     far = _listing("very-far", "Far Apples", other, 8, lat=38.6, lng=-121.5)
 
     async def fake_get(table, params=None):
@@ -63,7 +67,6 @@ def test_search_ignores_legacy_radius_km_arg():
         with patch("backend.ai_engine.supabase_get", new=AsyncMock(side_effect=fake_get)), \
              patch("backend.tools._forward_geocode", new=AsyncMock(return_value=None)), \
              patch("backend.tools._listing_is_fresh_enough", return_value=True):
-            # Tiny radius would have excluded this listing before; must still return.
             return await _search_food_near_user(
                 user_id=me, max_results=25, radius_km=1,
             )
@@ -76,8 +79,8 @@ def test_search_ignores_legacy_radius_km_arg():
 
 def test_search_includes_community_listings_without_coords():
     """Scoped users must see all community food even without lat/lng."""
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -103,7 +106,6 @@ def test_search_includes_community_listings_without_coords():
             return fake_user
         return fake_listings
 
-    # Far listings in the same community must still appear (no radius cutoff).
     result = asyncio.run(_run_search(fake_get, me))
     ids = {row["id"] for row in result["listings"]}
     assert "with-coords" in ids
@@ -112,8 +114,8 @@ def test_search_includes_community_listings_without_coords():
 
 
 def test_search_scopes_to_user_community_only():
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -147,8 +149,8 @@ def test_search_scopes_to_user_community_only():
 
 def test_search_post_fetch_drops_out_of_scope_rows():
     """Defense in depth: even if DB returns another school, drop it."""
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -167,7 +169,6 @@ def test_search_post_fetch_drops_out_of_scope_rows():
     async def fake_get(table, params=None):
         if table == "users":
             return fake_user
-        # Pretend PostgREST ignored community_id — return everything.
         return fake_listings
 
     result = asyncio.run(_run_search(fake_get, me))
@@ -178,8 +179,8 @@ def test_search_post_fetch_drops_out_of_scope_rows():
 
 
 def test_search_admin_sees_all_communities():
-    me = "user-admin"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -207,8 +208,8 @@ def test_search_admin_sees_all_communities():
 
 
 def test_search_no_community_sees_nothing():
-    me = "user-no-community"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -235,8 +236,8 @@ def test_search_no_community_sees_nothing():
 
 
 def test_search_warehouse_member_sees_warehouse_only():
-    me = "user-warehouse"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -270,8 +271,8 @@ async def _run_recent(fake_get, user_id):
 
 
 def test_recent_listings_scopes_to_user_community():
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,
@@ -307,7 +308,7 @@ async def _run_community_listings(fake_get, user_id, community_id):
 
 
 def test_community_listings_blocks_other_school():
-    me = "user-school-a"
+    me = "101"
 
     fake_user = [{
         "id": me,
@@ -326,8 +327,8 @@ def test_community_listings_blocks_other_school():
 
 
 def test_community_listings_allows_own_school():
-    me = "user-school-a"
-    other = "user-other"
+    me = "101"
+    other = "202"
 
     fake_user = [{
         "id": me,

@@ -9,10 +9,13 @@ function AuthModal({ onClose, onAuth }) {
     email: '',
     password: '',
     role: 'recipient',
-    referralCode: ''
+    referralCode: '',
+    approvalCode: ''
   });
   const [referralValid, setReferralValid] = React.useState(null);
   const [referrerName, setReferrerName] = React.useState('');
+  const [approvalValid, setApprovalValid] = React.useState(null);
+  const [approvalCommunityName, setApprovalCommunityName] = React.useState('');
 
   const demoUsers = [
     {
@@ -76,6 +79,7 @@ function AuthModal({ onClose, onAuth }) {
 
   const [authError, setAuthError] = React.useState('');
   const [captchaVerified, setCaptchaVerified] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
 
   const parseJwt = (token) => {
     try {
@@ -160,13 +164,22 @@ function AuthModal({ onClose, onAuth }) {
       }
     } else {
       setAuthError('');
+      if (!formData.approvalCode || !/^[A-Z]{3}\d{6}$/.test(formData.approvalCode)) {
+        setAuthError('A valid approval code is required (3 letters + 6 digits).');
+        return;
+      }
+      if (approvalValid === false) {
+        setAuthError('Invalid or already used approval code.');
+        return;
+      }
       try {
         const registerData = {
           name: formData.name,
           email: normalizedEmail,
           password: formData.password,
           role: formData.role,
-          referral_code: formData.referralCode || undefined
+          referral_code: formData.referralCode || undefined,
+          approval_code: formData.approvalCode
         };
         const json = await (window.databaseService ? window.databaseService.authRegister(registerData) : {});
         if (json && json.success) {
@@ -189,10 +202,7 @@ function AuthModal({ onClose, onAuth }) {
             window.dispatchEvent(new CustomEvent('foodmaps:auth_changed'));
             onClose();
           } else {
-            // Fallback: persist local user object (no token)
-            localStorage.setItem('current_user', JSON.stringify(userData));
-            onAuth(userData);
-            onClose();
+            setAuthError('Account created, but sign-in failed. Please sign in with your new credentials.');
           }
         } else {
           const err = (json && (json.error || json.message)) || 'Account creation failed';
@@ -234,6 +244,44 @@ function AuthModal({ onClose, onAuth }) {
         setReferrerName('');
       }
     }
+
+    if (field === 'approvalCode') {
+      const trimmedValue = value.trim().toUpperCase();
+      if (/^[A-Z]{3}\d{6}$/.test(trimmedValue)) {
+        if (window.approvalValidationTimeout) {
+          clearTimeout(window.approvalValidationTimeout);
+        }
+        window.approvalValidationTimeout = setTimeout(() => {
+          validateApprovalCode(trimmedValue);
+        }, 400);
+      } else {
+        setApprovalValid(trimmedValue.length >= 9 ? false : null);
+        setApprovalCommunityName('');
+      }
+    }
+  };
+
+  const validateApprovalCode = async (code) => {
+    if (!code || !/^[A-Z]{3}\d{6}$/.test(code)) {
+      setApprovalValid(null);
+      setApprovalCommunityName('');
+      return;
+    }
+    try {
+      const response = await fetch(`/api/approval-codes/validate?code=${encodeURIComponent(code)}`);
+      if (!response.ok) {
+        setApprovalValid(false);
+        setApprovalCommunityName('');
+        return;
+      }
+      const result = await response.json();
+      setApprovalValid(result.valid === true);
+      setApprovalCommunityName(result.valid === true ? (result.community_name || '') : '');
+    } catch (error) {
+      console.error('Error validating approval code:', error);
+      setApprovalValid(false);
+      setApprovalCommunityName('');
+    }
   };
 
   const validateReferralCode = async (code) => {
@@ -269,7 +317,7 @@ function AuthModal({ onClose, onAuth }) {
 
   try {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" data-name="auth-modal" data-file="js/components/auth/AuthModal.js">
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[10100]" data-name="auth-modal" data-file="js/components/auth/AuthModal.js">
         <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-bold text-[var(--text-primary)]">
@@ -324,13 +372,25 @@ function AuthModal({ onClose, onAuth }) {
                   </button>
                 )}
               </div>
-              <input
-                type="password"
-                required
-                value={formData.password}
-                onChange={(e) => handleInputChange('password', e.target.value)}
-                className="w-full p-2 border border-[var(--border-color)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={formData.password}
+                  onChange={(e) => handleInputChange('password', e.target.value)}
+                  className="w-full p-2 pr-16 border border-[var(--border-color)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)]"
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 px-3 text-xs font-medium text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  aria-pressed={showPassword}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
 
             {!isLogin && (
@@ -346,6 +406,39 @@ function AuthModal({ onClose, onAuth }) {
                   {/* <option value="driver">Driver</option>
                   <option value="store_owner">Store Owner</option> */}
                 </select>
+              </div>
+            )}
+
+            {!isLogin && (
+              <div>
+                <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1">
+                  Approval Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  maxLength={9}
+                  value={formData.approvalCode}
+                  onChange={(e) => handleInputChange('approvalCode', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                  placeholder="e.g. RBE123456"
+                  className={`w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--primary-color)] ${approvalValid === true ? 'border-green-500' :
+                    approvalValid === false ? 'border-red-500' :
+                      'border-[var(--border-color)]'
+                    }`}
+                />
+                {approvalValid === true && (
+                  <p className="text-sm text-green-600 mt-1">
+                    Valid{approvalCommunityName ? ` — joins ${approvalCommunityName}` : ''}
+                  </p>
+                )}
+                {approvalValid === false && formData.approvalCode && (
+                  <p className="text-sm text-red-600 mt-1">
+                    Invalid or already used approval code
+                  </p>
+                )}
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
+                  Required. Get this from your school or Food Maps coordinator.
+                </p>
               </div>
             )}
 
@@ -387,9 +480,9 @@ function AuthModal({ onClose, onAuth }) {
 
             <button
               type="submit"
-              className={`btn-primary w-full ${!captchaVerified ? 'opacity-50 cursor-not-allowed' : ''
+              className={`btn-primary w-full ${!captchaVerified || (!isLogin && approvalValid !== true) ? 'opacity-50 cursor-not-allowed' : ''
                 }`}
-              disabled={!captchaVerified}
+              disabled={!captchaVerified || (!isLogin && approvalValid !== true)}
             >
               {isLogin ? 'Sign In' : 'Create Account'}
             </button>

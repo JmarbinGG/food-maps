@@ -31,100 +31,37 @@ MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
 async def _require_listing_approval() -> bool:
     """True when community posts must wait for admin approval before Find Food.
 
-    Reads ``platform_settings.require_listing_approval``. Defaults to True when
-    the row is missing or unreadable so moderation fails closed.
+    Food Maps has no platform_settings table; chat posts go live as
+    ``available``. Keep the gate off so bulk/AI creates match that behavior.
     """
-    from backend.ai_engine import supabase_get
-
-    try:
-        rows = await supabase_get(
-            "platform_settings",
-            {
-                "key": "eq.require_listing_approval",
-                "select": "value",
-                "limit": "1",
-            },
-        )
-        if not rows:
-            return True
-        value = rows[0].get("value")
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"true", "1", "yes", "on"}
-        if value is None:
-            return True
-        return bool(value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("require_listing_approval lookup failed: %s", exc)
-        return True
+    return False
 
 
 async def _require_request_approval() -> bool:
-    """True when food requests must wait for admin approval before Community Requests.
+    """True when food requests must wait for admin approval.
 
-    Reads ``platform_settings.require_request_approval``. Defaults to True when
-    missing so moderation fails closed.
+    Food Maps has no platform_settings table — no approval gate.
     """
-    from backend.ai_engine import supabase_get
-
-    try:
-        rows = await supabase_get(
-            "platform_settings",
-            {
-                "key": "eq.require_request_approval",
-                "select": "value",
-                "limit": "1",
-            },
-        )
-        if not rows:
-            return True
-        value = rows[0].get("value")
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"true", "1", "yes", "on"}
-        if value is None:
-            return True
-        return bool(value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("require_request_approval lookup failed: %s", exc)
-        return True
+    return False
 
 
 async def _require_claim_approval() -> bool:
-    """True when recipient claims must wait for admin approval before pickup."""
-    from backend.ai_engine import supabase_get
+    """True when recipient claims must wait for admin approval before pickup.
 
-    try:
-        rows = await supabase_get(
-            "platform_settings",
-            {
-                "key": "eq.require_claim_approval",
-                "select": "value",
-                "limit": "1",
-            },
-        )
-        if not rows:
-            return True
-        value = rows[0].get("value")
-        if isinstance(value, bool):
-            return value
-        if isinstance(value, str):
-            return value.strip().lower() in {"true", "1", "yes", "on"}
-        if value is None:
-            return True
-        return bool(value)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("require_claim_approval lookup failed: %s", exc)
-        return True
+    Food Maps has no platform_settings table — no approval gate.
+    """
+    return False
 
 
 async def _resolve_create_listing_status(listing_type: str = "donation") -> str:
-    """Status for donor/Nouri creates: pending when the matching approval flag is on."""
+    """Status for donor/Nouri creates.
+
+    When approval is off, return ``available`` so rows show in Find Food
+    (same as chat ``post_food_listing``). Requests use ``open``.
+    """
     if str(listing_type or "donation").lower() == "request":
-        return "pending" if await _require_request_approval() else "approved"
-    return "pending" if await _require_listing_approval() else "approved"
+        return "pending" if await _require_request_approval() else "open"
+    return "pending" if await _require_listing_approval() else "available"
 
 
 async def _resolve_create_claim_status() -> str:
@@ -4283,28 +4220,17 @@ async def _fetch_all_active_community_rows(
     *,
     select: str = "id,name",
 ) -> list[dict]:
-    """Return every active community row (catalog source of truth).
+    """Return every active community row from Food Maps MySQL centers.
 
-    Used by resolve + listing tools so no school/hub is silently dropped
-    by a low default limit.
+    ``select`` is accepted for call-site compatibility; MySQL returns a
+    fixed catalog shape (id, name, and common center fields).
     """
-    from backend.ai_engine import supabase_get
-
     try:
-        rows = await supabase_get("communities", {
-            "is_active": "eq.true",
-            "select": select,
-            "order": "name.asc",
-            "limit": str(_COMMUNITY_FETCH_LIMIT),
-        })
+        from backend.ai.bulk_mysql import fetch_active_communities_mysql
+        return fetch_active_communities_mysql(max_results=_COMMUNITY_FETCH_LIMIT) or []
     except Exception as exc:
-        logger.warning("fetch all active communities failed: %s", exc)
+        logger.warning("MySQL active communities fetch failed: %s", exc)
         return []
-    out: list[dict] = []
-    for row in rows or []:
-        if isinstance(row, dict) and (row.get("id") is not None) and str(row.get("name") or "").strip():
-            out.append(row)
-    return out
 
 
 async def _get_active_communities(
@@ -4316,8 +4242,6 @@ async def _get_active_communities(
     Returns the full active catalog by default (capped only by max_results).
     Every row is a real community/school/hub — never invent free-text names.
     """
-    from backend.ai_engine import supabase_get
-
     try:
         max_results = int(max_results or 100)
     except (TypeError, ValueError):
@@ -4326,74 +4250,27 @@ async def _get_active_communities(
 
     logger.info("get_active_communities: user_id=%s max=%d", user_id, max_results)
 
-    communities = await _fetch_all_active_community_rows(
-        select=(
-            "id,name,location,contact,hours,phone,description,"
-            "latitude,longitude,food_given_lb,families_helped,"
-            "school_staff_helped,image"
-        ),
-    )
-    if not communities:
-        # Fall back to a direct fetch so callers still get an error shape.
-        try:
-            communities = await supabase_get("communities", {
-                "is_active": "eq.true",
-                "select": (
-                    "id,name,location,contact,hours,phone,description,"
-                    "latitude,longitude,food_given_lb,families_helped,"
-                    "school_staff_helped,image"
-                ),
-                "limit": str(_COMMUNITY_FETCH_LIMIT),
-            }) or []
-        except Exception as exc:
-            logger.error("Failed to fetch communities: %s", exc)
-            return {"error": f"Could not fetch communities: {str(exc)}"}
-
+    communities = await _fetch_all_active_community_rows()
     if not communities:
         return {"communities": [], "total": 0, "summary": "No active communities found."}
 
-    # If user_id provided, get their location and sort by distance.
-    # Prefer the geocoded latitude/longitude columns (set when user saves
-    # their address). Fall back to the legacy location JSON column for
-    # older rows that pre-date geocoding.
+    # Integer Food Maps users only — sort by distance when profile has coords.
     user_lat = user_lng = None
-    if user_id:
+    if user_id and str(user_id).strip().isdigit():
         try:
-            rows = await supabase_get("users", {
-                "id": f"eq.{user_id}",
-                "select": "latitude,longitude,location",
-            })
-            if rows:
-                profile = rows[0]
-                # 1. New canonical columns (numeric — PostgREST may return strings)
-                raw_lat = profile.get("latitude")
-                raw_lng = profile.get("longitude")
-                if raw_lat is not None and raw_lng is not None:
-                    try:
-                        user_lat = float(raw_lat)
-                        user_lng = float(raw_lng)
-                    except (TypeError, ValueError):
-                        pass
-                # 2. Legacy JSON column fallback (older profiles)
-                if user_lat is None or user_lng is None:
-                    loc = profile.get("location")
-                    if isinstance(loc, str):
-                        import json as _json
-                        try:
-                            loc = _json.loads(loc)
-                        except (ValueError, TypeError):
-                            loc = None
-                    if isinstance(loc, dict):
-                        lat_val = loc.get("latitude") or loc.get("lat")
-                        lng_val = loc.get("longitude") or loc.get("lng") or loc.get("lon")
-                        if lat_val and lng_val:
-                            try:
-                                user_lat = float(lat_val)
-                                user_lng = float(lng_val)
-                            except (TypeError, ValueError):
-                                pass
+            from backend.ai.bulk_mysql import fetch_donor_listing_defaults_mysql
+            profile = fetch_donor_listing_defaults_mysql(user_id) or {}
+            raw_lat = profile.get("latitude")
+            raw_lng = profile.get("longitude")
+            if raw_lat is not None and raw_lng is not None:
+                try:
+                    user_lat = float(raw_lat)
+                    user_lng = float(raw_lng)
+                except (TypeError, ValueError):
+                    pass
         except Exception as exc:
             logger.warning("Could not get user location: %s", exc)
+
 
     results = []
     for c in communities:
@@ -4708,120 +4585,46 @@ async def _resolve_community(community_name: Optional[str], community_id: Option
     """Resolve a community name or id to (id, name). Returns (None, None) on miss.
 
     Enforcement: only active catalog communities resolve. Free-text counties
-    and invented hubs return (None, None).
+    and invented hubs return (None, None). Food Maps uses MySQL distribution
+    centers as the catalog (no Supabase).
     """
-    from backend.ai_engine import supabase_get
-
-    raw_id = str(community_id or "").strip()
-    raw_name = (community_name or "").strip()
-
-    # Models often put the school name in community_id. Treat non-id values as names.
-    if raw_id and not _looks_like_community_id(raw_id):
-        if not raw_name:
-            raw_name = raw_id
-        raw_id = ""
-
-    if raw_id:
-        try:
-            rows = await supabase_get("communities", {
-                "id": f"eq.{raw_id}",
-                "is_active": "eq.true",
-                "select": "id,name",
-                "limit": "1",
-            })
-            if rows:
-                return str(rows[0]["id"]), rows[0].get("name")
-        except Exception as exc:
-            logger.warning("community lookup by id failed: %s", exc)
-
-    name = _sanitize_community_query(raw_name)
-    if not name:
-        return None, None
-    # Also try slash-spacing variants: "NEA / ACLC CC" ↔ "NEA/ACLC CC"
-    name_variants = [name]
-    spaced_slash = name.replace("/", " / ")
-    if spaced_slash not in name_variants:
-        name_variants.append(spaced_slash)
-    tight_slash = name.replace(" / ", "/").replace("/ ", "/").replace(" /", "/")
-    if tight_slash not in name_variants:
-        name_variants.append(tight_slash)
-
     try:
-        # Try exact match first (case-insensitive via ilike).
-        # Only match active communities so inactive ones can't be silently
-        # assigned to new listings (frontend RLS would hide them anyway).
-        rows = []
-        for variant in name_variants:
-            rows = await supabase_get("communities", {
-                "name": f"ilike.{variant}",
-                "is_active": "eq.true",
-                "select": "id,name",
-                "limit": "1",
-            })
-            if rows:
-                break
-        if not rows:
-            # Fall back to fuzzy contains match using % as the ILIKE wildcard.
-            # httpx URL-encodes % → %25; PostgREST URL-decodes it back to %
-            # before passing to PostgreSQL, so ILIKE '%name%' works correctly.
-            for variant in name_variants:
-                rows = await supabase_get("communities", {
-                    "name": f"ilike.%{variant}%",
-                    "is_active": "eq.true",
-                    "select": "id,name",
-                    "limit": "1",
-                })
-                if rows:
-                    break
-        if rows:
-            return str(rows[0]["id"]), rows[0].get("name")
-
-        # Last resort: score the FULL active catalog locally (handles partial
-        # names like "Do Good" → "Do Good Warehouse", typos, word reorder,
-        # and every school/hub including NEA/ACLC CC).
-        all_rows = await _fetch_all_active_community_rows(select="id,name")
-        for variant in name_variants:
-            hit = _best_community_name_match(variant, all_rows or [])
-            if hit:
-                return str(hit["id"]), hit.get("name")
+        from backend.ai.bulk_mysql import resolve_community_mysql
+        return resolve_community_mysql(community_name=community_name, community_id=community_id)
     except Exception as exc:
-        logger.warning("community lookup by name failed: %s", exc)
-    return None, None
+        logger.warning("MySQL community resolve failed: %s", exc)
+        return None, None
 
 
 async def _community_from_food_request(
     request_id: str,
 ) -> tuple[Optional[str], Optional[str], Optional[str]]:
     """Return (community_id, community_name, title) for a food request listing."""
-    from backend.ai_engine import supabase_get
-
     rid = str(request_id or "").strip()
-    if not rid:
+    if not rid or not rid.isdigit():
         return None, None, None
     try:
-        rows = await supabase_get("food_listings", {
-            "id": f"eq.{rid}",
-            "listing_type": "eq.request",
-            "select": "id,title,community_id,communities(id,name)",
-            "limit": "1",
-        })
+        from backend.app import SessionLocal
+        from backend.models import FoodResource
+        db = SessionLocal()
+        try:
+            listing = db.query(FoodResource).filter(FoodResource.id == int(rid)).first()
+            if not listing:
+                return None, None, None
+            cid = getattr(listing, "community_id", None)
+            title = getattr(listing, "title", None) or getattr(listing, "description", None)
+            cname = None
+            if cid is not None:
+                _, cname = await _resolve_community(None, str(cid))
+            if not cid:
+                return None, None, title
+            return str(cid), cname, title
+        finally:
+            db.close()
     except Exception as exc:
         logger.warning("food request community lookup failed: %s", exc)
         return None, None, None
-    if not rows:
-        return None, None, None
-    row = rows[0]
-    cid = row.get("community_id")
-    title = row.get("title")
-    community = row.get("communities")
-    if isinstance(community, list):
-        community = community[0] if community else None
-    cname = (community or {}).get("name") if isinstance(community, dict) else None
-    if cid and not cname:
-        _, cname = await _resolve_community(None, str(cid))
-    if not cid:
-        return None, None, title
-    return str(cid), cname, title
+
 
 
 def _best_community_name_match(query: str, rows: list) -> Optional[dict]:

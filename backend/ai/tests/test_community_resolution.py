@@ -176,27 +176,18 @@ class TestBestCommunityNameMatch:
 async def test_resolve_treats_name_stuffed_into_community_id(monkeypatch):
     from backend.tools import _resolve_community
 
-    catalog = [
-        {"id": "3", "name": "NEA/ACLC CC"},
-        {"id": "1", "name": "Alameda Unified School District"},
-    ]
+    def fake_resolve_mysql(*, community_name=None, community_id=None):
+        # Name stuffed into community_id (or quoted name) must still resolve.
+        needle = str(community_id or community_name or "").strip().strip('"')
+        catalog = {
+            "NEA/ACLC CC": ("3", "NEA/ACLC CC"),
+            "Alameda Unified School District": ("1", "Alameda Unified School District"),
+        }
+        return catalog.get(needle, (None, None))
 
-    async def fake_supabase_get(table, params):
-        if table != "communities":
-            return []
-        name_q = str(params.get("name") or "")
-        if name_q.startswith("ilike."):
-            needle = name_q[len("ilike."):].strip("%").lower()
-            for row in catalog:
-                if needle and needle in row["name"].lower():
-                    return [row]
-        return []
-
-    async def fake_fetch_rows(**_kwargs):
-        return catalog
-
-    monkeypatch.setattr("backend.ai_engine.supabase_get", fake_supabase_get)
-    monkeypatch.setattr("backend.tools._fetch_all_active_community_rows", fake_fetch_rows)
+    monkeypatch.setattr(
+        "backend.ai.bulk_mysql.resolve_community_mysql", fake_resolve_mysql
+    )
 
     cid, cname = await _resolve_community(None, "NEA/ACLC CC")
     assert cid == "3"
@@ -251,7 +242,7 @@ async def test_create_listing_rejects_non_catalog_community(monkeypatch):
     monkeypatch.setattr("backend.tools._fetch_all_active_community_rows", fetch_rows)
 
     result = await _create_food_listing(
-        user_id="00000000-0000-0000-0000-000000000001",
+        user_id="42",
         title="Pizza",
         quantity=1,
         unit="items",
