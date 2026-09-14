@@ -64,45 +64,47 @@ function isInBayArea(lat, lng) {
 }
 
 // Map legend categories for distribution centers (pin color + label).
+// High-chroma, far-apart hues so pins are hard to mix up. Primaries: red, blue, yellow.
+const MAP_LEGEND_LISTING_COLOR = '#FFCC00';
 const MAP_LEGEND_PROVIDER_TYPES = Object.freeze([
   {
     label: 'Schools',
-    color: '#4f46e5',
+    color: '#0057FF',
     match: ['schools', 'school meal program', 'school food distribution'],
   },
   {
     label: 'Food Pantry',
-    color: '#d97706',
+    color: '#E0007A',
     match: ['food pantry'],
   },
   {
     label: 'Food Rescue',
-    color: '#0d9488',
+    color: '#7A3E09',
     match: ['food rescue'],
   },
   {
     label: 'Community Garden',
-    color: '#15803d',
+    color: '#00A651',
     match: ['community garden'],
   },
   {
     label: 'Foodbank',
-    color: '#b91c1c',
+    color: '#E10600',
     match: ['foodbank', 'food bank'],
   },
   {
     label: 'Mobile Food Pantry',
-    color: '#ea580c',
+    color: '#FF5A00',
     match: ['mobile food pantry'],
   },
   {
     label: 'Food Delivery',
-    color: '#0284c7',
+    color: '#111111',
     match: ['food delivery', 'home delivery'],
   },
 ]);
 
-const MAP_LEGEND_DEFAULT_CENTER_COLOR = '#10b981';
+const MAP_LEGEND_DEFAULT_CENTER_COLOR = '#6B7280';
 
 function parseCenterProviderTypes(raw) {
   if (typeof window.parseProviderTypes === 'function') {
@@ -632,7 +634,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
         el.className = 'food-listing-marker';
         el.innerHTML = `
           <div style="
-            background-color: #f59e0b;
+            background-color: ${MAP_LEGEND_LISTING_COLOR};
             width: 35px;
             height: 35px;
             border-radius: 50% 50% 50% 0;
@@ -1009,7 +1011,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
             height: '14px',
             borderRadius: '50% 50% 50% 0',
             transform: 'rotate(-45deg)',
-            backgroundColor: '#f59e0b',
+            backgroundColor: MAP_LEGEND_LISTING_COLOR,
             flexShrink: 0,
             display: 'flex',
             alignItems: 'center',

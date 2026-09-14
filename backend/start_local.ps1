@@ -1,6 +1,9 @@
 # Start Food Maps locally — no AWS required by default.
 #
-# Local dev (SQLite, your machine only):
+# Local MySQL (127.0.0.1) if DATABASE_URL in .env.local points at localhost:
+#   .\backend\start_local.ps1
+#
+# Local SQLite fallback (when DATABASE_URL is unset or is remote MySQL/RDS):
 #   .\backend\start_local.ps1
 #
 # Use production RDS from your machine (needs network access to RDS):
@@ -51,15 +54,22 @@ if (-not $wantRds) {
 $useRds = ($env:USE_RDS -eq "1") -or ($env:USE_RDS -eq "true")
 
 if (-not $useRds) {
-    if (-not $env:ALLOW_SQLITE) { $env:ALLOW_SQLITE = "true" }
-    if (-not $env:DATABASE_URL -or $env:DATABASE_URL -like "mysql*") {
-        $dbFile = Join-Path $BackendDir "food_maps_local.db"
-        $dbUri = "sqlite:///" + ($dbFile -replace '\\', '/')
-        $env:DATABASE_URL = $dbUri
+    $isLocalMysql = $env:DATABASE_URL -match '^mysql' -and $env:DATABASE_URL -match '@(127\.0\.0\.1|localhost)(:|/)'
+    if ($isLocalMysql) {
+        Remove-Item Env:ALLOW_SQLITE -ErrorAction SilentlyContinue
+        Write-Host "Local dev mode: MySQL on this machine" -ForegroundColor Green
+        Write-Host "  Host: 127.0.0.1:3306"
+    } else {
+        if (-not $env:ALLOW_SQLITE) { $env:ALLOW_SQLITE = "true" }
+        if (-not $env:DATABASE_URL -or $env:DATABASE_URL -like "mysql*") {
+            $dbFile = Join-Path $BackendDir "food_maps_local.db"
+            $dbUri = "sqlite:///" + ($dbFile -replace '\\', '/')
+            $env:DATABASE_URL = $dbUri
+        }
+        Write-Host "Local dev mode: SQLite (no AWS)" -ForegroundColor Green
+        Write-Host "  Database: $(Join-Path $BackendDir 'food_maps_local.db')"
+        Write-Host "  Tip: copy .env.local.example to .env.local to persist these settings"
     }
-    Write-Host "Local dev mode: SQLite (no AWS)" -ForegroundColor Green
-    Write-Host "  Database: $(Join-Path $BackendDir 'food_maps_local.db')"
-    Write-Host "  Tip: copy .env.local.example to .env.local to persist these settings"
 } else {
     Write-Host "USE_RDS=1 - connecting to DATABASE_URL from .env" -ForegroundColor Cyan
     if (-not $env:DATABASE_URL) {

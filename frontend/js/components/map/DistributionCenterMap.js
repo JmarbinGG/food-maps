@@ -133,7 +133,7 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
       // Create custom marker element
       const color = (typeof window.getCenterLegendColor === 'function')
         ? window.getCenterLegendColor(center)
-        : '#10b981';
+        : '#6B7280';
       const el = document.createElement('div');
       el.className = 'distribution-center-marker';
       el.innerHTML = `
@@ -422,13 +422,13 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
       <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-3 text-xs max-w-[200px] max-h-[42vh] overflow-y-auto">
         <h4 className="font-semibold mb-2 text-sm">Legend</h4>
         {(window.MAP_LEGEND_PROVIDER_TYPES || [
-          { label: 'Schools', color: '#4f46e5' },
-          { label: 'Food Pantry', color: '#d97706' },
-          { label: 'Food Rescue', color: '#0d9488' },
-          { label: 'Community Garden', color: '#15803d' },
-          { label: 'Foodbank', color: '#b91c1c' },
-          { label: 'Mobile Food Pantry', color: '#ea580c' },
-          { label: 'Food Delivery', color: '#0284c7' },
+          { label: 'Schools', color: '#0057FF' },
+          { label: 'Food Pantry', color: '#E0007A' },
+          { label: 'Food Rescue', color: '#7A3E09' },
+          { label: 'Community Garden', color: '#00A651' },
+          { label: 'Foodbank', color: '#E10600' },
+          { label: 'Mobile Food Pantry', color: '#FF5A00' },
+          { label: 'Food Delivery', color: '#111111' },
         ]).map((entry) => (
           <div key={entry.label} className="flex items-center gap-2 mb-1.5">
             <div
