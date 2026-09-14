@@ -1,7 +1,7 @@
 # Production / staging stack. This file replaces the repository-root
 # docker-compose.yml, which is a local development stack only (it bind-mounts
 # source over the image, runs uvicorn with --reload, and starts a throwaway
-# Postgres with a hardcoded password). Do not deploy that one.
+# MySQL 8 with a hardcoded password). Do not deploy that one.
 #
 # Compose reads deploy/.env automatically for the ${...} values below.
 # Start with: docker compose -f docker-compose.prod.yml up -d

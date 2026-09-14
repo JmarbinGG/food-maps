@@ -122,7 +122,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "User UUID"},
+                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
                     "food_type": {
                         "type": "string",
                         "description": (
@@ -176,7 +176,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "User UUID"},
+                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
                     "hours": {
                         "type": "integer",
                         "description": "How far back to look (default 72).",
@@ -208,7 +208,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "User UUID"},
+                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
                     "community_id": {
                         "type": "string",
                         "description": "Community id (must be the caller's own community).",

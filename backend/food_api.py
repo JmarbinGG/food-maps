@@ -15,8 +15,13 @@ from backend.db import get_db
 load_aws_secrets()
 load_dotenv()
 
-# JWT settings
-JWT_SECRET = os.getenv("JWT_SECRET", "your-secret-key")
+# JWT settings — fail closed, same rule as backend/app.py
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET or len(JWT_SECRET) < 16:
+    raise RuntimeError(
+        "JWT_SECRET environment variable is required and must be at least "
+        "16 characters long."
+    )
 JWT_ALGORITHM = "HS256"
 security = HTTPBearer()
 

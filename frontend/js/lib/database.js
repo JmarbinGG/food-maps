@@ -3,13 +3,17 @@ window.databaseService = {
   listings: [],
   isConnected: true,
 
+  getAuthToken() {
+    return localStorage.getItem('auth_token') || localStorage.getItem('token');
+  },
+
   async getListings(limit = 100, include_claimed_for_me = false) {
     try {
       const params = new URLSearchParams();
       params.append('limit', limit);
       params.append('include_claimed_for_me', include_claimed_for_me);
 
-      const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+      const token = this.getAuthToken();
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
       const response = await fetch(`/api/listings/get?${params.toString()}`, {
@@ -151,7 +155,7 @@ window.databaseService = {
       // attributing a listing to the wrong user.
       const headers = {};
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = this.getAuthToken();
         if (token) headers['Authorization'] = `Bearer ${token}`;
       } catch (_) { /* no-op */ }
 
@@ -183,7 +187,7 @@ window.databaseService = {
 
   updateListing: async function (listingId, updates) {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = this.getAuthToken();
       if (!token) {
         return { success: false, error: 'Not authenticated' };
       }
@@ -223,7 +227,7 @@ window.databaseService = {
 
   addFavorite: async function (locationType, locationId, notes = '') {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = this.getAuthToken();
       if (!token) return { success: false, error: 'Not authenticated' };
 
       const response = await fetch('/api/favorites', {
@@ -249,7 +253,7 @@ window.databaseService = {
 
   removeFavorite: async function (favoriteId) {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = this.getAuthToken();
       if (!token) return { success: false, error: 'Not authenticated' };
 
       const response = await fetch(`/api/favorites/${favoriteId}`, {
@@ -271,7 +275,7 @@ window.databaseService = {
 
   getFavorites: async function () {
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = this.getAuthToken();
       if (!token) return { success: false, error: 'Not authenticated' };
 
       const response = await fetch('/api/favorites', {

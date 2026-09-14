@@ -1,6 +1,10 @@
 // SmartNotifications.js - AI-powered smart notifications (not spammy)
 // Learns what users actually care about and only notifies for relevant updates
 
+function getAuthToken() {
+  return localStorage.getItem('auth_token') || localStorage.getItem('token');
+}
+
 const SmartNotifications = () => {
   const [preferences, setPreferences] = React.useState({
     enabled: false,
@@ -39,7 +43,7 @@ const SmartNotifications = () => {
 
   const loadPreferences = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch('/api/notification-preferences', {
@@ -57,7 +61,7 @@ const SmartNotifications = () => {
 
   const loadBehaviorData = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch('/api/notification-behavior', {
@@ -96,7 +100,7 @@ const SmartNotifications = () => {
 
   const savePreferences = async (prefs) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       if (!token) return;
 
       await fetch('/api/notification-preferences', {
@@ -278,7 +282,7 @@ const SmartNotifications = () => {
     setNotificationHistory([notification, ...notificationHistory]);
 
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       await fetch('/api/notification-sent', {
         method: 'POST',
         headers: {
@@ -294,7 +298,7 @@ const SmartNotifications = () => {
 
   const trackNotificationClick = async (listing) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getAuthToken();
       await fetch('/api/notification-clicked', {
         method: 'POST',
         headers: {
@@ -325,7 +329,7 @@ const SmartNotifications = () => {
     // Poll for new listings every 5 minutes
     const interval = setInterval(async () => {
       try {
-        const token = localStorage.getItem('token');
+        const token = getAuthToken();
         if (!token) return;
 
         const response = await fetch('/api/listings/recent?minutes=10', {

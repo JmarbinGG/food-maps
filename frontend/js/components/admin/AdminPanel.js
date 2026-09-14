@@ -868,35 +868,33 @@ function AdminPanel({ onClose }) {
     const handleExportData = async () => {
       setExportStatus('exporting');
       try {
-        const result = await window.exportToSupabase.downloadExport();
-        if (result.success) {
-          setExportStatus('success');
-          setTimeout(() => setExportStatus(null), 3000);
-        } else {
-          setExportStatus('error');
-          setTimeout(() => setExportStatus(null), 3000);
-        }
+        const token = (window.databaseService && window.databaseService.getAuthToken)
+          ? window.databaseService.getAuthToken()
+          : (localStorage.getItem('auth_token') || localStorage.getItem('token'));
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        const [listingsResp, centersResp] = await Promise.all([
+          fetch('/api/listings/get?limit=500', { headers }),
+          fetch('/api/centers', { headers }),
+        ]);
+        const listings = listingsResp.ok ? await listingsResp.json() : [];
+        const centers = centersResp.ok ? await centersResp.json() : [];
+        const blob = new Blob(
+          [JSON.stringify({ listings, centers, exported_at: new Date().toISOString() }, null, 2)],
+          { type: 'application/json' },
+        );
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'foodmaps-export.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        setExportStatus('success');
+        setTimeout(() => setExportStatus(null), 3000);
       } catch (error) {
         console.error('Export error:', error);
         setExportStatus('error');
-        setTimeout(() => setExportStatus(null), 3000);
-      }
-    };
-
-    const handleSupabaseMigration = async () => {
-      setExportStatus('migrating');
-      try {
-        const result = await window.supabaseExporter.downloadSupabaseMigration();
-        if (result.success) {
-          setExportStatus('migration_success');
-          setTimeout(() => setExportStatus(null), 3000);
-        } else {
-          setExportStatus('migration_error');
-          setTimeout(() => setExportStatus(null), 3000);
-        }
-      } catch (error) {
-        console.error('Migration error:', error);
-        setExportStatus('migration_error');
         setTimeout(() => setExportStatus(null), 3000);
       }
     };
@@ -2061,24 +2059,6 @@ function AdminPanel({ onClose }) {
                       </>
                     )}
                   </button>
-
-                  <button
-                    onClick={handleSupabaseMigration}
-                    disabled={exportStatus === 'migrating'}
-                    className="btn-secondary flex items-center justify-center"
-                  >
-                    {exportStatus === 'migrating' ? (
-                      <>
-                        <div className="icon-loader-2 mr-2 animate-spin"></div>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <div className="icon-database mr-2"></div>
-                        Supabase Migration
-                      </>
-                    )}
-                  </button>
                 </div>
 
                 {exportStatus === 'success' && (
@@ -2087,13 +2067,7 @@ function AdminPanel({ onClose }) {
                   </div>
                 )}
 
-                {exportStatus === 'migration_success' && (
-                  <div className="mt-4 p-3 bg-green-100 text-green-800 rounded-lg">
-                    Supabase migration file generated successfully!
-                  </div>
-                )}
-
-                {(exportStatus === 'error' || exportStatus === 'migration_error') && (
+                {exportStatus === 'error' && (
                   <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-lg">
                     Export failed. Please try again.
                   </div>

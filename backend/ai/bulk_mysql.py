@@ -229,6 +229,18 @@ def insert_bulk_listing_mysql(row: dict[str, Any]) -> dict[str, Any]:
     now = datetime.utcnow()
     pickup_end = expiration_date or (now + timedelta(days=3))
 
+    community_id = None
+    raw_cid = row.get("community_id")
+    if raw_cid is not None and str(raw_cid).strip() not in ("", "null", "None"):
+        try:
+            community_id = int(raw_cid)
+        except (TypeError, ValueError):
+            community_id = None
+
+    listing_status = str(row.get("status") or "available").strip().lower()
+    if listing_status not in {"available", "pending"}:
+        listing_status = "available"
+
     db = SessionLocal()
     try:
         item = FoodResource(
@@ -245,7 +257,8 @@ def insert_bulk_listing_mysql(row: dict[str, Any]) -> dict[str, Any]:
             address=address,
             coords_lat=coords_lat,
             coords_lng=coords_lng,
-            status=str(row.get("status") or "approved"),
+            community_id=community_id,
+            status=listing_status,
             images=images_json,
             dietary_tags=dietary_tags if isinstance(dietary_tags, str) else None,
             allergens=allergens if isinstance(allergens, str) else None,

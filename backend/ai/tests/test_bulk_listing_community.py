@@ -76,3 +76,64 @@ class TestBulkListingCommunityPersistence:
         )
         row = _normalize_listing_row(item, "user-1", donor={}, status="pending")
         assert row["status"] == "pending"
+
+    def test_normalize_keeps_available_status(self):
+        item = BulkListingItem(
+            title="Mangoes",
+            quantity=1,
+            unit="basket",
+            category="produce",
+            expiry_date="2099-01-01",
+        )
+        row = _normalize_listing_row(item, "user-1", donor={}, status="available")
+        assert row["status"] == "available"
+
+    def test_normalize_maps_legacy_approved_to_available(self):
+        item = BulkListingItem(
+            title="Mangoes",
+            quantity=1,
+            unit="basket",
+            category="produce",
+            expiry_date="2099-01-01",
+        )
+        row = _normalize_listing_row(item, "user-1", donor={}, status="approved")
+        assert row["status"] == "available"
+
+
+def test_insert_bulk_listing_mysql_keeps_community_and_available_status():
+    from unittest.mock import MagicMock, patch
+
+    from backend.ai.bulk_mysql import insert_bulk_listing_mysql
+    from backend.models import FoodResource
+
+    created = []
+    db = MagicMock()
+
+    def _add(obj):
+        created.append(obj)
+        obj.id = 77
+
+    db.add.side_effect = _add
+    db.commit = MagicMock()
+    db.refresh = MagicMock()
+    db.rollback = MagicMock()
+    db.close = MagicMock()
+
+    with patch("backend.app.SessionLocal", return_value=db):
+        result = insert_bulk_listing_mysql({
+            "user_id": 3,
+            "title": "Apples",
+            "quantity": 2,
+            "unit": "bags",
+            "category": "produce",
+            "community_id": 8,
+            "status": "available",
+            "location": "1 Market St",
+        })
+
+    assert result["id"] == 77
+    assert result["status"] == "available"
+    assert len(created) == 1
+    assert isinstance(created[0], FoodResource)
+    assert created[0].community_id == 8
+    assert created[0].status == "available"

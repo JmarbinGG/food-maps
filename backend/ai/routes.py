@@ -420,9 +420,9 @@ def _normalize_listing_row(
     item: BulkListingItem,
     user_id: str,
     donor: dict | None = None,
-    status: str = "approved",
+    status: str = "available",
 ) -> dict:
-    """Map a validated BulkListingItem into a Supabase food_listings row."""
+    """Map a validated BulkListingItem into a MySQL food_resources row."""
     from datetime import date, timedelta
 
     from backend.ai.bulk_mysql import apply_donor_defaults_to_listing
@@ -437,7 +437,7 @@ def _normalize_listing_row(
         "unit": item.unit.strip()[:40],
         "category": category,
         "listing_type": "donation",
-        "status": status if status in {"approved", "pending"} else "approved",
+        "status": status if status in {"available", "pending"} else "available",
     }
     if item.description:
         row["description"] = item.description.strip()[:2000]

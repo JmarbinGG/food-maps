@@ -22,7 +22,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      'react-router-dom': path.resolve(__dirname, 'src/utils/react-router-shim.js'),
+      'react-router-dom': path.resolve(__dirname, 'utils/react-router-shim.js'),
     },
   },
 });
