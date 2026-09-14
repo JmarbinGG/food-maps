@@ -586,6 +586,23 @@ function App() {
     return () => window.removeEventListener('foodmaps:open_claim_confirm', handler);
   }, [listings]);
 
+  // Open listing detail modal when AI open_listing succeeds or a search card asks.
+  React.useEffect(() => {
+    const handler = (ev) => {
+      try {
+        const detail = ev && ev.detail || {};
+        const listingId = detail.listing_id;
+        if (listingId == null) return;
+        const listing = (listings || []).find((l) => l && String(l.id) === String(listingId));
+        if (typeof window.triggerListingDetailModal === 'function') {
+          window.triggerListingDetailModal(listing || { id: listingId, title: detail.title || 'Listing' });
+        }
+      } catch (_) { /* ignore */ }
+    };
+    window.addEventListener('foodmaps:open_listing', handler);
+    return () => window.removeEventListener('foodmaps:open_listing', handler);
+  }, [listings]);
+
   // Generic UI navigation driven by the AI's navigate_ui tool. Lets the
   // assistant open and close pages, panels and modals on the user's
   // behalf (dashboard, dispatch, admin, favorites, …).

@@ -215,7 +215,7 @@ class TestClaimQuantity:
         ]
         assert detect_conversation_flow("certain amount of them", history) != "claiming"
 
-    def test_resolve_listing_index_to_uuid(self):
+    def test_resolve_listing_index_to_id(self):
         listings = [
             {"id": "aaaa-bbbb", "title": "Tomatoes"},
             {"id": "cccc-dddd", "title": "Eggs"},
@@ -224,6 +224,24 @@ class TestClaimQuantity:
         resolved, err = resolve_listing_id_from_search(2, "user-1")
         assert err is None
         assert resolved == "cccc-dddd"
+
+    def test_resolve_rejects_uuid(self):
+        set_last_search_listings("user-uuid", [{"id": 9, "title": "Rice"}])
+        resolved, err = resolve_listing_id_from_search(
+            "56e3c110-8e22-4756-b98e-02d2d5c81a36", "user-uuid"
+        )
+        assert resolved is None
+        assert err
+        assert "uuid" in err.lower() or "numeric" in err.lower()
+
+    def test_resolve_hash_index_and_numeric_fallback(self):
+        set_last_search_listings("user-idx", [{"id": 77, "title": "Apples"}])
+        resolved, err = resolve_listing_id_from_search("#1", "user-idx")
+        assert err is None
+        assert resolved == "77"
+        resolved, err = resolve_listing_id_from_search("42", "user-idx")
+        assert err is None
+        assert resolved == "42"
 
     def test_enrich_claim_resolves_index(self):
         set_last_search_listings("u1", [{"id": "uuid-1", "title": "Rice"}])

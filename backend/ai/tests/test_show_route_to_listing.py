@@ -15,15 +15,11 @@ def _fake_session(user=None, listing=None) -> MagicMock:
 
     def _query(model):
         q = MagicMock()
-        # Both queries use .filter(...).first(); decide which result to
-        # return based on the model name.
         name = getattr(model, "__name__", "")
-        if name == "User":
-            q.filter.return_value.first.return_value = user
-        elif name == "FoodResource":
-            q.filter.return_value.first.return_value = listing
-        else:
-            q.filter.return_value.first.return_value = None
+        result = user if name == "User" else (listing if name == "FoodResource" else None)
+        q.filter.return_value = q
+        q.order_by.return_value = q
+        q.first.return_value = result
         return q
 
     db.query.side_effect = _query
@@ -242,3 +238,107 @@ async def test_invalid_mode_falls_back_to_driving():
         )
 
     assert r["route"]["mode"] == "driving"
+
+
+@pytest.mark.asyncio
+async def test_search_index_resolves_to_cached_listing_id_not_one():
+    from backend.ai.conversation_flow import (
+        clear_last_search_listings,
+        set_last_search_listings,
+    )
+
+    clear_last_search_listings("1")
+    set_last_search_listings("1", [{"id": 77, "title": "Apples"}])
+    user = _make_user()
+    listing = _make_listing(id=77, title="Apples")
+    fake_db = _fake_session(user=user, listing=listing)
+
+    try:
+        with patch("backend.app.SessionLocal", return_value=fake_db), \
+             patch("backend.ai.tools.MAPBOX_TOKEN", ""):
+            r = await execute_tool(
+                "show_route_to_listing", {"user_id": "1", "listing_id": "#1"}
+            )
+            r_plain = await execute_tool(
+                "show_route_to_listing", {"user_id": "1", "listing_id": "1"}
+            )
+    finally:
+        clear_last_search_listings("1")
+
+    assert r.get("success") is True
+    assert r["route"]["destination"]["listing_id"] == 77
+    assert r_plain.get("success") is True
+    assert r_plain["route"]["destination"]["listing_id"] == 77
+
+
+@pytest.mark.asyncio
+async def test_omitted_listing_id_uses_latest_claim():
+    user = _make_user()
+    listing = _make_listing(id=88, title="Claimed bread")
+    fake_db = _fake_session(user=user, listing=listing)
+
+    with patch("backend.app.SessionLocal", return_value=fake_db), \
+         patch("backend.ai.tools.MAPBOX_TOKEN", ""):
+        r = await execute_tool(
+            "show_route_to_listing", {"user_id": "1"}
+        )
+
+    assert r.get("success") is True
+    assert r["route"]["destination"]["listing_id"] == 88
+
+
+@pytest.mark.asyncio
+async def test_uuid_listing_id_returns_error():
+    r = await execute_tool(
+        "show_route_to_listing",
+        {
+            "user_id": "1",
+            "listing_id": "56e3c110-8e22-4756-b98e-02d2d5c81a36",
+        },
+    )
+    assert "error" in r
+    assert "uuid" in r["error"].lower() or "numeric" in r["error"].lower()
+
+
+@pytest.mark.asyncio
+async def test_open_listing_resolves_search_index():
+    from backend.ai.conversation_flow import (
+        clear_last_search_listings,
+        set_last_search_listings,
+    )
+    from backend.ai.tools import TOOL_DEFINITIONS
+
+    names = {t["function"]["name"] for t in TOOL_DEFINITIONS}
+    assert "open_listing" in names
+
+    clear_last_search_listings("1")
+    set_last_search_listings("1", [{"id": 77, "title": "Apples"}])
+    listing = _make_listing(id=77, title="Apples")
+    fake_db = _fake_session(listing=listing)
+
+    try:
+        with patch("backend.app.SessionLocal", return_value=fake_db):
+            r = await execute_tool(
+                "open_listing", {"user_id": "1", "listing_id": "1"}
+            )
+    finally:
+        clear_last_search_listings("1")
+
+    assert r.get("ok") is True
+    assert r.get("action") == "open_listing"
+    assert r.get("listing_id") == 77
+    assert r.get("title") == "Apples"
+
+
+@pytest.mark.asyncio
+async def test_open_listing_uuid_rejected():
+    r = await execute_tool(
+        "open_listing",
+        {
+            "user_id": "1",
+            "listing_id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+        },
+    )
+    assert r.get("ok") is False
+    assert "error" in r
+    assert "uuid" in r["error"].lower() or "numeric" in r["error"].lower()

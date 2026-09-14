@@ -68,6 +68,8 @@ REQUIRED_TOOLS = {
     "delete_listing",
     "send_user_message",
     "show_map",
+    "show_route_to_listing",
+    "open_listing",
     "navigate_ui",
 }
 

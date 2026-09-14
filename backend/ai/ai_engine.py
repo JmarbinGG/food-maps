@@ -469,7 +469,9 @@ def _build_action_policy() -> str:
         "separate listings — never sum quantities across them. On "
         "success: lead with what was claimed + pickup address/deadline, "
         "then ONE optional next step — if they want directions, call "
-        "show_route_to_listing with the listing UUID (or search #N). "
+        "show_route_to_listing with the numeric listing id or search #N. "
+        "If they ask for listing details / 'tell me more' / 'view that listing', "
+        "call open_listing with the same numeric id or search #N. "
         "On 'already have an active claim' → offer cancel_claim. Never "
         "expose UUIDs / tool names / raw ids in chat text.\n"
         "\n"
@@ -3814,7 +3816,7 @@ class ConversationEngine:
                         else:
                             # Forward extra UI-control fields (navigate_ui / show_map)
                             # so the frontend can act on them without another roundtrip.
-                            for extra_key in ("ok", "path", "action", "target", "view", "focus"):
+                            for extra_key in ("ok", "path", "action", "target", "view", "focus", "title"):
                                 if extra_key in result and result[extra_key] is not None:
                                     entry[extra_key] = result[extra_key]
                             # show_route_to_listing returns a `route` envelope

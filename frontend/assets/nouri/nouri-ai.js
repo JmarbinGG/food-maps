@@ -7852,7 +7852,7 @@ var UIControlContext = (0, import_react4.createContext)({
   executeUIAction: () => 0,
   executeUIActionsFromToolResults: () => 0
 });
-var UI_CONTROL_TOOLS = /* @__PURE__ */ new Set(["show_map", "navigate_ui", "show_route_to_listing"]);
+var UI_CONTROL_TOOLS = /* @__PURE__ */ new Set(["show_map", "navigate_ui", "show_route_to_listing", "open_listing"]);
 function dispatchUIAction(action) {
   if (!action) return;
   const act = (action.action || "open").toLowerCase();
@@ -7871,6 +7871,15 @@ function dispatchUIAction(action) {
         detail: { route: action.route, summary: action.summary || null }
       }));
     }, 150);
+    return;
+  }
+  if (action.tool === "open_listing" || act === "open_listing") {
+    const listingId = action.listing_id;
+    if (listingId != null) {
+      window.dispatchEvent(new CustomEvent("foodmaps:open_listing", {
+        detail: { listing_id: listingId, title: action.title || "" }
+      }));
+    }
     return;
   }
   if (action.tool === "show_map" || act === "open_map" || tgt === "map") {
@@ -11270,20 +11279,41 @@ function SearchResultsClaimList({
                   /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: item.community_name })
                 ] }),
                 item.dietary_tags?.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "flex gap-1 mt-1.5 flex-wrap", children: item.dietary_tags.map((tag) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: `${t3.tag} text-[10px] px-1.5 py-0.5 rounded border`, children: tag }, tag)) }),
-                onSuggestionClick && item.id && claimable && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
-                  "button",
-                  {
-                    type: "button",
-                    onClick: () => onSuggestionClick(
-                      isEs ? `Quiero reclamar el #${displayNum}` : `I'd like to claim #${displayNum}`
-                    ),
-                    className: "mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors",
-                    children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
-                      isEs ? "Reclamar solo este" : "Claim this one"
-                    ]
-                  }
-                )
+                item.id && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1.5 flex flex-wrap gap-1.5", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => {
+                        try {
+                          window.dispatchEvent(new CustomEvent("foodmaps:open_listing", {
+                            detail: { listing_id: item.id, title: item.title || "" }
+                          }));
+                        } catch (_2) {
+                        }
+                      },
+                      className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-50 transition-colors",
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-circle-info text-[10px]", "aria-hidden": "true" }),
+                        isEs ? "Ver detalles" : "View details"
+                      ]
+                    }
+                  ),
+                  onSuggestionClick && claimable && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+                    "button",
+                    {
+                      type: "button",
+                      onClick: () => onSuggestionClick(
+                        isEs ? `Quiero reclamar el #${displayNum}` : `I'd like to claim #${displayNum}`
+                      ),
+                      className: "inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors",
+                      children: [
+                        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-hand-holding-heart text-[10px]", "aria-hidden": "true" }),
+                        isEs ? "Reclamar solo este" : "Claim this one"
+                      ]
+                    }
+                  )
+                ] })
               ] })
             ] })
           },
@@ -11652,7 +11682,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
       }
     );
   }
-  const SILENT_UI_TOOLS = /* @__PURE__ */ new Set(["ui_action", "navigate_ui", "mark_notifications_read"]);
+  const SILENT_UI_TOOLS = /* @__PURE__ */ new Set(["ui_action", "navigate_ui", "open_listing", "mark_notifications_read"]);
   if (ok && !SILENT_UI_TOOLS.has(tool) && (result?.summary || result?.message)) {
     return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "generic", language, titleOverride: tool?.replace(/_/g, " ") || (language === "es" ? "Acci\xF3n" : "Action"), children: /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-800 text-[12px]", children: result.summary || result.message }) });
   }

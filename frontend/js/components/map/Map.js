@@ -235,7 +235,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
 
     // Set up global function for popup buttons to trigger the detail modal
     window.handleListingDetailsClick = (listingId) => {
-      const listing = safeListings.find(l => l.id === listingId);
+      const listing = safeListings.find(l => l && String(l.id) === String(listingId));
       if (listing) {
         // First update the selected listing
         if (onListingSelect) {

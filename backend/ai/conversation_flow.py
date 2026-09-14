@@ -6384,29 +6384,37 @@ def resolve_listing_id_from_search(
     raw_id,
     user_id: str,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Map display index (1-N) or UUID string to a listing id."""
+    """Map search-card index (#N) or a Food Maps numeric listing id.
+
+    UUIDs are rejected — listings are integer ids on MySQL.
+    """
     listings = get_last_search_listings(user_id)
-    if raw_id is None:
+    if raw_id is None or str(raw_id).strip() == "":
         return None, "missing listing_id"
     s = str(raw_id).strip()
-    if re.match(r"^[0-9a-f-]{36}$", s, re.I):
-        return s, None
+    if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", s, re.I):
+        return None, (
+            "Food Maps listings use numeric ids or the search card number "
+            "(#1, #2), not UUIDs."
+        )
     try:
-        idx = int(s)
+        idx = int(s.lstrip("#"))
     except (TypeError, ValueError):
         return None, (
             f"Invalid listing_id {raw_id!r}. Use the list number 1–{len(listings)} "
             "from the search cards, or the food name."
         )
-    if idx < 1 or idx > len(listings):
-        return None, (
-            f"List number {idx} is out of range (1–{len(listings)}). "
-            "Run search_food_near_user again."
-        )
-    resolved = listings[idx - 1].get("id")
-    if not resolved:
-        return None, "Could not resolve listing from search index."
-    return str(resolved), None
+    if listings and 1 <= idx <= len(listings):
+        resolved = listings[idx - 1].get("id")
+        if not resolved:
+            return None, "Could not resolve listing from search index."
+        return str(resolved), None
+    if idx >= 1:
+        return str(idx), None
+    return None, (
+        f"Invalid listing_id {raw_id!r}. Use the list number 1–{len(listings)} "
+        "from the search cards, or the food name."
+    )
 
 
 def resolve_donor_listing_id(

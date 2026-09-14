@@ -594,7 +594,23 @@ function SearchResultsClaimList({
                       ))}
                     </div>
                   )}
-                  {onSuggestionClick && item.id && claimable && (
+                  {item.id && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        try {
+                          window.dispatchEvent(new CustomEvent('foodmaps:open_listing', {
+                            detail: { listing_id: item.id, title: item.title || '' },
+                          }))
+                        } catch (_) { /* ignore */ }
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-50 transition-colors"
+                    >
+                      <i className="fas fa-circle-info text-[10px]" aria-hidden="true" />
+                      {isEs ? 'Ver detalles' : 'View details'}
+                    </button>
+                  {onSuggestionClick && claimable && (
                     <button
                       type="button"
                       onClick={() => onSuggestionClick(
@@ -602,11 +618,13 @@ function SearchResultsClaimList({
                           ? `Quiero reclamar el #${displayNum}`
                           : `I'd like to claim #${displayNum}`,
                       )}
-                      className="mt-1.5 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-semibold hover:bg-emerald-100 transition-colors"
                     >
                       <i className="fas fa-hand-holding-heart text-[10px]" aria-hidden="true" />
                       {isEs ? 'Reclamar solo este' : 'Claim this one'}
                     </button>
+                  )}
+                    </div>
                   )}
                 </div>
               </div>
@@ -1138,7 +1156,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   // query_distribution_centers, get_user_dashboard, get_mapbox_route).
   // Skip pure UI-control tools: their effect is the navigation itself, so a
   // "Done" card would be redundant noise next to the assistant's reply.
-  const SILENT_UI_TOOLS = new Set(['ui_action', 'navigate_ui', 'mark_notifications_read'])
+  const SILENT_UI_TOOLS = new Set(['ui_action', 'navigate_ui', 'open_listing', 'mark_notifications_read'])
   if (ok && !SILENT_UI_TOOLS.has(tool) && (result?.summary || result?.message)) {
     return (
       <ToolCardShell kind="generic" language={language} titleOverride={tool?.replace(/_/g, ' ') || (language === 'es' ? 'Acción' : 'Action')}>

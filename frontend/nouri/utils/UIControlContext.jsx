@@ -6,7 +6,7 @@ const UIControlContext = createContext({
   executeUIActionsFromToolResults: () => 0,
 });
 
-const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui', 'show_route_to_listing']);
+const UI_CONTROL_TOOLS = new Set(['show_map', 'navigate_ui', 'show_route_to_listing', 'open_listing']);
 
 function dispatchUIAction(action) {
   if (!action) return;
@@ -29,6 +29,15 @@ function dispatchUIAction(action) {
         detail: { route: action.route, summary: action.summary || null },
       }));
     }, 150);
+    return;
+  }
+  if (action.tool === 'open_listing' || act === 'open_listing') {
+    const listingId = action.listing_id;
+    if (listingId != null) {
+      window.dispatchEvent(new CustomEvent('foodmaps:open_listing', {
+        detail: { listing_id: listingId, title: action.title || '' },
+      }));
+    }
     return;
   }
   if (action.tool === 'show_map' || act === 'open_map' || tgt === 'map') {

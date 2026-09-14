@@ -1055,10 +1055,11 @@ TOOL_DEFINITIONS = [
                 "the recipient asks 'how do I get there?', 'show me directions', "
                 "'route to listing #N', 'cómo llego', 'dame las direcciones', or "
                 "right AFTER a successful claim so they can see the path to pickup. "
-                "Pass listing_id as the Supabase listing UUID from search/claim "
-                "results, OR the display number (#1, #2) from the latest search. "
-                "If they ask for directions to their pickup without a number, omit "
-                "listing_id and the server uses their most recent claim. "
+                "Pass listing_id as the Food Maps numeric listing id from "
+                "search/claim results, OR the display number (#1, #2) from the "
+                "latest search. If they ask for directions to their pickup "
+                "without a number, omit listing_id and the server uses their "
+                "most recent claim. "
                 "Requires the recipient to have an address on file AND the listing "
                 "to have map coordinates. The UI switches to Find Food map and "
                 "draws a blue route line."
@@ -1070,14 +1071,44 @@ TOOL_DEFINITIONS = [
                     "listing_id": {
                         "type": "string",
                         "description": (
-                            "Listing UUID, or search display index ('1', '2', '#3'). "
-                            "Optional when the user just claimed — uses latest claim."
+                            "Food Maps numeric listing id, or search display index "
+                            "('1', '2', '#3'). Optional when the user just claimed "
+                            "— uses latest claim."
                         ),
                     },
                     "mode": {
                         "type": "string",
                         "enum": ["driving", "walking", "cycling"],
                         "description": "Mapbox profile. Default 'driving'.",
+                    },
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_listing",
+            "description": (
+                "ACTION: open the listing detail modal for a specific food listing. "
+                "Call this when the recipient asks to 'show details', 'view listing', "
+                "'tell me more about #N', 'what's on that listing', or 'open listing #N'. "
+                "Pass listing_id as the Food Maps numeric listing id OR the search "
+                "card number (#1, #2). If they just claimed and ask for details without "
+                "a number, omit listing_id and the server uses their most recent claim."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "listing_id": {
+                        "type": "string",
+                        "description": (
+                            "Food Maps numeric listing id, or search display index "
+                            "('1', '2', '#3'). Optional when the user just claimed "
+                            "— uses latest claim."
+                        ),
                     },
                 },
                 "required": ["user_id"],
@@ -1325,6 +1356,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "send_user_message": _send_user_message,
         "show_map": _show_map,
         "show_route_to_listing": _show_route_to_listing,
+        "open_listing": _open_listing,
         "navigate_ui": _navigate_ui,
         # Agentic memory tools
         "save_user_memory": _save_user_memory,
@@ -5230,6 +5262,89 @@ def _coords_from_row(row: Optional[dict], *, address_keys: tuple = ()) -> tuple:
     return (lat, lng, addr)
 
 
+def _latest_claim_listing_id(uid: int) -> Optional[int]:
+    """Newest FoodResource claimed by this user, or None."""
+    from backend.app import SessionLocal
+    from backend.models import FoodResource
+
+    db = SessionLocal()
+    try:
+        row = (
+            db.query(FoodResource)
+            .filter(FoodResource.recipient_id == uid)
+            .filter(FoodResource.status.in_(["claimed", "pending", "approved"]))
+            .order_by(FoodResource.claimed_at.desc(), FoodResource.id.desc())
+            .first()
+        )
+        if row is None:
+            return None
+        return int(row.id)
+    finally:
+        db.close()
+
+
+def _resolve_listing_id_for_details(
+    user_id,
+    listing_id=None,
+) -> tuple[Optional[int], Optional[str]]:
+    """Resolve search #N / numeric id / omitted (latest claim) to a MySQL listing id."""
+    uid = _to_int(user_id)
+    if uid is None:
+        return None, "Invalid user_id"
+    raw = listing_id
+    missing = raw is None or str(raw).strip().lower() in ("", "none", "null")
+    if missing:
+        lid = _latest_claim_listing_id(uid)
+        if lid is None:
+            return None, (
+                "No recent claim found. Search first or pass listing #N."
+            )
+        return lid, None
+    from backend.ai.conversation_flow import resolve_listing_id_from_search
+
+    resolved, err = resolve_listing_id_from_search(raw, str(uid))
+    if err:
+        return None, err
+    lid = _to_int(str(resolved).lstrip("#"))
+    if lid is None:
+        return None, "Invalid listing_id"
+    return lid, None
+
+
+async def _open_listing(
+    user_id: str,
+    listing_id=None,
+    **_ignored,
+) -> dict:
+    """Open the listing detail modal. Same id resolution as show_route_to_listing."""
+    lid, err = _resolve_listing_id_for_details(user_id, listing_id)
+    if err:
+        return {"error": err, "ok": False, "success": False}
+
+    from backend.app import SessionLocal
+    from backend.models import FoodResource
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            if not listing:
+                return {"error": f"Listing #{lid} not found", "ok": False, "success": False}
+            title = getattr(listing, "title", None) or f"Listing #{lid}"
+            return {
+                "ok": True,
+                "success": True,
+                "action": "open_listing",
+                "listing_id": int(listing.id),
+                "title": title,
+                "summary": f"Opened details for {title}.",
+            }
+        finally:
+            db.close()
+
+    return await asyncio.to_thread(_sync)
+
+
 async def _show_route_to_listing(
     user_id: str,
     listing_id=None,
@@ -5251,10 +5366,9 @@ async def _show_route_to_listing(
     uid = _to_int(user_id)
     if uid is None:
         return {"error": "Invalid user_id"}
-    try:
-        lid = int(str(listing_id).strip().lstrip("#"))
-    except (TypeError, ValueError):
-        return {"error": "Invalid listing_id"}
+    lid, err = _resolve_listing_id_for_details(uid, listing_id)
+    if err:
+        return {"error": err}
 
     def _sync() -> dict:
         db = SessionLocal()
