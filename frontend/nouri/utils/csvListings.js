@@ -16,10 +16,20 @@ export function matchCommunityByName(name, communities) {
 }
 
 export function sanitizeListingExpiry(value) {
-  if (!value) return null;
-  const d = new Date(value);
+  if (value == null || value === '') return null;
+  const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString().slice(0, 10);
+}
+
+/** Copy a draft/CSV row and normalize expiry_date. Never returns null. */
+export function sanitizeListingRow(row) {
+  if (!row || typeof row !== 'object') return {};
+  const expiry = sanitizeListingExpiry(row.expiry_date || row.expiry);
+  return {
+    ...row,
+    expiry_date: expiry || undefined,
+  };
 }
 
 export function visionDraftToRow(draft) {

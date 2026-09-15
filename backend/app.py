@@ -739,6 +739,90 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "donor": donor_payload,
     }
 
+
+def _listing_deadline_passed(item: FoodResource) -> bool:
+    now_ts = datetime.now(timezone.utc).timestamp()
+    for value in (getattr(item, "pickup_window_end", None), getattr(item, "expiration_date", None)):
+        if not value:
+            continue
+        try:
+            raw = value if isinstance(value, datetime) else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            ts = raw.replace(tzinfo=timezone.utc).timestamp() if raw.tzinfo is None else raw.timestamp()
+            if ts <= now_ts:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def listing_as_center_inventory_item(item: FoodResource, center_id: int) -> dict:
+    """Shape a live listing as a school-inventory row for GET /api/centers/{id}/inventory."""
+    serialized = serialize_listing(item, include_donor=False, include_donor_contact=False)
+    cat_raw = str(serialized.get("category") or "packaged").strip().lower()
+    try:
+        category = FoodCategory(cat_raw)
+    except Exception:
+        category = FoodCategory.PACKAGED
+    perish = None
+    perish_raw = serialized.get("perishability")
+    if perish_raw:
+        try:
+            perish = PerishabilityLevel(str(perish_raw).strip().lower())
+        except Exception:
+            perish = None
+    now = datetime.utcnow()
+    return {
+        "id": item.id,
+        "center_id": center_id,
+        "listing_id": item.id,
+        "name": str(item.title or "Food donation")[:255],
+        "description": item.description,
+        "category": category,
+        "quantity": float(item.qty or 0),
+        "unit": str(item.unit or "items")[:255],
+        "perishability": perish,
+        "expiration_date": item.expiration_date,
+        "images": serialized.get("images") or None,
+        "is_available": True,
+        "created_at": item.created_at or now,
+        "updated_at": item.updated_at or item.created_at or now,
+    }
+
+
+def _parse_inventory_images(raw) -> Optional[list]:
+    if not raw:
+        return None
+    if isinstance(raw, list):
+        return [str(x) for x in raw if isinstance(x, str)]
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(x) for x in parsed if isinstance(x, str)]
+    except Exception:
+        return None
+    return None
+
+
+def pantry_as_center_inventory_item(row: CenterInventory) -> dict:
+    now = datetime.utcnow()
+    return {
+        "id": row.id,
+        "center_id": row.center_id,
+        "listing_id": None,
+        "name": row.name,
+        "description": row.description,
+        "category": row.category,
+        "quantity": float(row.quantity or 0),
+        "unit": row.unit or "items",
+        "perishability": row.perishability,
+        "expiration_date": row.expiration_date,
+        "images": _parse_inventory_images(row.images),
+        "is_available": bool(row.is_available) if row.is_available is not None else True,
+        "created_at": row.created_at or now,
+        "updated_at": row.updated_at or row.created_at or now,
+    }
+
+
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
@@ -3182,20 +3266,32 @@ async def get_distribution_center(center_id: int, db: Session = Depends(get_db))
 
 @app.get("/api/centers/{center_id}/inventory", response_model=List[CenterInventoryResponse])
 async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
-    """Get inventory for a specific distribution center"""
+    """Get pantry stock plus available listed food for a school/center."""
     try:
         center = db.query(DistributionCenter).filter(
             DistributionCenter.id == center_id
         ).first()
-        
+
         if not center:
             raise HTTPException(status_code=404, detail="Distribution center not found")
-        
-        inventory = db.query(CenterInventory).filter(
+
+        pantry = db.query(CenterInventory).filter(
             CenterInventory.center_id == center_id
         ).all()
-        
-        return inventory
+
+        listings = (
+            db.query(FoodResource)
+            .filter(FoodResource.community_id == center_id)
+            .filter(FoodResource.status == "available")
+            .order_by(FoodResource.created_at.desc())
+            .all()
+        )
+        listing_items = [
+            listing_as_center_inventory_item(row, center_id)
+            for row in listings
+            if not _listing_deadline_passed(row)
+        ]
+        return [pantry_as_center_inventory_item(row) for row in pantry] + listing_items
     except HTTPException:
         raise
     except Exception as e:

@@ -90,6 +90,99 @@ def fetch_donor_listing_defaults_mysql(user_id: str | int) -> dict[str, Any]:
         db.close()
 
 
+def fetch_community_location_mysql(community_id: str | int | None) -> dict[str, Any] | None:
+    """Return {id, name, address, latitude, longitude} for an active school/center."""
+    if community_id is None or str(community_id).strip() in ("", "null", "None"):
+        return None
+    try:
+        cid = int(community_id)
+    except (TypeError, ValueError):
+        return None
+
+    from backend.app import SessionLocal
+    from backend.models import DistributionCenter
+
+    db = SessionLocal()
+    try:
+        center = (
+            db.query(DistributionCenter)
+            .filter(DistributionCenter.id == cid)
+            .first()
+        )
+        if not center:
+            return None
+        return {
+            "id": center.id,
+            "name": str(center.name or "").strip() or None,
+            "address": str(center.address or "").strip() or None,
+            "latitude": center.coords_lat,
+            "longitude": center.coords_lng,
+        }
+    finally:
+        db.close()
+
+
+def apply_community_location_to_listing(
+    row: dict[str, Any],
+    center: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Copy school pin/address onto a listing when it has none of its own."""
+    if not center:
+        return row
+    if row.get("latitude") is None and center.get("latitude") is not None:
+        try:
+            row["latitude"] = float(center["latitude"])
+            row["longitude"] = float(center["longitude"])
+        except (TypeError, ValueError):
+            pass
+    if not str(row.get("location") or row.get("full_address") or row.get("address") or "").strip():
+        addr = str(center.get("address") or "").strip()
+        if addr:
+            row["location"] = addr[:200]
+            row["full_address"] = addr[:200]
+            row["address"] = addr[:255]
+    return row
+
+
+def backfill_listing_coords_from_community_mysql() -> int:
+    """Stamp school coordinates onto existing listings that have a community but no pin."""
+    from sqlalchemy import or_
+
+    from backend.app import SessionLocal
+    from backend.models import DistributionCenter, FoodResource
+
+    db = SessionLocal()
+    updated = 0
+    try:
+        rows = (
+            db.query(FoodResource)
+            .filter(FoodResource.community_id.isnot(None))
+            .filter(or_(FoodResource.coords_lat.is_(None), FoodResource.coords_lng.is_(None)))
+            .all()
+        )
+        for item in rows:
+            center = (
+                db.query(DistributionCenter)
+                .filter(DistributionCenter.id == item.community_id)
+                .first()
+            )
+            if not center or center.coords_lat is None or center.coords_lng is None:
+                continue
+            item.coords_lat = float(center.coords_lat)
+            item.coords_lng = float(center.coords_lng)
+            if not str(item.address or "").strip() and center.address:
+                item.address = str(center.address).strip()[:255]
+            updated += 1
+        if updated:
+            db.commit()
+        return updated
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def resolve_community_mysql(
     community_name: Optional[str] = None,
     community_id: Optional[str | int] = None,
@@ -243,6 +336,20 @@ def insert_bulk_listing_mysql(row: dict[str, Any]) -> dict[str, Any]:
 
     db = SessionLocal()
     try:
+        if community_id is not None and (coords_lat is None or coords_lng is None):
+            from backend.models import DistributionCenter
+
+            center = (
+                db.query(DistributionCenter)
+                .filter(DistributionCenter.id == community_id)
+                .first()
+            )
+            if center is not None and center.coords_lat is not None and center.coords_lng is not None:
+                coords_lat = float(center.coords_lat)
+                coords_lng = float(center.coords_lng)
+                if not address and center.address:
+                    address = str(center.address).strip()[:255] or None
+
         item = FoodResource(
             donor_id=donor_id,
             title=str(row.get("title") or "Food donation")[:255],

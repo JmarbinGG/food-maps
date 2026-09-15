@@ -858,6 +858,36 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "get_my_claims",
+            "description": (
+                "List the authenticated user's food claims (as a recipient). "
+                "Use when they ask 'what did I claim', 'my pickups', 'show my "
+                "claims', or 'what food am I picking up'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["active", "completed", "all"],
+                        "description": (
+                            "Filter by claim status. Default: active "
+                            "(claimed / pending / pending_confirmation / approved)."
+                        ),
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max claims to return (default 10, max 25).",
+                    },
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_food_listing",
             "description": (
                 "Edit one of the authenticated donor's own listings. Use for "
@@ -1347,6 +1377,7 @@ async def execute_tool(name: str, arguments: dict) -> dict:
         "post_food_listings": _post_food_listings,
         "attach_photos_to_listing": _attach_photos_to_listing,
         "get_user_listings": _get_user_listings,
+        "get_my_claims": _get_my_claims,
         "update_food_listing": _update_food_listing,
         "update_listing": _update_food_listing,
         "edit_listing": _update_food_listing,
@@ -1479,6 +1510,52 @@ def _reject_non_mysql_user(user_id) -> Optional[dict]:
         "error": "Food Maps requires a numeric user id",
         "message": "Food Maps requires a numeric user id",
     }
+
+
+def _listing_image_url(row) -> Optional[str]:
+    """First public listing photo: https URL or same-origin /uploads/ path."""
+    raw = None
+    if isinstance(row, dict):
+        raw = row.get("images")
+        if not raw:
+            maybe = row.get("image_url") or row.get("image")
+            if isinstance(maybe, str) and maybe.strip():
+                raw = maybe.strip()
+    else:
+        raw = getattr(row, "images", None)
+
+    urls: list = []
+    if isinstance(raw, list):
+        urls = raw
+    elif isinstance(raw, str) and raw.strip():
+        s = raw.strip()
+        if s.startswith(("{", "[")):
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    urls = parsed
+                elif isinstance(parsed, str):
+                    urls = [parsed]
+            except Exception:
+                urls = [s]
+        else:
+            urls = [s]
+
+    for u in urls:
+        if not isinstance(u, str):
+            continue
+        s = u.strip()
+        if s.startswith(("http://", "https://", "/uploads/")):
+            return s[:1024]
+    return None
+
+
+def _listing_photo_fields(row) -> dict:
+    url = _listing_image_url(row)
+    fields: dict = {"has_photo": bool(url)}
+    if url:
+        fields["image_url"] = url
+    return fields
 
 
 
@@ -1627,6 +1704,27 @@ async def _run(sync_fn):
 # Tool implementations
 # ---------------------------------------------------------------------------
 
+def _apply_browse_community_scope(q, *, viewer_is_admin, viewer_community_id):
+    """Scope Find Food browse: viewer's school plus listings with no school yet.
+
+    Users with no community_id are not locked to ``community_id == -1``
+    (that filter always returns zero rows). Donor own-posts are excluded
+    separately by the caller.
+    """
+    if viewer_is_admin or viewer_community_id is None:
+        return q
+    from sqlalchemy import or_
+    from backend.models import FoodResource
+
+    cid = int(viewer_community_id)
+    return q.filter(
+        or_(
+            FoodResource.community_id == cid,
+            FoodResource.community_id.is_(None),
+        )
+    )
+
+
 async def _search_food_near_user(
     user_id: str,
     food_type: Optional[str] = None,
@@ -1665,14 +1763,11 @@ async def _search_food_near_user(
 
             q = db.query(FoodResource).filter(FoodResource.status == "available")
             q = q.filter(FoodResource.donor_id != uid)
-            if (
-                not viewer_is_admin
-                and viewer_community_id is not None
-            ):
-                q = q.filter(FoodResource.community_id == int(viewer_community_id))
-            elif not viewer_is_admin:
-                # Non-admin with no community: do not leak cross-community rows.
-                q = q.filter(FoodResource.community_id == -1)
+            q = _apply_browse_community_scope(
+                q,
+                viewer_is_admin=viewer_is_admin,
+                viewer_community_id=viewer_community_id,
+            )
             if food_type:
                 try:
                     cat = FoodCategory(food_type.lower())
@@ -1706,6 +1801,7 @@ async def _search_food_near_user(
                     "donor_id": r.donor_id,
                     "community_id": getattr(r, "community_id", None),
                     "urgency_score": r.urgency_score,
+                    **_listing_photo_fields(r),
                 })
 
             if user_lat is not None and user_lng is not None:
@@ -1779,14 +1875,11 @@ async def _get_recent_listings(
                     q = q.filter(FoodResource.category == FoodCategory(str(category).lower()))
                 except ValueError:
                     pass
-            if (
-                not viewer_is_admin
-                and viewer_community_id is not None
-            ):
-                q = q.filter(FoodResource.community_id == int(viewer_community_id))
-            elif not viewer_is_admin and uid is not None and viewer_community_id is None:
-                # Non-admin with no community: do not leak cross-community rows.
-                q = q.filter(FoodResource.community_id == -1)
+            q = _apply_browse_community_scope(
+                q,
+                viewer_is_admin=viewer_is_admin,
+                viewer_community_id=viewer_community_id,
+            )
 
             now = _utcnow()
             rows = q.order_by(FoodResource.created_at.desc()).limit(safe_limit * 3).all()
@@ -1808,6 +1901,7 @@ async def _get_recent_listings(
                     "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
                     "donor_id": r.donor_id,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
+                    **_listing_photo_fields(r),
                 })
                 if len(listings) >= safe_limit:
                     break
@@ -1912,6 +2006,7 @@ async def _get_community_listings(
                     "community_name": community_name,
                     "expiry_date": r.expiration_date.isoformat() if r.expiration_date else None,
                     "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
+                    **_listing_photo_fields(r),
                 })
             label = community_name or f"community #{cid}"
             summary = (
@@ -3421,11 +3516,12 @@ async def _claim_listing(
                     "success": True,
                     "listing_id": item.id,
                     "title": item.title,
-                    "quantity": item.quantity,
+                    "quantity": getattr(item, "qty", None) if getattr(item, "quantity", None) is None else item.quantity,
                     "unit": item.unit,
                     "pickup_location": item.address,
                     "needs_confirmation": True,
                     "summary": summary,
+                    **_listing_photo_fields(item),
                 }
             # SMS fallback: include the code in the result so the AI can
             # relay it to the user in chat.
@@ -3434,7 +3530,7 @@ async def _claim_listing(
                 "success": True,
                 "listing_id": item.id,
                 "title": item.title,
-                "quantity": item.quantity,
+                "quantity": getattr(item, "qty", None) if getattr(item, "quantity", None) is None else item.quantity,
                 "unit": item.unit,
                 "pickup_location": item.address,
                 "status": item.status,
@@ -3447,6 +3543,7 @@ async def _claim_listing(
                     f"code is {code}. Reply with 'confirm {code}' within 5 minutes "
                     f"or the claim auto-releases. Pickup address: {item.address}."
                 ),
+                **_listing_photo_fields(item),
             }
         except Exception as exc:
             logger.exception("claim_listing failed")
@@ -3523,9 +3620,12 @@ async def _claim_listings(
                 "quantity": result.get("quantity") or (
                     qty_arg if isinstance(qty_arg, int) else None
                 ),
+                "unit": result.get("unit"),
                 "claim_id": result.get("claim_id"),
                 "awaiting_approval": bool(result.get("awaiting_approval")),
                 "already_claimed": bool(result.get("already_claimed")),
+                **({"image_url": result["image_url"]} if result.get("image_url") else {}),
+                "has_photo": bool(result.get("image_url") or result.get("has_photo")),
             })
             try:
                 from backend.ai.conversation_flow import (
@@ -4901,8 +5001,8 @@ async def _get_user_listings(
                     "status": r.status,
                     "address": r.address,
                     "display_index": i,
-                    "has_photo": bool(r.images),
                     "claims_count": 1 if r.recipient_id else 0,
+                    **_listing_photo_fields(r),
                 })
             summary = f"Found {len(listings)} listing(s)."
             if listings:
@@ -4910,6 +5010,78 @@ async def _get_user_listings(
                     f"#{l['id']} {l['title']}" for l in listings[:5]
                 )
             return {"success": True, "listings": listings, "total": len(listings), "summary": summary}
+        finally:
+            db.close()
+
+    return await _run(_sync)
+
+
+_ACTIVE_CLAIM_STATUSES = (
+    "claimed",
+    "pending",
+    "pending_confirmation",
+    "approved",
+)
+
+
+async def _get_my_claims(
+    user_id: str,
+    status: str = "active",
+    limit: int = 10,
+    **_ignored,
+) -> dict:
+    """List the current user's claimed FoodResource rows (MySQL)."""
+    from backend.app import SessionLocal
+    from backend.models import FoodResource
+
+    uid = _to_int(user_id)
+    if uid is None:
+        return {"success": False, "error": "Invalid user_id", "listings": []}
+    try:
+        lim = max(1, min(int(limit or 10), 25))
+    except (TypeError, ValueError):
+        lim = 10
+    status_norm = str(status or "active").lower().strip()
+
+    def _sync() -> dict:
+        db = SessionLocal()
+        try:
+            q = db.query(FoodResource).filter(FoodResource.recipient_id == uid)
+            if status_norm == "active":
+                q = q.filter(FoodResource.status.in_(list(_ACTIVE_CLAIM_STATUSES)))
+            elif status_norm == "completed":
+                q = q.filter(FoodResource.status.in_(["completed", "picked_up"]))
+            rows = q.order_by(FoodResource.claimed_at.desc(), FoodResource.id.desc()).limit(lim).all()
+            listings = []
+            for i, r in enumerate(rows, start=1):
+                listings.append({
+                    "id": r.id,
+                    "claim_id": r.id,
+                    "claim_status": r.status,
+                    "title": r.title,
+                    "quantity": r.qty,
+                    "unit": r.unit,
+                    "category": r.category.value if hasattr(r.category, "value") else (
+                        str(r.category) if r.category else None
+                    ),
+                    "status": r.status,
+                    "address": r.address,
+                    "expiry_date": r.expiration_date.isoformat() if r.expiration_date else None,
+                    "pickup_by": r.pickup_window_end.isoformat() if r.pickup_window_end else None,
+                    "display_index": i,
+                    **_listing_photo_fields(r),
+                })
+            summary = f"Found {len(listings)} claim(s)."
+            if listings:
+                summary = f"You have {len(listings)} claim(s): " + ", ".join(
+                    f"#{l['id']} {l['title']}" for l in listings[:5]
+                )
+            return {
+                "success": True,
+                "listings": listings,
+                "total": len(listings),
+                "summary": summary,
+            }
         finally:
             db.close()
 
@@ -4986,12 +5158,28 @@ async def _update_food_listing(
                 return {"success": False, "error": "No fields to update."}
             db.commit()
             db.refresh(item)
+            listing = {
+                "id": item.id,
+                "title": item.title,
+                "quantity": item.qty,
+                "unit": item.unit,
+                "category": item.category.value if hasattr(item.category, "value") else (
+                    str(item.category) if item.category else None
+                ),
+                "status": item.status,
+                "address": item.address,
+                "expiry_date": item.expiration_date.isoformat() if item.expiration_date else None,
+                "pickup_by": item.pickup_window_end.isoformat() if item.pickup_window_end else None,
+                **_listing_photo_fields(item),
+            }
             return {
                 "success": True,
                 "listing_id": item.id,
                 "title": item.title,
                 "updated_fields": updated_fields,
+                "listing": listing,
                 "summary": f"Updated listing #{item.id} ({', '.join(updated_fields)}).",
+                **_listing_photo_fields(item),
             }
         except Exception:
             db.rollback()

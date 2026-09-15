@@ -10240,10 +10240,18 @@ function matchCommunityByName(name, communities) {
   return (communities || []).find((c2) => String(c2.name || "").toLowerCase() === n2) || null;
 }
 function sanitizeListingExpiry(value) {
-  if (!value) return null;
-  const d2 = new Date(value);
+  if (value == null || value === "") return null;
+  const d2 = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d2.getTime())) return null;
   return d2.toISOString().slice(0, 10);
+}
+function sanitizeListingRow(row) {
+  if (!row || typeof row !== "object") return {};
+  const expiry = sanitizeListingExpiry(row.expiry_date || row.expiry);
+  return {
+    ...row,
+    expiry_date: expiry || void 0
+  };
 }
 function visionDraftToRow(draft) {
   if (!draft) return null;
@@ -11135,6 +11143,50 @@ function ToolCardShell({ kind, language = "en", titleOverride, children }) {
     }
   );
 }
+function listingPhotoUrl(item) {
+  if (!item || typeof item !== "object") return null;
+  const candidates = [];
+  if (typeof item.image_url === "string") candidates.push(item.image_url);
+  if (Array.isArray(item.images)) {
+    for (const img of item.images) {
+      if (typeof img === "string") candidates.push(img);
+    }
+  } else if (typeof item.images === "string") {
+    candidates.push(item.images);
+  }
+  if (typeof item.image === "string") candidates.push(item.image);
+  for (const raw of candidates) {
+    const u2 = String(raw || "").trim();
+    if (/^https?:\/\//i.test(u2)) return u2;
+    if (u2.startsWith("/uploads/")) return u2;
+  }
+  return null;
+}
+function ListingThumb({ item, alt, displayNum }) {
+  const photoUrl = listingPhotoUrl(item);
+  const [broken, setBroken] = (0, import_react10.useState)(false);
+  const showPhoto = Boolean(photoUrl) && !broken;
+  if (showPhoto) {
+    return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+      "img",
+      {
+        src: photoUrl,
+        alt: alt || "",
+        loading: "lazy",
+        className: "h-20 w-20 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
+        onError: () => setBroken(true)
+      }
+    );
+  }
+  return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+    "div",
+    {
+      className: "h-20 w-20 flex-shrink-0 rounded-md border border-gray-200 bg-gray-100 text-gray-500 font-bold text-sm flex items-center justify-center",
+      "aria-hidden": "true",
+      children: displayNum != null ? displayNum : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-image text-gray-400 text-[14px]" })
+    }
+  );
+}
 function SearchResultsClaimList({
   searchItems,
   tool,
@@ -11230,7 +11282,6 @@ function SearchResultsClaimList({
         const expiryLabel = fmtDate(expiryRaw);
         const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(" \xB7 ");
         const address = item.address || item.full_address || item.pickup_location || null;
-        const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
         const isSelected = selected.has(displayNum);
         return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "li",
@@ -11255,18 +11306,7 @@ function SearchResultsClaimList({
                   children: displayNum
                 }
               ),
-              photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-                "img",
-                {
-                  src: photoUrl,
-                  alt: item.title || "",
-                  loading: "lazy",
-                  className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
-                  onError: (e2) => {
-                    e2.currentTarget.style.display = "none";
-                  }
-                }
-              ),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ListingThumb, { item, alt: item.title || "", displayNum }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
                 meta && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
@@ -11374,7 +11414,6 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
       const expiryLabel = fmtDate(expiryRaw);
       const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(" \xB7 ");
       const address = item.address || item.full_address || item.pickup_location || null;
-      const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
       return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { className: "rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "span",
@@ -11384,18 +11423,7 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
             children: displayNum
           }
         ),
-        photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-          "img",
-          {
-            src: photoUrl,
-            alt: item.title || "",
-            loading: "lazy",
-            className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
-            onError: (e2) => {
-              e2.currentTarget.style.display = "none";
-            }
-          }
-        ),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ListingThumb, { item, alt: item.title || "", displayNum }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
           /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `font-medium ${t3.accent}`, children: item.title }),
           meta && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: `${t3.sub} text-[11px] mt-0.5`, children: meta }),
@@ -11418,15 +11446,18 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
         language,
         titleOverride: language === "es" ? `Reclamos \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} fallaron` : ""}` : `Multi-claim \xB7 ${claimed.length} ok${failed.length ? `, ${failed.length} failed` : ""}`,
         children: [
-          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { className: "text-gray-800 text-[12px]", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: c2.title || c2.listing_id || "Listing" }),
-            c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-600", children: [
-              " \xB7 ",
-              c2.quantity,
-              " ",
-              c2.unit || ""
+          claimed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1.5 mb-2", children: claimed.map((c2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("li", { className: "text-gray-800 text-[12px]", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5 items-start", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ListingThumb, { item: c2, alt: c2.title || "", displayNum: i2 + 1 }),
+            /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "font-semibold", children: c2.title || c2.listing_id || "Listing" }),
+              c2.quantity != null && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "text-gray-600", children: [
+                " \xB7 ",
+                c2.quantity,
+                " ",
+                c2.unit || ""
+              ] })
             ] })
-          ] }, c2.listing_id || c2.claim_id || i2)) }),
+          ] }) }, c2.listing_id || c2.claim_id || i2)) }),
           failed.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("ul", { className: "space-y-1 text-red-100 text-[11px]", children: failed.map((f2, i2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("li", { children: [
             f2.title || f2.listing_id || `#${f2.index ?? i2 + 1}`,
             ": ",
@@ -11445,20 +11476,8 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     ] });
   }
   if ((tool === "claim_listing" || tool === "claim_food") && ok) {
-    const photoUrl = typeof result.image_url === "string" && /^https?:\/\//i.test(result.image_url) ? result.image_url : null;
     return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "claim", language, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
-      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-        "img",
-        {
-          src: photoUrl,
-          alt: result.title || "",
-          loading: "lazy",
-          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
-          onError: (e2) => {
-            e2.currentTarget.style.display = "none";
-          }
-        }
-      ),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ListingThumb, { item: result, alt: result.title || "" }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
         result.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "text-gray-800", children: [
           result.quantity ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "font-medium", children: [
@@ -11570,20 +11589,8 @@ function ToolResultCard({ toolResult, language = "en", onSuggestionClick, allowe
     const qtyLabel = item.quantity != null ? `${item.quantity}${item.unit ? ` ${item.unit}` : ""}` : null;
     const expiryLabel = fmtDate(item.expiry_date || item.pickup_by);
     const address = item.address || item.full_address || item.location || null;
-    const photoUrl = typeof item.image_url === "string" && /^https?:\/\//i.test(item.image_url) ? item.image_url : null;
     return /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ToolCardShell, { kind: "updated", language, children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex gap-2.5", children: [
-      photoUrl && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-        "img",
-        {
-          src: photoUrl,
-          alt: item.title || "",
-          loading: "lazy",
-          className: "h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100",
-          onError: (e2) => {
-            e2.currentTarget.style.display = "none";
-          }
-        }
-      ),
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(ListingThumb, { item, alt: item.title || "" }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "min-w-0 flex-1", children: [
         item.title && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-gray-900 font-semibold", children: item.title }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `${TOOL_CARD_TOKENS.updated.sub} text-[11px] mt-0.5 space-y-0.5`, children: [
@@ -12135,9 +12142,13 @@ function BulkUploadPreview({
     const preferred = preferredCommunityId ? communities.find((c2) => String(c2.id) === String(preferredCommunityId)) : null;
     currentRows.forEach((row, idx) => {
       if (row?.community_id) {
+        const byId = communities.find((c2) => String(c2.id) === String(row.community_id));
+        if (!byId) {
+          onUpdateRow(idx, { community_id: void 0 });
+          return;
+        }
         if (!row.community_name) {
-          const byId = communities.find((c2) => String(c2.id) === String(row.community_id));
-          if (byId) onUpdateRow(idx, { community_name: byId.name });
+          onUpdateRow(idx, { community_name: byId.name });
         }
         return;
       }
@@ -12217,6 +12228,16 @@ function BulkUploadPreview({
       },
       (r3) => !r3?.community_id && !String(r3?.community_name || "").trim()
     );
+  };
+  const applyCommunityToAllRows = (id) => {
+    const value = String(id || "").trim();
+    const match = value ? communities.find((c2) => String(c2.id) === value) : null;
+    const indexes = rows.map((_2, i2) => i2);
+    if (!indexes.length || typeof onUpdateRows !== "function") return;
+    onUpdateRows(indexes, {
+      community_id: match ? String(match.id) : void 0,
+      community_name: match?.name
+    });
   };
   const applyCategoryToSelected = () => {
     const category = String(bulkCategory || "").trim();
@@ -12312,6 +12333,38 @@ function BulkUploadPreview({
       ] })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "text-[11px] text-slate-300 mb-2 truncate", title: pending.filename, children: pending.filename }),
+    !isCsv && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-2 space-y-1", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1.5 min-w-0 text-[11px]", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-emerald-700 flex-shrink-0", "aria-hidden": "true" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+          "select",
+          {
+            value: String(rows[0]?.community_id || ""),
+            onChange: (e2) => applyCommunityToAllRows(e2.target.value),
+            disabled: busy || communitiesLoading,
+            className: `flex-1 min-w-0 bg-white border rounded px-2 py-1.5 text-gray-900 ${rows[0]?.community_id ? "border-gray-300" : "border-amber-400"}`,
+            "aria-label": isEs ? "Comunidad / escuela" : "Community / school",
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : communities.length === 0 ? isEs ? "No hay escuelas cargadas" : "No schools loaded" : isEs ? "Elige escuela o comunidad\u2026" : "Choose school or community\u2026" }),
+              communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
+            ]
+          }
+        )
+      ] }),
+      (communitiesError || !communitiesLoading && communities.length === 0) && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-2 text-[10px] text-amber-800", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: communitiesError || (isEs ? "No se encontraron escuelas o comunidades." : "No schools or communities found.") }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          "button",
+          {
+            type: "button",
+            onClick: loadCommunities,
+            disabled: busy || communitiesLoading,
+            className: "underline font-semibold disabled:opacity-40",
+            children: isEs ? "Reintentar" : "Retry"
+          }
+        )
+      ] })
+    ] }),
     pending.enriched && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800", children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-wand-magic-sparkles mt-0.5", "aria-hidden": "true" }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "flex-1", children: pending.enrichSummary || (totalFilled ? isEs ? `IA rellen\xF3 huecos en ${totalFilled} fila(s). Revisa y confirma.` : `AI filled gaps on ${totalFilled} row(s). Review and confirm.` : isEs ? "IA revis\xF3 tus filas \u2014 no hab\xEDa huecos que rellenar." : "AI reviewed your rows \u2014 no gaps to fill.") })
@@ -12467,7 +12520,7 @@ function BulkUploadPreview({
         }
       )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `space-y-1.5 overflow-y-auto nourish-scrollbar pr-1 ${isCsv ? "max-h-64" : "max-h-44"}`, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: `space-y-1.5 pr-1 ${isCsv ? "max-h-64 overflow-y-auto nourish-scrollbar" : ""}`, children: [
       previewRows.map((row, idx) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "rounded-lg border border-gray-200 bg-gray-50 p-2 flex items-start gap-2", children: [
         isCsv && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
           "input",
@@ -12555,7 +12608,7 @@ function BulkUploadPreview({
               }
             )
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1 grid grid-cols-1 sm:grid-cols-3 gap-1 text-[11px]", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "mt-1 grid grid-cols-1 gap-1 text-[11px]", children: [
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
               /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-location-dot text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
@@ -12587,7 +12640,7 @@ function BulkUploadPreview({
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("label", { className: "flex items-center gap-1 min-w-0", children: [
               /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("i", { className: "fas fa-people-group text-slate-400 flex-shrink-0", "aria-hidden": "true" }),
-              communities.length > 0 ? /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
                 "select",
                 {
                   value: row.community_id || "",
@@ -12599,28 +12652,14 @@ function BulkUploadPreview({
                       community_name: match?.name
                     });
                   },
-                  disabled: busy,
+                  disabled: busy || communitiesLoading,
                   className: `flex-1 min-w-0 bg-white border rounded px-1 py-0.5 text-gray-900 ${row.community_id ? "border-slate-600" : "border-amber-400"}`,
                   "aria-label": isEs ? "Comunidad / escuela" : "Community / school",
                   required: true,
                   children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: isEs ? "Elige escuela o comunidad\u2026" : "Choose school or community\u2026" }),
+                    /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: "", children: communitiesLoading ? isEs ? "Cargando\u2026" : "Loading\u2026" : isEs ? "Elige escuela o comunidad\u2026" : "Choose school or community\u2026" }),
                     communities.map((c2) => /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("option", { value: c2.id, children: c2.name }, c2.id))
                   ]
-                }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-                "input",
-                {
-                  type: "text",
-                  value: row.community_name || "",
-                  onChange: (e2) => onUpdateRow(idx, {
-                    community_name: e2.target.value || void 0,
-                    community_id: void 0
-                  }),
-                  disabled: busy || communitiesLoading,
-                  placeholder: communitiesLoading ? isEs ? "Cargando comunidades\u2026" : "Loading communities\u2026" : isEs ? "Nombre de escuela o comunidad" : "School or community name",
-                  className: `flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400 ${row.community_name ? "" : "ring-1 ring-amber-400 rounded"}`,
-                  "aria-label": isEs ? "Comunidad / escuela" : "Community / school"
                 }
               )
             ] })
@@ -13555,7 +13594,7 @@ ${imageBlock}` : imageBlock;
     setUploadBusy(true);
     try {
       const rowsToCreate = pendingUpload.rows.map((r3) => {
-        const cleaned = sanitizeListingExpiry(r3);
+        const cleaned = sanitizeListingRow(r3);
         return {
           ...cleaned,
           community_id: cleaned.community_id != null ? String(cleaned.community_id) : void 0,
@@ -15751,7 +15790,7 @@ function ShareBulkCsvPanel({
     setApiErrors([]);
     try {
       const rowsToCreate = rows.map((r3) => {
-        const cleaned = sanitizeListingExpiry(r3);
+        const cleaned = sanitizeListingRow(r3);
         return {
           ...cleaned,
           community_id: cleaned.community_id != null ? String(cleaned.community_id) : void 0,

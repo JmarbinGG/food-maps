@@ -63,6 +63,7 @@ REQUIRED_TOOLS = {
     "post_food_listing",
     "post_food_listings",
     "get_user_listings",
+    "get_my_claims",
     "update_food_listing",
     "deactivate_listing",
     "delete_listing",

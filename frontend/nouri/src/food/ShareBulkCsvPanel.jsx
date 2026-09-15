@@ -6,7 +6,7 @@ import aiChatService from '../../utils/services/aiChatService.js'
 import {
   parseListingsCsv,
   downloadCsvTemplate,
-  sanitizeListingExpiry,
+  sanitizeListingRow,
   matchCommunityByName,
 } from '../../utils/csvListings.js'
 import { assignImagestoRows } from '../../utils/foodImages.js'
@@ -328,7 +328,7 @@ function ShareBulkCsvPanel({
     setApiErrors([])
     try {
       const rowsToCreate = rows.map((r) => {
-        const cleaned = sanitizeListingExpiry(r)
+        const cleaned = sanitizeListingRow(r)
         return {
           ...cleaned,
           community_id: cleaned.community_id != null ? String(cleaned.community_id) : undefined,

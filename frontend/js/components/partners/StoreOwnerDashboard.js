@@ -385,13 +385,13 @@ function StoreOwnerDashboard({ user, onClose }) {
               ) : (
                 inventory.map(item => (
                   <div
-                    key={item.id}
+                    key={item.listing_id != null ? `listing-${item.listing_id}` : `inv-${item.id}`}
                     className={`bg-white rounded-lg shadow-sm p-4 ${!item.is_available ? 'opacity-60' : ''
                       }`}
                   >
                     <div className="flex justify-between items-start">
                       <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <h3 className="text-lg font-semibold">{item.name}</h3>
                           <span className={`px-2 py-1 text-xs rounded ${item.is_available
                             ? 'bg-green-100 text-green-800'
@@ -399,6 +399,11 @@ function StoreOwnerDashboard({ user, onClose }) {
                             }`}>
                             {item.is_available ? 'Available' : 'Unavailable'}
                           </span>
+                          {item.listing_id != null && (
+                            <span className="px-2 py-1 text-xs rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
+                              Listed donation
+                            </span>
+                          )}
                         </div>
                         {item.description && (
                           <p className="text-sm text-gray-600 mb-2">{item.description}</p>
@@ -425,6 +430,7 @@ function StoreOwnerDashboard({ user, onClose }) {
                           </p>
                         )}
                       </div>
+                      {item.listing_id == null && (
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleToggleAvailability(item.id, item.is_available)}
@@ -442,6 +448,7 @@ function StoreOwnerDashboard({ user, onClose }) {
                           Delete
                         </button>
                       </div>
+                      )}
                     </div>
                   </div>
                 ))

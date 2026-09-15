@@ -24,8 +24,50 @@ function getEffectiveListingStatus(listing) {
   return rawStatus || 'available';
 }
 
+function getListingLatLng(listing) {
+  if (!listing) return null;
+  const pairs = [];
+  if (listing.coords_lat != null && listing.coords_lng != null) {
+    pairs.push([listing.coords_lat, listing.coords_lng]);
+  }
+  if (listing.coords && listing.coords.lat != null && listing.coords.lng != null) {
+    pairs.push([listing.coords.lat, listing.coords.lng]);
+  }
+  if (Array.isArray(listing.coordinates) && listing.coordinates.length >= 2) {
+    pairs.push([listing.coordinates[1], listing.coordinates[0]]);
+  }
+  if (listing.lat != null && listing.lng != null) {
+    pairs.push([listing.lat, listing.lng]);
+  }
+  if (listing.latitude != null && listing.longitude != null) {
+    pairs.push([listing.latitude, listing.longitude]);
+  }
+  for (const [latRaw, lngRaw] of pairs) {
+    const lat = Number(latRaw);
+    const lng = Number(lngRaw);
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
+function applyNormalizedListingCoords(copy) {
+  if (!copy) return copy;
+  const pin = getListingLatLng(copy);
+  if (pin) {
+    copy.coords = { lat: pin.lat, lng: pin.lng };
+    copy.coords_lat = pin.lat;
+    copy.coords_lng = pin.lng;
+  } else if (copy.coords) {
+    delete copy.coords;
+  }
+  return copy;
+}
+
 try {
   window.getEffectiveListingStatus = getEffectiveListingStatus;
+  window.getListingLatLng = getListingLatLng;
 } catch (_) {
   // Ignore non-browser contexts.
 }
@@ -375,13 +417,7 @@ function App() {
             if (!item) return item;
             const copy = { ...item };
             copy.status = (copy.status || '').toString().toLowerCase();
-            try {
-              if (copy.coords && copy.coords.lat !== undefined && copy.coords.lng !== undefined) {
-                copy.coords = { lat: parseFloat(copy.coords.lat), lng: parseFloat(copy.coords.lng) };
-              } else if (copy.coords_lat !== undefined && copy.coords_lng !== undefined) {
-                copy.coords = { lat: parseFloat(copy.coords_lat), lng: parseFloat(copy.coords_lng) };
-              }
-            } catch (_) { }
+            applyNormalizedListingCoords(copy);
             copy.id = copy.id || copy.objectId || copy._id || copy.listing_id;
             return copy;
           };
@@ -931,49 +967,8 @@ function App() {
         const normalizeListing = (item) => {
           if (!item) return item;
           const copy = { ...item };
-          // Normalize status to lowercase
           copy.status = (copy.status || '').toString().toLowerCase();
-
-          // Normalize coords to copy.coords = { lat, lng }
-          try {
-            if (copy.coords && copy.coords.lat !== undefined && copy.coords.lng !== undefined) {
-              copy.coords = { lat: parseFloat(copy.coords.lat), lng: parseFloat(copy.coords.lng) };
-            } else if (copy.coords_lat !== undefined && copy.coords_lng !== undefined) {
-              copy.coords = { lat: parseFloat(copy.coords_lat), lng: parseFloat(copy.coords_lng) };
-            } else if (Array.isArray(copy.coordinates) && copy.coordinates.length >= 2) {
-              // coordinates stored as [lng, lat]
-              copy.coords = { lat: parseFloat(copy.coordinates[1]), lng: parseFloat(copy.coordinates[0]) };
-            }
-            // Validate and auto-swap if values look reversed
-            if (copy.coords) {
-              const lat = copy.coords.lat;
-              const lng = copy.coords.lng;
-              const validLat = Number.isFinite(lat) && lat >= -90 && lat <= 90;
-              const validLng = Number.isFinite(lng) && lng >= -180 && lng <= 180;
-              if (!validLat && validLng) {
-                // try swapping
-                if (Number.isFinite(lng) && lng >= -90 && lng <= 90 && Number.isFinite(lat) && lat >= -180 && lat <= 180) {
-                  copy.coords = { lat: lng, lng: lat };
-                } else {
-                  // invalid coords - remove
-                  delete copy.coords;
-                }
-              } else if (!validLng && validLat) {
-                if (Number.isFinite(lat) && lat >= -180 && lat <= 180 && Number.isFinite(lng) && lng >= -90 && lng <= 90) {
-                  copy.coords = { lat: lng, lng: lat };
-                } else {
-                  delete copy.coords;
-                }
-              } else if (!validLat || !validLng) {
-                delete copy.coords;
-              }
-            }
-          } catch (e) {
-            // leave as-is if normalization fails
-            console.error('Listing normalization error', e);
-          }
-
-          // Ensure id exists
+          applyNormalizedListingCoords(copy);
           copy.id = copy.id || copy.objectId || copy._id || copy.listing_id;
           return copy;
         };
@@ -1251,16 +1246,9 @@ function App() {
             return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
           };
           base = base.filter((l) => {
-            let lat; let lng;
-            if (l?.coords && l.coords.lat != null && l.coords.lng != null) {
-              lat = Number(l.coords.lat); lng = Number(l.coords.lng);
-            } else if (Array.isArray(l?.coordinates) && l.coordinates.length >= 2) {
-              lng = Number(l.coordinates[0]); lat = Number(l.coordinates[1]);
-            } else if (l?.lat != null && l?.lng != null) {
-              lat = Number(l.lat); lng = Number(l.lng);
-            }
-            if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-            return distMiles(lat, lng) <= maxMiles;
+            const pin = getListingLatLng(l);
+            if (!pin) return true;
+            return distMiles(pin.lat, pin.lng) <= maxMiles;
           });
         }
       }
@@ -1614,22 +1602,12 @@ function App() {
     if (!userLocation) return filteredListings;
 
     return filteredListings.map(listing => {
-      let lat, lng;
-
-      // Handle both coordinate formats safely
-      if (listing.coords) {
-        lat = listing.coords.lat;
-        lng = listing.coords.lng;
-      } else if (listing.coordinates && Array.isArray(listing.coordinates) && listing.coordinates.length >= 2) {
-        lng = listing.coordinates[0];
-        lat = listing.coordinates[1];
-      }
-
-      const distance = (lat && lng) ? calculateDistance(
+      const pin = getListingLatLng(listing);
+      const distance = pin ? calculateDistance(
         userLocation.lat,
         userLocation.lng,
-        lat,
-        lng
+        pin.lat,
+        pin.lng
       ) : 0;
 
       return {

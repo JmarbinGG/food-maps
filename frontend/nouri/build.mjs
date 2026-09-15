@@ -25,7 +25,11 @@ await esbuild.build({
   logLevel: 'info',
 });
 
-// Copy css separately
-const css = readFileSync(path.resolve(__dirname, 'src/nouri.css'), 'utf8');
-writeFileSync(path.join(outDir, 'nouri-ai.css'), css);
+// Copy css separately, including Toastify so success/error icons stay 22px
+const nouriCss = readFileSync(path.resolve(__dirname, 'src/nouri.css'), 'utf8');
+const toastifyCss = readFileSync(
+  path.resolve(__dirname, 'node_modules/react-toastify/dist/ReactToastify.css'),
+  'utf8',
+);
+writeFileSync(path.join(outDir, 'nouri-ai.css'), `${nouriCss}\n${toastifyCss}`);
 console.log('Built', path.join(outDir, 'nouri-ai.js'));

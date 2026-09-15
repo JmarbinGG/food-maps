@@ -27,6 +27,7 @@ _LISTING_UI_KEYS = (
     "display_index", "address", "full_address", "image_url", "category",
     "expiry_date", "pickup_by", "community_id", "community_name",
     "dietary_tags", "is_own_listing", "status", "latitude", "longitude",
+    "claim_id", "claim_status", "has_photo",
 )
 
 _CLAIM_UI_KEYS = (
@@ -121,12 +122,14 @@ def enrich_tool_action(fn_name: str, result: dict, entry: dict) -> dict:
             if key in result and result[key] is not None:
                 entry[key] = result[key]
 
-    elif fn_name == "get_user_listings":
+    elif fn_name in {"get_user_listings", "get_my_claims"}:
         listings = result.get("listings") or []
         if listings:
             entry["listings"] = [_trim_listing(row) for row in listings[:8]]
         if result.get("summary"):
             entry["summary"] = result["summary"]
+        if result.get("total") is not None:
+            entry["total"] = result["total"]
 
     elif fn_name in {"update_food_listing", "update_listing", "edit_listing"}:
         listing = result.get("listing") or {}

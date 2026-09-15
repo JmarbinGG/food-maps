@@ -120,11 +120,50 @@
         border-bottom: 1px solid #e5e7eb;
         background: #f9fafb;
       }
-      .fm-page-editor-panel__header h3 {
+      .fm-page-editor-panel__header h3,
+      .fm-page-editor-panel__header .fm-panel-title-input {
         margin: 0 0 0.25rem;
         font-size: 1.125rem;
         font-weight: 700;
         color: #111827;
+      }
+      .fm-panel-title-input {
+        width: 100%;
+        border: 1px solid #d1d5db;
+        border-radius: 0.5rem;
+        padding: 0.45rem 0.65rem;
+        box-sizing: border-box;
+        background: #fff;
+      }
+      .fm-panel-title-input:focus {
+        outline: none;
+        border-color: #15803d;
+        box-shadow: 0 0 0 3px rgba(21, 128, 61, 0.15);
+      }
+      .fm-field-label-input {
+        width: 100%;
+        border: 1px solid #e5e7eb;
+        border-radius: 0.375rem;
+        padding: 0.35rem 0.55rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #374151;
+        margin-bottom: 0.4rem;
+        box-sizing: border-box;
+        background: #fff;
+      }
+      .fm-field-label-input::placeholder {
+        text-transform: none;
+        letter-spacing: 0;
+        font-weight: 500;
+        color: #9ca3af;
+      }
+      .fm-field-label-input:focus {
+        outline: none;
+        border-color: #15803d;
+        box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.12);
       }
       .fm-page-editor-panel__header p {
         margin: 0;
@@ -225,6 +264,10 @@
     document.head.appendChild(style);
   }
 
+  const DEFAULT_PANEL_TITLE = 'Edit Page Content';
+  const META_PANEL_TITLE_KEY = '__panel_title';
+  const META_LABEL_PREFIX = '__label:';
+
   function humanizeKey(key) {
     return String(key || '')
       .replace(/^(img_|bg_)/, '')
@@ -234,6 +277,39 @@
       .replace(/[-_/]+/g, ' ')
       .replace(/\b\w/g, (c) => c.toUpperCase())
       .trim() || 'Field';
+  }
+
+  function isMetaContentKey(key) {
+    return typeof key === 'string' && key.startsWith('__');
+  }
+
+  function metaLabelKey(fieldKey) {
+    return META_LABEL_PREFIX + fieldKey;
+  }
+
+  function savedLabelOverride(fieldKey) {
+    const content = (state && state.serverContent) || {};
+    const saved = content[metaLabelKey(fieldKey)];
+    return typeof saved === 'string' && saved.trim() ? saved.trim() : '';
+  }
+
+  function defaultFieldLabel(type, key, el) {
+    if (el && el.getAttribute('data-edit-label')) {
+      return String(el.getAttribute('data-edit-label')).trim();
+    }
+    if (type === 'image') return humanizeKey(key) + ' (Image URL)';
+    if (type === 'background') return humanizeKey(key) + ' (Background URL)';
+    return humanizeKey(key);
+  }
+
+  function resolveFieldLabel(type, key, el) {
+    return savedLabelOverride(key) || defaultFieldLabel(type, key, el);
+  }
+
+  function getPanelTitle() {
+    const content = (state && state.serverContent) || {};
+    const saved = content[META_PANEL_TITLE_KEY];
+    return typeof saved === 'string' && saved.trim() ? saved.trim() : DEFAULT_PANEL_TITLE;
   }
 
   function plainTextFromHtml(html) {
@@ -273,7 +349,8 @@
       panel.setAttribute('aria-label', 'Page content editor');
       panel.innerHTML = `
         <div class="fm-page-editor-panel__header">
-          <h3>Edit Page Content</h3>
+          <input type="text" class="fm-panel-title-input" data-fm-panel-title
+            value="${DEFAULT_PANEL_TITLE}" aria-label="Editor panel title" />
           <p>Update fields below. Changes preview live on the page.</p>
         </div>
         <div class="fm-page-editor-panel__body" data-fm-fields></div>
@@ -413,6 +490,7 @@
     Object.keys(content).forEach((key) => {
       const value = content[key];
       if (value == null) return;
+      if (isMetaContentKey(key)) return;
       if (key.startsWith('img_')) {
         const imgKey = key.slice(4);
         document.querySelectorAll(`[data-editable-img="${cssEscape(imgKey)}"]`).forEach((el) => {
@@ -479,7 +557,8 @@
       fields.push({
         type: 'text',
         key: key,
-        label: humanizeKey(key),
+        label: resolveFieldLabel('text', key, el),
+        defaultLabel: defaultFieldLabel('text', key, el),
         value: el.innerHTML,
         preview: plainTextFromHtml(el.innerHTML).slice(0, 80),
       });
@@ -493,7 +572,8 @@
         type: 'image',
         key: key,
         storageKey: 'img_' + key,
-        label: humanizeKey(key) + ' (Image URL)',
+        label: resolveFieldLabel('image', key, el),
+        defaultLabel: defaultFieldLabel('image', key, el),
         value: el.src || '',
       });
     });
@@ -507,7 +587,8 @@
         type: 'background',
         key: key,
         storageKey: 'bg_' + key,
-        label: humanizeKey(key) + ' (Background URL)',
+        label: resolveFieldLabel('background', key, el),
+        defaultLabel: defaultFieldLabel('background', key, el),
         value: match ? match[1] : '',
         raw: el.style.backgroundImage || '',
       });
@@ -556,6 +637,10 @@
 
   function buildFormPanel(fields) {
     const { panel } = ensureChrome();
+    const panelTitleInput = panel.querySelector('[data-fm-panel-title]');
+    if (panelTitleInput) {
+      panelTitleInput.value = getPanelTitle();
+    }
     const body = panel.querySelector('[data-fm-fields]');
     body.innerHTML = '';
 
@@ -568,10 +653,14 @@
       const wrap = document.createElement('div');
       wrap.className = 'fm-page-editor-field';
 
-      const label = document.createElement('label');
-      label.textContent = field.label;
-      label.htmlFor = 'fm-field-' + index;
-      wrap.appendChild(label);
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.className = 'fm-field-label-input';
+      labelInput.value = field.label || field.defaultLabel || '';
+      labelInput.placeholder = field.defaultLabel || field.label || 'Field label';
+      labelInput.dataset.fmLabelKey = field.key;
+      labelInput.setAttribute('aria-label', 'Field label for ' + (field.defaultLabel || field.key));
+      wrap.appendChild(labelInput);
 
       if (field.preview && field.type === 'text') {
         const hint = document.createElement('div');
@@ -681,7 +770,13 @@
   }
 
   function snapshotPage() {
-    const snap = { text: {}, images: {}, backgrounds: {} };
+    const snap = {
+      text: {},
+      images: {},
+      backgrounds: {},
+      panelTitle: getPanelTitle(),
+      fieldLabels: {},
+    };
     document.querySelectorAll('[data-editable]').forEach((el) => {
       const key = el.getAttribute('data-editable');
       if (key) snap.text[key] = el.innerHTML;
@@ -693,6 +788,12 @@
     document.querySelectorAll('[data-editable-bg]').forEach((el) => {
       const key = el.getAttribute('data-editable-bg');
       if (key) snap.backgrounds[key] = el.style.backgroundImage;
+    });
+    const content = (state && state.serverContent) || {};
+    Object.keys(content).forEach((key) => {
+      if (key.startsWith(META_LABEL_PREFIX)) {
+        snap.fieldLabels[key.slice(META_LABEL_PREFIX.length)] = content[key];
+      }
     });
     return snap;
   }
@@ -737,6 +838,22 @@
         el.style.backgroundImage = snap.backgrounds[key];
       });
     });
+    if (state && state.serverContent) {
+      const next = { ...state.serverContent };
+      if (snap.panelTitle && snap.panelTitle !== DEFAULT_PANEL_TITLE) {
+        next[META_PANEL_TITLE_KEY] = snap.panelTitle;
+      } else {
+        delete next[META_PANEL_TITLE_KEY];
+      }
+      Object.keys(next).forEach((key) => {
+        if (key.startsWith(META_LABEL_PREFIX)) delete next[key];
+      });
+      Object.keys(snap.fieldLabels || {}).forEach((fieldKey) => {
+        const val = snap.fieldLabels[fieldKey];
+        if (val && String(val).trim()) next[metaLabelKey(fieldKey)] = String(val).trim();
+      });
+      state.serverContent = next;
+    }
   }
 
   function toggleEditMode() {
@@ -755,6 +872,30 @@
     const changes = {};
     const panel = document.getElementById('fm-page-editor-panel');
     if (!panel) return changes;
+
+    const panelTitleInput = panel.querySelector('[data-fm-panel-title]');
+    if (panelTitleInput) {
+      const nextTitle = String(panelTitleInput.value || '').trim();
+      const originalTitle = (state.original && state.original.panelTitle) || DEFAULT_PANEL_TITLE;
+      if (nextTitle && nextTitle !== originalTitle) {
+        changes[META_PANEL_TITLE_KEY] = nextTitle;
+      } else if (!nextTitle && originalTitle !== DEFAULT_PANEL_TITLE) {
+        changes[META_PANEL_TITLE_KEY] = '';
+      }
+    }
+
+    panel.querySelectorAll('[data-fm-label-key]').forEach((labelInput) => {
+      const fieldKey = labelInput.dataset.fmLabelKey;
+      if (!fieldKey) return;
+      const nextLabel = String(labelInput.value || '').trim();
+      const originalLabel = (state.original && state.original.fieldLabels && state.original.fieldLabels[fieldKey]) || '';
+      if (nextLabel && nextLabel !== originalLabel) {
+        changes[metaLabelKey(fieldKey)] = nextLabel;
+      } else if (!nextLabel && originalLabel) {
+        changes[metaLabelKey(fieldKey)] = '';
+      }
+    });
+
     const inputs = panel.querySelectorAll('[data-fm-key]');
     inputs.forEach((input) => {
       const key = input.dataset.fmKey;

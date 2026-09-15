@@ -720,7 +720,9 @@ async def ai_bulk_listings(
     Returns: { created, failed, ids, errors }
     """
     from backend.ai.bulk_mysql import (
+        apply_community_location_to_listing,
         apply_donor_defaults_to_listing,
+        fetch_community_location_mysql,
         fetch_donor_listing_defaults_mysql,
         insert_bulk_listing_mysql,
     )
@@ -781,6 +783,11 @@ async def ai_bulk_listings(
                 row.pop("latitude", None)
                 row.pop("longitude", None)
                 row = apply_donor_defaults_to_listing(row, donor)
+            if row.get("community_id") is not None and row.get("latitude") is None:
+                row = apply_community_location_to_listing(
+                    row,
+                    fetch_community_location_mysql(row.get("community_id")),
+                )
             inserted = insert_bulk_listing_mysql(row)
             rid = inserted.get("id")
             if rid:

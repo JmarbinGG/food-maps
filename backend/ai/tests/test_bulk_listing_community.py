@@ -100,6 +100,35 @@ class TestBulkListingCommunityPersistence:
         assert row["status"] == "available"
 
 
+class TestCommunityLocationStamp:
+    def test_copies_school_pin_when_listing_has_none(self):
+        from backend.ai.bulk_mysql import apply_community_location_to_listing
+
+        row = apply_community_location_to_listing(
+            {"title": "Apples", "community_id": 8},
+            {
+                "id": 8,
+                "name": "Lincoln",
+                "address": "123 School St, Oakland, CA",
+                "latitude": 37.8,
+                "longitude": -122.27,
+            },
+        )
+        assert row["latitude"] == 37.8
+        assert row["longitude"] == -122.27
+        assert row["location"] == "123 School St, Oakland, CA"
+
+    def test_does_not_overwrite_existing_pin(self):
+        from backend.ai.bulk_mysql import apply_community_location_to_listing
+
+        row = apply_community_location_to_listing(
+            {"latitude": 37.77, "longitude": -122.42, "location": "1 Market St"},
+            {"latitude": 37.8, "longitude": -122.27, "address": "123 School St"},
+        )
+        assert row["latitude"] == 37.77
+        assert row["location"] == "1 Market St"
+
+
 def test_insert_bulk_listing_mysql_keeps_community_and_available_status():
     from unittest.mock import MagicMock, patch
 
@@ -129,6 +158,8 @@ def test_insert_bulk_listing_mysql_keeps_community_and_available_status():
             "community_id": 8,
             "status": "available",
             "location": "1 Market St",
+            "latitude": 37.77,
+            "longitude": -122.42,
         })
 
     assert result["id"] == 77

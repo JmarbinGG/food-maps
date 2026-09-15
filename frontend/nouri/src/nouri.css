@@ -296,3 +296,17 @@ body.has-nouri-guide-bar {
   outline: 2px solid #10b981;
   outline-offset: 2px;
 }
+
+/* Keep toastify icons at 22px even if Tailwind CDN overrides the bundled CSS. */
+.Toastify__toast-container {
+  position: fixed;
+  z-index: 9999;
+}
+
+.Toastify__toast-icon,
+.Toastify__toast-icon svg {
+  width: 22px;
+  height: 22px;
+  max-width: 22px;
+  max-height: 22px;
+}

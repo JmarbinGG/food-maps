@@ -249,6 +249,7 @@ class CenterInventoryResponse(BaseModel):
     is_available: bool
     created_at: datetime
     updated_at: datetime
+    listing_id: Optional[int] = None
 
     class Config:
         from_attributes = True

@@ -353,7 +353,7 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
             <div className="p-6 overflow-y-auto max-h-[calc(80vh-120px)]">
               <h3 className="text-lg font-semibold mb-4">Available Food Items</h3>
 
-              {centerInventory.length === 0 ? (
+              {centerInventory.filter(item => item.is_available).length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <div className="text-xs mb-2 uppercase tracking-[0.2em] text-gray-400">Inventory</div>
                   <p>No items currently available</p>
@@ -362,7 +362,7 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
                 <div className="grid gap-4">
                   {centerInventory.filter(item => item.is_available).map(item => (
                     <div
-                      key={item.id}
+                      key={item.listing_id != null ? `listing-${item.listing_id}` : `inv-${item.id}`}
                       className="border rounded-lg p-4 hover:shadow-md transition-shadow"
                     >
                       <div className="flex justify-between items-start">

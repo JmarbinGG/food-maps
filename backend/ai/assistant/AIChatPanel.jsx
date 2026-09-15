@@ -7,7 +7,7 @@ import { useUIControl } from '../../utils/UIControlContext.jsx'
 import VoiceOutput from './VoiceOutput.jsx'
 import { useNouriGuide } from '../../utils/NouriGuideContext.jsx'
 import aiChatService from '../../utils/services/aiChatService.js'
-import { parseListingsCsv, downloadCsvTemplate, sanitizeListingExpiry, visionDraftToRow, matchCommunityByName } from '../../utils/csvListings.js'
+import { parseListingsCsv, downloadCsvTemplate, sanitizeListingRow, visionDraftToRow, matchCommunityByName } from '../../utils/csvListings.js'
 import { assignImagestoRows, assignFoodImage } from '../../utils/foodImages.js'
 import dataService from '../../utils/dataService.js'
 import centersClient from '../../utils/centersClient.js'
@@ -409,6 +409,55 @@ function ToolCardShell({ kind, language = 'en', titleOverride, children }) {
 }
 
 
+function listingPhotoUrl(item) {
+  if (!item || typeof item !== 'object') return null
+  const candidates = []
+  if (typeof item.image_url === 'string') candidates.push(item.image_url)
+  if (Array.isArray(item.images)) {
+    for (const img of item.images) {
+      if (typeof img === 'string') candidates.push(img)
+    }
+  } else if (typeof item.images === 'string') {
+    candidates.push(item.images)
+  }
+  if (typeof item.image === 'string') candidates.push(item.image)
+  for (const raw of candidates) {
+    const u = String(raw || '').trim()
+    if (/^https?:\/\//i.test(u)) return u
+    if (u.startsWith('/uploads/')) return u
+  }
+  return null
+}
+
+
+function ListingThumb({ item, alt, displayNum }) {
+  const photoUrl = listingPhotoUrl(item)
+  const [broken, setBroken] = useState(false)
+  const showPhoto = Boolean(photoUrl) && !broken
+  if (showPhoto) {
+    return (
+      <img
+        src={photoUrl}
+        alt={alt || ''}
+        loading="lazy"
+        className="h-20 w-20 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
+        onError={() => setBroken(true)}
+      />
+    )
+  }
+  return (
+    <div
+      className="h-20 w-20 flex-shrink-0 rounded-md border border-gray-200 bg-gray-100 text-gray-500 font-bold text-sm flex items-center justify-center"
+      aria-hidden="true"
+    >
+      {displayNum != null
+        ? displayNum
+        : <i className="fas fa-image text-gray-400 text-[14px]" />}
+    </div>
+  )
+}
+
+
 function SearchResultsClaimList({
   searchItems,
   tool,
@@ -531,9 +580,6 @@ function SearchResultsClaimList({
           const expiryLabel = fmtDate(expiryRaw)
           const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(' · ')
           const address = item.address || item.full_address || item.pickup_location || null
-          const photoUrl = typeof item.image_url === 'string' && /^https?:\/\//i.test(item.image_url)
-            ? item.image_url
-            : null
           const isSelected = selected.has(displayNum)
 
           return (
@@ -563,15 +609,7 @@ function SearchResultsClaimList({
                 >
                   {displayNum}
                 </span>
-                {photoUrl && (
-                  <img
-                    src={photoUrl}
-                    alt={item.title || ''}
-                    loading="lazy"
-                    className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
-                    onError={(e) => { e.currentTarget.style.display = 'none' }}
-                  />
-                )}
+                <ListingThumb item={item} alt={item.title || ''} displayNum={displayNum} />
                 <div className="min-w-0 flex-1">
                   <div className={`font-medium ${t.accent}`}>{item.title}</div>
                   {meta && <div className={`${t.sub} text-[11px] mt-0.5`}>{meta}</div>}
@@ -717,9 +755,6 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
             const expiryLabel = fmtDate(expiryRaw)
             const meta = [distance, qtyLabel, item.category, expiryLabel ? `Exp ${expiryLabel}` : null].filter(Boolean).join(' · ')
             const address = item.address || item.full_address || item.pickup_location || null
-            const photoUrl = typeof item.image_url === 'string' && /^https?:\/\//i.test(item.image_url)
-              ? item.image_url
-              : null
             return (
               <li key={item.id || displayNum} className="rounded-lg bg-gray-50 px-2.5 py-2 border border-gray-200">
                 <div className="flex gap-2.5">
@@ -729,15 +764,7 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
                   >
                     {displayNum}
                   </span>
-                  {photoUrl && (
-                    <img
-                      src={photoUrl}
-                      alt={item.title || ''}
-                      loading="lazy"
-                      className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
-                      onError={(e) => { e.currentTarget.style.display = 'none' }}
-                    />
-                  )}
+                  <ListingThumb item={item} alt={item.title || ''} displayNum={displayNum} />
                   <div className="min-w-0 flex-1">
                     <div className={`font-medium ${t.accent}`}>{item.title}</div>
                     {meta && <div className={`${t.sub} text-[11px] mt-0.5`}>{meta}</div>}
@@ -775,10 +802,15 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
           <ul className="space-y-1.5 mb-2">
             {claimed.map((c, i) => (
               <li key={c.listing_id || c.claim_id || i} className="text-gray-800 text-[12px]">
-                <span className="font-semibold">{c.title || c.listing_id || 'Listing'}</span>
-                {c.quantity != null && (
-                  <span className="text-gray-600"> · {c.quantity} {c.unit || ''}</span>
-                )}
+                <div className="flex gap-2.5 items-start">
+                  <ListingThumb item={c} alt={c.title || ''} displayNum={i + 1} />
+                  <div className="min-w-0 flex-1">
+                    <span className="font-semibold">{c.title || c.listing_id || 'Listing'}</span>
+                    {c.quantity != null && (
+                      <span className="text-gray-600"> · {c.quantity} {c.unit || ''}</span>
+                    )}
+                  </div>
+                </div>
               </li>
             ))}
           </ul>
@@ -814,21 +846,10 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
   if ((tool === 'claim_listing' || tool === 'claim_food') && ok) {
     // Only show the real listing photo (no category placeholder fallback)
     // so the thumbnail always matches the photo the donor attached.
-    const photoUrl = typeof result.image_url === 'string' && /^https?:\/\//i.test(result.image_url)
-      ? result.image_url
-      : null
     return (
       <ToolCardShell kind="claim" language={language}>
         <div className="flex gap-2.5">
-          {photoUrl && (
-            <img
-              src={photoUrl}
-              alt={result.title || ''}
-              loading="lazy"
-              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
-              onError={(e) => { e.currentTarget.style.display = 'none' }}
-            />
-          )}
+          <ListingThumb item={result} alt={result.title || ''} />
           <div className="min-w-0 flex-1">
             {result.title && (
               <div className="text-gray-800">
@@ -972,21 +993,10 @@ function ToolResultCard({ toolResult, language = 'en', onSuggestionClick, allowe
       : null
     const expiryLabel = fmtDate(item.expiry_date || item.pickup_by)
     const address = item.address || item.full_address || item.location || null
-    const photoUrl = typeof item.image_url === 'string' && /^https?:\/\//i.test(item.image_url)
-      ? item.image_url
-      : null
     return (
       <ToolCardShell kind="updated" language={language}>
         <div className="flex gap-2.5">
-          {photoUrl && (
-            <img
-              src={photoUrl}
-              alt={item.title || ''}
-              loading="lazy"
-              className="h-14 w-14 flex-shrink-0 rounded-md object-cover border border-gray-200 bg-gray-100"
-              onError={(e) => { e.currentTarget.style.display = 'none' }}
-            />
-          )}
+          <ListingThumb item={item} alt={item.title || ''} />
           <div className="min-w-0 flex-1">
             {item.title && (
               <div className="text-gray-900 font-semibold">{item.title}</div>
@@ -1699,9 +1709,15 @@ function BulkUploadPreview({
       : null
     currentRows.forEach((row, idx) => {
       if (row?.community_id) {
+        const byId = communities.find((c) => String(c.id) === String(row.community_id))
+        if (!byId) {
+          // Vision / profile may stamp an id that is not in the live catalog.
+          // An unmatched <select value> looks stuck and ignores clicks.
+          onUpdateRow(idx, { community_id: undefined })
+          return
+        }
         if (!row.community_name) {
-          const byId = communities.find((c) => String(c.id) === String(row.community_id))
-          if (byId) onUpdateRow(idx, { community_name: byId.name })
+          onUpdateRow(idx, { community_name: byId.name })
         }
         return
       }
@@ -1792,6 +1808,17 @@ function BulkUploadPreview({
       },
       (r) => !r?.community_id && !String(r?.community_name || '').trim(),
     )
+  }
+
+  const applyCommunityToAllRows = (id) => {
+    const value = String(id || '').trim()
+    const match = value ? communities.find((c) => String(c.id) === value) : null
+    const indexes = rows.map((_, i) => i)
+    if (!indexes.length || typeof onUpdateRows !== 'function') return
+    onUpdateRows(indexes, {
+      community_id: match ? String(match.id) : undefined,
+      community_name: match?.name,
+    })
   }
 
   const applyCategoryToSelected = () => {
@@ -1897,6 +1924,47 @@ function BulkUploadPreview({
         )}
       </div>
       <div className="text-[11px] text-slate-300 mb-2 truncate" title={pending.filename}>{pending.filename}</div>
+
+      {!isCsv && (
+        <div className="mb-2 space-y-1">
+          <label className="flex items-center gap-1.5 min-w-0 text-[11px]">
+            <i className="fas fa-people-group text-emerald-700 flex-shrink-0" aria-hidden="true" />
+            <select
+              value={String(rows[0]?.community_id || '')}
+              onChange={(e) => applyCommunityToAllRows(e.target.value)}
+              disabled={busy || communitiesLoading}
+              className={`flex-1 min-w-0 bg-white border rounded px-2 py-1.5 text-gray-900 ${
+                rows[0]?.community_id ? 'border-gray-300' : 'border-amber-400'
+              }`}
+              aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
+            >
+              <option value="">
+                {communitiesLoading
+                  ? (isEs ? 'Cargando comunidades…' : 'Loading communities…')
+                  : communities.length === 0
+                    ? (isEs ? 'No hay escuelas cargadas' : 'No schools loaded')
+                    : (isEs ? 'Elige escuela o comunidad…' : 'Choose school or community…')}
+              </option>
+              {communities.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </label>
+          {(communitiesError || (!communitiesLoading && communities.length === 0)) && (
+            <div className="flex items-center gap-2 text-[10px] text-amber-800">
+              <span>{communitiesError || (isEs ? 'No se encontraron escuelas o comunidades.' : 'No schools or communities found.')}</span>
+              <button
+                type="button"
+                onClick={loadCommunities}
+                disabled={busy || communitiesLoading}
+                className="underline font-semibold disabled:opacity-40"
+              >
+                {isEs ? 'Reintentar' : 'Retry'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {pending.enriched && (
         <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] text-emerald-800">
@@ -2075,7 +2143,7 @@ function BulkUploadPreview({
         </div>
       )}
 
-      <div className={`space-y-1.5 overflow-y-auto nourish-scrollbar pr-1 ${isCsv ? 'max-h-64' : 'max-h-44'}`}>
+      <div className={`space-y-1.5 pr-1 ${isCsv ? 'max-h-64 overflow-y-auto nourish-scrollbar' : ''}`}>
         {previewRows.map((row, idx) => (
           <div key={idx} className="rounded-lg border border-gray-200 bg-gray-50 p-2 flex items-start gap-2">
             {isCsv && (
@@ -2153,7 +2221,7 @@ function BulkUploadPreview({
                   listing publishes without a map pin, freshness hint, or
                   community attribution. Pre-filled from the donor profile
                   and a category-based expiry suggestion by the backend. */}
-              <div className="mt-1 grid grid-cols-1 sm:grid-cols-3 gap-1 text-[11px]">
+              <div className="mt-1 grid grid-cols-1 gap-1 text-[11px]">
                 <label className="flex items-center gap-1 min-w-0">
                   <i className="fas fa-location-dot text-slate-400 flex-shrink-0" aria-hidden="true" />
                   <input
@@ -2179,51 +2247,32 @@ function BulkUploadPreview({
                 </label>
                 <label className="flex items-center gap-1 min-w-0">
                   <i className="fas fa-people-group text-slate-400 flex-shrink-0" aria-hidden="true" />
-                  {communities.length > 0 ? (
-                    <select
-                      value={row.community_id || ''}
-                      onChange={(e) => {
-                        const id = e.target.value || ''
-                        const match = communities.find((c) => String(c.id) === String(id))
-                        onUpdateRow(idx, {
-                          community_id: id || undefined,
-                          community_name: match?.name,
-                        })
-                      }}
-                      disabled={busy}
-                      className={`flex-1 min-w-0 bg-white border rounded px-1 py-0.5 text-gray-900 ${
-                        row.community_id ? 'border-slate-600' : 'border-amber-400'
-                      }`}
-                      aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
-                      required
-                    >
-                      <option value="">
-                        {isEs ? 'Elige escuela o comunidad…' : 'Choose school or community…'}
-                      </option>
-                      {communities.map(c => (
-                        <option key={c.id} value={c.id}>{c.name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      value={row.community_name || ''}
-                      onChange={(e) => onUpdateRow(idx, {
-                        community_name: e.target.value || undefined,
-                        community_id: undefined,
-                      })}
-                      disabled={busy || communitiesLoading}
-                      placeholder={
-                        communitiesLoading
-                          ? (isEs ? 'Cargando comunidades…' : 'Loading communities…')
-                          : (isEs ? 'Nombre de escuela o comunidad' : 'School or community name')
-                      }
-                      className={`flex-1 min-w-0 bg-transparent outline-none focus:bg-emerald-50 px-1 py-0.5 rounded text-gray-900 placeholder:text-gray-400 ${
-                        row.community_name ? '' : 'ring-1 ring-amber-400 rounded'
-                      }`}
-                      aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
-                    />
-                  )}
+                  <select
+                    value={row.community_id || ''}
+                    onChange={(e) => {
+                      const id = e.target.value || ''
+                      const match = communities.find((c) => String(c.id) === String(id))
+                      onUpdateRow(idx, {
+                        community_id: id || undefined,
+                        community_name: match?.name,
+                      })
+                    }}
+                    disabled={busy || communitiesLoading}
+                    className={`flex-1 min-w-0 bg-white border rounded px-1 py-0.5 text-gray-900 ${
+                      row.community_id ? 'border-slate-600' : 'border-amber-400'
+                    }`}
+                    aria-label={isEs ? 'Comunidad / escuela' : 'Community / school'}
+                    required
+                  >
+                    <option value="">
+                      {communitiesLoading
+                        ? (isEs ? 'Cargando…' : 'Loading…')
+                        : (isEs ? 'Elige escuela o comunidad…' : 'Choose school or community…')}
+                    </option>
+                    {communities.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
                 </label>
               </div>
               {communitiesError && (
@@ -3354,7 +3403,7 @@ function AIChatPanel() {
     setUploadBusy(true)
     try {
       const rowsToCreate = pendingUpload.rows.map((r) => {
-        const cleaned = sanitizeListingExpiry(r)
+        const cleaned = sanitizeListingRow(r)
         return {
           ...cleaned,
           community_id: cleaned.community_id != null

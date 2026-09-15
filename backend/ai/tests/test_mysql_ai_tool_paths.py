@@ -96,8 +96,8 @@ def test_reject_non_mysql_user_rejects_uuid_and_blank():
 
 
 @pytest.mark.asyncio
-async def test_search_empty_community_does_not_leak():
-    """Non-admin with no community_id must scope to an impossible community."""
+async def test_search_empty_community_does_not_use_impossible_id():
+    """Users with no school still browse available listings (excluding their own)."""
     user = _user(community_id=None)
     filters = []
     db = _session(user=user, listings=[], filters=filters)
@@ -106,6 +106,18 @@ async def test_search_empty_community_does_not_leak():
     ):
         result = await _search_food_near_user(user_id="7", max_results=10)
     assert result["listings"] == []
+    assert not any("-1" in str(f) for f in filters)
+
+
+@pytest.mark.asyncio
+async def test_search_scoped_user_includes_null_community():
+    user = _user(community_id=8)
+    filters = []
+    db = _session(user=user, listings=[], filters=filters)
+    with patch("backend.app.SessionLocal", return_value=db), patch(
+        "backend.app._user_is_admin", return_value=False
+    ):
+        await _search_food_near_user(user_id="7", max_results=10)
 
     def _sql(expr) -> str:
         try:
@@ -113,7 +125,9 @@ async def test_search_empty_community_does_not_leak():
         except Exception:
             return str(expr)
 
-    assert any("community_id" in _sql(f) and "-1" in _sql(f) for f in filters)
+    joined = " ".join(_sql(f) for f in filters)
+    assert "community_id" in joined
+    assert "IS NULL" in joined.upper() or "is_(None)" in joined
 
 
 @pytest.mark.asyncio
@@ -130,6 +144,7 @@ async def test_search_admin_skips_community_scope():
     ids = {row["id"] for row in result["listings"]}
     assert ids == {1, 2}
     assert not any("-1" in str(f) for f in filters)
+    assert all("has_photo" in row for row in result["listings"])
 
 
 @pytest.mark.asyncio
