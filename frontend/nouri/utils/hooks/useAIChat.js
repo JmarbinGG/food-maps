@@ -79,11 +79,16 @@ export function useAIChat() {
     return () => window.removeEventListener('foodmaps:page_context', handler);
   }, []);
 
-  const guideState = useMemo(() => ({
-    ...guide,
-    pageKey: pageContext.pageKey || guide.pageKey,
-    path: pageContext.path || guide.path,
-  }), [guide, pageContext]);
+  const guideState = useMemo(() => {
+    const role = String(user?.role || '').toLowerCase().trim() || undefined;
+    return {
+      ...guide,
+      pageKey: pageContext.pageKey || guide.pageKey,
+      path: pageContext.path || guide.path,
+      // Backend chip forks need role even when profile lookup lags.
+      ...(role ? { role, community_role: role } : {}),
+    };
+  }, [guide, pageContext, user?.role]);
 
   useEffect(() => {
     localStorage.setItem('nouri_chat_lang', language);

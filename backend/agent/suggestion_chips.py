@@ -93,6 +93,7 @@ def _infer_assistance_fork_goal(
     user_message: str = "",
     assistance_reminder: str = "",
     guide_state: Optional[Dict[str, Any]] = None,
+    user_role: Optional[str] = None,
 ) -> str:
     """Return share | find | request for assistance-fork chips."""
     rem = (assistance_reminder or "").lower()
@@ -102,9 +103,20 @@ def _infer_assistance_fork_goal(
     if isinstance(guide_state, dict):
         page_key = str(guide_state.get("pageKey") or "").lower()
         path = str(guide_state.get("path") or "").lower()
+    role = str(user_role or "").lower().strip()
+    if not role and isinstance(guide_state, dict):
+        role = str(
+            guide_state.get("role")
+            or guide_state.get("community_role")
+            or ""
+        ).lower().strip()
+    recipient_like = role in {"recipient", "volunteer", "driver"}
+    can_share = role == "donor"
 
-    # Explicit reminder / copy wins.
+    # Explicit reminder / copy wins (clamp share unless active role is donor).
     if any(k in rem for k in ("share food", "to share", "compartir")):
+        if role and not can_share:
+            return "find"
         return "share"
     if any(k in rem for k in ("request food", "to request", "solicitar")):
         return "request"
@@ -125,6 +137,8 @@ def _infer_assistance_fork_goal(
     ))
 
     if share_hit and not request_hit:
+        if role and not can_share:
+            return "find"
         return "share"
     if request_hit and not share_hit:
         return "request"
@@ -133,13 +147,18 @@ def _infer_assistance_fork_goal(
 
     # Live page when the ask is ambiguous.
     if page_key == "share" or "/share" in path:
+        if role and not can_share:
+            return "find"
         return "share"
     if page_key == "request" or "/request" in path:
         return "request"
-    if page_key in {"find", "near-me", "claim"} or "/find" in path or "/near-me" in path:
+    if page_key in {"find", "near-me", "claim", "map", "home"} or "/find" in path or "/near-me" in path:
         return "find"
 
-    return "share"
+    # Ambiguous: only explicit donors default to share.
+    if can_share:
+        return "share"
+    return "find"
 
 
 def share_assistance_fork_chips(
@@ -149,13 +168,15 @@ def share_assistance_fork_chips(
     user_message: str = "",
     assistance_reminder: Optional[str] = None,
     guide_state: Optional[Dict[str, Any]] = None,
+    user_role: Optional[str] = None,
 ) -> List[Chip]:
     """Forced chips when Nouri asks do-it-for-me vs guide (share / find / request).
 
-    Share: lead with **Open the form** → `/share`.
-    Request: lead with **Open Request Food** → `/request`.
-    Find: lead with **Open Find Food** → `/find` (never "Open the form").
-    Always show the open chip so users get three options; label must match the goal.
+    Share: lead with **Open Share Food** → `/share` (create view), plus
+    Do it for me / Guide me.
+    Find / request: listings already appear in the sidebar — no Open Find Food
+    chip; only Do it for me / Guide me.
+    Recipient accounts never get Open Share Food.
     """
     rem = (assistance_reminder or "").strip()
     rem_l = _normalize_chip_text(rem)
@@ -204,37 +225,32 @@ def share_assistance_fork_chips(
         k in reply for k in ("quieres", "guio", "hazlo")
     ) or rem_l.startswith("modo de ayuda")
 
+    role = str(user_role or "").lower().strip()
+    if not role and isinstance(guide_state, dict):
+        role = str(
+            guide_state.get("role")
+            or guide_state.get("community_role")
+            or ""
+        ).lower().strip()
+
     goal = _infer_assistance_fork_goal(
-        reply, um, rem_l, guide_state=guide_state,
+        reply, um, rem_l, guide_state=guide_state, user_role=role,
     )
 
-    path = ""
-    if isinstance(guide_state, dict):
-        path = str(guide_state.get("path") or "").lower()
+    chips: List[Chip] = []
 
-    if goal == "share":
-        nav_path, nav_target = "/share", "create"
-        open_label = "Abrir el formulario" if es else "Open the form"
-        open_message = open_label
-    elif goal == "request":
-        nav_path, nav_target = "/request", "request"
-        open_label = "Abrir Solicitar comida" if es else "Open Request Food"
-        open_message = open_label
-    else:
-        # Find Food — never label this "Open the form".
-        nav_path = "/near-me" if ("near-me" in path or (isinstance(guide_state, dict) and str(guide_state.get("pageKey") or "").lower() == "near-me")) else "/find"
-        nav_target = "near-me" if nav_path == "/near-me" else "map"
-        open_label = "Abrir Buscar comida" if es else "Open Find Food"
-        open_message = open_label
-
-    chips: List[Chip] = [{
-        "label": open_label,
-        "message": open_message,
-        "action": "navigate",
-        "target": nav_target,
-        "path": nav_path,
-        "href": nav_path,
-    }]
+    # Open Share Food ONLY for donors. Recipients / admins-in-recipient-UX /
+    # unknown roles never get it (listings already show in the sidebar).
+    if goal == "share" and role == "donor":
+        open_label = "Abrir Compartir comida" if es else "Open Share Food"
+        chips.append({
+            "label": open_label,
+            "message": open_label,
+            "action": "navigate",
+            "target": "create",
+            "path": "/share",
+            "href": "/share",
+        })
 
     if es:
         chips.extend([
@@ -563,30 +579,51 @@ def _chips_for_guided_response(
     chips: List[Chip] = []
 
     # Field-specific options from the guided body.
-    if any(k in low for k in ("donor type", "tipo de donante")):
+    if any(k in low for k in ("perishab", "perecedero")):
         if es:
-            chips.extend([
-                {"label": "Individual / Familia", "message": "Individual/Familia"},
-                {"label": "Organización", "message": "Organización"},
-            ])
+            chips.extend(["Baja", "Media", "Alta"])
         else:
-            chips.extend([
-                {"label": "Individual / Family", "message": "Individual/Family"},
-                {"label": "Organization", "message": "Organization"},
-            ])
+            chips.extend(["Low", "Medium", "High"])
+    elif any(k in low for k in (" unit", "unidad", "pounds", "servings", "ounces", "libras")):
+        if es:
+            chips.extend(["Libras", "Unidades", "Porciones", "Onzas"])
+        else:
+            chips.extend(["Pounds", "Items", "Servings", "Ounces"])
     elif any(k in low for k in ("allerg", "dietary", "dietética", "dietetica", "restricciones")):
         if es:
             chips.extend(["Ninguna", "Vegetariano", "Sin frutos secos"])
         else:
             chips.extend(["None", "Vegetarian", "Nut-free"])
-    elif any(k in low for k in ("photo", "picture", "foto", "imagen")):
+    elif any(k in low for k in ("photo", "picture", "foto", "imagen", "add photos")):
         if es:
             chips.extend([
                 {"label": "Adjuntar foto", "message": "Adjuntaré una foto"},
+                {"label": "Saltar fotos", "message": "listo — sin foto"},
             ])
         else:
             chips.extend([
                 {"label": "I'll add a photo", "message": "I'll add a photo"},
+                {"label": "Skip photos", "message": "done — skip photos"},
+            ])
+    elif any(k in low for k in ("4-digit", "confirm claim", "confirm your claim", "confirmar reclamo")):
+        if es:
+            chips.extend([
+                {"label": "Ya confirmé", "message": "listo — confirmé el reclamo"},
+                {"label": "No llegó el código", "message": "no recibí el código SMS"},
+            ])
+        else:
+            chips.extend([
+                {"label": "Claim confirmed", "message": "done — claim confirmed"},
+                {"label": "No code yet", "message": "I didn't get the SMS code"},
+            ])
+    elif any(k in low for k in ("claim this food", "tap claim", "pulsa reclamar", "reclamar esta comida")):
+        if es:
+            chips.extend([
+                {"label": "Ya reclamé", "message": "listo — pulsé reclamar"},
+            ])
+        else:
+            chips.extend([
+                {"label": "I tapped Claim", "message": "done — I tapped Claim"},
             ])
     elif any(k in low for k in ("claim", "reclamar", "+ / −", "+/−", "portion")):
         if es:
@@ -603,17 +640,30 @@ def _chips_for_guided_response(
             chips.extend(["Bread", "Fruit", "Vegetables", "Prepared meal"])
     elif any(k in low for k in (
         "open the share", "open share", "open the find", "open find",
-        "open the request", "open request", "tap share food", "tap find food",
-        "see the form", "main menu", "top menu",
-        "abre compartir", "abre buscar", "ves el formulario",
+        "tap share food", "food maps logo", "home map",
+        "see the form", "top bar", "top menu",
+        "abre compartir", "ves el formulario",
+        "food maps map", "ves el mapa", "see the food maps map",
+        "update search area", "search this area", "zip chip",
     )):
         if es:
             chips.extend([
-                {"label": "Ya veo el formulario", "message": "listo — ya veo el formulario"},
+                {"label": "Ya lo veo", "message": "listo — ya lo veo"},
             ])
         else:
             chips.extend([
-                {"label": "I see the form", "message": "done — I see the form"},
+                {"label": "I see it", "message": "done — I see it"},
+            ])
+    elif any(k in low for k in ("safety check", "revisión de seguridad", "skip safety")):
+        if es:
+            chips.extend([
+                {"label": "Completar seguridad", "message": "completo la revisión"},
+                {"label": "Saltar seguridad", "message": "saltar revisión de seguridad"},
+            ])
+        else:
+            chips.extend([
+                {"label": "Complete safety check", "message": "I'll complete the safety check"},
+                {"label": "Skip safety check", "message": "skip safety check"},
             ])
 
     # Always offer advance / help for guided coaching.
@@ -1201,12 +1251,20 @@ def build_turn_suggestions(
             return guided_chips[:_MAX_CHIPS]
 
     # 1) Assistance fork (reminder or reply text) — exclusive.
+    role = None
+    if isinstance(user_context, dict):
+        role = (
+            user_context.get("community_role")
+            or user_context.get("role")
+            or user_context.get("user_role")
+        )
     fork = share_assistance_fork_chips(
         response_text or "",
         language,
         user_message=last_user_message or "",
         assistance_reminder=assistance_reminder,
         guide_state=user_context if isinstance(user_context, dict) else None,
+        user_role=str(role) if role else None,
     )
     if fork:
         return fork[:_MAX_CHIPS]

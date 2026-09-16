@@ -1284,6 +1284,7 @@ function MessageBubble({
   onRegenerate,
   showRegenerate = false,
   showSuggestionChips = false,
+  communityRole = null,
 }) {
   const [feedbackGiven, setFeedbackGiven] = useState(null)
   const [avatarBroken, setAvatarBroken] = useState(false)
@@ -1291,10 +1292,10 @@ function MessageBubble({
   const isUser = msg.role === 'user'
   const suggestionItems = useMemo(() => {
     const raw = msg.suggestions || msg.suggestedActions || []
-    return resolveInputChips(raw, language, null, {
+    return resolveInputChips(raw, language, communityRole, {
       allowLazy: false,
     })
-  }, [msg.suggestions, msg.suggestedActions, language])
+  }, [msg.suggestions, msg.suggestedActions, language, communityRole])
   const isVoiceMessage = msg.source === 'voice'
   const timeLabel = formatChatTime(msg.timestamp)
 
@@ -4621,6 +4622,7 @@ function AIChatPanel() {
                     showSuggestionChips={
                       idx === liveChipIdx && !isLoading && !msg.isError
                     }
+                    communityRole={communityRole}
                   />
                 </React.Fragment>
               )

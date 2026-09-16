@@ -8400,51 +8400,50 @@ var FORM_ID_ALIASES = {
 };
 var FIELD_ALIASES = {
   qty: "quantity",
-  address: "full_address",
+  full_address: "address",
   pickup_location: "location",
   csv: "csvFile",
   notes: "requester_email",
-  household_size: "category"
+  household_size: "category",
+  donor_name: "title",
+  expiry_date: "perishability"
 };
 var NOURI_GOALS = {
   "share-food": {
     formId: "share-food",
     route: "/share",
     goal: "share food",
-    welcome: "Welcome! This form has two sections: donor information at the top, and food listing details below. Click or tap any field whenever you need help.",
-    // Keep indices aligned with backend `_SHARE_GUIDED_UI` (one field per step).
+    welcome: "Welcome to Food Maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.",
+    // Keep indices aligned with backend `_SHARE_GUIDED_UI` (CreateListing fields).
     steps: [
       { section: "Open Share Food", label: "Open Share Food", fieldName: "" },
-      { section: "Your name", label: "Name / Organization", fieldName: "donor_name" },
-      { section: "Donor type", label: "Donor Type", fieldName: "donor_type" },
-      { section: "ZIP code", label: "ZIP Code", fieldName: "donor_zip" },
-      { section: "City", label: "City", fieldName: "donor_city" },
-      { section: "State", label: "State", fieldName: "donor_state" },
-      { section: "Community", label: "Community", fieldName: "school_district" },
-      { section: "Email or phone", label: "Email", fieldName: "donor_email" },
-      { section: "Pickup address", label: "Pickup Address", fieldName: "full_address" },
-      { section: "Food name", label: "Food Name", fieldName: "title" },
-      { section: "Category", label: "Category", fieldName: "category" },
+      { section: "Title", label: "Title", fieldName: "title" },
       { section: "Description", label: "Description", fieldName: "description" },
+      { section: "Photos", label: "Photos", fieldName: "image" },
+      { section: "Category", label: "Category", fieldName: "category" },
+      { section: "Perishability", label: "Perishability", fieldName: "perishability" },
       { section: "Quantity", label: "Quantity", fieldName: "quantity" },
       { section: "Unit", label: "Unit", fieldName: "unit" },
-      { section: "Expiration", label: "Expiration Date", fieldName: "expiry_date" },
-      { section: "Photo & submit", label: "Photo & Submit", fieldName: "image" }
+      { section: "Pickup address", label: "Pickup Address", fieldName: "address" },
+      { section: "Pickup window start", label: "Pickup Window Start", fieldName: "pickup_window_start" },
+      { section: "Pickup window end", label: "Pickup Window End", fieldName: "pickup_window_end" },
+      { section: "Continue to Safety Check", label: "Continue to Safety Check", fieldName: "safety" },
+      { section: "Finish & submit", label: "Finish & Submit", fieldName: "safety_done" }
     ]
   },
   "request-food": {
     formId: "request-food",
-    route: "/request",
+    route: "/find",
     goal: "request food",
-    welcome: "Welcome! I'll guide you step by step through your food request. Click or tap any field whenever you need help.",
+    welcome: "Welcome! On Food Maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
     // Aligned with backend `_REQUEST_GUIDED_UI` (6 steps).
     steps: [
-      { section: "Open Request Food", label: "Open Request Food", fieldName: "title" },
+      { section: "Stay in chat", label: "Stay in chat", fieldName: "title" },
       { section: "What you need", label: "Food Needed", fieldName: "title" },
-      { section: "How much", label: "Category & Quantity", fieldName: "category" },
-      { section: "Community", label: "Community", fieldName: "school_district" },
+      { section: "How much", label: "How much", fieldName: "category" },
+      { section: "Your area", label: "ZIP area", fieldName: "school_district" },
       { section: "Your contact", label: "Contact Info", fieldName: "requester_name" },
-      { section: "Submit", label: "Submit", fieldName: "requester_email" }
+      { section: "Next step", label: "Search or Find Food", fieldName: "requester_email" }
     ]
   },
   "claim-food": {
@@ -8460,13 +8459,14 @@ var NOURI_GOALS = {
     formId: "find-food",
     route: "/find",
     goal: "find food",
-    welcome: "Browse available food listings or tell Nouri what you need.",
-    // Aligned with backend `_FIND_GUIDED_UI` (4 steps).
+    welcome: "Find Food is the Food Maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.",
+    // Aligned with backend `_FIND_GUIDED_UI` (5 steps).
     steps: [
-      { section: "Open Find Food", label: "Browse listings", fieldName: "search" },
-      { section: "What to look for", label: "Search", fieldName: "search" },
-      { section: "Look at results", label: "Results", fieldName: "search" },
-      { section: "Claim it", label: "Claim", fieldName: "claimQty", dataGuideField: "claimQty" }
+      { section: "Open the map", label: "Open map", fieldName: "search" },
+      { section: "Your ZIP area", label: "ZIP area", fieldName: "zip" },
+      { section: "Browse listings", label: "Map or list", fieldName: "search" },
+      { section: "Claim it", label: "Claim", fieldName: "claimQty", dataGuideField: "claimQty" },
+      { section: "Confirm claim", label: "Confirm Claim", fieldName: "confirmCode", dataGuideField: "confirmCode" }
     ]
   },
   login: {
@@ -8543,30 +8543,25 @@ var SHARE_FOOD_HINTS = {
   title: "Enter a short name for the food you are sharing.",
   description: "Add a few details so neighbors know what to expect.",
   category: "Pick the category that best matches this food.",
+  perishability: "How quickly does this food spoil?",
   qty: "How many portions or packages are available?",
   quantity: "How many portions or packages are available?",
-  unit: "Choose the unit that matches your quantity.",
+  unit: "Choose Pounds, Items, Servings, or Ounces.",
   address: "Enter the pickup address where neighbors can collect the food.",
   full_address: "Enter the pickup address where neighbors can collect the food.",
-  pickup_window_start: "When can pickup start?",
-  pickup_window_end: "When does the pickup window end?",
-  image: "Optional: add a photo of the food.",
-  donor_name: "Enter your name or organization.",
-  donor_type: "Are you sharing as an individual/family or an organization?",
-  donor_zip: "Enter your ZIP code.",
-  donor_city: "Enter your city.",
-  donor_state: "Select your state.",
-  school_district: "Choose your school or community.",
-  donor_email: "Enter an email so neighbors can reach you if needed.",
-  expiry_date: "When should this food be used by?"
+  pickup_window_start: "When can pickup start? Use Now for a quick start time.",
+  pickup_window_end: "When does the pickup window end? Use +2h for a quick end time.",
+  image: "Click Add photos to attach a photo of the food.",
+  safety: "Click Continue to Safety Check at the bottom.",
+  safety_done: "Complete the safety checklist, or click Skip Safety Check."
 };
 var REQUEST_FOOD_HINTS = {
   title: "What food do you need?",
-  category: "Pick a category and how much you need.",
-  school_district: "Choose your school or community.",
-  requester_name: "Enter your name so donors know who to help.",
-  requester_email: "Enter an email so we can follow up.",
-  address: "Where should help be delivered or picked up?",
+  category: "Roughly how much do you need?",
+  school_district: "Check or update your ZIP search area.",
+  requester_name: "Confirm you are signed in so donors can reach you.",
+  requester_email: "I can search Find Food on the map for matches near you.",
+  address: "Where can you pick up food?",
   notes: "Add any notes about dietary needs or timing.",
   household_size: "How many people are in your household?"
 };
@@ -8582,23 +8577,25 @@ var BULK_UPLOAD_HINTS = {
 var STEP_RE = /(?:GUIDED\s*[—–-]\s*STEP|GUIADO\s*[—–-]\s*PASO)\s*(\d+)\s*(?:of|de)\s*(\d+)\s*(?:\(([^)]+)\))?\s*(?:[—–-]\s*([^\n[]+))?/i;
 var FIELD_RE = /\[field:([a-z0-9_]+)\]/i;
 var FIELD_HINTS = [
-  { field: "donor_name", re: /name\s*\/\s*organization|type your name|escribe tu nombre|donor information.*name|caja.*nombre/i },
-  { field: "donor_type", re: /donor type|tipo de donante|individual\s*\/\s*family|individual\s*\/\s*familia/i },
-  { field: "donor_zip", re: /\bzip\b|código postal|codigo postal/i },
-  { field: "donor_city", re: /\bcity\b|ciudad/i },
-  { field: "donor_state", re: /\bstate\b|estado(?!s)/i },
-  { field: "school_district", re: /active communities|comunidades activas|school (?:or )?community|escuela o comunidad/i },
-  { field: "donor_email", re: /\bemail\b|correo|phone|teléfono|telefono/i },
-  { field: "full_address", re: /full address|pickup address|dirección completa|direccion completa|street address/i },
-  { field: "title", re: /what are you donating|qué estás donando|que estas donando|food name|nombre del alimento/i },
+  { field: "title", re: /\btitle\b|food name|nombre del alimento|what food are you sharing|qué estás donando|que estas donando|fresh vegetables|verduras/i },
+  { field: "description", re: /\bdescription\b|descripción|descripcion|short sentence|frase corta/i },
+  { field: "image", re: /\bphoto\b|\bfotos?\b|add photos|añadir fotos|optional/i },
   { field: "category", re: /\bcategory\b|categoría|categoria/i },
-  { field: "description", re: /\bdescription\b|descripción|descripcion/i },
+  { field: "perishability", re: /perishab|perecedero|spoils|echa a perder/i },
   { field: "quantity", re: /\bquantity\b|cantidad|how many|cuántos|cuantos/i },
-  { field: "unit", re: /\bunit\b|unidad(?!es de)/i },
-  { field: "expiry_date", re: /expiration|expiry|best-?by|vencimiento|caducidad/i },
-  { field: "image", re: /\bphoto\b|\bfoto\b|upload|submit listing|enviar listado/i },
-  { field: "requester_name", re: /your name|tu nombre|requester/i },
-  { field: "requester_email", re: /submit food request|enviar solicitud/i }
+  { field: "unit", re: /\bunit\b|unidad(?!es de)|pounds|servings|ounces/i },
+  { field: "address", re: /pickup address|dirección de recogida|direccion de recogida|mapbox|selected address/i },
+  { field: "pickup_window_start", re: /window start|inicio de|pickup must|tap now|\bnow\b/i },
+  { field: "pickup_window_end", re: /window end|fin de|\+2h|after the start/i },
+  { field: "safety", re: /continue to safety|continuar a (?:revisión de )?seguridad|green button continue/i },
+  { field: "safety_done", re: /skip safety|saltar revisión|finish & submit|awaiting approval|pendiente de aprobación|complete the safety/i },
+  { field: "requester_name", re: /your name|tu nombre|signed in|iniciado sesión/i },
+  { field: "requester_email", re: /search find food|buscar en buscar|open find food/i },
+  { field: "school_district", re: /school|community|comunidad|escuela/i },
+  { field: "zip", re: /\bzip\b|código postal|codigo postal|update search area|search this area|buscar en esta zona/i },
+  { field: "search", re: /map pins|all listings|food listings|\blist\b|browse|pines|todas las publicaciones/i },
+  { field: "claimQty", re: /claim this food|tap claim|pulsa reclamar|reclamar esta comida/i },
+  { field: "confirmCode", re: /4-digit|confirm claim|confirm your claim|confirmar reclamo|sms code/i }
 ];
 function parseGuidedStepHeader(message) {
   if (!message) return null;
@@ -8631,9 +8628,9 @@ function inferGuidedFieldFromText(message, fallbackGoalKey = null) {
   if (!looksGuided && !fallbackGoalKey) return null;
   let goalKey = fallbackGoalKey;
   if (!goalKey) {
-    if (/share food|compartir|donor information|food listing/i.test(t3)) goalKey = "share-food";
+    if (/share food|compartir|basic info|safety check|food maps share/i.test(t3)) goalKey = "share-food";
     else if (/request food|solicitar/i.test(t3)) goalKey = "request-food";
-    else if (/find food|buscar comida|claim/i.test(t3)) goalKey = "find-food";
+    else if (/find food|buscar comida|claim this food|food maps map|zip chip|confirm claim/i.test(t3)) goalKey = "find-food";
     else if (fallbackGoalKey) goalKey = fallbackGoalKey;
     else goalKey = "share-food";
   }
@@ -9147,17 +9144,18 @@ function syncGuideFromFormField({ formId, fieldName, label, text, hints = {} }, 
   const mappedIndex = goalKey ? getStepIndexForField(goalKey, fieldName) : -1;
   const hintKeys = Object.keys(hints);
   const hintIndex = hintKeys.indexOf(fieldName);
-  const stepIndex = mappedIndex >= 0 ? mappedIndex : hintIndex >= 0 ? hintIndex : state.stepIndex;
+  const chatLocked = state.source === "chat" && state.goalKey && state.stepTotal > 0 && state.stepIndex != null;
+  const stepIndex = chatLocked ? state.stepIndex : mappedIndex >= 0 ? mappedIndex : hintIndex >= 0 ? hintIndex : state.stepIndex;
   const stepTotal = NOURI_GOALS[goalKey]?.steps?.length || hintKeys.length || state.stepTotal;
   updateGuide({
-    source: "form",
-    goalKey,
+    source: chatLocked ? "chat" : "form",
+    goalKey: goalKey || state.goalKey,
     formId,
     stepIndex,
     stepTotal,
-    section: "",
+    section: chatLocked ? state.section : "",
     label: label || fieldName,
-    fieldName,
+    fieldName: canonicalFieldName(fieldName) || fieldName,
     text,
     caption: text
   }, { speak: true, lang, focusField: true });
@@ -9812,11 +9810,16 @@ function useAIChat() {
     window.addEventListener("foodmaps:page_context", handler);
     return () => window.removeEventListener("foodmaps:page_context", handler);
   }, []);
-  const guideState = (0, import_react6.useMemo)(() => ({
-    ...guide,
-    pageKey: pageContext.pageKey || guide.pageKey,
-    path: pageContext.path || guide.path
-  }), [guide, pageContext]);
+  const guideState = (0, import_react6.useMemo)(() => {
+    const role = String(user?.role || "").toLowerCase().trim() || void 0;
+    return {
+      ...guide,
+      pageKey: pageContext.pageKey || guide.pageKey,
+      path: pageContext.path || guide.path,
+      // Backend chip forks need role even when profile lookup lags.
+      ...role ? { role, community_role: role } : {}
+    };
+  }, [guide, pageContext, user?.role]);
   (0, import_react6.useEffect)(() => {
     localStorage.setItem("nouri_chat_lang", language);
   }, [language]);
@@ -10053,16 +10056,16 @@ function useAIChat() {
 // utils/hooks/useCommunityRole.js
 function useCommunityRole() {
   const { user, isAdmin } = useAuthContext();
-  if (isAdmin) return "admin";
-  if (!user) return null;
+  if (!user && !isAdmin) return null;
   const role = String(user?.role || "").toLowerCase().trim();
-  if (!role) return null;
   if (role === "donor") return "donor";
   if (role === "recipient") return "recipient";
   if (role === "volunteer") return "volunteer";
   if (role === "dispatcher" || role === "organizer") return "organizer";
   if (role === "driver") return "driver";
   if (role === "admin") return "admin";
+  if (isAdmin) return "admin";
+  if (!user) return null;
   return null;
 }
 
@@ -10409,10 +10412,21 @@ function liveAssistantIndex(messages) {
   }
   return -1;
 }
+var _SHARE_OPEN_RE = /^(open share food|abrir compartir comida)$/i;
+function _canShareFood(communityRole) {
+  return String(communityRole || "").toLowerCase().trim() === "donor";
+}
 function resolveInputChips(suggestions, language, communityRole, opts = {}) {
   const raw = Array.isArray(suggestions) ? suggestions : [];
   if (raw.length) {
-    return raw.slice(0, 6).map((s2) => typeof s2 === "string" ? { label: s2, message: s2 } : s2);
+    let chips = raw.slice(0, 6).map((s2) => typeof s2 === "string" ? { label: s2, message: s2 } : s2);
+    if (!_canShareFood(communityRole)) {
+      chips = chips.filter((c2) => {
+        const label = String(c2?.label || c2?.message || "").trim();
+        return !_SHARE_OPEN_RE.test(label);
+      });
+    }
+    return chips;
   }
   if (opts.allowLazy) {
     const es = language === "es";
@@ -11799,7 +11813,8 @@ function MessageBubble({
   onRetry,
   onRegenerate,
   showRegenerate = false,
-  showSuggestionChips = false
+  showSuggestionChips = false,
+  communityRole = null
 }) {
   const [feedbackGiven, setFeedbackGiven] = (0, import_react10.useState)(null);
   const [avatarBroken, setAvatarBroken] = (0, import_react10.useState)(false);
@@ -11807,10 +11822,10 @@ function MessageBubble({
   const isUser = msg.role === "user";
   const suggestionItems = (0, import_react10.useMemo)(() => {
     const raw = msg.suggestions || msg.suggestedActions || [];
-    return resolveInputChips(raw, language, null, {
+    return resolveInputChips(raw, language, communityRole, {
       allowLazy: false
     });
-  }, [msg.suggestions, msg.suggestedActions, language]);
+  }, [msg.suggestions, msg.suggestedActions, language, communityRole]);
   const isVoiceMessage = msg.source === "voice";
   const timeLabel = formatChatTime(msg.timestamp);
   const handleFeedback = (rating) => {
@@ -14543,7 +14558,8 @@ ${imageBlock}` : imageBlock;
                               onRetry: retryMessage,
                               onRegenerate: regenerateLast,
                               showRegenerate: idx === lastAssistantIdx,
-                              showSuggestionChips: idx === liveChipIdx && !isLoading && !msg.isError
+                              showSuggestionChips: idx === liveChipIdx && !isLoading && !msg.isError,
+                              communityRole
                             }
                           )
                         ] }, msg.id);

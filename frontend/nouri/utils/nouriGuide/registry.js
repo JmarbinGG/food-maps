@@ -16,15 +16,17 @@ export const FORM_ID_ALIASES = {
 
 /**
  * Live SPA field names → registry / GUIDED field names.
- * Allows CreateListing (qty/address) and similar to resolve guide steps.
+ * Allows CreateListing (qty) and legacy field names to resolve guide steps.
  */
 export const FIELD_ALIASES = {
   qty: 'quantity',
-  address: 'full_address',
+  full_address: 'address',
   pickup_location: 'location',
   csv: 'csvFile',
   notes: 'requester_email',
   household_size: 'category',
+  donor_name: 'title',
+  expiry_date: 'perishability',
 };
 
 export const NOURI_GOALS = {
@@ -33,41 +35,38 @@ export const NOURI_GOALS = {
     route: '/share',
     goal: 'share food',
     welcome:
-      'Welcome! This form has two sections: donor information at the top, and food listing details below. Click or tap any field whenever you need help.',
-    // Keep indices aligned with backend `_SHARE_GUIDED_UI` (one field per step).
+      'Welcome to Food Maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.',
+    // Keep indices aligned with backend `_SHARE_GUIDED_UI` (CreateListing fields).
     steps: [
       { section: 'Open Share Food', label: 'Open Share Food', fieldName: '' },
-      { section: 'Your name', label: 'Name / Organization', fieldName: 'donor_name' },
-      { section: 'Donor type', label: 'Donor Type', fieldName: 'donor_type' },
-      { section: 'ZIP code', label: 'ZIP Code', fieldName: 'donor_zip' },
-      { section: 'City', label: 'City', fieldName: 'donor_city' },
-      { section: 'State', label: 'State', fieldName: 'donor_state' },
-      { section: 'Community', label: 'Community', fieldName: 'school_district' },
-      { section: 'Email or phone', label: 'Email', fieldName: 'donor_email' },
-      { section: 'Pickup address', label: 'Pickup Address', fieldName: 'full_address' },
-      { section: 'Food name', label: 'Food Name', fieldName: 'title' },
-      { section: 'Category', label: 'Category', fieldName: 'category' },
+      { section: 'Title', label: 'Title', fieldName: 'title' },
       { section: 'Description', label: 'Description', fieldName: 'description' },
+      { section: 'Photos', label: 'Photos', fieldName: 'image' },
+      { section: 'Category', label: 'Category', fieldName: 'category' },
+      { section: 'Perishability', label: 'Perishability', fieldName: 'perishability' },
       { section: 'Quantity', label: 'Quantity', fieldName: 'quantity' },
       { section: 'Unit', label: 'Unit', fieldName: 'unit' },
-      { section: 'Expiration', label: 'Expiration Date', fieldName: 'expiry_date' },
-      { section: 'Photo & submit', label: 'Photo & Submit', fieldName: 'image' },
+      { section: 'Pickup address', label: 'Pickup Address', fieldName: 'address' },
+      { section: 'Pickup window start', label: 'Pickup Window Start', fieldName: 'pickup_window_start' },
+      { section: 'Pickup window end', label: 'Pickup Window End', fieldName: 'pickup_window_end' },
+      { section: 'Continue to Safety Check', label: 'Continue to Safety Check', fieldName: 'safety' },
+      { section: 'Finish & submit', label: 'Finish & Submit', fieldName: 'safety_done' },
     ],
   },
   'request-food': {
     formId: 'request-food',
-    route: '/request',
+    route: '/find',
     goal: 'request food',
     welcome:
-      "Welcome! I'll guide you step by step through your food request. Click or tap any field whenever you need help.",
+      "Welcome! On Food Maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
     // Aligned with backend `_REQUEST_GUIDED_UI` (6 steps).
     steps: [
-      { section: 'Open Request Food', label: 'Open Request Food', fieldName: 'title' },
+      { section: 'Stay in chat', label: 'Stay in chat', fieldName: 'title' },
       { section: 'What you need', label: 'Food Needed', fieldName: 'title' },
-      { section: 'How much', label: 'Category & Quantity', fieldName: 'category' },
-      { section: 'Community', label: 'Community', fieldName: 'school_district' },
+      { section: 'How much', label: 'How much', fieldName: 'category' },
+      { section: 'Your area', label: 'ZIP area', fieldName: 'school_district' },
       { section: 'Your contact', label: 'Contact Info', fieldName: 'requester_name' },
-      { section: 'Submit', label: 'Submit', fieldName: 'requester_email' },
+      { section: 'Next step', label: 'Search or Find Food', fieldName: 'requester_email' },
     ],
   },
   'claim-food': {
@@ -80,17 +79,19 @@ export const NOURI_GOALS = {
       { section: 'Claim', label: 'Portions', dataGuideField: 'claimQty' },
     ],
   },
-  'find-food': {
+    'find-food': {
     formId: 'find-food',
     route: '/find',
     goal: 'find food',
-    welcome: 'Browse available food listings or tell Nouri what you need.',
-    // Aligned with backend `_FIND_GUIDED_UI` (4 steps).
+    welcome:
+      'Find Food is the Food Maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.',
+    // Aligned with backend `_FIND_GUIDED_UI` (5 steps).
     steps: [
-      { section: 'Open Find Food', label: 'Browse listings', fieldName: 'search' },
-      { section: 'What to look for', label: 'Search', fieldName: 'search' },
-      { section: 'Look at results', label: 'Results', fieldName: 'search' },
+      { section: 'Open the map', label: 'Open map', fieldName: 'search' },
+      { section: 'Your ZIP area', label: 'ZIP area', fieldName: 'zip' },
+      { section: 'Browse listings', label: 'Map or list', fieldName: 'search' },
       { section: 'Claim it', label: 'Claim', fieldName: 'claimQty', dataGuideField: 'claimQty' },
+      { section: 'Confirm claim', label: 'Confirm Claim', fieldName: 'confirmCode', dataGuideField: 'confirmCode' },
     ],
   },
   login: {
@@ -197,36 +198,31 @@ export function resolveGoalKey(formId) {
   return goalKeyFromFormId(formId);
 }
 
-/** Hint text maps for form voice guide (SPA field names). */
+/** Hint text maps for form voice guide (Food Maps CreateListing fields). */
 export const SHARE_FOOD_HINTS = {
   title: 'Enter a short name for the food you are sharing.',
   description: 'Add a few details so neighbors know what to expect.',
   category: 'Pick the category that best matches this food.',
+  perishability: 'How quickly does this food spoil?',
   qty: 'How many portions or packages are available?',
   quantity: 'How many portions or packages are available?',
-  unit: 'Choose the unit that matches your quantity.',
+  unit: 'Choose Pounds, Items, Servings, or Ounces.',
   address: 'Enter the pickup address where neighbors can collect the food.',
   full_address: 'Enter the pickup address where neighbors can collect the food.',
-  pickup_window_start: 'When can pickup start?',
-  pickup_window_end: 'When does the pickup window end?',
-  image: 'Optional: add a photo of the food.',
-  donor_name: 'Enter your name or organization.',
-  donor_type: 'Are you sharing as an individual/family or an organization?',
-  donor_zip: 'Enter your ZIP code.',
-  donor_city: 'Enter your city.',
-  donor_state: 'Select your state.',
-  school_district: 'Choose your school or community.',
-  donor_email: 'Enter an email so neighbors can reach you if needed.',
-  expiry_date: 'When should this food be used by?',
+  pickup_window_start: 'When can pickup start? Use Now for a quick start time.',
+  pickup_window_end: 'When does the pickup window end? Use +2h for a quick end time.',
+  image: 'Click Add photos to attach a photo of the food.',
+  safety: 'Click Continue to Safety Check at the bottom.',
+  safety_done: 'Complete the safety checklist, or click Skip Safety Check.',
 };
 
 export const REQUEST_FOOD_HINTS = {
   title: 'What food do you need?',
-  category: 'Pick a category and how much you need.',
-  school_district: 'Choose your school or community.',
-  requester_name: 'Enter your name so donors know who to help.',
-  requester_email: 'Enter an email so we can follow up.',
-  address: 'Where should help be delivered or picked up?',
+  category: 'Roughly how much do you need?',
+  school_district: 'Check or update your ZIP search area.',
+  requester_name: 'Confirm you are signed in so donors can reach you.',
+  requester_email: 'I can search Find Food on the map for matches near you.',
+  address: 'Where can you pick up food?',
   notes: 'Add any notes about dietary needs or timing.',
   household_size: 'How many people are in your household?',
 };

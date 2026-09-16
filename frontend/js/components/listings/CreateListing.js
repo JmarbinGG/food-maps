@@ -117,15 +117,38 @@ function CreateListing({ user, onCancel, onSuccess }) {
     }
   };
 
-  const notifyFormFocus = (fieldName, label, stepIndex = step) => {
+  // Guided walkthrough indices (must match backend _SHARE_GUIDED_UI / registry).
+  const SHARE_GUIDE_FIELDS = {
+    title: 1,
+    description: 2,
+    image: 3,
+    photos: 3,
+    category: 4,
+    perishability: 5,
+    qty: 6,
+    quantity: 6,
+    unit: 7,
+    address: 8,
+    pickup_window_start: 9,
+    pickup_window_end: 10,
+    safety: 11,
+    safety_done: 12,
+  };
+  const SHARE_GUIDE_TOTAL = 13;
+
+  const notifyFormFocus = (fieldName, label) => {
     if (typeof window === 'undefined') return;
+    const canonical = fieldName === 'qty' ? 'quantity'
+      : (fieldName === 'photos' || fieldName === 'images') ? 'image'
+      : fieldName;
+    const guidedIndex = SHARE_GUIDE_FIELDS[fieldName] ?? SHARE_GUIDE_FIELDS[canonical];
     window.dispatchEvent(new CustomEvent('foodmaps:form_focus', {
       detail: {
         formId: 'share-listing',
-        fieldName,
+        fieldName: canonical,
         label,
-        stepIndex,
-        stepTotal: 2,
+        stepIndex: guidedIndex != null ? guidedIndex : undefined,
+        stepTotal: SHARE_GUIDE_TOTAL,
         path: '/share',
         pageKey: 'share',
         source: 'form',
@@ -270,10 +293,19 @@ function CreateListing({ user, onCancel, onSuccess }) {
       welcomeMessage: 'Tell me about the food you want to share. I can guide you through each field.',
       fieldHints: {
         title: 'What food are you sharing? Say the name or type.',
-        description: 'Add details like quantity, freshness, or pickup notes.',
-        address: 'Where can someone pick this up?',
+        description: 'Add details like freshness or pickup notes.',
         category: 'Is it produce, prepared food, bakery, or packaged?',
+        perishability: 'How quickly does this food spoil?',
         qty: 'How many portions or packages are available?',
+        unit: 'Pounds, Items, Servings, or Ounces?',
+        address: 'Where can someone pick this up?',
+        pickup_window_start: 'When can pickup start?',
+        pickup_window_end: 'When does the pickup window end?',
+        image: 'Click Add photos to attach a photo of the food.',
+        pickup_window_start: 'When can pickup start?',
+        pickup_window_end: 'When does the pickup window end?',
+        safety: 'Click Continue to Safety Check at the bottom.',
+        safety_done: 'Complete the safety checklist, or click Skip Safety Check.',
       },
     });
     if (window.FoodMapsNouri?.mountWithRetry) {
@@ -478,7 +510,15 @@ function CreateListing({ user, onCancel, onSuccess }) {
           }
         }
 
-        if (typeof window.showAlert === 'function') window.showAlert('Listing created successfully!', { title: 'Success', variant: 'success' });
+        if (typeof window.showAlert === 'function') {
+          const awaiting = !!(res.awaiting_approval || (res.listing && res.listing.status === 'pending'));
+          window.showAlert(
+            awaiting
+              ? (res.message || 'Listing submitted — waiting for admin approval before it appears on Find Food.')
+              : (res.message || 'Listing created successfully!'),
+            { title: awaiting ? 'Awaiting approval' : 'Success', variant: 'success' }
+          );
+        }
         onSuccess();
       } else {
         let err = (res && res.error) || 'Failed to create listing';
@@ -491,7 +531,15 @@ function CreateListing({ user, onCancel, onSuccess }) {
               res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
               if (res && res.success) {
                 console.log('Created listing after phone:', res.data || res);
-                if (typeof window.showAlert === 'function') window.showAlert('Listing created successfully!', { title: 'Success', variant: 'success' });
+                if (typeof window.showAlert === 'function') {
+                  const awaiting = !!(res.awaiting_approval || (res.listing && res.listing.status === 'pending'));
+                  window.showAlert(
+                    awaiting
+                      ? (res.message || 'Listing submitted — waiting for admin approval before it appears on Find Food.')
+                      : (res.message || 'Listing created successfully!'),
+                    { title: awaiting ? 'Awaiting approval' : 'Success', variant: 'success' }
+                  );
+                }
                 onSuccess();
                 setIsSubmitting(false);
                 return;
@@ -559,9 +607,10 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     type="text"
                     value={formData.title}
                     onChange={(e) => handleInputChange('title', e.target.value)}
-                    onFocus={() => notifyFormFocus('title', 'Title', 1)}
+                    onFocus={() => notifyFormFocus('title', 'Title')}
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     placeholder="e.g., Fresh vegetables from community garden"
+                    data-guide-field="title"
                   />
                   {errors.title && <p className="text-red-500 text-sm mt-1">{errors.title}</p>}
                 </div>
@@ -573,20 +622,23 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <textarea
                     value={formData.description}
                     onChange={(e) => handleInputChange('description', e.target.value)}
-                    onFocus={() => notifyFormFocus('description', 'Description', 1)}
+                    onFocus={() => notifyFormFocus('description', 'Description')}
                     rows={3}
                     className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                     placeholder="Describe the food items..."
+                    data-guide-field="description"
                   />
                 </div>
 
-                <div>
+                <div data-guide-field="image">
                   <label className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
                     Photos <span className="text-xs text-[var(--text-secondary)] font-normal">(optional, up to {MAX_IMAGES})</span>
                   </label>
                   <div className="flex items-center gap-3 flex-wrap">
                     <label
                       className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-[var(--border-color)] cursor-pointer hover:bg-[var(--bg-secondary,#f9fafb)] ${isUploadingImage || (formData.images && formData.images.length >= MAX_IMAGES) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      onFocus={() => notifyFormFocus('image', 'Photos')}
+                      onClick={() => notifyFormFocus('image', 'Photos')}
                     >
                       <i className="fas fa-camera text-[var(--text-secondary)]"></i>
                       <span className="text-sm text-[var(--text-secondary)]">
@@ -633,7 +685,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     <select
                       value={formData.category}
                       onChange={(e) => handleInputChange('category', e.target.value)}
+                      onFocus={() => notifyFormFocus('category', 'Category')}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      data-guide-field="category"
                     >
                       {categories.map(cat => (
                         <option key={cat.value} value={cat.value}>{cat.label}</option>
@@ -648,7 +702,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     <select
                       value={formData.perishability}
                       onChange={(e) => handleInputChange('perishability', e.target.value)}
+                      onFocus={() => notifyFormFocus('perishability', 'Perishability')}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      data-guide-field="perishability"
                     >
                       {perishabilityLevels.map(level => (
                         <option key={level.value} value={level.value}>{level.label}</option>
@@ -668,8 +724,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                       step="0.1"
                       value={formData.qty}
                       onChange={(e) => handleInputChange('qty', e.target.value)}
-                      onFocus={() => notifyFormFocus('qty', 'Quantity', 1)}
+                      onFocus={() => notifyFormFocus('qty', 'Quantity')}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      data-guide-field="quantity"
                     />
                     {errors.qty && <p className="text-red-500 text-sm mt-1">{errors.qty}</p>}
                   </div>
@@ -681,7 +738,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     <select
                       value={formData.unit}
                       onChange={(e) => handleInputChange('unit', e.target.value)}
+                      onFocus={() => notifyFormFocus('unit', 'Unit')}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                      data-guide-field="unit"
                     >
                       <option value="lbs">Pounds</option>
                       <option value="items">Items</option>
@@ -712,6 +771,8 @@ function CreateListing({ user, onCancel, onSuccess }) {
                       }}
                       className="w-full p-3 border border-[var(--border-color)] rounded-lg"
                       placeholder="Search address with Mapbox"
+                      data-guide-field="address"
+                      onFocus={() => notifyFormFocus('address', 'Pickup Address')}
                     />
                   </mapbox-address-autofill>
                   {errors.address && <p className="text-red-500 text-sm mt-1">{errors.address}</p>}
@@ -745,7 +806,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                         type="datetime-local"
                         value={formData.pickup_window_start}
                         onChange={(e) => handleInputChange('pickup_window_start', e.target.value)}
+                        onFocus={() => notifyFormFocus('pickup_window_start', 'Pickup Window Start')}
                         className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                        data-guide-field="pickup_window_start"
                       />
                       <button
                         type="button"
@@ -773,7 +836,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                         type="datetime-local"
                         value={formData.pickup_window_end}
                         onChange={(e) => handleInputChange('pickup_window_end', e.target.value)}
+                        onFocus={() => notifyFormFocus('pickup_window_end', 'Pickup Window End')}
                         className="w-full p-3 border border-[var(--border-color)] rounded-lg"
+                        data-guide-field="pickup_window_end"
                       />
                       <button
                         type="button"
@@ -803,6 +868,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <button
                     type="submit"
                     className="btn-primary flex-1"
+                    data-guide-field="safety"
+                    onFocus={() => notifyFormFocus('safety', 'Continue to Safety Check')}
+                    onClick={() => notifyFormFocus('safety', 'Continue to Safety Check')}
                   >
                     Continue to Safety Check →
                   </button>
@@ -811,7 +879,10 @@ function CreateListing({ user, onCancel, onSuccess }) {
             )}
 
             {step === 2 && (
-              <div>
+              <div
+                data-guide-field="safety_done"
+                onFocus={() => notifyFormFocus('safety_done', 'Finish & Submit')}
+              >
                 {window.FoodSafetyChecklist && React.createElement(window.FoodSafetyChecklist, {
                   foodItem: {
                     ...formData,
@@ -841,6 +912,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                   <button
                     type="button"
                     onClick={() => {
+                      notifyFormFocus('safety_done', 'Finish & Submit');
                       // Skip safety check
                       setSafetyData(null);
                       const fakeEvent = { preventDefault: () => { } };
@@ -848,6 +920,7 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     }}
                     className="btn-secondary"
                     disabled={isSubmitting}
+                    data-guide-field="safety_done"
                   >
                     Skip Safety Check
                   </button>

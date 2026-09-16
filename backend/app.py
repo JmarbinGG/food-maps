@@ -39,7 +39,7 @@ from backend.models import (
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
-    ApprovalCode,
+    ApprovalCode, PlatformSetting,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -361,6 +361,79 @@ def _find_user_by_email(db: Session, email: Optional[str]) -> Optional[User]:
 def _database_mode() -> str:
     db_url = (os.getenv("DATABASE_URL") or "").lower()
     return "local" if db_url.startswith("sqlite") else "cloud"
+
+
+def _jwt_user_id(credentials: HTTPAuthorizationCredentials) -> int:
+    payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return user_id
+
+
+def _require_user_from_credentials(
+    credentials: HTTPAuthorizationCredentials,
+    db: Session,
+) -> User:
+    """Resolve JWT → DB user. Missing row = stale session (wrong/local DB)."""
+    user_id = _jwt_user_id(credentials)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        mode = _database_mode()
+        raise HTTPException(
+            status_code=401,
+            detail=(
+                "Your session does not match this database. "
+                "Please sign out and log in again"
+                + (" with a local account (e.g. admin.smoke@example.com / password123)."
+                   if mode == "local" else ".")
+            ),
+        )
+    return user
+
+
+def _ensure_local_sqlite_users(db: Session) -> None:
+    """Seed known local accounts so role switching works without a prod sync."""
+    db_url = (os.getenv("DATABASE_URL") or "").lower()
+    allow = (os.getenv("ALLOW_SQLITE") or "").lower() in ("1", "true", "yes")
+    if not (db_url.startswith("sqlite") or allow):
+        return
+    password = os.getenv("LOCAL_DEV_PASSWORD") or "password123"
+    seeds = [
+        ("admin.smoke@example.com", "Local Admin", UserRole.ADMIN, True),
+        ("donor.smoke@example.com", "Local Donor", UserRole.DONOR, False),
+        ("recipient.smoke@example.com", "Local Recipient", UserRole.RECIPIENT, False),
+    ]
+    created = 0
+    for email, name, role, is_admin in seeds:
+        existing = _find_user_by_email(db, email)
+        if existing:
+            # Keep password predictable for local smoke logins.
+            try:
+                if not existing.password_hash or not pwd_context.verify(password, existing.password_hash):
+                    existing.password_hash = pwd_context.hash(password)
+                # Keep role aligned with the smoke account identity.
+                if existing.role != role:
+                    existing.role = role
+                if role == UserRole.ADMIN:
+                    existing.is_admin = True
+                    existing.role = UserRole.ADMIN
+            except Exception:
+                existing.password_hash = pwd_context.hash(password)
+            continue
+        db.add(User(
+            name=name,
+            email=email,
+            password_hash=pwd_context.hash(password),
+            role=role,
+            is_admin=is_admin,
+        ))
+        created += 1
+    db.commit()
+    if created:
+        print(f"[ok] local sqlite users seeded ({created} new); password={password}")
+    else:
+        print("[ok] local sqlite smoke users ready (password123)")
 
 
 def _user_is_admin(user) -> bool:
@@ -1035,13 +1108,7 @@ async def put_page_content(
 @app.get("/api/user/me")
 async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
+        user = _require_user_from_credentials(credentials, db)
         community_name = await _community_name_for_id(user.community_id)
         return {
             "id": user.id,
@@ -1077,15 +1144,7 @@ async def get_user_profile(credentials: HTTPAuthorizationCredentials = Depends(s
     Includes both /api/user/profile and /user/profile to tolerate proxies that strip /api.
     """
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-
+        user = _require_user_from_credentials(credentials, db)
         community_name = await _community_name_for_id(user.community_id)
         return {
             "id": user.id,
@@ -1139,15 +1198,9 @@ async def update_phone(request: Request, credentials: HTTPAuthorizationCredentia
 @app.put("/api/user/profile")
 async def update_profile(request: Request, credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
-        user_id = int(payload.get("sub")) if payload and payload.get("sub") is not None else None
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
+        user = _require_user_from_credentials(credentials, db)
+
         body = await request.json()
-        user = db.query(User).filter(User.id == user_id).first()
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
 
         if 'name' in body:
             user.name = body['name']
@@ -1396,10 +1449,28 @@ async def startup_event():
     )
     _add_missing_model_columns(
         User, FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
-        ApprovalCode,
+        ApprovalCode, PlatformSetting,
         AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
     )
     _backfill_user_is_admin()
+
+    # Local SQLite: ensure smoke accounts exist for role-switch testing.
+    try:
+        seed_db = SessionLocal()
+        try:
+            _ensure_local_sqlite_users(seed_db)
+        finally:
+            seed_db.close()
+    except Exception as _seed_exc:
+        print(f"Note: local user seed: {_seed_exc}")
+
+    # Seed platform_settings defaults (listing approval gate)
+    try:
+        from backend.platform_settings import ensure_platform_settings_seeded
+        ensure_platform_settings_seeded()
+        print("[ok] platform_settings seeded")
+    except Exception as _ps_exc:
+        print(f"Note: platform_settings seed: {_ps_exc}")
 
     # Seed reference data
     try:
@@ -1773,7 +1844,16 @@ def get_listings(
             return raw_status or 'available'
 
         # Serialize listings and apply role-aware visibility rules.
+        # pending/declined stay off Find Food except for the donor (own) or admin.
         result = []
+        viewer_is_admin = False
+        if user_id is not None:
+            try:
+                viewer = db.query(User).filter(User.id == int(user_id)).first()
+                viewer_is_admin = bool(viewer and _user_is_admin(viewer))
+            except Exception:
+                viewer_is_admin = False
+
         for listing in listings:
             try:
                 serialized = serialize_listing(listing, include_donor=True, include_donor_contact=False)
@@ -1781,12 +1861,33 @@ def get_listings(
                 effective_status = _effective_status(serialized)
                 serialized['status'] = effective_status
 
+                is_mine_as_donor = (
+                    user_id is not None
+                    and serialized.get('donor_id') is not None
+                    and str(serialized.get('donor_id')) == str(user_id)
+                )
+
+                if not viewer_is_admin and effective_status in ('pending', 'declined') and not is_mine_as_donor:
+                    continue
+
+                if viewer_is_admin:
+                    result.append(serialized)
+                    continue
+
+                if not user_id:
+                    if effective_status != 'available':
+                        continue
+                    result.append(serialized)
+                    continue
+
                 if user_role == 'recipient':
                     recipient_id = serialized.get('recipient_id')
                     is_claimed = effective_status in ('claimed', 'pending_confirmation')
-                    is_mine = user_id is not None and recipient_id is not None and str(recipient_id) == str(user_id)
-
-                    # Recipients may only see available listings and listings claimed by themselves.
+                    is_mine = (
+                        user_id is not None
+                        and recipient_id is not None
+                        and str(recipient_id) == str(user_id)
+                    )
                     if not (effective_status == 'available' or (is_claimed and is_mine)):
                         continue
 
@@ -2153,10 +2254,21 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
             # junk like "lolwut" or jumping to "completed" without going
             # through the SMS confirmation flow). The set mirrors the
             # values the rest of the app filters on.
-            allowed_statuses = {"available", "claimed", "pending_confirmation", "completed", "expired", "cancelled"}
-            if str(status).lower() not in allowed_statuses:
+            allowed_statuses = {
+                "available", "claimed", "pending_confirmation", "completed",
+                "expired", "cancelled", "pending", "declined",
+            }
+            new_status = str(status).lower()
+            if new_status not in allowed_statuses:
                 raise HTTPException(status_code=400, detail=f"Invalid status. Allowed: {sorted(allowed_statuses)}")
-            item.status = str(status).lower()
+            prev_status = str(item.status or "").lower()
+            # Non-admins cannot self-approve moderated listings onto Find Food.
+            if not is_admin and new_status == "available" and prev_status in ("pending", "declined"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Only an admin can approve this listing for Find Food",
+                )
+            item.status = new_status
         # NOTE: recipient_id is intentionally NOT writable here. It is
         # only set by the claim / confirm endpoints. Allowing it on PUT
         # would let a donor pin any user_id as the recipient of their
@@ -2948,16 +3060,177 @@ async def get_admin_stats(admin_user: User = Depends(verify_admin), db: Session 
         active_tasks = db.query(DonationReminder).filter(
             DonationReminder.status.in_([ReminderStatus.PENDING, ReminderStatus.SENT])
         ).count()
+        pending_listings = db.query(FoodResource).filter(FoodResource.status == "pending").count()
 
         return {
             "users": total_users,
             "listings": total_listings,
             "schedules": total_schedules,
             "tasks": active_tasks,
+            "pending_listings": pending_listings,
             "connected": True,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _review_listing_status(item: FoodResource, *, approve: bool, db: Session) -> dict:
+    item.status = "available" if approve else "declined"
+    item.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(item)
+    return serialize_listing(item, include_donor=True, include_donor_contact=False)
+
+
+@app.get("/api/admin/listings/pending")
+async def admin_pending_listings(
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Queue of donation listings awaiting admin approve/decline."""
+    rows = (
+        db.query(FoodResource)
+        .filter(FoodResource.status == "pending")
+        .order_by(FoodResource.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    listings = [
+        serialize_listing(r, include_donor=True, include_donor_contact=False) for r in rows
+    ]
+    return {"count": len(listings), "listings": listings}
+
+
+@app.post("/api/admin/listings/{listing_id}/approve")
+async def admin_approve_listing(
+    listing_id: int,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if str(item.status or "").lower() not in ("pending", "declined"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Listing status is '{item.status}', not pending/declined",
+        )
+    listing = _review_listing_status(item, approve=True, db=db)
+    return {"success": True, "listing": listing, "message": "Listing approved — now live on Find Food"}
+
+
+@app.post("/api/admin/listings/{listing_id}/decline")
+async def admin_decline_listing(
+    listing_id: int,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if str(item.status or "").lower() not in ("pending", "available"):
+        # Allow declining pending; also allow pulling live listings off the map.
+        if str(item.status or "").lower() == "declined":
+            return {"success": True, "listing": serialize_listing(item), "message": "Already declined"}
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot decline listing with status '{item.status}'",
+        )
+    listing = _review_listing_status(item, approve=False, db=db)
+    return {"success": True, "listing": listing, "message": "Listing declined"}
+
+
+@app.post("/api/admin/listings/bulk-review")
+async def admin_bulk_review_listings(
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Approve or decline many pending listings at once."""
+    body = await request.json()
+    ids = body.get("ids") or []
+    action = str(body.get("action") or "").strip().lower()
+    if action not in ("approve", "decline", "reject"):
+        raise HTTPException(status_code=400, detail="action must be approve or decline")
+    if not isinstance(ids, list) or not ids:
+        raise HTTPException(status_code=400, detail="ids must be a non-empty list")
+
+    approve = action == "approve"
+    succeeded = []
+    failed = []
+    for raw_id in ids:
+        try:
+            lid = int(raw_id)
+        except (TypeError, ValueError):
+            failed.append({"id": raw_id, "error": "invalid id"})
+            continue
+        item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+        if not item:
+            failed.append({"id": lid, "error": "not found"})
+            continue
+        st = str(item.status or "").lower()
+        if approve and st not in ("pending", "declined"):
+            failed.append({"id": lid, "error": f"status={st}"})
+            continue
+        if not approve and st not in ("pending", "available"):
+            failed.append({"id": lid, "error": f"status={st}"})
+            continue
+        try:
+            _review_listing_status(item, approve=approve, db=db)
+            succeeded.append(lid)
+        except Exception as exc:
+            failed.append({"id": lid, "error": str(exc)})
+
+    return {
+        "success": True,
+        "action": "approve" if approve else "decline",
+        "succeeded": succeeded,
+        "failed": failed,
+        "count": len(succeeded),
+    }
+
+
+@app.get("/api/admin/settings/require_listing_approval")
+async def admin_get_require_listing_approval(
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    from backend.platform_settings import (
+        SETTING_REQUIRE_LISTING_APPROVAL,
+        get_platform_setting_bool,
+    )
+
+    enabled = get_platform_setting_bool(db, SETTING_REQUIRE_LISTING_APPROVAL, default=True)
+    return {"key": SETTING_REQUIRE_LISTING_APPROVAL, "value": enabled}
+
+
+@app.put("/api/admin/settings/require_listing_approval")
+async def admin_set_require_listing_approval(
+    request: Request,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    from backend.platform_settings import (
+        SETTING_REQUIRE_LISTING_APPROVAL,
+        set_platform_setting,
+    )
+
+    body = await request.json()
+    raw = body.get("value", body.get("enabled", body.get("require_listing_approval")))
+    if isinstance(raw, str):
+        enabled = raw.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        enabled = bool(raw)
+    set_platform_setting(db, SETTING_REQUIRE_LISTING_APPROVAL, enabled)
+    return {
+        "key": SETTING_REQUIRE_LISTING_APPROVAL,
+        "value": enabled,
+        "message": (
+            "New donation listings will wait for approval"
+            if enabled
+            else "New donation listings will go live immediately"
+        ),
+    }
 
 
 @app.get("/api/public/stats")
@@ -4047,6 +4320,12 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
                     break
             images_json = json.dumps(cleaned) if cleaned else None
 
+        from backend.platform_settings import resolve_donation_create_status
+        listing_status = resolve_donation_create_status(
+            is_admin=_user_is_admin(donor),
+            db=db,
+        )
+
         item = FoodResource(
             donor_id=donor_id,
             title=title,
@@ -4059,6 +4338,7 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             pickup_window_end=pickup_end,
             address=address,
             images=images_json,
+            status=listing_status,
             created_at=datetime.utcnow()
         )
 
@@ -4095,8 +4375,17 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
         db.add(item)
         db.commit()
         db.refresh(item)
-        # Return the created item
-        return {"success": True, "listing": serialize_listing(item)}
+        awaiting = str(item.status or "").lower() == "pending"
+        return {
+            "success": True,
+            "listing": serialize_listing(item),
+            "awaiting_approval": awaiting,
+            "message": (
+                "Listing submitted and waiting for admin approval before it appears on Find Food."
+                if awaiting
+                else "Listing created successfully."
+            ),
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

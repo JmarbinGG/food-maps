@@ -802,22 +802,22 @@ def _build_action_policy() -> str:
         "## Assistance mode — ask first on find / share / request (default)\n"
         "When someone starts FINDING food, SHARING food, or REQUESTING food "
         "(and they are NOT in food-insecurity distress), ask ONCE before tools:\n"
-        "  1) Open the form / Open Find Food / Open Request Food — ONLY "
-        "navigate_ui to that page, then stop. Brief 'opened …' confirm. "
-        "Do NOT ask what they want to share/find/request. Do NOT start guided "
-        "intake. Never use Share's 'Open the form' label for Find Food.\n"
-        "  2) Do it for me — you handle the whole flow in chat "
-        "(search/claim, ask-and-post donation, or post_food_request).\n"
-        "  3) Guide me step by step — idiot-proof coaching. FIRST tell them "
-        "to open the right page (Share Food / Find Food / Request Food) "
-        "themselves; do NOT call navigate_ui. Then ONE baby-step at a time: "
-        "tiny words, where to look, what to tap/type. Wait for 'done' before "
-        "the next step. Form voice on the page still helps if they opened it.\n"
-        "The UI shows three chips matching the goal: Share → Open the form; "
-        "Request → Open Request Food; Find → Open Find Food; "
-        "plus Do it for me / Guide me step by step. Never say Open the form for Find.\n"
+        "  Share only — Open Share Food: ONLY navigate_ui to /share, then stop. "
+        "Brief 'opened …' confirm. Do NOT ask what they want to share. Do NOT "
+        "start guided intake.\n"
+        "  Find / request — NEVER offer Open Find Food (listings already show "
+        "in the sidebar). Only: Do it for me / Guide me step by step.\n"
+        "  Do it for me — you handle the whole flow in chat "
+        "(search/claim, ask-and-post donation, or help finding food).\n"
+        "  Guide me step by step — idiot-proof coaching. For share: FIRST tell "
+        "them to open Share Food themselves; do NOT call navigate_ui. For find: "
+        "coach the map + sidebar list. ONE baby-step at a time: tiny words, "
+        "where to look, what to tap/type. Wait for 'done' before the next step.\n"
+        "Chips: Share → Open Share Food + Do it for me + Guide me; "
+        "Find/request → Do it for me + Guide me only (no Open Find Food). "
+        "Never say Open Share Food for Find.\n"
         "Skip this ask when: they already chose a mode this session, "
-        "said 'do it for me' / 'guide me' / 'open the form' / 'open find food', "
+        "said 'do it for me' / 'guide me' / 'open share food' / 'open the form' / 'open find food', "
         "named concrete qty+food to "
         "post, or are mid-claim with listings already shown. Distress "
         "('hungry', 'nothing to eat') → skip and search immediately "
@@ -1382,6 +1382,43 @@ def _build_confirmation_summary(tool_name: str, args: dict) -> str:
 # Conversation Engine
 # ---------------------------------------------------------------------------
 
+def _prefer_active_community_role(
+    *,
+    guide_state: Optional[dict] = None,
+    profile: Optional[dict] = None,
+    role_hint: Optional[str] = None,
+) -> Optional[str]:
+    """Pick the UX role for chips / reminders.
+
+    Client ``guide_state`` wins for donor/recipient/… so an admin who switched
+    into recipient UX is not stuck on JWT ``admin`` (which would still emit
+    Open Share Food).
+    """
+    gs = ""
+    if isinstance(guide_state, dict):
+        gs = str(
+            guide_state.get("community_role")
+            or guide_state.get("role")
+            or ""
+        ).lower().strip()
+    prof = ""
+    if isinstance(profile, dict):
+        prof = str(
+            profile.get("community_role")
+            or profile.get("role")
+            or ""
+        ).lower().strip()
+    hint = str(role_hint or "").lower().strip()
+    active = {"donor", "recipient", "volunteer", "driver", "organizer", "dispatcher"}
+    if gs in active:
+        return gs
+    if prof in active:
+        return prof
+    if hint in active:
+        return hint
+    return gs or prof or hint or None
+
+
 def _normalize_chat_profile(
     raw: dict | None,
     user_id: str,
@@ -1404,7 +1441,11 @@ def _normalize_chat_profile(
     nested = raw.get("profile")
     if isinstance(nested, dict):
         uid = raw.get("user_id") or user_id
-        role = nested.get("community_role") or role_hint
+        role = (
+            nested.get("community_role")
+            or nested.get("role")
+            or role_hint
+        )
         role_key = str(role or "member").lower().strip()
         is_admin = bool(nested.get("is_admin")) or role_key == "admin"
         return {
@@ -2661,11 +2702,19 @@ class ConversationEngine:
         assist_reminder = None
         try:
             from backend.ai.conversation_flow import build_assistance_mode_reminder
+            assist_guide = dict(guide_state) if isinstance(guide_state, dict) else {}
+            _role = (
+                (profile or {}).get("community_role")
+                or (profile or {}).get("role")
+                or role_hint
+            )
+            if _role and not assist_guide.get("community_role") and not assist_guide.get("role"):
+                assist_guide["community_role"] = str(_role).lower().strip()
             assist_reminder = build_assistance_mode_reminder(
                 message,
                 history,
                 lang=lang,
-                guide_state=guide_state,
+                guide_state=assist_guide or None,
                 user_id=str(user_id),
             )
             if assist_reminder:
@@ -2855,9 +2904,11 @@ class ConversationEngine:
             assistance_reminder=assist_reminder,
             guide_state=guide_state,
             community_role=(
-                (profile or {}).get("community_role")
-                or (profile or {}).get("role")
-                or role_hint
+                _prefer_active_community_role(
+                    guide_state=guide_state,
+                    profile=profile,
+                    role_hint=role_hint,
+                )
             ),
         )
 
@@ -4097,6 +4148,11 @@ class ConversationEngine:
                     community_role = prof.get("community_role") or prof.get("role")
             except Exception:
                 pass
+        if not community_role and isinstance(guide_state, dict):
+            community_role = (
+                guide_state.get("community_role")
+                or guide_state.get("role")
+            )
 
         # When we just asked the do-it-for-me vs guide fork,
         # force goal-aware chips even if the model rephrased the question.
@@ -4109,7 +4165,9 @@ class ConversationEngine:
                 response_text or "", lang or "en", force=True,
             )
             if guided:
-                return _serialize_suggestion_chips(guided)
+                return _serialize_suggestion_chips(
+                    _filter_chips_for_community_role(guided, community_role),
+                )
 
         if not _user_chose_hands_on(user_message or "", assistance_reminder or ""):
             forced = share_assistance_fork_chips(
@@ -4118,9 +4176,12 @@ class ConversationEngine:
                 user_message=user_message or "",
                 assistance_reminder=assistance_reminder,
                 guide_state=guide_state,
+                user_role=community_role,
             )
             if forced:
-                return _serialize_suggestion_chips(forced)
+                return _serialize_suggestion_chips(
+                    _filter_chips_for_community_role(forced, community_role),
+                )
 
         communities: list[dict] = []
         suggested: Optional[str] = None
@@ -4161,6 +4222,14 @@ class ConversationEngine:
         if isinstance(guide_state, dict):
             user_context["pageKey"] = guide_state.get("pageKey")
             user_context["path"] = guide_state.get("path")
+            # Prefer live guide_state role when profile lookup missed.
+            if not community_role:
+                community_role = (
+                    guide_state.get("community_role")
+                    or guide_state.get("role")
+                )
+                if community_role:
+                    user_context["community_role"] = str(community_role).lower().strip()
         try:
             chips = build_turn_suggestions(
                 response_text or "",
@@ -4182,9 +4251,39 @@ class ConversationEngine:
                 suggested_community=suggested,
                 assistance_reminder=assistance_reminder,
                 guide_state=guide_state,
+                user_role=community_role,
             )
 
-        return _serialize_suggestion_chips(chips)
+        return _serialize_suggestion_chips(
+            _filter_chips_for_community_role(chips, community_role),
+        )
+
+
+def _filter_chips_for_community_role(chips: list, community_role: Optional[str]) -> list:
+    """Open Share Food is donor-only — strip for every other / unknown role."""
+    role = str(community_role or "").lower().strip()
+    if role == "donor":
+        return list(chips or [])
+    # Strip for recipient, admin, volunteer, empty (fail closed for non-donors).
+    blocked = {
+        "open share food",
+        "abrir compartir comida",
+    }
+    out: list = []
+    for chip in chips or []:
+        if isinstance(chip, str):
+            if chip.strip().lower() in blocked:
+                continue
+            out.append(chip)
+            continue
+        if isinstance(chip, dict):
+            label = str(
+                chip.get("label") or chip.get("message") or chip.get("prompt") or ""
+            ).strip().lower()
+            if label in blocked:
+                continue
+        out.append(chip)
+    return out
 
 
 def _serialize_suggestion_chips(chips: list) -> list:
@@ -4415,6 +4514,7 @@ def generate_quick_replies(
     suggested_community: Optional[str] = None,
     guide_state: Optional[dict] = None,
     assistance_reminder: Optional[str] = None,
+    user_role: Optional[str] = None,
 ) -> list[str]:
     """Heuristic 'smart reply' / autofill chips for the chat UI.
 
@@ -4515,6 +4615,7 @@ def generate_quick_replies(
             text, lang, user_message=user_message or "",
             assistance_reminder=assistance_reminder or "",
             guide_state=guide_state,
+            user_role=user_role,
         )
         for chip in fork or []:
             label = chip.get("label") if isinstance(chip, dict) else str(chip or "")
@@ -4623,6 +4724,7 @@ def generate_quick_replies(
             text, lang, user_message=user_message or "",
             assistance_reminder=assistance_reminder or "",
             guide_state=guide_state,
+            user_role=user_role,
         )
         if fork:
             for chip in fork:
@@ -4962,6 +5064,7 @@ def generate_quick_replies(
         text, lang, user_message=user_message or "",
         assistance_reminder=assistance_reminder or "",
         guide_state=guide_state,
+        user_role=user_role,
     )
     if _fork:
         for chip in _fork:
@@ -5048,6 +5151,7 @@ def generate_quick_replies(
         fork = share_assistance_fork_chips(
             text, lang, user_message=user_message or "",
             guide_state=guide_state,
+            user_role=user_role,
         )
         if fork:
             for chip in fork:

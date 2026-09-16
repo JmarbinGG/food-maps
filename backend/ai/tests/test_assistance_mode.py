@@ -172,7 +172,7 @@ def test_quick_replies_hands_on_ack_not_fork():
     labels = [c if isinstance(c, str) else c.get("label") for c in chips]
     assert "Do it for me" not in labels
     assert "Guide me step by step" not in labels
-    assert "Open the form" not in labels
+    assert "Open Share Food" not in labels
 
 
 def test_reminder_guided_share():
@@ -204,14 +204,14 @@ def test_open_page_share_navigates_only():
             "message": "Want me to handle everything, or guide you step by step?",
         },
     ]
-    rem = build_assistance_mode_reminder("Open the form", history)
+    rem = build_assistance_mode_reminder("Open Share Food", history)
     assert rem is not None
     assert "OPEN PAGE ONLY" in rem
     assert "navigate_ui" in rem
     assert "target=create" in rem
     assert "Do NOT ask what they want to share" in rem
     assert "GUIDED" not in rem or "Do NOT start GUIDED" in rem
-    assert detect_assistance_mode("Open the form") == "open_page"
+    assert detect_assistance_mode("Open Share Food") == "open_page"
 
 
 def test_open_page_find_navigates_only():
@@ -256,42 +256,92 @@ def test_no_tool_block_after_mode_chosen():
 
 
 def test_quick_replies_for_assistance_fork():
-    # Ambiguous fork (no find/share cue) defaults to Share → Open the form.
+    # Ambiguous fork with donor role → Open Share Food.
+    out = generate_quick_replies(
+        "Want me to handle everything for you in chat, or walk you through "
+        "doing it yourself step by step on the pages?",
+        user_role="donor",
+    )
+    assert out == [
+        "Open Share Food",
+        "Do it for me",
+        "Guide me step by step",
+    ]
+
+
+def test_ambiguous_fork_without_donor_omits_open_share():
     out = generate_quick_replies(
         "Want me to handle everything for you in chat, or walk you through "
         "doing it yourself step by step on the pages?",
     )
-    assert out == [
-        "Open the form",
-        "Do it for me",
-        "Guide me step by step",
+    assert "Open Share Food" not in out
+    assert out == ["Do it for me", "Guide me step by step"]
+
+
+def test_recipient_fork_never_shows_open_share_food():
+    from backend.agent.suggestion_chips import share_assistance_fork_chips
+
+    chips = share_assistance_fork_chips(
+        "Want me to handle everything for you in chat, or walk you through "
+        "doing it yourself step by step on the pages?",
+        "en",
+        user_message="help me with food",
+        user_role="recipient",
+    )
+    labels = [c["label"] if isinstance(c, dict) else c for c in chips]
+    assert "Open Share Food" not in labels
+    assert "Open Find Food" not in labels
+    assert labels == ["Do it for me", "Guide me step by step"]
+
+    out = generate_quick_replies(
+        "Want me to handle everything for you in chat, or walk you through "
+        "doing it yourself step by step?",
+        user_message="I need food",
+        user_role="recipient",
+    )
+    assert "Open Share Food" not in out
+    assert "Open Find Food" not in out
+    assert out == ["Do it for me", "Guide me step by step"]
+
+    # Admin JWT / is_admin with active recipient UX must also omit Open Share Food.
+    admin_as_recipient = share_assistance_fork_chips(
+        "Want me to handle everything for you in chat, or walk you through "
+        "doing it yourself step by step?",
+        "en",
+        user_message="I want to share food",
+        user_role="recipient",
+        guide_state={"community_role": "recipient", "role": "recipient"},
+    )
+    assert "Open Share Food" not in [
+        c["label"] if isinstance(c, dict) else c for c in admin_as_recipient
     ]
 
 
 def test_quick_replies_share_fork_mentions_share_in_reply():
     out = generate_quick_replies(
         "I can help you share food — want me to handle everything for you "
-        "in chat, or walk you through it step by step on the pages?"
+        "in chat, or walk you through it step by step on the pages?",
+        user_role="donor",
     )
     assert out == [
-        "Open the form",
+        "Open Share Food",
         "Do it for me",
         "Guide me step by step",
     ]
 
 
-def test_quick_replies_find_fork_uses_open_find_food():
+def test_quick_replies_find_fork_omits_open_find_food():
     out = generate_quick_replies(
         "I can search nearby. Want me to handle the search for you, "
         "or guide you on Find Food step by step?",
         user_message="I want to find food",
     )
     assert out == [
-        "Open Find Food",
         "Do it for me",
         "Guide me step by step",
     ]
-    assert "Open the form" not in out
+    assert "Open Find Food" not in out
+    assert "Open Share Food" not in out
 
 
 def test_quick_replies_find_fork_omits_open_on_find_page():
@@ -301,11 +351,11 @@ def test_quick_replies_find_fork_omits_open_on_find_page():
         guide_state={"pageKey": "find", "path": "/find"},
     )
     assert out == [
-        "Open Find Food",
         "Do it for me",
         "Guide me step by step",
     ]
-    assert "Open the form" not in out
+    assert "Open Find Food" not in out
+    assert "Open Share Food" not in out
 
 
 def test_quick_replies_headerless_guided_not_fork():
@@ -315,7 +365,7 @@ def test_quick_replies_headerless_guided_not_fork():
         "and we'll go to the next step together.",
         user_message="Guide me step by step",
     )
-    assert "Open the form" not in out
+    assert "Open Share Food" not in out
     assert "Do it for me" not in out
     assert "Guide me step by step" not in out
     assert "Done" in out
@@ -331,13 +381,13 @@ def test_guided_share_advances_on_done():
         {"role": "user", "message": "Guide me step by step"},
         {
             "role": "assistant",
-            "message": "GUIDED — STEP 1 of 16 (SHARE FOOD — Open Share Food): ...",
+            "message": "GUIDED — STEP 1 of 13 (SHARE FOOD — Open Share Food): ...",
         },
     ]
     rem = build_assistance_mode_reminder("done", history)
     assert rem is not None
     assert "STEP 2" in rem
-    assert "Your name" in rem or "Name" in rem or "donor" in rem.lower()
+    assert "Title" in rem or "title" in rem.lower()
 
     # Donor already named food + qty — go straight into posting.
     assert needs_assistance_mode_choice("I want to share 5 apples") is False
@@ -357,26 +407,26 @@ def test_live_guide_state_skips_reopen():
         {"role": "user", "message": "Guide me step by step"},
         {
             "role": "assistant",
-            "message": "GUIDED — STEP 1 of 16 (SHARE FOOD) — Open Share Food:\nOpen the page.",
+            "message": "GUIDED — STEP 1 of 13 (SHARE FOOD) — Open Share Food:\nOpen the page.",
         },
     ]
     guide_state = {
         "formId": "share-food",
-        "fieldName": "donor_name",
+        "fieldName": "title",
         "stepIndex": 1,
-        "stepTotal": 16,
+        "stepTotal": 13,
         "path": "/share",
-        "label": "Name / Organization",
+        "label": "Title",
         "source": "form",
     }
     rem = build_assistance_mode_reminder("what goes here?", history, guide_state=guide_state)
     assert rem is not None
     assert "Do NOT call navigate_ui" in rem
-    assert "baby" in rem.lower() or "IDIOT" in rem or "Name" in rem
+    assert "baby" in rem.lower() or "IDIOT" in rem or "Title" in rem
     live = build_live_guide_prompt(guide_state)
     assert live is not None
     assert "share-food" in live or "/share" in live
-    assert "donor_name" in live
+    assert "title" in live
 
 
 def test_live_guide_state_advances_from_form_field():
@@ -384,7 +434,7 @@ def test_live_guide_state_advances_from_form_field():
         {"role": "user", "message": "Guide me step by step"},
         {
             "role": "assistant",
-            "message": "GUIDED — STEP 1 of 16 (SHARE FOOD) — Open Share Food:\nOpen.",
+            "message": "GUIDED — STEP 1 of 13 (SHARE FOOD) — Open Share Food:\nOpen.",
         },
     ]
     rem = build_assistance_mode_reminder(
@@ -392,14 +442,67 @@ def test_live_guide_state_advances_from_form_field():
         history,
         guide_state={
             "formId": "share-food",
-            "fieldName": "donor_name",
+            "fieldName": "title",
             "stepIndex": 1,
             "path": "/share",
         },
     )
-    # Focused on name → advance goes to donor type (STEP 3).
-    assert "STEP 3" in rem
-    assert "Donor type" in rem or "donor_type" in rem.lower() or "Tipo" in rem
+    # Chat history wins: after Open (STEP 1), done → Title (STEP 2).
+    # Form focus on title must NOT skip ahead to Description.
+    assert "STEP 2" in rem
+    assert "Title" in rem or "title" in rem.lower()
+
+
+def test_guided_advance_ignores_stale_form_focus():
+    """Form focus on an earlier field must not rewind or skip the walkthrough."""
+    history = [
+        {"role": "user", "message": "Guide me step by step"},
+        {
+            "role": "assistant",
+            "message": "GUIDED — STEP 1 of 13 (SHARE FOOD) — Open Share Food:\nOpen.",
+        },
+        {"role": "user", "message": "done"},
+        {
+            "role": "assistant",
+            "message": "GUIDED — STEP 2 of 13 (SHARE FOOD) — Title [field:title]:\nTap Title.",
+        },
+        {"role": "user", "message": "done"},
+        {
+            "role": "assistant",
+            "message": (
+                "GUIDED — STEP 3 of 13 (SHARE FOOD) — Description "
+                "[field:description]:\nTap Description."
+            ),
+        },
+    ]
+    rem = build_assistance_mode_reminder(
+        "done",
+        history,
+        guide_state={
+            "formId": "share-food",
+            "fieldName": "title",  # stale focus left on title
+            "path": "/share",
+        },
+    )
+    assert rem is not None
+    assert "STEP 4" in rem
+    assert "Photo" in rem or "photo" in rem.lower() or "image" in rem.lower()
+
+
+def test_guided_share_continue_then_finish():
+    history = [
+        {
+            "role": "assistant",
+            "message": (
+                "GUIDED — STEP 12 of 13 (SHARE FOOD) — Continue to Safety Check "
+                "[field:safety]:\nClick Continue."
+            ),
+        },
+    ]
+    rem = build_assistance_mode_reminder("done", history, guide_state={"path": "/share"})
+    assert rem is not None
+    assert "STEP 13" in rem
+    assert "Finish" in rem or "Skip Safety" in rem or "safety" in rem.lower()
 
 
 def test_durable_assistance_session_survives_without_history_mode():
@@ -422,7 +525,7 @@ def test_live_form_does_not_force_guided_mode():
     assert resolve_assistance_mode(
         "what goes here?",
         [],
-        guide_state={"formId": "share-food", "fieldName": "donor_name"},
+        guide_state={"formId": "share-food", "fieldName": "title"},
     ) is None
 
 

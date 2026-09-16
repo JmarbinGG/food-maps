@@ -2043,11 +2043,14 @@ async def _get_user_profile(user_id: str) -> dict:
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
+            role_val = user.role.value if user.role else None
             return {
                 "id": user.id,
                 "name": user.name,
                 "email": user.email,
-                "role": user.role.value if user.role else None,
+                "role": role_val,
+                # Alias used by chip forks / assistance reminders.
+                "community_role": role_val,
                 "address": user.address,
                 "latitude": user.coords_lat,
                 "longitude": user.coords_lng,
@@ -4764,6 +4767,14 @@ async def _post_food_listing_legacy_sqlalchemy(
                     )
                 }
 
+            from backend.platform_settings import resolve_donation_create_status
+            from backend.app import _user_is_admin as _is_admin_user
+
+            listing_status = resolve_donation_create_status(
+                is_admin=bool(_is_admin_user(user)),
+                db=db,
+            )
+
             item = FoodResource(
                 donor_id=uid,
                 title=title.strip()[:255],
@@ -4779,7 +4790,7 @@ async def _post_food_listing_legacy_sqlalchemy(
                 coords_lat=lat,
                 coords_lng=lng,
                 community_id=listing_community_id,
-                status="available",
+                status=listing_status,
                 allergens=json.dumps(list(allergens)) if allergens else None,
                 dietary_tags=json.dumps(list(dietary_tags)) if dietary_tags else None,
                 images=json.dumps([str(u) for u in images if u]) if images else None,
@@ -4811,6 +4822,7 @@ async def _post_food_listing_legacy_sqlalchemy(
             verified = False
             verify_issues: list[str] = []
             visible_count = None
+            awaiting_approval = str(listing_status).lower() == "pending"
             if check is None:
                 verify_issues.append("listing row not found on re-query")
             else:
@@ -4819,7 +4831,10 @@ async def _post_food_listing_legacy_sqlalchemy(
                     if hasattr(check.status, "value")
                     else str(check.status or "")
                 )
-                if status_val != "available":
+                if awaiting_approval:
+                    if status_val != "pending":
+                        verify_issues.append(f"status={status_val!r} (expected 'pending')")
+                elif status_val != "available":
                     verify_issues.append(f"status={status_val!r} (expected 'available')")
                 if check.coords_lat is None or check.coords_lng is None:
                     verify_issues.append("missing map coordinates")
@@ -4852,7 +4867,13 @@ async def _post_food_listing_legacy_sqlalchemy(
             # tool used profile coords silently — this surfaces it.
             addr_part = f" at {resolved_address}" if resolved_address else ""
             coord_part = f" (pin {lat:.4f}, {lng:.4f})"
-            if verified:
+            if awaiting_approval and verified:
+                summary = (
+                    f"Submitted listing #{item.id} — '{item.title}' "
+                    f"({cat_enum.value}){addr_part}{coord_part}. "
+                    "It is waiting for admin approval before it appears on Find Food."
+                )
+            elif verified:
                 summary = (
                     f"Posted listing #{item.id} — '{item.title}' "
                     f"({cat_enum.value}){addr_part}{coord_part}. "
@@ -4870,6 +4891,8 @@ async def _post_food_listing_legacy_sqlalchemy(
             return {
                 "success": True,
                 "listing_id": item.id,
+                "status": listing_status,
+                "awaiting_approval": awaiting_approval,
                 "address": resolved_address,
                 "coords_lat": lat,
                 "coords_lng": lng,

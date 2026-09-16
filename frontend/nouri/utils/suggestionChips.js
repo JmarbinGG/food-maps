@@ -13,10 +13,25 @@ export function liveAssistantIndex(messages) {
   return -1;
 }
 
+const _SHARE_OPEN_RE = /^(open share food|abrir compartir comida)$/i;
+
+function _canShareFood(communityRole) {
+  // Only donors get Share Food navigate chips. Recipients, volunteers,
+  // admins-in-recipient-UX, and unknown roles must never see them.
+  return String(communityRole || '').toLowerCase().trim() === 'donor';
+}
+
 export function resolveInputChips(suggestions, language, communityRole, opts = {}) {
   const raw = Array.isArray(suggestions) ? suggestions : [];
   if (raw.length) {
-    return raw.slice(0, 6).map((s) => (typeof s === 'string' ? { label: s, message: s } : s));
+    let chips = raw.slice(0, 6).map((s) => (typeof s === 'string' ? { label: s, message: s } : s));
+    if (!_canShareFood(communityRole)) {
+      chips = chips.filter((c) => {
+        const label = String(c?.label || c?.message || '').trim();
+        return !_SHARE_OPEN_RE.test(label);
+      });
+    }
+    return chips;
   }
   if (opts.allowLazy) {
     const es = language === 'es';

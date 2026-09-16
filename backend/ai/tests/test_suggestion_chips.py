@@ -263,22 +263,22 @@ class TestBuildTurnSuggestions:
             assistance_reminder="GUIDED MODE: coach one baby step at a time.",
         )
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
-        assert "Open the form" not in labels
+        assert "Open Share Food" not in labels
         assert "Do it for me" not in labels
         assert "Guide me step by step" not in labels
         assert "Done" in labels
-        assert "I see the form" in labels or "What's next?" in labels
+        assert "I see it" in labels or "I see the form" in labels or "What's next?" in labels
 
-    def test_guided_donor_type_gets_role_chips(self):
+    def test_guided_unit_gets_unit_chips(self):
         text = (
-            "GUIDED — STEP 2 of 9 (SHARE FOOD — Donor Information):\n"
-            "Find Donor Type and choose Individual/Family or Organization. "
+            "GUIDED — STEP 8 of 13 (SHARE FOOD — Unit):\n"
+            "Tap Unit and pick Pounds, Items, Servings, or Ounces. "
             "Say 'done' when selected."
         )
         chips = build_turn_suggestions(text, "en", tool_results=[], min_chips=0)
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
-        assert any("Individual" in (l or "") for l in labels)
-        assert any("Organization" in (l or "") for l in labels)
+        assert any("Pounds" in (l or "") for l in labels)
+        assert any("Items" in (l or "") for l in labels)
 
     def test_single_claim_qty_not_multi_each_chips(self):
         text = "Nice choice! How many of the Fresh Bread would you like? They have 5 available."
@@ -327,13 +327,14 @@ class TestBuildTurnSuggestions:
             tool_results=[],
             min_chips=0,
             last_user_message="I want to share food",
+            user_context={"community_role": "donor"},
             assistance_reminder=(
                 "ASSISTANCE MODE (required this turn):\nAsk ONCE how they want help."
             ),
         )
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
         assert labels == [
-            "Open the form",
+            "Open Share Food",
             "Do it for me",
             "Guide me step by step",
         ]
@@ -357,9 +358,10 @@ class TestBuildTurnSuggestions:
             tool_results=[],
             min_chips=0,
             last_user_message="I want to share food",
+            user_context={"community_role": "donor"},
         )
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
-        assert "Open the form" in labels
+        assert "Open Share Food" in labels
         assert "Yes" not in labels
         assert "Later" not in labels
 
@@ -372,9 +374,9 @@ class TestBuildTurnSuggestions:
             last_user_message="I want to find food",
         )
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
-        assert labels[0] == "Open Find Food"
-        assert "Open the form" not in labels
-        assert "Do it for me" in labels
+        assert "Open Find Food" not in labels
+        assert "Open Share Food" not in labels
+        assert labels == ["Do it for me", "Guide me step by step"]
 
     def test_find_fork_already_on_page_omits_open(self):
         chips = build_turn_suggestions(
@@ -386,5 +388,6 @@ class TestBuildTurnSuggestions:
             user_context={"pageKey": "find", "path": "/find"},
         )
         labels = [c if isinstance(c, str) else c.get("label") for c in chips]
-        assert "Open the form" not in labels
-        assert labels == ["Open Find Food", "Do it for me", "Guide me step by step"]
+        assert "Open Share Food" not in labels
+        assert "Open Find Food" not in labels
+        assert labels == ["Do it for me", "Guide me step by step"]

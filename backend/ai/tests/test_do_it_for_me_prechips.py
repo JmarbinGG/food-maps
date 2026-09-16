@@ -21,7 +21,7 @@ def _joined(chips) -> str:
     [
         (
             "How would you like to proceed with sharing?",
-            ("Do it for me", "Open the form", "Guide"),
+            ("Do it for me", "Open Share Food", "Guide"),
             ("5 apples",),
             "I want to share food",
         ),
@@ -117,7 +117,7 @@ def _joined(chips) -> str:
         ),
         (
             "Would you like to open the request food form, or should I handle it for you?",
-            ("Open the form", "Do it for me"),
+            ("Open Share Food", "Do it for me"),
             ("Yes, post it", "Claim", "Still sealed"),
             "I need food",
         ),
@@ -361,8 +361,9 @@ class TestChipTurnRegression:
             last_user_message="I need food",
         )
         joined = _joined(chips)
-        assert "open the form" in joined
+        assert "open share food" not in joined
         assert "do it for me" in joined
+        assert "guide me step by step" in joined or "guide" in joined
         assert "claim" not in joined
 
     def test_search_results_do_not_steal_claim_confirm(self):

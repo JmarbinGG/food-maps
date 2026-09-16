@@ -29,18 +29,16 @@ MAPBOX_DIRECTIONS_URL = "https://api.mapbox.com/directions/v5/mapbox"
 
 
 async def _require_listing_approval() -> bool:
-    """True when community posts must wait for admin approval before Find Food.
+    """True when community posts must wait for admin approval before Find Food."""
+    from backend.platform_settings import require_listing_approval
 
-    Food Maps has no platform_settings table; chat posts go live as
-    ``available``. Keep the gate off so bulk/AI creates match that behavior.
-    """
-    return False
+    return require_listing_approval()
 
 
 async def _require_request_approval() -> bool:
     """True when food requests must wait for admin approval.
 
-    Food Maps has no platform_settings table — no approval gate.
+    Food Maps has no request-approval queue yet — keep off.
     """
     return False
 
@@ -48,7 +46,7 @@ async def _require_request_approval() -> bool:
 async def _require_claim_approval() -> bool:
     """True when recipient claims must wait for admin approval before pickup.
 
-    Food Maps has no platform_settings table — no approval gate.
+    Food Maps uses SMS pending_confirmation instead — keep off.
     """
     return False
 
@@ -56,13 +54,12 @@ async def _require_claim_approval() -> bool:
 async def _resolve_create_listing_status(listing_type: str = "donation") -> str:
     """Status for donor/Nouri creates.
 
-    When approval is off, return ``available`` so rows show in Find Food
-    (same as chat ``post_food_listing``). Requests use ``open``.
+    When listing approval is on, donations start as ``pending`` until an admin
+    approves them to ``available``. Requests use ``open`` (no request queue yet).
     """
     if str(listing_type or "donation").lower() == "request":
         return "pending" if await _require_request_approval() else "open"
     return "pending" if await _require_listing_approval() else "available"
-
 
 async def _resolve_create_claim_status() -> str:
     """Status for new claims: pending when claim approval is required."""

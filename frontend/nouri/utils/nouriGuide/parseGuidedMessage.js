@@ -10,25 +10,27 @@ import { NOURI_GOALS, getStepMeta } from './registry'
 const STEP_RE = /(?:GUIDED\s*[—–-]\s*STEP|GUIADO\s*[—–-]\s*PASO)\s*(\d+)\s*(?:of|de)\s*(\d+)\s*(?:\(([^)]+)\))?\s*(?:[—–-]\s*([^\n[]+))?/i
 const FIELD_RE = /\[field:([a-z0-9_]+)\]/i
 
-/** Keyword → field for headerless guided coaching replies. */
+/** Keyword → field for headerless guided coaching replies (Food Maps CreateListing). */
 const FIELD_HINTS = [
-  { field: 'donor_name', re: /name\s*\/\s*organization|type your name|escribe tu nombre|donor information.*name|caja.*nombre/i },
-  { field: 'donor_type', re: /donor type|tipo de donante|individual\s*\/\s*family|individual\s*\/\s*familia/i },
-  { field: 'donor_zip', re: /\bzip\b|código postal|codigo postal/i },
-  { field: 'donor_city', re: /\bcity\b|ciudad/i },
-  { field: 'donor_state', re: /\bstate\b|estado(?!s)/i },
-  { field: 'school_district', re: /active communities|comunidades activas|school (?:or )?community|escuela o comunidad/i },
-  { field: 'donor_email', re: /\bemail\b|correo|phone|teléfono|telefono/i },
-  { field: 'full_address', re: /full address|pickup address|dirección completa|direccion completa|street address/i },
-  { field: 'title', re: /what are you donating|qué estás donando|que estas donando|food name|nombre del alimento/i },
+  { field: 'title', re: /\btitle\b|food name|nombre del alimento|what food are you sharing|qué estás donando|que estas donando|fresh vegetables|verduras/i },
+  { field: 'description', re: /\bdescription\b|descripción|descripcion|short sentence|frase corta/i },
+  { field: 'image', re: /\bphoto\b|\bfotos?\b|add photos|añadir fotos|optional/i },
   { field: 'category', re: /\bcategory\b|categoría|categoria/i },
-  { field: 'description', re: /\bdescription\b|descripción|descripcion/i },
+  { field: 'perishability', re: /perishab|perecedero|spoils|echa a perder/i },
   { field: 'quantity', re: /\bquantity\b|cantidad|how many|cuántos|cuantos/i },
-  { field: 'unit', re: /\bunit\b|unidad(?!es de)/i },
-  { field: 'expiry_date', re: /expiration|expiry|best-?by|vencimiento|caducidad/i },
-  { field: 'image', re: /\bphoto\b|\bfoto\b|upload|submit listing|enviar listado/i },
-  { field: 'requester_name', re: /your name|tu nombre|requester/i },
-  { field: 'requester_email', re: /submit food request|enviar solicitud/i },
+  { field: 'unit', re: /\bunit\b|unidad(?!es de)|pounds|servings|ounces/i },
+  { field: 'address', re: /pickup address|dirección de recogida|direccion de recogida|mapbox|selected address/i },
+  { field: 'pickup_window_start', re: /window start|inicio de|pickup must|tap now|\bnow\b/i },
+  { field: 'pickup_window_end', re: /window end|fin de|\+2h|after the start/i },
+  { field: 'safety', re: /continue to safety|continuar a (?:revisión de )?seguridad|green button continue/i },
+  { field: 'safety_done', re: /skip safety|saltar revisión|finish & submit|awaiting approval|pendiente de aprobación|complete the safety/i },
+  { field: 'requester_name', re: /your name|tu nombre|signed in|iniciado sesión/i },
+  { field: 'requester_email', re: /search find food|buscar en buscar|open find food/i },
+  { field: 'school_district', re: /school|community|comunidad|escuela/i },
+  { field: 'zip', re: /\bzip\b|código postal|codigo postal|update search area|search this area|buscar en esta zona/i },
+  { field: 'search', re: /map pins|all listings|food listings|\blist\b|browse|pines|todas las publicaciones/i },
+  { field: 'claimQty', re: /claim this food|tap claim|pulsa reclamar|reclamar esta comida/i },
+  { field: 'confirmCode', re: /4-digit|confirm claim|confirm your claim|confirmar reclamo|sms code/i },
 ]
 
 /**
@@ -80,9 +82,9 @@ export function inferGuidedFieldFromText(message, fallbackGoalKey = null) {
 
   let goalKey = fallbackGoalKey
   if (!goalKey) {
-    if (/share food|compartir|donor information|food listing/i.test(t)) goalKey = 'share-food'
+    if (/share food|compartir|basic info|safety check|food maps share/i.test(t)) goalKey = 'share-food'
     else if (/request food|solicitar/i.test(t)) goalKey = 'request-food'
-    else if (/find food|buscar comida|claim/i.test(t)) goalKey = 'find-food'
+    else if (/find food|buscar comida|claim this food|food maps map|zip chip|confirm claim/i.test(t)) goalKey = 'find-food'
     else if (fallbackGoalKey) goalKey = fallbackGoalKey
     else goalKey = 'share-food'
   }

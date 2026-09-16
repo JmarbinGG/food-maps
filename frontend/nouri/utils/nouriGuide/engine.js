@@ -4,7 +4,7 @@
  */
 import { textToSpeech, playAudioBlob } from '../openaiVoice'
 import { guideFormField, clearAllFormFieldGuides, reapplyPendingGuideField } from '../formFieldGuide'
-import { NOURI_GOALS, getStepMeta, goalKeyFromFormId, getStepIndexForField } from './registry'
+import { NOURI_GOALS, getStepMeta, goalKeyFromFormId, getStepIndexForField, canonicalFieldName } from './registry'
 import { parseGuidedStepHeader, simplifyGuideText, inferGuidedFieldFromText } from './parseGuidedMessage'
 import { trackFieldFocus, notifyFieldChanged, reportFieldError, resetStuckTracking } from './stuckDetection'
 import { normalizeGuideLang, ttsLangTag } from '../guideLang'
@@ -447,8 +447,9 @@ export function syncGuideFromChatMessage(message, { lang = 'en', speak = false }
 
 /**
  * Form field focus — unified with chat step state.
- * @param {{ formId: string, fieldName: string, label?: string, text: string, hints?: Record<string, unknown> }} params
- * @param {{ lang?: string }} [options]
+ * During an active chat-guided walkthrough, keep the chat step index so
+ * focusing a field does not skip/rewind the form order. Still highlight
+ * the focused field for voice help.
  */
 export function syncGuideFromFormField(
   { formId, fieldName, label, text, hints = {} },
@@ -460,20 +461,28 @@ export function syncGuideFromFormField(
   const mappedIndex = goalKey ? getStepIndexForField(goalKey, fieldName) : -1
   const hintKeys = Object.keys(hints)
   const hintIndex = hintKeys.indexOf(fieldName)
-  const stepIndex = mappedIndex >= 0
-    ? mappedIndex
-    : (hintIndex >= 0 ? hintIndex : state.stepIndex)
+  const chatLocked =
+    state.source === 'chat'
+    && state.goalKey
+    && state.stepTotal > 0
+    && state.stepIndex != null
+
+  const stepIndex = chatLocked
+    ? state.stepIndex
+    : (mappedIndex >= 0
+      ? mappedIndex
+      : (hintIndex >= 0 ? hintIndex : state.stepIndex))
   const stepTotal = NOURI_GOALS[goalKey]?.steps?.length || hintKeys.length || state.stepTotal
 
   updateGuide({
-    source: 'form',
-    goalKey,
+    source: chatLocked ? 'chat' : 'form',
+    goalKey: goalKey || state.goalKey,
     formId,
     stepIndex,
     stepTotal,
-    section: '',
+    section: chatLocked ? state.section : '',
     label: label || fieldName,
-    fieldName,
+    fieldName: canonicalFieldName(fieldName) || fieldName,
     text,
     caption: text,
   }, { speak: true, lang, focusField: true })

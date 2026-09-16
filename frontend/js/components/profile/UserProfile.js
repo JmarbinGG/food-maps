@@ -297,7 +297,21 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
           }
         }
       } else {
-        setMessage({ type: 'error', text: data.detail || 'Failed to update profile' });
+        const detail = (typeof data?.detail === 'string')
+          ? data.detail
+          : (Array.isArray(data?.detail) ? data.detail.map((d) => d.msg || d).join(' ') : '')
+            || 'Failed to update profile';
+        const staleSession = response.status === 401
+          || /user not found|does not match this database|sign out and log in/i.test(detail);
+        if (staleSession && typeof window.handleTokenExpired === 'function') {
+          window.handleTokenExpired({ showAlert: true });
+          setMessage({
+            type: 'error',
+            text: detail || 'Session expired. Please sign in again with a local account.',
+          });
+        } else {
+          setMessage({ type: 'error', text: detail });
+        }
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Network error. Please try again.' });

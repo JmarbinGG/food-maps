@@ -12,19 +12,21 @@ from backend.models import FoodCategory, UserRole
 async def test_resolve_create_listing_status_available_when_gate_off():
     from backend.tools import _resolve_create_listing_status
 
-    assert await _resolve_create_listing_status("donation") == "available"
-    assert await _resolve_create_listing_status("request") == "open"
+    async def _off():
+        return False
+
+    with patch("backend.tools._require_listing_approval", _off):
+        assert await _resolve_create_listing_status("donation") == "available"
+        assert await _resolve_create_listing_status("request") == "open"
 
 
 @pytest.mark.asyncio
-async def test_require_approval_helpers_off_for_food_maps():
+async def test_require_request_and_claim_helpers_off_for_food_maps():
     from backend.tools import (
         _require_claim_approval,
-        _require_listing_approval,
         _require_request_approval,
     )
 
-    assert await _require_listing_approval() is False
     assert await _require_request_approval() is False
     assert await _require_claim_approval() is False
 

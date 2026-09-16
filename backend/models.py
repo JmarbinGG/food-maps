@@ -589,3 +589,13 @@ class NewsletterSubscription(Base):
     is_active = Column(Boolean, default=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PlatformSetting(Base):
+    """Key/value platform toggles (e.g. require_listing_approval)."""
+    __tablename__ = "platform_settings"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    value = Column(Text, nullable=False, default="")
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

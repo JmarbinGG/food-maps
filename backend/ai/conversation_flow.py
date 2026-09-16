@@ -802,10 +802,11 @@ def _page_already_open(guide_state: dict | None, goal: str) -> bool:
         return "request" in blob or page_key == "request"
     if goal in ("find", "claim"):
         return (
-            page_key in {"find", "claim", "near-me"}
+            page_key in {"find", "claim", "near-me", "map", "home"}
             or "find" in blob
             or "claim" in blob
             or "near" in blob
+            or "map" in blob
         )
     if goal == "profile":
         return page_key == "profile" or "profile" in blob
@@ -829,13 +830,36 @@ def _guide_state_step_index(guide_state: dict | None, total: int) -> Optional[in
     return min(idx, max(0, total - 1))
 
 
+_GUIDED_FIELD_ALIASES: dict[str, str] = {
+    "qty": "quantity",
+    "quantity": "quantity",
+    "full_address": "address",
+    "address": "address",
+    "images": "image",
+    "photo": "image",
+    "photos": "image",
+    "image": "image",
+    "expiry_date": "perishability",
+    "expiration_date": "perishability",
+}
+
+
+def _canonical_guided_field(field_name: str) -> str:
+    key = str(field_name or "").strip()
+    if not key:
+        return ""
+    return _GUIDED_FIELD_ALIASES.get(key, key)
+
+
 def _guided_index_for_field(steps: tuple[dict, ...] | None, field_name: str) -> Optional[int]:
     """Map a live form field to its guided-step index (prefer non-open steps)."""
     if not steps or not field_name:
         return None
+    want = _canonical_guided_field(field_name)
     open_hit: Optional[int] = None
     for i, step in enumerate(steps):
-        if step.get("field") != field_name:
+        step_field = _canonical_guided_field(str(step.get("field") or ""))
+        if step_field != want:
             continue
         if step.get("is_open_step"):
             open_hit = i
@@ -853,32 +877,41 @@ def _guided_step_index(
 ) -> tuple[int, bool]:
     """Return (step_index, is_repeat).
 
-    Prefer mapping guide_state.fieldName → step (form hint indices are NOT
-    the same as guided steps). Fall back to chat GUIDED history.
+    Mid walkthrough: advance strictly from chat GUIDED history so form focus
+    cannot skip or rewind fields. Form field mapping is only used to jump to
+    a field when the user asks for help, or before any GUIDED step exists.
     """
-    field = ""
-    if isinstance(guide_state, dict):
-        field = str(guide_state.get("fieldName") or "").strip()
-    mapped = _guided_index_for_field(steps, field) if field else None
-    if mapped is not None:
-        if _user_guided_advance(message):
-            return min(mapped + 1, total - 1), False
-        t = (message or "").strip().lower()
-        repeat = t in {
-            "help", "huh", "what", "repeat", "again", "stuck", "ayuda", "otra vez",
-        }
-        return mapped, repeat
-
-    delivered = _guided_last_step_no(history)
-    if delivered == 0:
-        return 0, False
-    if _user_guided_advance(message):
-        return min(delivered, total - 1), False
     t = (message or "").strip().lower()
     repeat = t in {
         "help", "huh", "what", "repeat", "again", "stuck", "ayuda", "otra vez",
     }
-    return max(0, delivered - 1), repeat
+    help_like = repeat or any(
+        p in t for p in (
+            "what goes", "what do i", "where do i", "how do i", "help with",
+            "qué pongo", "que pongo", "dónde", "donde", "ayuda con",
+        )
+    )
+
+    delivered = _guided_last_step_no(history)  # 1-based step number from headers
+    field = ""
+    if isinstance(guide_state, dict):
+        field = str(guide_state.get("fieldName") or "").strip()
+    mapped = _guided_index_for_field(steps, field) if field else None
+
+    # Already mid GUIDED walkthrough — keep form order from chat history.
+    if delivered > 0:
+        if _user_guided_advance(message):
+            # Next index = delivered (since delivered is the last 1-based step).
+            return min(delivered, total - 1), False
+        if help_like and mapped is not None:
+            return mapped, True
+        # Re-coach the current step (do not jump to whatever field is focused).
+        return max(0, delivered - 1), repeat
+
+    # No GUIDED steps yet — land on focused field if present, else start.
+    if mapped is not None:
+        return mapped, repeat
+    return 0, False
 
 
 def _guided_from_steps(
@@ -964,16 +997,20 @@ def _guided_format_step(
             "MODO GUIADO = tutorial IDIOTA-PROOF (como a un niño).\n"
             "CRÍTICO: NO llames navigate_ui. NO abras ninguna página tú.\n"
             "Solo DILE en el tutorial cómo abrirla "
-            "(menú → Compartir / Buscar / Solicitar). Ellos la abren.\n"
+            "(Food Maps: Compartir = botón verde arriba derecha; Buscar comida = mapa de inicio "
+            "vía el logo — en GUIADO de buscar NO uses el botón verde Buscar comida, abre el chat). "
+            "Ellos la abren.\n"
             "Palabras cortas. UNA sola acción. Frases de 5–12 palabras.\n"
             "Di exactamente dónde mirar y qué tocar/escribir.\n"
             "Resalta SOLO el campo de este paso — no saltes campos.\n"
+            "Solo Share Food Create Listing — de arriba abajo bajo la tarjeta "
+            "azul clara AI GUIDE. No inventes info de donante ni otros formularios.\n"
             f"{already_bit}"
             f"{body}\n"
             "Tu respuesta visible DEBE empezar exactamente con esa línea GUIADO, "
             "luego un renglón en blanco, luego 2–5 frases MUY simples. "
-            "Ejemplo de tono: 'Mira arriba. Pulsa Compartir comida. ¿Ya la ves? "
-            "Di listo.'\n"
+            "Ejemplo de tono: 'Mira arriba a la derecha. Pulsa el botón verde "
+            "Compartir comida. ¿Ya ves el formulario? Di listo.'\n"
             "NO llames post_food_listing, post_food_request, claim_*, search_*, "
             "ni navigate_ui salvo que lo pidan explícitamente."
             f"{repeat_note}"
@@ -987,25 +1024,28 @@ def _guided_format_step(
         "GUIDED MODE = IDIOT-PROOF baby-step TUTORIAL.\n"
         "CRITICAL: Do NOT call navigate_ui. Do NOT open any page yourself.\n"
         "Only TELL the user how to open the page in the tutorial "
-        "(menu → Share Food / Find Food / Request Food). They open it.\n"
+        "(Food Maps: Share Food = top-right green button; Find Food = home map via logo — "
+        "do NOT send them to the green Find Food button in guided Find, that opens chat). "
+        "They open it.\n"
         "Tiny words. ONE action only. Sentences of about 5–12 words.\n"
         "Say exactly where to look and what to tap or type.\n"
-        "Highlight ONLY this step's field — do not skip required fields.\n"
+        "Highlight ONLY this step's field — do not skip fields.\n"
+        "Share Food Create Listing ONLY — top to bottom under the light-blue "
+        "AI GUIDE card. Never invent donor-info, Request Food, or other forms.\n"
         f"{already_bit}"
         f"{body}\n"
         "Your user-visible reply MUST start with that GUIDED header line exactly, "
         "then a blank line, then 2–5 VERY simple sentences. "
-        "Tone example: 'Look at the top menu. Tap Share Food. Do you see the form? "
-        "Say done.'\n"
+        "Tone example: 'Look at the top right. Tap the green Share Food button. "
+        "Do you see the form? Say done.'\n"
         "Do NOT call post_food_listing, post_food_request, claim_*, search_*, "
         "or navigate_ui unless they explicitly ask you to."
         f"{repeat_note}"
     )
 
 
-# Idiot-proof UI walkthrough: open the page first, then ONE required field
-# per step so every Share Food input gets highlighted (keep in sync with
-# utils/nouriGuide/registry.js → share-food.steps).
+# Idiot-proof UI walkthrough for Food Maps Share Food (CreateListing).
+# Keep in sync with frontend/nouri/utils/nouriGuide/registry.js → share-food.steps.
 _SHARE_GUIDED_UI: tuple[dict, ...] = (
     {
         "section_en": "Open Share Food",
@@ -1014,199 +1054,38 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Look at the top of the screen.\n"
-            "2) Find the button or link that says Share Food (or Compartir).\n"
-            "3) Tap it.\n"
-            "4) Wait until you see a form with boxes to fill in.\n"
+            "1) Look at the TOP RIGHT of Food Maps.\n"
+            "2) Find the green button that says Share Food.\n"
+            "3) Click Share Food.\n"
+            "4) Wait until you see the Share Food form (Basic Info / Safety Check).\n"
             "5) Ask: 'Do you see the Share Food form now? Say done.'"
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Mira arriba en la pantalla.\n"
-            "2) Busca Compartir comida.\n"
-            "3) Púlsalo.\n"
-            "4) Espera hasta ver un formulario con cajas.\n"
+            "1) Mira ARRIBA A LA DERECHA en Food Maps.\n"
+            "2) Busca el botón verde Compartir comida.\n"
+            "3) Haz clic en Compartir comida.\n"
+            "4) Espera el formulario Share Food (Información básica / Seguridad).\n"
             "5) Pregunta: '¿Ya ves el formulario? Di listo.'"
         ),
     },
     {
-        "section_en": "Your name",
-        "section_es": "Tu nombre",
-        "field": "donor_name",
-        "body_en": (
-            "Baby step:\n"
-            "• Look at the TOP blue box — Donor Information.\n"
-            "• Tap Name / Organization (it should be highlighted).\n"
-            "• Type your name. Example: Maria Lopez.\n"
-            "• Say done when the name is there."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Mira la caja azul ARRIBA — Información del donante.\n"
-            "• Pulsa Nombre u Organización (debe estar resaltado).\n"
-            "• Escribe tu nombre. Ejemplo: María López.\n"
-            "• Di listo cuando esté."
-        ),
-    },
-    {
-        "section_en": "Donor type",
-        "section_es": "Tipo de donante",
-        "field": "donor_type",
-        "body_en": (
-            "Baby step:\n"
-            "• Stay in the blue box at the top.\n"
-            "• Tap Donor Type (highlighted).\n"
-            "• Choose Individual/Family OR Organization.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Quédate en la caja azul de arriba.\n"
-            "• Pulsa Tipo de donante (resaltado).\n"
-            "• Elige Individual/Familia u Organización.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "ZIP code",
-        "section_es": "Código postal",
-        "field": "donor_zip",
-        "body_en": (
-            "Baby step:\n"
-            "• Still in the blue box.\n"
-            "• Tap ZIP Code (highlighted).\n"
-            "• Type your ZIP. Example: 94501.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Sigue en la caja azul.\n"
-            "• Pulsa Código postal (resaltado).\n"
-            "• Escribe el ZIP. Ejemplo: 94501.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "City",
-        "section_es": "Ciudad",
-        "field": "donor_city",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap City (highlighted).\n"
-            "• Type your city. Example: Alameda.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Ciudad (resaltado).\n"
-            "• Escribe la ciudad. Ejemplo: Alameda.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "State",
-        "section_es": "Estado",
-        "field": "donor_state",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap State (highlighted).\n"
-            "• Pick your state from the list.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Estado (resaltado).\n"
-            "• Elige el estado de la lista.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "Community",
-        "section_es": "Comunidad",
-        "field": "school_district",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap Active Communities / school list (highlighted).\n"
-            "• Pick your school or community.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Comunidades activas (resaltado).\n"
-            "• Elige tu escuela o comunidad.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "Email or phone",
-        "section_es": "Correo o teléfono",
-        "field": "donor_email",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap Email (highlighted) OR Phone.\n"
-            "• Type one contact — email or phone is enough.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Correo (resaltado) O Teléfono.\n"
-            "• Escribe uno — correo o teléfono basta.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "Pickup address",
-        "section_es": "Dirección de recogida",
-        "field": "full_address",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap Full Address / Pickup Address (highlighted).\n"
-            "• Type your street address slowly.\n"
-            "• Wait for the green check on the map.\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Dirección completa (resaltado).\n"
-            "• Escribe la calle despacio.\n"
-            "• Espera la marca verde del mapa.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "Food name",
-        "section_es": "Nombre del alimento",
+        "section_en": "Title",
+        "section_es": "Título",
         "field": "title",
         "body_en": (
             "Baby step:\n"
-            "• Scroll DOWN to the green box — Food Listing Details.\n"
-            "• Tap What are you donating? (highlighted).\n"
-            "• Type the food name. Example: Fresh apples.\n"
-            "• Say done."
+            "• Look under the light-blue AI GUIDE card on the form.\n"
+            "• Tap Title * (highlighted) — first field.\n"
+            "• Enter the food you are sharing. Example: Fresh vegetables from garden.\n"
+            "• Say done when the title is there."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Baja a la caja verde — Detalles del alimento.\n"
-            "• Pulsa ¿Qué estás donando? (resaltado).\n"
-            "• Escribe el nombre. Ejemplo: Manzanas frescas.\n"
-            "• Di listo."
-        ),
-    },
-    {
-        "section_en": "Category",
-        "section_es": "Categoría",
-        "field": "category",
-        "body_en": (
-            "Baby step:\n"
-            "• Tap Category (highlighted).\n"
-            "• Pick one (produce, bakery, prepared…).\n"
-            "• Say done."
-        ),
-        "body_es": (
-            "Paso de bebé:\n"
-            "• Pulsa Categoría (resaltado).\n"
-            "• Elige una (fruta, panadería, preparada…).\n"
-            "• Di listo."
+            "• Mira debajo de la tarjeta azul clara AI GUIDE.\n"
+            "• Pulsa Título * (resaltado) — primer campo.\n"
+            "• Escribe la comida que compartes. Ejemplo: Verduras frescas del jardín.\n"
+            "• Di listo cuando esté."
         ),
     },
     {
@@ -1215,14 +1094,67 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         "field": "description",
         "body_en": (
             "Baby step:\n"
+            "• Still under the AI GUIDE card — second field.\n"
             "• Tap Description (highlighted).\n"
-            "• Write one short sentence about the food.\n"
+            "• Write a short description of the food.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
+            "• Sigue bajo AI GUIDE — segundo campo.\n"
             "• Pulsa Descripción (resaltado).\n"
-            "• Escribe una frase corta sobre la comida.\n"
+            "• Escribe una descripción corta de la comida.\n"
+            "• Di listo."
+        ),
+    },
+    {
+        "section_en": "Photos",
+        "section_es": "Fotos",
+        "field": "image",
+        "body_en": (
+            "Baby step:\n"
+            "• Find Photos — third section under the AI GUIDE card.\n"
+            "• Click the Add photos button to attach a photo of the food.\n"
+            "• Say done when the photo is attached (or if you skip)."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Busca Fotos — tercera sección bajo AI GUIDE.\n"
+            "• Haz clic en Añadir fotos para adjuntar una foto.\n"
+            "• Di listo cuando esté (o si saltas)."
+        ),
+    },
+    {
+        "section_en": "Category",
+        "section_es": "Categoría",
+        "field": "category",
+        "body_en": (
+            "Baby step:\n"
+            "• Tap Category * (highlighted).\n"
+            "• Select a category from the list.\n"
+            "• Say done."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Pulsa Categoría * (resaltado).\n"
+            "• Elige una categoría de la lista.\n"
+            "• Di listo."
+        ),
+    },
+    {
+        "section_en": "Perishability",
+        "section_es": "Perecedero",
+        "field": "perishability",
+        "body_en": (
+            "Baby step:\n"
+            "• Tap Perishability (highlighted).\n"
+            "• Select the perishability level (High / Medium / Low).\n"
+            "• Say done."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Pulsa Perecedero (resaltado).\n"
+            "• Elige el nivel (Alta / Media / Baja).\n"
             "• Di listo."
         ),
     },
@@ -1232,13 +1164,13 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         "field": "quantity",
         "body_en": (
             "Baby step:\n"
-            "• Tap Quantity (highlighted).\n"
+            "• Tap Quantity * (highlighted).\n"
             "• Type how many. Example: 5.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Pulsa Cantidad (resaltado).\n"
+            "• Pulsa Cantidad * (resaltado).\n"
             "• Escribe cuántos. Ejemplo: 5.\n"
             "• Di listo."
         ),
@@ -1250,79 +1182,125 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         "body_en": (
             "Baby step:\n"
             "• Tap Unit (highlighted).\n"
-            "• Pick a unit (lb, count, boxes…).\n"
+            "• Select Pounds, Items, Servings, or Ounces.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
             "• Pulsa Unidad (resaltado).\n"
-            "• Elige una (lb, unidades, cajas…).\n"
+            "• Elige Libras, Unidades, Porciones u Onzas.\n"
             "• Di listo."
         ),
     },
     {
-        "section_en": "Expiration",
-        "section_es": "Caducidad",
-        "field": "expiry_date",
+        "section_en": "Pickup address",
+        "section_es": "Dirección de recogida",
+        "field": "address",
         "body_en": (
             "Baby step:\n"
-            "• Tap Expiration Date (highlighted).\n"
-            "• Pick a day (required unless this is fresh produce).\n"
-            "• Fresh produce only: you may say done without a date.\n"
+            "• Tap Pickup Address * (highlighted).\n"
+            "• Type your street address and pick a match from the list.\n"
+            "• Wait for the green Selected Address box.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Pulsa Fecha de vencimiento (resaltado).\n"
-            "• Elige un día (obligatorio salvo producto fresco).\n"
-            "• Solo producto fresco: puedes decir listo sin fecha.\n"
+            "• Pulsa Dirección de recogida * (resaltado).\n"
+            "• Escribe la calle y elige una de la lista.\n"
+            "• Espera la caja verde de dirección seleccionada.\n"
             "• Di listo."
         ),
     },
     {
-        "section_en": "Photo & submit",
-        "section_es": "Foto y enviar",
-        "field": "image",
+        "section_en": "Pickup window start",
+        "section_es": "Inicio de recogida",
+        "field": "pickup_window_start",
         "body_en": (
             "Baby step:\n"
-            "• Tap Photo (highlighted) — REQUIRED; you cannot submit without one.\n"
-            "• Tap Upload and pick a real picture of YOUR food.\n"
-            "• Look at the whole form once.\n"
-            "• Tap Submit Listing at the bottom.\n"
+            "• Tap Pickup Window Start * (highlighted).\n"
+            "• Fill in a future date and time, or tap Now.\n"
+            "• Say done."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Pulsa Inicio de ventana de recogida * (resaltado).\n"
+            "• Pon fecha y hora futuras, o pulsa Ahora.\n"
+            "• Di listo."
+        ),
+    },
+    {
+        "section_en": "Pickup window end",
+        "section_es": "Fin de recogida",
+        "field": "pickup_window_end",
+        "body_en": (
+            "Baby step:\n"
+            "• Tap Pickup Window End * (highlighted).\n"
+            "• Fill in a time after the start, or tap +2h.\n"
+            "• Say done."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Pulsa Fin de ventana de recogida * (resaltado).\n"
+            "• Pon una hora después del inicio, o pulsa +2h.\n"
+            "• Di listo."
+        ),
+    },
+    {
+        "section_en": "Continue to Safety Check",
+        "section_es": "Continuar a seguridad",
+        "field": "safety",
+        "body_en": (
+            "Baby step:\n"
+            "• Scroll to the bottom of Basic Info.\n"
+            "• Click the green button Continue to Safety Check →\n"
+            "• Say done when you see the Safety Check step."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Baja al final de Información básica.\n"
+            "• Haz clic en Continuar a revisión de seguridad →\n"
+            "• Di listo cuando veas el paso de seguridad."
+        ),
+    },
+    {
+        "section_en": "Finish & submit",
+        "section_es": "Terminar y enviar",
+        "field": "safety_done",
+        "body_en": (
+            "Baby step:\n"
+            "• Complete the safety checklist on this page,\n"
+            "  OR click Skip Safety Check.\n"
+            "• Wait for success — the listing may say awaiting approval.\n"
             "• Say submitted when it works, or tell me if you see an error."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Pulsa Foto (resaltado) — OBLIGATORIA; no se puede enviar sin ella.\n"
-            "• Pulsa Subir y elige una foto REAL de TU comida.\n"
-            "• Mira el formulario una vez.\n"
-            "• Pulsa Enviar listado abajo.\n"
+            "• Completa la lista de seguridad,\n"
+            "  O pulsa Saltar revisión de seguridad.\n"
+            "• Espera el éxito — puede decir pendiente de aprobación.\n"
             "• Di enviado si salió bien, o cuéntame el error."
         ),
     },
 )
 
+# Food Maps: requests are handled via Nouri chat (no separate Request Food header button).
 _REQUEST_GUIDED_UI: tuple[dict, ...] = (
     {
-        "section_en": "Open Request Food",
-        "section_es": "Abrir Solicitar Comida",
+        "section_en": "Stay in chat",
+        "section_es": "Quédate en el chat",
         "field": "title",
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Look at the top menu.\n"
-            "2) Find Request Food.\n"
-            "3) Tap it.\n"
-            "4) Wait for the request form to show.\n"
-            "5) Ask: 'Do you see the Request Food form? Say done.'"
+            "1) Food Maps uses Share Food and Find Food in the top bar.\n"
+            "2) To request help, stay in this Nouri chat — no separate Request Food page.\n"
+            "3) Ask: 'Ready to tell me what food you need? Say done.'"
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Mira el menú de arriba.\n"
-            "2) Busca Solicitar comida.\n"
-            "3) Púlsalo.\n"
-            "4) Espera el formulario.\n"
-            "5) Pregunta: '¿Ya ves el formulario? Di listo.'"
+            "1) Food Maps usa Compartir y Buscar comida en la barra de arriba.\n"
+            "2) Para pedir ayuda, quédate en este chat con Nouri.\n"
+            "3) Pregunta: '¿Listo para decirme qué comida necesitas? Di listo.'"
         ),
     },
     {
@@ -1331,15 +1309,15 @@ _REQUEST_GUIDED_UI: tuple[dict, ...] = (
         "field": "title",
         "body_en": (
             "Baby step:\n"
-            "• Tap What food do you need?\n"
-            "• Type one food. Example: Rice.\n"
-            "• Say done."
+            "• Tell me one food you need. Example: Rice.\n"
+            "• Or tap Find Food in the green top button to browse the map.\n"
+            "• Say done when you named the food."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Pulsa ¿Qué alimento necesitas?\n"
-            "• Escribe uno. Ejemplo: Arroz.\n"
-            "• Di listo."
+            "• Dime un alimento. Ejemplo: Arroz.\n"
+            "• O pulsa Buscar comida en el botón verde para ver el mapa.\n"
+            "• Di listo cuando lo digas."
         ),
     },
     {
@@ -1348,33 +1326,33 @@ _REQUEST_GUIDED_UI: tuple[dict, ...] = (
         "field": "category",
         "body_en": (
             "Baby step:\n"
-            "• Tap Category and pick one.\n"
-            "• Tap How much? and type a number.\n"
-            "• Pick a Unit (items, lb, bags…).\n"
+            "• Tell me roughly how much you need.\n"
+            "• Example: 2 bags, or enough for a family of 4.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Elige Categoría.\n"
-            "• Escribe ¿Cuánto? con un número.\n"
-            "• Elige Unidad.\n"
+            "• Dime más o menos cuánto necesitas.\n"
+            "• Ejemplo: 2 bolsas, o para una familia de 4.\n"
             "• Di listo."
         ),
     },
     {
-        "section_en": "Community",
-        "section_es": "Comunidad",
+        "section_en": "Your area",
+        "section_es": "Tu zona",
         "field": "school_district",
         "body_en": (
             "Baby step:\n"
-            "• Needed by is optional — skip if you have no date.\n"
-            "• Tap School / community and pick yours.\n"
+            "• Check the ZIP button next to the Food Maps logo.\n"
+            "• Tap it if you need to change your search area.\n"
+            "• Or tell me your ZIP / neighborhood in chat.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Necesito para es opcional — sáltalo si no hay fecha.\n"
-            "• Elige Escuela / comunidad.\n"
+            "• Mira el botón ZIP junto al logo de Food Maps.\n"
+            "• Púlsalo si quieres cambiar la zona.\n"
+            "• O dime tu ZIP / barrio en el chat.\n"
             "• Di listo."
         ),
     },
@@ -1384,99 +1362,97 @@ _REQUEST_GUIDED_UI: tuple[dict, ...] = (
         "field": "requester_name",
         "body_en": (
             "Baby step:\n"
-            "• Type Your name.\n"
-            "• Type Email.\n"
-            "• Phone is optional.\n"
+            "• Make sure you are signed in so donors can reach you.\n"
+            "• If asked, confirm your name or email in chat.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Escribe Tu nombre.\n"
-            "• Escribe Correo.\n"
-            "• Teléfono es opcional.\n"
+            "• Asegúrate de haber iniciado sesión.\n"
+            "• Si te lo piden, confirma tu nombre o correo en el chat.\n"
             "• Di listo."
         ),
     },
     {
-        "section_en": "Submit",
-        "section_es": "Enviar",
+        "section_en": "Next step",
+        "section_es": "Siguiente paso",
         "field": "requester_email",
         "body_en": (
             "Baby step:\n"
-            "• Look at the form one time.\n"
-            "• Tap Submit food request at the bottom.\n"
-            "• Say submitted when it works, or tell me the error."
+            "• I will search Find Food / the map for matches near you.\n"
+            "• Or open Find Food yourself with the green top button.\n"
+            "• Say done when you want me to search, or tell me the error."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Mira el formulario una vez.\n"
-            "• Pulsa Enviar solicitud de comida.\n"
-            "• Di enviado si salió bien, o cuéntame el error."
+            "• Buscaré en Buscar comida / el mapa cerca de ti.\n"
+            "• O abre Buscar comida con el botón verde.\n"
+            "• Di listo cuando quieras que busque, o cuéntame el error."
         ),
     },
 )
 
 _FIND_GUIDED_UI: tuple[dict, ...] = (
     {
-        "section_en": "Open Find Food",
-        "section_es": "Abrir Buscar Comida",
+        "section_en": "Open the map",
+        "section_es": "Abrir el mapa",
         "field": "search",
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Look at the top menu.\n"
-            "2) Find Find Food (or Buscar comida).\n"
-            "3) Tap it.\n"
-            "4) Wait until you see food cards or a search box.\n"
-            "5) Ask: 'Do you see Find Food now? Say done.'"
+            "1) Find Food on Food Maps IS the home map — not a separate form.\n"
+            "2) Tap the Food Maps logo (top left) if you are on another screen.\n"
+            "3) Wait until you see the map with food pins, and/or All Listings on the left.\n"
+            "4) Do NOT use the green Find Food button for this tutorial — that opens chat.\n"
+            "5) Ask: 'Do you see the Food Maps map now? Say done.'"
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Mira el menú de arriba.\n"
-            "2) Busca Buscar comida.\n"
-            "3) Púlsalo.\n"
-            "4) Espera ver tarjetas o un buscador.\n"
-            "5) Pregunta: '¿Ya ves Buscar comida? Di listo.'"
+            "1) Buscar comida en Food Maps ES el mapa de inicio — no hay otro formulario.\n"
+            "2) Pulsa el logo de Food Maps (arriba izquierda) si estás en otra pantalla.\n"
+            "3) Espera ver el mapa con pines y/o Todas las publicaciones a la izquierda.\n"
+            "4) NO uses el botón verde Buscar comida en este tutorial — abre el chat.\n"
+            "5) Pregunta: '¿Ya ves el mapa de Food Maps? Di listo.'"
         ),
     },
     {
-        "section_en": "What to look for",
-        "section_es": "Qué buscar",
-        "field": "search",
+        "section_en": "Your ZIP area",
+        "section_es": "Tu zona ZIP",
+        "field": "zip",
         "body_en": (
             "Baby step:\n"
-            "• Look for the search box on Find Food.\n"
-            "• Or just tell me in chat what food you want.\n"
-            "• Example: 'bread' or 'apples'.\n"
-            "• Say done when you typed it or told me."
+            "• Look next to the Food Maps logo for the green ZIP chip.\n"
+            "• Tap it — a box titled Update search area opens.\n"
+            "• Type your ZIP code, then tap Search this area.\n"
+            "• Say done when the area looks right."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Busca la caja de búsqueda.\n"
-            "• O dime en el chat qué comida quieres.\n"
-            "• Ejemplo: 'pan' o 'manzanas'.\n"
-            "• Di listo cuando lo hayas dicho."
+            "• Mira el chip verde ZIP junto al logo.\n"
+            "• Púlsalo — se abre Actualizar zona de búsqueda.\n"
+            "• Escribe tu ZIP y pulsa Buscar en esta zona.\n"
+            "• Di listo cuando la zona esté bien."
         ),
     },
     {
-        "section_en": "Look at results",
-        "section_es": "Ver resultados",
+        "section_en": "Browse listings",
+        "section_es": "Ver listados",
         "field": "search",
         "body_en": (
             "Baby step:\n"
-            "• Look at the food cards on the page.\n"
-            "• Or ask me to search for you in chat.\n"
-            "• Pick one food you like.\n"
-            "• Say the number or the name. Example: '#1' or 'the bread'.\n"
-            "• Say done when you picked one."
+            "• On the map, each yellow pin with an apple is shared food.\n"
+            "• Or tap List (top right) for Food Listings cards.\n"
+            "• Or use All Listings in the left sidebar (desktop).\n"
+            "• Tap a pin → Details, or tap a listing card.\n"
+            "• Say done when you opened one listing you like."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Mira las tarjetas de comida.\n"
-            "• O pídeme buscar en el chat.\n"
-            "• Elige una.\n"
-            "• Di el número o el nombre. Ejemplo: '#1'.\n"
-            "• Di listo cuando elijas."
+            "• En el mapa, cada pin amarillo con manzana es comida.\n"
+            "• O pulsa Lista (arriba derecha) para ver tarjetas.\n"
+            "• O usa Todas las publicaciones a la izquierda (escritorio).\n"
+            "• Pulsa un pin → Detalles, o una tarjeta.\n"
+            "• Di listo cuando abras un listado que te guste."
         ),
     },
     {
@@ -1485,21 +1461,38 @@ _FIND_GUIDED_UI: tuple[dict, ...] = (
         "field": "claimQty",
         "body_en": (
             "Baby step:\n"
-            "• Tap Claim on that food card.\n"
-            "• Or tell me 'claim it for me'.\n"
-            "• Use + and − to pick how many.\n"
-            "• Read the pickup place.\n"
-            "• Tap Confirm Claim.\n"
-            "• Say done when it is confirmed."
+            "• On a listing card, tap Claim.\n"
+            "• Or in Food Listing Details, tap Claim This Food.\n"
+            "• Read the pickup address and window.\n"
+            "• If asked for a phone number, enter it and tap Save.\n"
+            "• Say done when the claim starts (or you see a code screen)."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Pulsa Reclamar en esa tarjeta.\n"
-            "• O dime 'reclámala por mí'.\n"
-            "• Usa + y − para la cantidad.\n"
-            "• Lee el lugar de recogida.\n"
-            "• Pulsa Confirmar reclamo.\n"
-            "• Di listo cuando esté."
+            "• En la tarjeta, pulsa Reclamar.\n"
+            "• O en Detalles, pulsa Reclamar esta comida.\n"
+            "• Lee la dirección y la ventana de recogida.\n"
+            "• Si pide teléfono, escríbelo y pulsa Guardar.\n"
+            "• Di listo cuando empiece el reclamo (o veas el código)."
+        ),
+    },
+    {
+        "section_en": "Confirm claim",
+        "section_es": "Confirmar reclamo",
+        "field": "confirmCode",
+        "body_en": (
+            "Baby step:\n"
+            "• Check your phone for the 4-digit SMS code.\n"
+            "• In Confirm Your Claim, tap Enter 4-Digit Code.\n"
+            "• Type the code, then tap Confirm Claim.\n"
+            "• Say done when it says confirmed, or tell me the error."
+        ),
+        "body_es": (
+            "Paso de bebé:\n"
+            "• Revisa el SMS con el código de 4 dígitos.\n"
+            "• En Confirmar tu reclamo, pulsa Introducir código.\n"
+            "• Escribe el código y pulsa Confirmar reclamo.\n"
+            "• Di listo cuando esté confirmado, o cuéntame el error."
         ),
     },
 )
@@ -1651,28 +1644,33 @@ def _page_key_from_path(path: str) -> str:
 
 _PAGE_KNOWLEDGE_EN: dict[str, str] = {
     "home": (
-        "HOME (/). Marketing landing. Main CTAs: Find Food (/find), Share Food (/share), "
-        "Request Food (/request). Offer those three paths; use navigate_ui to open them."
+        "HOME (/). Food Maps map is the main Find Food surface. Top bar CTAs: "
+        "green Share Food (donors) or Find Food (recipients), plus ZIP area. "
+        "Offer Share Food (/share → create) or Find Food (map). Use navigate_ui."
     ),
     "share": (
-        "SHARE FOOD (/share) — donor listing form. Fields: donor name/org, donor type, "
-        "food title, quantity, allergens, description, photos (REQUIRED before post), "
-        "community, pickup address, pickup window, expiry. Hands-on: collect in chat then "
-        "post_food_listing with images[]. Guided: coach one field at a time; navigate_ui "
-        "target=create only if not already on /share. Never skip photo."
+        "SHARE FOOD (/share) — Food Maps CreateListing form. Step 1 Basic Info: "
+        "title, description, optional photos, category, perishability, quantity, "
+        "unit, pickup address (Mapbox), pickup window start/end. Step 2 Safety Check "
+        "(or Skip). Listing may await admin approval. Hands-on: collect in chat then "
+        "post_food_listing. Guided: coach one CreateListing field at a time; "
+        "navigate_ui target=create only if not already on share. Photos are optional."
     ),
     "find": (
-        "FIND FOOD (/find) — recipient browse/map/list. Search/filter listings, claim from "
-        "cards or via claim_listing in chat. Hands-on: search_food_near_user then claim. "
-        "Guided: coach filters/map; navigate_ui target=list if not on /find. Near-me is /near-me."
+        "FIND FOOD — Food Maps home map (currentView=map). There is no separate Find Food form. "
+        "Header green Find Food opens Nouri chat (not the map). Guide users to the logo/home map, "
+        "ZIP chip → Update search area → Search this area, Map/List toggle, All Listings sidebar, "
+        "pin → Details, Claim / Claim This Food, then Confirm Your Claim (4-digit SMS). "
+        "navigate_ui target=map."
     ),
     "near-me": (
         "NEAR ME (/near-me) — location-first browse. Same claim/search tools as Find Food. "
         "navigate_ui target=near-me."
     ),
     "request": (
-        "REQUEST FOOD (/request) — recipient posts a need (text-only, NO photos). "
-        "post_food_request tool. Guided: coach the request form; navigate_ui target=request."
+        "REQUEST FOOD — Food Maps has no separate Request Food header button. "
+        "Help in Nouri chat and/or send them to Find Food on the map. "
+        "post_food_request only if they explicitly want a posted need."
     ),
     "claim": (
         "CLAIM FOOD (/claim) — claim a specific listing (often opened with listing state). "
@@ -1682,7 +1680,7 @@ _PAGE_KNOWLEDGE_EN: dict[str, str] = {
     "profile": (
         "PROFILE (/profile) — user identity, dietary prefs, listings tabs, stats. "
         "get_user_profile / update_user_profile. navigate_ui target=profile. "
-        "Do not post food from here; send donors to /share."
+        "Do not post food from here; send donors to Share Food."
     ),
     "settings": (
         "SETTINGS (/settings) — account + Accessibility (Easy Mode, voice, captions). "
@@ -1746,21 +1744,26 @@ _PAGE_KNOWLEDGE_EN: dict[str, str] = {
 
 _PAGE_KNOWLEDGE_ES: dict[str, str] = {
     "home": (
-        "INICIO (/). CTAs: Buscar comida (/find), Compartir (/share), Solicitar (/request). "
-        "Ofrece esas rutas; usa navigate_ui para abrirlas."
+        "INICIO (/). El mapa de Food Maps es Buscar comida. Barra superior: botón verde "
+        "Compartir comida (donantes) o Buscar comida, más ZIP. Usa navigate_ui."
     ),
     "share": (
-        "COMPARTIR COMIDA (/share). Formulario de donante. Foto OBLIGATORIA antes de publicar. "
-        "navigate_ui target=create si no están en /share."
+        "COMPARTIR COMIDA (/share) — formulario CreateListing de Food Maps. "
+        "Paso 1: título, descripción, fotos opcionales, categoría, perecedero, cantidad, "
+        "unidad, dirección Mapbox, ventana de recogida. Paso 2: revisión de seguridad "
+        "(o saltar). Puede quedar pendiente de aprobación. Fotos opcionales. "
+        "navigate_ui target=create si no están en compartir."
     ),
     "find": (
-        "BUSCAR COMIDA (/find). Mapa/lista para receptores. Buscar y reclamar. "
-        "navigate_ui target=list."
+        "BUSCAR COMIDA — el mapa de inicio de Food Maps (no hay formulario aparte). "
+        "El botón verde Buscar comida abre el chat de Nouri. Guía: logo/mapa, chip ZIP → "
+        "Actualizar zona → Buscar en esta zona, Mapa/Lista, pines → Detalles, Reclamar / "
+        "Reclamar esta comida, luego Confirmar reclamo (SMS 4 dígitos). navigate_ui target=map."
     ),
     "near-me": "CERCA DE MÍ (/near-me). Misma lógica que Find. navigate_ui target=near-me.",
     "request": (
-        "SOLICITAR COMIDA (/request). Pedido solo texto (sin fotos). "
-        "navigate_ui target=request."
+        "SOLICITAR — Food Maps no tiene botón Solicitar en la barra. "
+        "Ayuda en el chat de Nouri y/o envía a Buscar comida en el mapa."
     ),
     "claim": "RECLAMAR (/claim). Usa claim_listing o navega target=claim.",
     "profile": "PERFIL (/profile). Datos y preferencias. navigate_ui target=profile.",
@@ -1779,7 +1782,7 @@ _PAGE_KNOWLEDGE_ES: dict[str, str] = {
     "recipes": "RECETAS (/recipes). navigate_ui target=meal-planning.",
     "admin": "ADMIN (/admin…). navigate_ui target=admin o dispatch.",
     "contact": "CONTACTO (/contact).",
-    "how-it-works": "CÓMO FUNCIONA (/how-it-works). Explica Find/Share/Request.",
+    "how-it-works": "CÓMO FUNCIONA (/how-it-works). Explica Buscar/Compartir en Food Maps.",
     "sponsors": "PATROCINADORES (/sponsors). navigate_ui target=partners.",
     "faqs": "PREGUNTAS FRECUENTES (/faqs).",
 }
@@ -1808,12 +1811,12 @@ def build_page_knowledge_prompt(
             return (
                 f"CONOCIMIENTO DE PÁGINA: el usuario está en `{path_val or page_key}`. "
                 "Ayúdalo con lo que esa pantalla permite en Food Maps. "
-                "Si no sabes el detalle, ofrece Find/Share/Request."
+                "Si no sabes el detalle, ofrece Buscar comida / Compartir comida."
             )
         return (
             f"PAGE KNOWLEDGE: the user is on `{path_val or page_key}`. "
             "Help with what that Food Maps screen can do. "
-            "If unsure, offer Find Food / Share Food / Request Food."
+            "If unsure, offer Find Food / Share Food."
         )
     if lang == "es":
         return (
@@ -1867,20 +1870,51 @@ def build_assistance_mode_reminder(
     if mode and goal:
         set_assistance_session(user_id, mode=mode, goal=goal)
 
+    role = ""
+    if isinstance(guide_state, dict):
+        role = str(
+            guide_state.get("role")
+            or guide_state.get("community_role")
+            or ""
+        ).lower().strip()
+
     if mode is None and needs_assistance_mode_choice(
         message, history, user_id=user_id, guide_state=guide_state,
     ):
         goal = goal or detect_assistance_goal(message, history) or "find"
+        # Only donors get Share coaching — never Open Share Food for recipients/admins-in-recipient-UX.
+        if goal == "share" and role and role != "donor":
+            goal = "find"
         action = _assistance_action_label(goal, lang)
-        if goal == "find":
-            open_opt_en = "Open Find Food"
-            open_opt_es = "Abrir Buscar comida"
-        elif goal == "request":
-            open_opt_en = "Open Request Food"
-            open_opt_es = "Abrir Solicitar comida"
-        else:
-            open_opt_en = "Open the form"
-            open_opt_es = "Abrir el formulario"
+        # Find/request: food already listed in the sidebar — no Open Find Food.
+        if goal in {"find", "request"}:
+            if lang == "es":
+                return (
+                    f"MODO DE AYUDA (obligatorio este turno):\n"
+                    f"El usuario quiere {action}. NO llames search_food_near_user, "
+                    f"claim_*, ni post_food_* todavía.\n"
+                    f"Pregunta UNA vez, cálido y breve, ofreciendo DOS opciones:\n"
+                    f"(1) Hazlo por mí — tú lo haces en el chat;\n"
+                    f"(2) Guíame paso a paso — te guía paso a paso muy simple "
+                    f"(como a un niño) usando el mapa y la lista lateral.\n"
+                    f"NO ofrezcas 'Abrir Buscar comida' — la comida ya está "
+                    f"listada en la barra lateral. Los chips muestran exactamente "
+                    f"esas dos respuestas. Nunca digas 'Abrir Compartir comida'."
+                )
+            return (
+                f"ASSISTANCE MODE (required this turn):\n"
+                f"The user wants to {action}. Do NOT call search_food_near_user, "
+                f"claim_*, or post_food_* yet.\n"
+                f"Ask ONCE, warm and brief, offering TWO options:\n"
+                f"(1) Do it for me — you handle everything in chat;\n"
+                f"(2) Guide me step by step — baby-step coaching on the map "
+                f"and sidebar list (very simple).\n"
+                f"Do NOT offer 'Open Find Food' — listings already show in the "
+                f"sidebar. The chips show exactly those two replies. "
+                f"Never say 'Open Share Food'."
+            )
+        open_opt_en = "Open Share Food"
+        open_opt_es = "Abrir Compartir comida"
         if lang == "es":
             return (
                 f"MODO DE AYUDA (obligatorio este turno):\n"
@@ -1891,8 +1925,7 @@ def build_assistance_mode_reminder(
                 f"(2) Hazlo por mí — tú lo haces en el chat;\n"
                 f"(3) Guíame paso a paso — te dice cómo abrir la página y te guía "
             f"paso a paso muy simple (como a un niño).\n"
-                f"Los chips muestran exactamente esas tres respuestas. "
-                f"Nunca digas 'Abrir el formulario' para Buscar comida."
+                f"Los chips muestran exactamente esas tres respuestas."
             )
         return (
             f"ASSISTANCE MODE (required this turn):\n"
@@ -1903,9 +1936,7 @@ def build_assistance_mode_reminder(
             f"(2) Do it for me — you handle everything in chat;\n"
             f"(3) Guide me step by step — tells you to open the page, then "
             f"baby-step coaching (very simple).\n"
-            f"The chips show exactly those three replies. "
-            f"Never say 'Open the form' for Find Food — that label is only "
-            f"for Share Food / Request Food forms."
+            f"The chips show exactly those three replies."
         )
 
     if mode == "open_page" and goal:
@@ -1913,8 +1944,8 @@ def build_assistance_mode_reminder(
             target, path = "list", "/find"
             page_en, page_es = "Find Food", "Buscar Comida"
         elif goal == "request":
-            target, path = "request", "/request"
-            page_en, page_es = "Request Food", "Solicitar Comida"
+            target, path = "map", "/find"
+            page_en, page_es = "Find Food", "Buscar Comida"
         else:
             target, path = "create", "/share"
             page_en, page_es = "Share Food", "Compartir Comida"
@@ -2026,7 +2057,7 @@ def assistance_mode_tool_block_reason(
         return (
             "GUIDED tutorial mode — do NOT open pages with navigate_ui. "
             "TELL the user in the tutorial how to open the page themselves "
-            "(look at the menu, tap Share Food / Find Food / Request Food). "
+            "(look at the Food Maps logo for the home map, or the green Share Food button for donors). "
             "Never navigate for them while guiding."
         )
     if mode == "open_page":

@@ -67,6 +67,15 @@ function AdminPanel({ onClose }) {
     const [centersError, setCentersError] = React.useState('');
     const [referralsError, setReferralsError] = React.useState('');
     const [listingsError, setListingsError] = React.useState('');
+    const [pendingApprovals, setPendingApprovals] = React.useState([]);
+    const [pendingApprovalsLoading, setPendingApprovalsLoading] = React.useState(false);
+    const [pendingApprovalsError, setPendingApprovalsError] = React.useState('');
+    const [pendingCount, setPendingCount] = React.useState(0);
+    const [requireListingApproval, setRequireListingApproval] = React.useState(true);
+    const [savingApprovalToggle, setSavingApprovalToggle] = React.useState(false);
+    const [approvalBusyId, setApprovalBusyId] = React.useState(null);
+    const [approvalBulkBusy, setApprovalBulkBusy] = React.useState(false);
+    const [selectedPendingIds, setSelectedPendingIds] = React.useState([]);
     const [users, setUsers] = React.useState([]);
     const [userCounts, setUserCounts] = React.useState({ all: 0, donor: 0, recipient: 0, admin: 0, driver: 0, volunteer: 0 });
     const [usersLoading, setUsersLoading] = React.useState(false);
@@ -161,6 +170,9 @@ function AdminPanel({ onClose }) {
         loadReferralStats();
       } else if (activeTab === 'listings') {
         loadListings();
+      } else if (activeTab === 'listing_approvals') {
+        loadPendingApprovals();
+        loadRequireListingApproval();
       } else if (activeTab === 'categories') {
         loadListingCategories();
       } else if (activeTab === 'newsletter') {
@@ -577,6 +589,159 @@ function AdminPanel({ onClose }) {
       }
     };
 
+    const loadPendingApprovals = async () => {
+      setPendingApprovalsLoading(true);
+      try {
+        setPendingApprovalsError('');
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/listings/pending', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const rows = Array.isArray(data.listings) ? data.listings.map(normalizeListing) : [];
+          setPendingApprovals(rows);
+          setPendingCount(typeof data.count === 'number' ? data.count : rows.length);
+          setSelectedPendingIds([]);
+        } else {
+          const error = await response.json().catch(() => ({}));
+          setPendingApprovalsError(error.detail || 'Failed to load pending listings');
+        }
+      } catch (error) {
+        console.error('Error loading pending approvals:', error);
+        setPendingApprovalsError('Failed to load pending listings');
+      } finally {
+        setPendingApprovalsLoading(false);
+      }
+    };
+
+    const loadRequireListingApproval = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/settings/require_listing_approval', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setRequireListingApproval(!!data.value);
+        }
+      } catch (error) {
+        console.error('Error loading approval setting:', error);
+      }
+    };
+
+    const handleToggleRequireListingApproval = async () => {
+      const next = !requireListingApproval;
+      setSavingApprovalToggle(true);
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/settings/require_listing_approval', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ value: next }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setRequireListingApproval(!!data.value);
+          if (typeof window.showAlert === 'function') {
+            window.showAlert(data.message || (next ? 'Approval required' : 'Go live immediately'), {
+              title: 'Setting updated',
+              variant: 'success',
+            });
+          } else {
+            alert(data.message || 'Setting updated');
+          }
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert(error.detail || 'Failed to update setting');
+        }
+      } catch (error) {
+        console.error('Toggle require approval failed:', error);
+        alert('Failed to update setting');
+      } finally {
+        setSavingApprovalToggle(false);
+      }
+    };
+
+    const handleReviewListing = async (listingId, approve) => {
+      setApprovalBusyId(listingId);
+      try {
+        const token = localStorage.getItem('auth_token');
+        const action = approve ? 'approve' : 'decline';
+        const response = await fetch(`/api/admin/listings/${listingId}/${action}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (response.ok) {
+          setPendingApprovals((prev) => prev.filter((l) => l.id !== listingId));
+          setPendingCount((c) => Math.max(0, c - 1));
+          setSelectedPendingIds((prev) => prev.filter((id) => id !== listingId));
+          try {
+            window.dispatchEvent(new CustomEvent('listingUpdated', { detail: { id: listingId } }));
+          } catch (_) { /* ignore */ }
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert(error.detail || `Failed to ${action} listing`);
+        }
+      } catch (error) {
+        console.error('Listing review failed:', error);
+        alert('Failed to update listing');
+      } finally {
+        setApprovalBusyId(null);
+      }
+    };
+
+    const handleBulkReviewListings = async (approve) => {
+      const ids = (selectedPendingIds.length ? selectedPendingIds : pendingApprovals.map((l) => l.id)).filter(Boolean);
+      if (!ids.length) return;
+      const action = approve ? 'approve' : 'decline';
+      if (!confirm(`${approve ? 'Approve' : 'Decline'} ${ids.length} listing${ids.length === 1 ? '' : 's'}?`)) {
+        return;
+      }
+      setApprovalBulkBusy(true);
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch('/api/admin/listings/bulk-review', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ids, action }),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          const okIds = new Set(data.succeeded || []);
+          setPendingApprovals((prev) => prev.filter((l) => !okIds.has(l.id)));
+          setPendingCount((c) => Math.max(0, c - okIds.size));
+          setSelectedPendingIds([]);
+          try {
+            window.dispatchEvent(new CustomEvent('listingsChanged'));
+          } catch (_) { /* ignore */ }
+          if (data.failed && data.failed.length) {
+            alert(`${data.failed.length} listing(s) could not be updated`);
+          }
+        } else {
+          const error = await response.json().catch(() => ({}));
+          alert(error.detail || 'Bulk review failed');
+        }
+      } catch (error) {
+        console.error('Bulk review failed:', error);
+        alert('Bulk review failed');
+      } finally {
+        setApprovalBulkBusy(false);
+      }
+    };
+
+    const togglePendingSelection = (id) => {
+      setSelectedPendingIds((prev) => (
+        prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      ));
+    };
+
     const loadListings = async () => {
       setListingsLoading(true);
       try {
@@ -838,8 +1003,10 @@ function AdminPanel({ onClose }) {
             listings: stats.listings || 0,
             schedules: stats.schedules || 0,
             tasks: stats.tasks || 0,
+            pending_listings: stats.pending_listings || 0,
             connected: stats.connected !== false
           });
+          setPendingCount(stats.pending_listings || 0);
           return;
         }
 
@@ -920,6 +1087,7 @@ function AdminPanel({ onClose }) {
                 { id: 'users', label: 'Users', icon: 'users' },
                 { id: 'approval_codes', label: 'Approval Codes', icon: 'key' },
                 { id: 'centers', label: 'Distribution Centers', icon: 'map-pin' },
+                { id: 'listing_approvals', label: pendingCount > 0 ? `Listing Approvals (${pendingCount})` : 'Listing Approvals', icon: 'check-circle' },
                 { id: 'listings', label: 'Listings', icon: 'package' },
                 { id: 'categories', label: 'Categories', icon: 'tags' },
                 { id: 'referrals', label: 'Referrals', icon: 'user-plus' },
@@ -1804,6 +1972,183 @@ function AdminPanel({ onClose }) {
             </div>
           )}
 
+          {activeTab === 'listing_approvals' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Listing Approvals</h3>
+                  <p className="mt-1 text-sm text-gray-600">
+                    Review donation listings from donors and Nouri before they appear on Find Food.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 shadow-sm">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-900">Require approval</p>
+                    <p className="text-xs text-gray-500">
+                      {requireListingApproval
+                        ? 'Donations start as pending'
+                        : 'Donations go live immediately'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={requireListingApproval}
+                    disabled={savingApprovalToggle}
+                    onClick={handleToggleRequireListingApproval}
+                    className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition ${
+                      requireListingApproval ? 'bg-green-600' : 'bg-gray-300'
+                    } ${savingApprovalToggle ? 'opacity-60' : ''}`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition mt-0.5 ${
+                        requireListingApproval ? 'translate-x-5' : 'translate-x-0.5'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Pending</p>
+                  <p className="mt-1 text-2xl font-bold text-amber-900">{pendingApprovals.length}</p>
+                </div>
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-4 sm:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <p className="text-sm text-slate-600">
+                    Admin-created listings always go live. Turning off require-approval only affects new donor/Nouri posts — it does not auto-approve this queue.
+                  </p>
+                  <div className="flex flex-shrink-0 gap-2">
+                    <button
+                      type="button"
+                      onClick={loadPendingApprovals}
+                      className="btn-secondary text-sm"
+                      disabled={pendingApprovalsLoading}
+                    >
+                      Refresh
+                    </button>
+                    {pendingApprovals.length > 0 && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-primary text-sm"
+                          disabled={approvalBulkBusy || approvalBusyId != null}
+                          onClick={() => handleBulkReviewListings(true)}
+                        >
+                          {approvalBulkBusy ? 'Working…' : 'Approve all'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-danger text-sm"
+                          disabled={approvalBulkBusy || approvalBusyId != null}
+                          onClick={() => handleBulkReviewListings(false)}
+                        >
+                          Decline all
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {pendingApprovalsLoading ? (
+                <div className="text-center py-8">
+                  <div className="icon-loader-2 animate-spin text-2xl text-gray-400 mx-auto mb-2"></div>
+                  <p className="text-gray-500">Loading pending listings...</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingApprovalsError && (
+                    <div className="p-3 bg-red-50 text-red-700 rounded-lg border border-red-200">{pendingApprovalsError}</div>
+                  )}
+                  {pendingApprovals.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No listings waiting for approval.
+                    </div>
+                  ) : (
+                    <div className="grid gap-4">
+                      {pendingApprovals.map((listing) => (
+                        <div key={listing.id} className="card">
+                          <div className="flex justify-between items-start gap-3">
+                            <div className="flex items-start gap-3 flex-1 min-w-0">
+                              <input
+                                type="checkbox"
+                                className="mt-1"
+                                checked={selectedPendingIds.includes(listing.id)}
+                                onChange={() => togglePendingSelection(listing.id)}
+                                aria-label={`Select ${listing.name}`}
+                              />
+                              {listing.image_url && (
+                                <img
+                                  src={listing.image_url}
+                                  alt={listing.name}
+                                  className="w-20 h-20 object-cover rounded"
+                                />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-semibold text-lg">{listing.name}</h4>
+                                <p className="text-gray-600 text-sm mb-2">{listing.description}</p>
+                                <div className="text-sm text-gray-500 space-y-1">
+                                  <p><strong>Quantity:</strong> {listing.quantity}</p>
+                                  <p><strong>Location:</strong> {listing.location}</p>
+                                  <p><strong>Posted by:</strong> {listing.user_name || 'Unknown'}</p>
+                                  <p>
+                                    <strong>Status:</strong>
+                                    <span className="ml-1 px-2 py-1 rounded-full text-xs bg-amber-100 text-amber-800">
+                                      {listing.status}
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                              <button
+                                type="button"
+                                className="btn-primary text-sm"
+                                disabled={approvalBusyId === listing.id || approvalBulkBusy}
+                                onClick={() => handleReviewListing(listing.id, true)}
+                              >
+                                {approvalBusyId === listing.id ? '…' : 'Approve'}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-danger text-sm"
+                                disabled={approvalBusyId === listing.id || approvalBulkBusy}
+                                onClick={() => handleReviewListing(listing.id, false)}
+                              >
+                                Decline
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {selectedPendingIds.length > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary text-sm"
+                        disabled={approvalBulkBusy}
+                        onClick={() => handleBulkReviewListings(true)}
+                      >
+                        Approve selected ({selectedPendingIds.length})
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-danger text-sm"
+                        disabled={approvalBulkBusy}
+                        onClick={() => handleBulkReviewListings(false)}
+                      >
+                        Decline selected ({selectedPendingIds.length})
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {activeTab === 'listings' && (
             <div className="space-y-6">
               <div className="flex justify-between items-center">
@@ -1856,6 +2201,8 @@ function AdminPanel({ onClose }) {
                                     <p><strong>Status:</strong>
                                       <span className={`ml-1 px-2 py-1 rounded-full text-xs ${listing.status === 'available' ? 'bg-green-100 text-green-800' :
                                         listing.status === 'claimed' ? 'bg-blue-100 text-blue-800' :
+                                        listing.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                                        listing.status === 'declined' ? 'bg-red-100 text-red-800' :
                                           'bg-gray-100 text-gray-800'
                                         }`}>
                                         {listing.status}

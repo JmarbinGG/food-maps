@@ -470,9 +470,10 @@ def test_photo_ask_never_offers_skip_chip():
 
 def test_vague_share_proceed_gets_fork_not_yes_no():
     out = generate_quick_replies(
-        "How would you like to proceed with sharing?"
+        "How would you like to proceed with sharing?",
+        user_role="donor",
     )
-    assert "Open the form" in out
+    assert "Open Share Food" in out
     assert "Do it for me" in out
     assert "Guide me step by step" in out
     assert "Yes" not in out
@@ -489,10 +490,9 @@ def test_find_food_fork_not_yes_no():
         "I can search nearby. Want me to handle the search for you, "
         "or guide you on Find Food step by step?"
     )
-    assert "Open Find Food" in out
-    assert "Open the form" not in out
-    assert "Do it for me" in out
-    assert "Guide me step by step" in out
+    assert "Open Find Food" not in out
+    assert "Open Share Food" not in out
+    assert out == ["Do it for me", "Guide me step by step"]
     assert out[:3] != ["Yes", "No", "Later"]
 
 
@@ -506,10 +506,9 @@ def test_find_food_fork_omits_open_when_already_on_find():
         guide_state={"pageKey": "find", "path": "/find"},
     )
     labels = [c["label"] for c in chips]
-    assert "Open the form" not in labels
-    assert labels[0] == "Open Find Food"  # still show; never "Open the form"
-    assert "Do it for me" in labels
-    assert "Guide me step by step" in labels
+    assert "Open Share Food" not in labels
+    assert "Open Find Food" not in labels
+    assert labels == ["Do it for me", "Guide me step by step"]
 
 
 def test_share_fork_keeps_open_the_form():
@@ -519,9 +518,10 @@ def test_share_fork_keeps_open_the_form():
         "Want me to handle everything in chat, or guide you step by step on Share Food?",
         "en",
         user_message="I want to share food",
+        user_role="donor",
     )
     labels = [c["label"] for c in chips]
-    assert labels[0] == "Open the form"
+    assert labels[0] == "Open Share Food"
     assert "Open Find Food" not in labels
 
 
@@ -530,9 +530,10 @@ def test_spanish_assist_fork_chips_match_language():
         "¿Quieres que yo lo haga TODO por ti aquí en el chat, o te guío paso a paso?",
         lang="en",  # sticky lag — chips must still be Spanish
         user_message="Quiero compartir comida",
+        user_role="donor",
     )
     assert out == [
-        "Abrir el formulario",
+        "Abrir Compartir comida",
         "Hazlo por mí",
         "Guíame paso a paso",
     ]
@@ -546,6 +547,7 @@ def test_share_assistance_fork_forced_from_reminder():
         "How would you like to proceed?",
         "en",
         user_message="I want to share food",
+        user_role="donor",
         assistance_reminder=(
             "ASSISTANCE MODE (required this turn):\n"
             "The user wants to share food. Ask ONCE..."
@@ -553,7 +555,7 @@ def test_share_assistance_fork_forced_from_reminder():
     )
     labels = [c["label"] for c in chips]
     assert labels == [
-        "Open the form",
+        "Open Share Food",
         "Do it for me",
         "Guide me step by step",
     ]
@@ -567,9 +569,10 @@ def test_share_assistance_fork_from_rephrased_reply():
         "I walk you through the form yourself?",
         "en",
         user_message="share some food",
+        user_role="donor",
     )
     labels = [c["label"] for c in chips]
-    assert "Open the form" in labels
+    assert "Open Share Food" in labels
     assert "Do it for me" in labels
     assert "Guide me step by step" in labels
 
@@ -588,18 +591,23 @@ def test_share_fork_open_form_always_present():
     )
     for t in (t1, t2):
         for chips in (
-            share_assistance_fork_chips(t, "en", user_message="I want to share food"),
-            generate_quick_replies(t, user_message="I want to share food"),
+            share_assistance_fork_chips(
+                t, "en", user_message="I want to share food", user_role="donor",
+            ),
+            generate_quick_replies(
+                t, user_message="I want to share food", user_role="donor",
+            ),
             build_turn_suggestions(
                 t, "en", tool_results=[], min_chips=0,
                 last_user_message="I want to share food",
+                user_context={"community_role": "donor"},
             ),
         ):
             labels = [
                 c if isinstance(c, str) else c.get("label")
                 for c in chips
             ]
-            assert labels[0] in ("Open the form", "Abrir el formulario"), labels
+            assert labels[0] in ("Open Share Food", "Abrir Compartir comida"), labels
             assert "Do it for me" in labels or "Hazlo por mí" in labels
             assert any("step" in (l or "").lower() or "paso" in (l or "").lower() for l in labels)
             assert "5 apples" not in labels
