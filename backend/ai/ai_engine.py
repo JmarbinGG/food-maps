@@ -4625,7 +4625,7 @@ def generate_quick_replies(
     if turn == "guided":
         return out
     if turn in (
-        "post_confirm", "photo", "description", "community", "allergen",
+        "menu", "post_confirm", "photo", "description", "community", "allergen",
         "expiry", "food_qty", "food", "qty", "address",
         "pickup_window", "handoff", "request_fork", "delete_confirm",
         "claim_confirm_multi", "claim_confirm_single", "claim_qty_multi",
@@ -4637,6 +4637,7 @@ def generate_quick_replies(
             text=text,
             suggested_community=suggested_community,
             communities=communities,
+            user_role=user_role,
         )
         if classified:
             add(*classified)
@@ -4853,14 +4854,15 @@ def generate_quick_replies(
     help_menu_keys = (
         "try first", "would you like to try", "what can you do",
         "how does foodmaps", "how does this work", "where do i start",
-        "not sure", "don't know", "dont know", "i'm lost", "im lost",
+        "which sounds good", "which one sounds like you", "which sounds like you",
+        "don't know", "dont know", "i'm lost", "im lost",
         "qué puedo hacer", "como funciona", "cómo funciona", "por dónde empiezo",
     )
-    if any(k in t for k in help_menu_keys):
-        if es:
-            add("Buscar comida gratis", "Compartir comida extra", "Solicitar comida")
-        else:
-            add("Find free food", "Share extra food", "Request food")
+    # Bare "not sure" alone is too broad (mode-fork replies say it too).
+    # Prefer path-listing menus / explicit orientation asks.
+    from backend.ai.chip_turn import _is_orientation_menu_turn, _orientation_menu_chips
+    if _is_orientation_menu_turn(t) or any(k in t for k in help_menu_keys):
+        add(*_orientation_menu_chips(lang=lang, user_role=user_role))
         return out
 
     # AI showed food options after a search — pick by number.
@@ -5124,19 +5126,17 @@ def generate_quick_replies(
             add("Yes, post it", "Wait, edit it", "Cancel")
         return out
 
-    # User seems lost — offer the 3 main paths
+    # User seems lost — offer the main paths (role-aware).
     if any(k in t for k in (
             "what can you do", "how does foodmaps", "how does this work",
-            "what do i do", "not sure", "don't know", "dont know", "idk",
+            "what do i do", "don't know", "dont know", "idk",
             "help me", "guide me", "walk me through", "where do i start",
             "i'm lost", "im lost", "no idea", "confused",
             "qué puedo hacer", "que puedo hacer", "cómo funciona", "como funciona",
             "qué hago", "que hago", "no sé qué", "no se que", "no estoy seguro",
     )):
-        if es:
-            add("Buscar comida gratis", "Compartir comida extra", "Solicitar comida")
-        else:
-            add("Find free food", "Share extra food", "Request food")
+        from backend.ai.chip_turn import _orientation_menu_chips
+        add(*_orientation_menu_chips(lang=lang, user_role=user_role))
         return out
 
     # User wants to share but hasn't said what yet — and hasn't picked mode

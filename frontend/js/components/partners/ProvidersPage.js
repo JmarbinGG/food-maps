@@ -296,13 +296,21 @@ function ProviderCard({ center }) {
   const phoneHref = telUrl(center.phone);
   const directionsHref = mapsUrl(center.address);
   const websiteHref = webUrl(center.website);
+  const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+    ? window.FoodMapsSocialMedia
+    : null;
+  const socialItems = socialApi
+    ? socialApi.socialLinkItems(center)
+    : (websiteHref
+      ? [{ network: 'website', url: websiteHref, iconClass: 'fas fa-globe', label: 'Website' }]
+      : []);
 
   const hasDetails = Boolean(
     center.description ||
     center.eligibility ||
     center.languages ||
     center.coverage_areas ||
-    center.social_media ||
+    socialItems.length ||
     websiteHref ||
     availability
   );
@@ -455,7 +463,7 @@ function ProviderCard({ center }) {
                 <p className="text-gray-800">{center.coverage_areas}</p>
               </div>
             )}
-            {websiteHref && (
+            {websiteHref && socialItems.length === 0 && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-0.5">Website</p>
                 <a href={websiteHref} target="_blank" rel="noopener noreferrer" className="text-green-800 hover:underline break-all">
@@ -463,10 +471,24 @@ function ProviderCard({ center }) {
                 </a>
               </div>
             )}
-            {center.social_media && (
+            {socialItems.length > 0 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-0.5">Social</p>
-                <p className="text-gray-800">{center.social_media}</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-1.5">Links</p>
+                <div className="flex flex-wrap items-center gap-3">
+                  {socialItems.map((item) => (
+                    <a
+                      key={item.network}
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={item.label}
+                      title={item.label}
+                      className="text-green-800 hover:text-green-950 text-xl leading-none"
+                    >
+                      <i className={item.iconClass} aria-hidden="true"></i>
+                    </a>
+                  ))}
+                </div>
               </div>
             )}
           </div>

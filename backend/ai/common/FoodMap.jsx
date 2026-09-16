@@ -12,6 +12,7 @@ import {
     listingVisibleToCommunityScope,
 } from '../../utils/communityScope';
 import CommunityPinIcon, { getCommunityPinDimensions, renderCommunityPinSvg } from './CommunityPinIcon.jsx';
+import { renderSocialIconsHtml } from '../../utils/socialMediaLinks.js';
 
 // Mapbox is loaded via CDN in index.html
 // Access it from window.mapboxgl
@@ -479,8 +480,8 @@ function FoodMap({ onMarkerClick, showSignupPrompt = true, highlightedFoodId = n
         // Add community markers
         communities.forEach((community) => {
             // Parse and validate coordinates
-            const lat = parseFloat(community.latitude);
-            const lng = parseFloat(community.longitude);
+            const lat = parseFloat(community.latitude ?? community.coords_lat);
+            const lng = parseFloat(community.longitude ?? community.coords_lng);
             
             // Validate coordinates are valid numbers and in correct ranges
             if (isNaN(lat) || isNaN(lng)) return;
@@ -681,10 +682,22 @@ function FoodMap({ onMarkerClick, showSignupPrompt = true, highlightedFoodId = n
         popupContent.className = 'p-3 max-w-xs';
         popupContent.style.width = '300px';
 
+        const imageUrl = community.image || community.logo_url || '';
+        const locationText = community.location || community.address || '';
+        const hoursText = community.hours || '';
+        const phoneText = community.phone || '';
+        const contactText = community.contact || '';
+        const descriptionText = community.description || '';
+        const socialHtml = renderSocialIconsHtml(community, {
+            size: '20px',
+            gap: '12px',
+            color: '#15803d',
+        });
+
         popupContent.innerHTML = `
-            ${community.image ? `
+            ${imageUrl ? `
                 <img 
-                    src="${escapeHtml(community.image)}" 
+                    src="${escapeHtml(imageUrl)}" 
                     alt="${escapeHtml(community.name)}"
                     style="width: 100%; height: 128px; object-fit: cover; border-radius: 8px; margin-bottom: 12px;"
                 />
@@ -692,24 +705,41 @@ function FoodMap({ onMarkerClick, showSignupPrompt = true, highlightedFoodId = n
             <h3 style="font-weight: bold; font-size: 18px; color: #111827; margin-bottom: 8px;">
                 ${escapeHtml(community.name)}
             </h3>
+            ${descriptionText ? `
+                <p style="font-size: 13px; color: #4B5563; margin-bottom: 10px; line-height: 1.45;">
+                    ${escapeHtml(descriptionText)}
+                </p>
+            ` : ''}
             <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; font-size: 14px; color: #374151;">
+                ${locationText ? `
                 <div style="display: flex; align-items: start; gap: 8px;">
                     <i class="fas fa-map-marker-alt" style="color: #2CABE3; margin-top: 2px;"></i>
-                    <span>${escapeHtml(community.location)}</span>
-                </div>
+                    <span>${escapeHtml(locationText)}</span>
+                </div>` : ''}
+                ${hoursText ? `
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-clock" style="color: #2CABE3;"></i>
-                    <span>${escapeHtml(community.hours)}</span>
-                </div>
+                    <span>${escapeHtml(hoursText)}</span>
+                </div>` : ''}
+                ${phoneText ? `
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-phone" style="color: #2CABE3;"></i>
-                    <span>${escapeHtml(community.phone)}</span>
-                </div>
+                    <span>${escapeHtml(phoneText)}</span>
+                </div>` : ''}
+                ${contactText ? `
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <i class="fas fa-user" style="color: #2CABE3;"></i>
-                    <span>${escapeHtml(community.contact)}</span>
-                </div>
+                    <span>${escapeHtml(contactText)}</span>
+                </div>` : ''}
             </div>
+            ${socialHtml ? `
+                <div style="margin-bottom: 12px;">
+                    <div style="font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: #6B7280; margin-bottom: 6px;">
+                        Links
+                    </div>
+                    ${socialHtml}
+                </div>
+            ` : ''}
             
             <button id="view-community-btn" style="
                 width: 100%;
@@ -727,13 +757,17 @@ function FoodMap({ onMarkerClick, showSignupPrompt = true, highlightedFoodId = n
             </button>
         `;
 
+        const lng = Number(community.longitude ?? community.coords_lng);
+        const lat = Number(community.latitude ?? community.coords_lat);
+        if (Number.isNaN(lng) || Number.isNaN(lat)) return;
+
         popupRef.current = new mapboxgl.Popup({
             closeButton: true,
             closeOnClick: false,
             maxWidth: '320px',
             offset: 25
         })
-            .setLngLat([community.longitude, community.latitude])
+            .setLngLat([lng, lat])
             .setDOMContent(popupContent)
             .addTo(map.current);
 

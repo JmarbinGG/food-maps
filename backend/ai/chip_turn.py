@@ -10,6 +10,7 @@ from typing import Optional
 CHIP_TURN_CLASSES = (
     "fork",
     "guided",
+    "menu",
     "post_confirm",
     "photo",
     "description",
@@ -34,7 +35,7 @@ CHIP_TURN_CLASSES = (
 
 # Classified turns must not fall through to legacy heuristics.
 CLASSIFIED_EXCLUSIVE = frozenset({
-    "fork", "guided", "post_confirm", "photo", "description", "community",
+    "fork", "guided", "menu", "post_confirm", "photo", "description", "community",
     "allergen", "expiry", "food_qty", "food", "qty", "address",
     "pickup_window", "handoff", "request_fork", "delete_confirm",
     "claim_confirm_multi", "claim_confirm_single", "claim_qty_multi",
@@ -43,7 +44,7 @@ CLASSIFIED_EXCLUSIVE = frozenset({
 
 # Classified asks whose chips must beat leftover search/claim tool chips.
 SHARE_ASK_CLASSES = frozenset({
-    "post_confirm", "photo", "description", "community", "allergen",
+    "menu", "post_confirm", "photo", "description", "community", "allergen",
     "expiry", "food_qty", "food", "qty", "address", "pickup_window", "handoff",
     "request_fork", "delete_confirm", "edit",
     "claim_confirm_multi", "claim_confirm_single", "claim_qty_multi",
@@ -166,8 +167,38 @@ def _is_photo_ask(t: str) -> bool:
     return True
 
 
+def _is_orientation_menu_turn(t: str) -> bool:
+    """Lost-user / Not sure menus offering Find / Share / Request paths."""
+    ask = any(k in t for k in (
+        "try first", "would you like to try", "which one would you like to try",
+        "which one sounds like you", "which sounds like you", "which sounds good",
+        "what can you do", "how does foodmaps", "how does this work",
+        "where do i start", "which one sounds good",
+        "qué te gustaría", "que te gustaria", "por dónde empiezo", "por donde empiezo",
+        "cómo funciona", "como funciona", "qué puedo hacer", "que puedo hacer",
+    ))
+    if not ask:
+        return False
+    paths = sum(
+        1
+        for k in (
+            "find free food", "find food", "buscar comida",
+            "share extra", "share food", "compartir",
+            "request food", "solicitar",
+            "my pickups", "pickups", "mis reservas", "check pickup",
+        )
+        if k in t
+    )
+    return paths >= 2 or any(k in t for k in (
+        "try first", "what can you do", "how does this work", "where do i start",
+        "how does foodmaps", "cómo funciona", "como funciona",
+    ))
+
+
 def _is_post_confirm_turn(t: str) -> bool:
     if _is_address_turn(t):
+        return False
+    if _is_orientation_menu_turn(t):
         return False
     if _is_community_turn(t):
         # "Want me to post this to your community" is community, not post confirm
@@ -207,7 +238,17 @@ def _is_post_confirm_turn(t: str) -> bool:
     if any(k in t for k in ("look good", "looks good", "sound good", "sounds good")):
         if _is_address_turn(t):
             return False
-        return any(k in t for k in ("post", "publish", "listing", "share"))
+        # "Which sounds good?" on a Find/Share/Request menu is not a publish ask.
+        if any(k in t for k in (
+            "which sounds", "which one sounds", "what sounds good",
+            "try first", "find free", "request food",
+        )):
+            return False
+        # Require publish intent — bare "share" matches "share extra food" menus.
+        return any(k in t for k in (
+            "post", "publish", "listing",
+            "share this", "share it", "go ahead and share", "ready to share",
+        ))
     return False
 
 
@@ -313,6 +354,11 @@ def classify_share_chip_turn(
     if _is_real_fork_ask(t, user_message=user_message, assistance_reminder=rem):
         return "fork"
 
+    # Lost-user / Not sure orientation — before post_confirm / request_fork
+    # so "Request food … which would you like?" never becomes mode chips.
+    if _is_orientation_menu_turn(t):
+        return "menu"
+
     try:
         from backend.ai.conversation_flow import is_post_success_response
         if is_post_success_response(raw):
@@ -357,6 +403,8 @@ def classify_share_chip_turn(
     )):
         return "delete_confirm"
 
+    # Real request assistance fork only — not a Find/Share/Request menu that
+    # happens to say "request food" + "would you like".
     if any(k in t for k in (
         "request food", "post a request", "need food", "food request",
         "request form", "request help", "help request",
@@ -364,9 +412,12 @@ def classify_share_chip_turn(
         "formulario de solicitud", "solicitud de comida",
     )) and any(k in t for k in (
         "open the form", "open the request", "open request",
-        "do it for me", "handle it", "handle this", "how would you like",
-        "would you like", "abrir el formulario", "hazlo por mí", "hazlo por mi",
-        "abrir la solicitud", "abrir solicitud",
+        "do it for me", "handle it", "handle this", "handle everything",
+        "guide me", "step by step", "walk you through",
+        "how would you like to proceed", "how do you want to",
+        "abrir el formulario", "hazlo por mí", "hazlo por mi",
+        "abrir la solicitud", "abrir solicitud", "guíame", "guiame",
+        "paso a paso",
     )):
         return "request_fork"
 
@@ -466,6 +517,34 @@ def classify_share_chip_turn(
     return "none"
 
 
+def _orientation_menu_chips(
+    *,
+    lang: str = "en",
+    user_role: Optional[str] = None,
+) -> list[str]:
+    """Role-aware chips after Not sure / help orientation menus."""
+    es = lang == "es"
+    role = str(user_role or "").lower().strip()
+    if es:
+        find_c = "Buscar comida gratis"
+        share_c = "Compartir comida extra"
+        request_c = "Solicitar comida"
+        pickups_c = "Mis reservas"
+        how_c = "¿Cómo funciona?"
+    else:
+        find_c = "Find free food"
+        share_c = "Share extra food"
+        request_c = "Request food"
+        pickups_c = "My pickups"
+        how_c = "How does this work?"
+
+    if role == "donor":
+        return [share_c, pickups_c, how_c]
+    if role == "recipient":
+        return [find_c, request_c, pickups_c, how_c]
+    return [find_c, share_c, request_c, pickups_c]
+
+
 def chips_for_turn_class(
     turn: str,
     *,
@@ -473,10 +552,15 @@ def chips_for_turn_class(
     text: str = "",
     suggested_community: Optional[str] = None,
     communities: Optional[list] = None,
+    user_role: Optional[str] = None,
 ) -> list[str]:
     """Return chip labels for a classified turn (EN/ES)."""
     es = lang == "es"
     communities = communities or []
+    role = str(user_role or "").lower().strip()
+
+    if turn == "menu":
+        return _orientation_menu_chips(lang=lang, user_role=role)
 
     if turn == "post_confirm":
         t = _norm(text)

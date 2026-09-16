@@ -10351,6 +10351,44 @@ function assignImagestoRows(rows) {
 function getToken() {
   return localStorage.getItem("auth_token") || localStorage.getItem("token") || "";
 }
+function mapCenterRow(c2) {
+  if (!c2 || typeof c2 !== "object") return null;
+  const lat = c2.latitude != null ? c2.latitude : c2.coords_lat;
+  const lng = c2.longitude != null ? c2.longitude : c2.coords_lng;
+  return {
+    ...c2,
+    id: c2.id,
+    name: c2.name,
+    description: c2.description || "",
+    address: c2.address || "",
+    location: c2.location || c2.address || "",
+    phone: c2.phone || "",
+    hours: c2.hours || "",
+    contact: c2.contact || "",
+    website: c2.website || "",
+    social_media: c2.social_media || "",
+    logo_url: c2.logo_url || "",
+    image: c2.image || c2.logo_url || "",
+    is_active: c2.is_active !== false,
+    latitude: lat != null && lat !== "" ? Number(lat) : null,
+    longitude: lng != null && lng !== "" ? Number(lng) : null,
+    coords_lat: lat != null && lat !== "" ? Number(lat) : null,
+    coords_lng: lng != null && lng !== "" ? Number(lng) : null
+  };
+}
+function applyCommunityFilters(rows, filters) {
+  let data = Array.isArray(rows) ? rows.slice() : [];
+  for (const f2 of filters || []) {
+    if (!f2 || !f2.col) continue;
+    if (f2.col === "is_active") {
+      const want = f2.val === true || f2.val === "true" || f2.val === 1;
+      data = data.filter((r3) => Boolean(r3.is_active) === want);
+      continue;
+    }
+    data = data.filter((r3) => String(r3[f2.col]) === String(f2.val));
+  }
+  return data;
+}
 var centersClient = {
   from(table) {
     const builder = {
@@ -10358,12 +10396,19 @@ var centersClient = {
       _filters: [],
       _select: "*",
       _order: null,
+      _notNull: [],
       select(cols) {
         this._select = cols;
         return this;
       },
       eq(col, val) {
         this._filters.push({ col, val });
+        return this;
+      },
+      not(col, op, val) {
+        if (op === "is" && (val === null || val === "null")) {
+          this._notNull.push(col);
+        }
         return this;
       },
       order(col, opts = {}) {
@@ -10378,10 +10423,28 @@ var centersClient = {
               headers: token ? { Authorization: `Bearer ${token}` } : {}
             });
             if (!res.ok) throw new Error(await res.text());
-            let data = await res.json();
-            data = (data || []).map((c2) => ({ id: c2.id, name: c2.name, is_active: true }));
+            let raw = await res.json();
+            let data = (raw || []).map(mapCenterRow).filter(Boolean);
+            data = applyCommunityFilters(data, this._filters);
+            for (const col of this._notNull) {
+              const key = col === "latitude" ? "latitude" : col === "longitude" ? "longitude" : col;
+              data = data.filter((r3) => {
+                const v2 = r3[key] != null ? r3[key] : r3[col];
+                return v2 != null && v2 !== "" && !Number.isNaN(Number(v2));
+              });
+            }
             if (this._order?.col === "name") {
-              data.sort((a2, b2) => String(a2.name).localeCompare(String(b2.name)));
+              data.sort((a2, b2) => String(a2.name || "").localeCompare(String(b2.name || "")));
+            }
+            if (this._select && this._select !== "*" && typeof this._select === "string") {
+              const cols = this._select.split(",").map((s2) => s2.trim()).filter(Boolean);
+              if (cols.length && cols.every((c2) => c2 === "id" || c2 === "name" || c2 === "is_active")) {
+                data = data.map((c2) => ({
+                  id: c2.id,
+                  name: c2.name,
+                  is_active: c2.is_active
+                }));
+              }
             }
             resolve({ data, error: null });
             return;

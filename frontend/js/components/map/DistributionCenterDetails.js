@@ -422,6 +422,14 @@ function DistributionCenterDetails({
   const websiteUrl = normalizeExternalUrl(center.website);
   const isAdmin = canEditCategories != null ? Boolean(canEditCategories) : resolveIsAdmin(user);
   const selectedTypes = parseProviderTypes(center.provider_types);
+  const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+    ? window.FoodMapsSocialMedia
+    : null;
+  const socialItems = socialApi
+    ? socialApi.socialLinkItems(center)
+    : (websiteUrl
+      ? [{ network: 'website', url: websiteUrl, iconClass: 'fas fa-globe', label: 'Website' }]
+      : []);
 
   const rows = [
     center.description ? { label: 'Description', value: center.description } : null,
@@ -429,11 +437,11 @@ function DistributionCenterDetails({
     center.languages ? { label: 'Languages spoken', value: center.languages } : null,
     availabilityLabel ? { label: 'Availability', value: availabilityLabel } : null,
     center.coverage_areas ? { label: 'Coverage areas', value: center.coverage_areas } : null,
-    center.social_media ? { label: 'Social media', value: center.social_media } : null,
   ].filter(Boolean);
 
   const hasWebsite = Boolean(websiteUrl);
-  const hasDetails = rows.length > 0 || hasWebsite;
+  const hasSocialIcons = socialItems.length > 0;
+  const hasDetails = rows.length > 0 || hasWebsite || hasSocialIcons;
   const categoriesVisible = showCategories && (isAdmin || selectedTypes.length > 0);
 
   if (!hasDetails && !categoriesVisible) {
@@ -464,7 +472,29 @@ function DistributionCenterDetails({
                 <div className="whitespace-pre-wrap break-words">{row.value}</div>
               </div>
             ))}
-            {hasWebsite && (
+            {hasSocialIcons && (
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5">
+                  Links
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  {socialItems.map((item) => (
+                    <a
+                      key={item.network}
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={item.label}
+                      title={item.label}
+                      className="text-green-700 hover:text-green-900 text-xl leading-none"
+                    >
+                      <i className={item.iconClass} aria-hidden="true"></i>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {!hasSocialIcons && hasWebsite && (
               <div>
                 <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Website</div>
                 <a

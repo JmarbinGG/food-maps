@@ -1299,6 +1299,7 @@ def build_turn_suggestions(
                 text=response_text or "",
                 suggested_community=ctx.get("suggested_community"),
                 communities=ctx.get("active_communities") or None,
+                user_role=str(role) if role else None,
             )
             if classified:
                 chip_objs: List[Chip] = [
@@ -1373,6 +1374,7 @@ def build_turn_suggestions(
             suggested_community=(user_context or {}).get("suggested_community"),
             assistance_reminder=assistance_reminder,
             guide_state=user_context if isinstance(user_context, dict) else None,
+            user_role=str(role) if role else None,
         ):
             add(chip)
 

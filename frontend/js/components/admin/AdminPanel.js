@@ -19,7 +19,12 @@ function AdminPanel({ onClose }) {
       languages: '',
       availability: '',
       website: '',
-      social_media: '',
+      social_facebook: '',
+      social_instagram: '',
+      social_twitter: '',
+      social_youtube: '',
+      social_linkedin: '',
+      social_tiktok: '',
       coverage_areas: '',
       provider_types: '',
       logo_url: ''
@@ -247,6 +252,19 @@ function AdminPanel({ onClose }) {
         const method = editingCenter ? 'PUT' : 'POST';
 
         const types = parseCenterTypes(centerForm.provider_types);
+        const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+          ? window.FoodMapsSocialMedia
+          : null;
+        const social_media = socialApi
+          ? socialApi.serializeSocialMedia({
+              facebook: centerForm.social_facebook,
+              instagram: centerForm.social_instagram,
+              twitter: centerForm.social_twitter,
+              youtube: centerForm.social_youtube,
+              linkedin: centerForm.social_linkedin,
+              tiktok: centerForm.social_tiktok,
+            })
+          : '';
         const payload = {
           ...centerForm,
           coords_lat: centerForm.coords_lat === '' || centerForm.coords_lat == null
@@ -257,7 +275,14 @@ function AdminPanel({ onClose }) {
             : Number(centerForm.coords_lng),
           provider_types: JSON.stringify(types),
           logo_url: centerForm.logo_url || null,
+          social_media: social_media || null,
         };
+        delete payload.social_facebook;
+        delete payload.social_instagram;
+        delete payload.social_twitter;
+        delete payload.social_youtube;
+        delete payload.social_linkedin;
+        delete payload.social_tiktok;
 
         const response = await fetch(url, {
           method,
@@ -309,6 +334,15 @@ function AdminPanel({ onClose }) {
     };
 
     const handleEditCenter = (center) => {
+      const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+        ? window.FoodMapsSocialMedia
+        : null;
+      const social = socialApi
+        ? socialApi.parseSocialMedia(center.social_media)
+        : {
+            facebook: '', instagram: '', twitter: '',
+            youtube: '', linkedin: '', tiktok: '',
+          };
       setCenterForm({
         name: center.name || '',
         description: center.description || '',
@@ -321,7 +355,12 @@ function AdminPanel({ onClose }) {
         languages: center.languages || '',
         availability: center.availability || '',
         website: center.website || '',
-        social_media: center.social_media || '',
+        social_facebook: social.facebook || '',
+        social_instagram: social.instagram || '',
+        social_twitter: social.twitter || '',
+        social_youtube: social.youtube || '',
+        social_linkedin: social.linkedin || '',
+        social_tiktok: social.tiktok || '',
         coverage_areas: center.coverage_areas || '',
         provider_types: center.provider_types
           ? (typeof center.provider_types === 'string'
@@ -1207,6 +1246,75 @@ function AdminPanel({ onClose }) {
                       className={`${inputClass} md:col-span-2`}
                       rows="2"
                     ></textarea>
+                    <div className="md:col-span-2 rounded-lg border border-green-200 bg-green-50/50 p-3 space-y-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-green-800">Social media links</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          Add full URLs. These show as clickable icons on map pins and provider cards.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {[
+                          { key: 'social_facebook', label: 'Facebook', icon: 'fab fa-facebook', placeholder: 'https://facebook.com/...' },
+                          { key: 'social_instagram', label: 'Instagram', icon: 'fab fa-instagram', placeholder: 'https://instagram.com/...' },
+                          { key: 'social_twitter', label: 'X / Twitter', icon: 'fab fa-x-twitter', placeholder: 'https://x.com/...' },
+                          { key: 'social_youtube', label: 'YouTube', icon: 'fab fa-youtube', placeholder: 'https://youtube.com/...' },
+                          { key: 'social_linkedin', label: 'LinkedIn', icon: 'fab fa-linkedin', placeholder: 'https://linkedin.com/...' },
+                          { key: 'social_tiktok', label: 'TikTok', icon: 'fab fa-tiktok', placeholder: 'https://tiktok.com/@...' },
+                        ].map((field) => (
+                          <div key={field.key}>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              <i className={`${field.icon} mr-1.5 text-green-700`} aria-hidden="true"></i>
+                              {field.label}
+                            </label>
+                            <input
+                              type="url"
+                              placeholder={field.placeholder}
+                              value={centerForm[field.key] || ''}
+                              onChange={(e) => setCenterForm({ ...centerForm, [field.key]: e.target.value })}
+                              className={inputClass}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      {(() => {
+                        const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+                          ? window.FoodMapsSocialMedia
+                          : null;
+                        if (!socialApi) return null;
+                        const previewCenter = {
+                          website: centerForm.website,
+                          social_media: socialApi.serializeSocialMedia({
+                            facebook: centerForm.social_facebook,
+                            instagram: centerForm.social_instagram,
+                            twitter: centerForm.social_twitter,
+                            youtube: centerForm.social_youtube,
+                            linkedin: centerForm.social_linkedin,
+                            tiktok: centerForm.social_tiktok,
+                          }),
+                        };
+                        const items = socialApi.socialLinkItems(previewCenter);
+                        if (!items.length) return null;
+                        return (
+                          <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-green-200">
+                            <span className="text-xs font-medium text-gray-600">Preview:</span>
+                            {items.map((item) => (
+                              <a
+                                key={item.network}
+                                href={item.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label={item.label}
+                                title={item.label}
+                                className="text-green-700 hover:text-green-900 text-lg leading-none"
+                              >
+                                <i className={item.iconClass} aria-hidden="true"></i>
+                              </a>
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
                     <input
                       type="text"
                       placeholder="Address"
@@ -1377,16 +1485,6 @@ function AdminPanel({ onClose }) {
                           onChange={(e) => setCenterForm({ ...centerForm, website: e.target.value })}
                           className={inputClass}
                         />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Social media accounts</label>
-                        <textarea
-                          placeholder="Facebook, Instagram, etc."
-                          value={centerForm.social_media || ''}
-                          onChange={(e) => setCenterForm({ ...centerForm, social_media: e.target.value })}
-                          className={inputClass}
-                          rows="2"
-                        ></textarea>
                       </div>
                     </div>
                   </div>
