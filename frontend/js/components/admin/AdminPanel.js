@@ -2,7 +2,6 @@ function AdminPanel({ onClose }) {
   try {
     const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200';
     const [activeTab, setActiveTab] = React.useState('overview');
-    const [exportStatus, setExportStatus] = React.useState(null);
     const [dbStats, setDbStats] = React.useState({});
     const [centers, setCenters] = React.useState([]);
     const [showCenterForm, setShowCenterForm] = React.useState(false);
@@ -937,27 +936,164 @@ function AdminPanel({ onClose }) {
       }
     };
 
-    const exportNewsletterCsv = () => {
-      const rows = [
-        ['email', 'first_name', 'last_name', 'source', 'subscribed_at'],
-        ...newsletterSubscribers.map((s) => [
-          s.email || '',
-          s.first_name || '',
-          s.last_name || '',
-          s.source || '',
-          s.created_at || '',
-        ]),
-      ];
-      const csv = rows
-        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    const downloadCsv = (filenamePrefix, headers, rows) => {
+      const allRows = [headers, ...rows];
+      const csv = allRows
+        .map((row) => row.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
         .join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `foodmaps-newsletter-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `foodmaps-${filenamePrefix}-${new Date().toISOString().slice(0, 10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
+    };
+
+    const filteredUsersForExport = () => {
+      const needle = userSearch.trim().toLowerCase();
+      return users.filter((u) => {
+        if (!needle) return true;
+        const hay = [
+          u.name, u.email, u.phone, u.role, u.referral_code, u.address, u.referred_by_code,
+        ].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(needle);
+      });
+    };
+
+    const exportUsersCsv = () => {
+      const rows = filteredUsersForExport().map((u) => [
+        u.id ?? '',
+        u.name || '',
+        u.email || '',
+        u.role || '',
+        u.phone || '',
+        (u.community_id != null ? (communityNameById[String(u.community_id)] || '') : ''),
+        u.approval_number || '',
+        u.referral_code || '',
+        u.referred_by_code || '',
+        u.address || '',
+        u.created_at || '',
+      ]);
+      downloadCsv('users', [
+        'id', 'name', 'email', 'role', 'phone', 'community', 'approval_number',
+        'referral_code', 'referred_by_code', 'address', 'joined',
+      ], rows);
+    };
+
+    const exportCentersCsv = () => {
+      const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
+        ? window.FoodMapsSocialMedia
+        : null;
+      const rows = centers.map((c) => {
+        const social = socialApi
+          ? socialApi.parseSocialMedia(c.social_media)
+          : (typeof c.social_media === 'object' && c.social_media ? c.social_media : {});
+        const types = Array.isArray(c.provider_types)
+          ? c.provider_types.join('; ')
+          : (typeof c.provider_types === 'string' ? c.provider_types : '');
+        return [
+          c.id ?? '',
+          c.name || '',
+          c.description || '',
+          c.address || '',
+          c.phone || '',
+          c.hours || '',
+          c.coords_lat ?? '',
+          c.coords_lng ?? '',
+          c.eligibility || '',
+          c.languages || '',
+          c.availability || '',
+          c.website || '',
+          social.facebook || '',
+          social.instagram || '',
+          social.twitter || '',
+          social.youtube || '',
+          social.linkedin || '',
+          social.tiktok || '',
+          c.coverage_areas || '',
+          types,
+          c.is_active ? 'active' : 'inactive',
+        ];
+      });
+      downloadCsv('distribution-centers', [
+        'id', 'name', 'description', 'address', 'phone', 'hours',
+        'lat', 'lng', 'eligibility', 'languages', 'availability', 'website',
+        'facebook', 'instagram', 'twitter', 'youtube', 'linkedin', 'tiktok',
+        'coverage_areas', 'provider_types', 'status',
+      ], rows);
+    };
+
+    const exportListingsCsv = () => {
+      const rows = listings.map((l) => [
+        l.id ?? '',
+        l.name || '',
+        l.description || '',
+        l.quantity || '',
+        l.location || '',
+        l.category || '',
+        l.status || '',
+        l.user_name || '',
+        l.expiry_date || '',
+        l.image_url || '',
+      ]);
+      downloadCsv('listings', [
+        'id', 'name', 'description', 'quantity', 'location', 'category',
+        'status', 'posted_by', 'expires', 'image_url',
+      ], rows);
+    };
+
+    const exportReferralsCsv = () => {
+      const edgeRows = [];
+      referralStats.forEach((referrer) => {
+        const referred = Array.isArray(referrer.referred_users) ? referrer.referred_users : [];
+        if (!referred.length) {
+          edgeRows.push([
+            referrer.id ?? '',
+            referrer.name || '',
+            referrer.email || '',
+            referrer.referral_code || '',
+            referrer.referral_count ?? 0,
+            referrer.created_at || '',
+            '',
+            '',
+            '',
+            '',
+          ]);
+          return;
+        }
+        referred.forEach((r) => {
+          edgeRows.push([
+            referrer.id ?? '',
+            referrer.name || '',
+            referrer.email || '',
+            referrer.referral_code || '',
+            referrer.referral_count ?? 0,
+            referrer.created_at || '',
+            r.id ?? '',
+            r.name || '',
+            r.email || '',
+            r.created_at || '',
+          ]);
+        });
+      });
+      downloadCsv('referrals', [
+        'referrer_id', 'referrer_name', 'referrer_email', 'referral_code',
+        'referral_count', 'referrer_joined',
+        'referred_id', 'referred_name', 'referred_email', 'referred_joined',
+      ], edgeRows);
+    };
+
+    const exportNewsletterCsv = () => {
+      downloadCsv('newsletter', [
+        'email', 'first_name', 'last_name', 'source', 'subscribed_at',
+      ], newsletterSubscribers.map((s) => [
+        s.email || '',
+        s.first_name || '',
+        s.last_name || '',
+        s.source || '',
+        s.created_at || '',
+      ]));
     };
 
     const updateListingCategoryField = (id, patch) => {
@@ -1071,40 +1207,6 @@ function AdminPanel({ onClose }) {
       }
     };
 
-    const handleExportData = async () => {
-      setExportStatus('exporting');
-      try {
-        const token = (window.databaseService && window.databaseService.getAuthToken)
-          ? window.databaseService.getAuthToken()
-          : (localStorage.getItem('auth_token') || localStorage.getItem('token'));
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const [listingsResp, centersResp] = await Promise.all([
-          fetch('/api/listings/get?limit=500', { headers }),
-          fetch('/api/centers', { headers }),
-        ]);
-        const listings = listingsResp.ok ? await listingsResp.json() : [];
-        const centers = centersResp.ok ? await centersResp.json() : [];
-        const blob = new Blob(
-          [JSON.stringify({ listings, centers, exported_at: new Date().toISOString() }, null, 2)],
-          { type: 'application/json' },
-        );
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'foodmaps-export.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-        setExportStatus('success');
-        setTimeout(() => setExportStatus(null), 3000);
-      } catch (error) {
-        console.error('Export error:', error);
-        setExportStatus('error');
-        setTimeout(() => setExportStatus(null), 3000);
-      }
-    };
-
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-3 sm:p-5"
         data-name="admin-panel" data-file="js/components/admin/AdminPanel.js">
@@ -1136,7 +1238,6 @@ function AdminPanel({ onClose }) {
                 { id: 'ai_broadcasts', label: 'AI Broadcasts', icon: 'megaphone' },
                 { id: 'ai_query', label: 'AI Query', icon: 'search' },
                 { id: 'database', label: 'Database', icon: 'database' },
-                { id: 'export', label: 'Export', icon: 'download' }
               ].map(tab => (
                 <button
                   key={tab.id}
@@ -1204,19 +1305,30 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'centers' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-3">
                 <h3 className="text-lg font-semibold">Distribution Centers</h3>
-                <button
-                  onClick={() => {
-                    setCenterForm({ ...emptyCenterForm });
-                    setEditingCenter(null);
-                    setShowCenterForm(true);
-                  }}
-                  className="btn-primary flex items-center"
-                >
-                  <div className="icon-plus mr-2"></div>
-                  Add Center
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={exportCentersCsv}
+                    disabled={!centers.length}
+                    className="btn-secondary flex items-center disabled:opacity-50"
+                  >
+                    <div className="icon-download mr-2"></div>
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCenterForm({ ...emptyCenterForm });
+                      setEditingCenter(null);
+                      setShowCenterForm(true);
+                    }}
+                    className="btn-primary flex items-center"
+                  >
+                    <div className="icon-plus mr-2"></div>
+                    Add Center
+                  </button>
+                </div>
               </div>
 
               {showCenterForm && (
@@ -1611,13 +1723,24 @@ function AdminPanel({ onClose }) {
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <h3 className="text-lg font-semibold">All Users</h3>
-                <button
-                  onClick={loadUsers}
-                  className="btn-secondary flex items-center self-start"
-                >
-                  <div className="icon-refresh-cw mr-2"></div>
-                  Refresh
-                </button>
+                <div className="flex flex-wrap gap-2 self-start">
+                  <button
+                    type="button"
+                    onClick={exportUsersCsv}
+                    disabled={!users.length}
+                    className="btn-secondary flex items-center disabled:opacity-50"
+                  >
+                    <div className="icon-download mr-2"></div>
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={loadUsers}
+                    className="btn-secondary flex items-center"
+                  >
+                    <div className="icon-refresh-cw mr-2"></div>
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1922,15 +2045,26 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'referrals' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-3">
                 <h3 className="text-lg font-semibold">Referral Analytics</h3>
-                <button
-                  onClick={loadReferralStats}
-                  className="btn-secondary flex items-center"
-                >
-                  <div className="icon-refresh-cw mr-2"></div>
-                  Refresh
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={exportReferralsCsv}
+                    disabled={!referralStats.length}
+                    className="btn-secondary flex items-center disabled:opacity-50"
+                  >
+                    <div className="icon-download mr-2"></div>
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={loadReferralStats}
+                    className="btn-secondary flex items-center"
+                  >
+                    <div className="icon-refresh-cw mr-2"></div>
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {referralLoading ? (
@@ -2249,15 +2383,26 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'listings' && (
             <div className="space-y-6">
-              <div className="flex justify-between items-center">
+              <div className="flex flex-wrap justify-between items-center gap-3">
                 <h3 className="text-lg font-semibold">Food Listings Management</h3>
-                <button
-                  onClick={loadListings}
-                  className="btn-secondary flex items-center"
-                >
-                  <div className="icon-refresh-cw mr-2"></div>
-                  Refresh
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={exportListingsCsv}
+                    disabled={!listings.length}
+                    className="btn-secondary flex items-center disabled:opacity-50"
+                  >
+                    <div className="icon-download mr-2"></div>
+                    Export CSV
+                  </button>
+                  <button
+                    onClick={loadListings}
+                    className="btn-secondary flex items-center"
+                  >
+                    <div className="icon-refresh-cw mr-2"></div>
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               {listingsLoading ? (
@@ -2474,49 +2619,6 @@ function AdminPanel({ onClose }) {
                 >
                   Refresh Stats
                 </button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'export' && (
-            <div className="space-y-6">
-              <div className="card">
-                <h3 className="text-lg font-semibold mb-4">Data Export</h3>
-                <p className="text-gray-600 mb-4">
-                  Export all Food Maps data for backup or migration purposes.
-                </p>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <button
-                    onClick={handleExportData}
-                    disabled={exportStatus === 'exporting'}
-                    className="btn-primary flex items-center justify-center"
-                  >
-                    {exportStatus === 'exporting' ? (
-                      <>
-                        <div className="icon-loader-2 mr-2 animate-spin"></div>
-                        Exporting...
-                      </>
-                    ) : (
-                      <>
-                        <div className="icon-download mr-2"></div>
-                        Export JSON Data
-                      </>
-                    )}
-                  </button>
-                </div>
-
-                {exportStatus === 'success' && (
-                  <div className="mt-4 p-3 bg-green-100 text-green-800 rounded-lg">
-                    Data exported successfully!
-                  </div>
-                )}
-
-                {exportStatus === 'error' && (
-                  <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-lg">
-                    Export failed. Please try again.
-                  </div>
-                )}
               </div>
             </div>
           )}

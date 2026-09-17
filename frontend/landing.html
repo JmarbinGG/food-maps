@@ -170,6 +170,15 @@
         border-radius: 6px;
         box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }
+
+    /* Sticky nav is h-24 / z-50. Keep the chatbot fully below it instead of
+       letting the header sit under the bar. */
+    #nouri-ai-root [role="dialog"] {
+        top: 7rem !important;
+        bottom: 1rem !important;
+        height: auto !important;
+        max-height: none !important;
+    }
     </style>
 
     <script>
@@ -367,7 +376,7 @@
 
     <!-- Admin Edit Button for Slideshow -->
     <button id="slideshow-admin-btn"
-        class="hidden fixed top-32 right-6 z-50 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-orange-600 transition-all">
+        class="hidden fixed top-32 left-6 z-50 bg-orange-500 text-white px-4 py-2 rounded-lg shadow-lg hover:bg-orange-600 transition-all">
         <div class="flex items-center gap-2">
             <div class="icon-edit text-xl"></div>
             <span>Edit Slideshow</span>

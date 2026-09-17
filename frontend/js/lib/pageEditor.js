@@ -63,7 +63,7 @@
       .fm-admin-edit-btn {
         position: fixed;
         bottom: 2rem;
-        right: 2rem;
+        left: 2rem;
         z-index: 1200;
         width: 56px;
         height: 56px;
