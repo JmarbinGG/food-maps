@@ -168,7 +168,9 @@ actions, in the order they were discovered:
 - **Rotation order:** created `'foodmaps'@'%'` on `foodapitest` with grants
   scoped to `SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX` on the
   `foodapitest` schema (the live database name matches the instance
-  identifier, not `food_maps` as originally assumed); updated `DATABASE_URL`
+  identifier, not `food_maps` as originally assumed) -- note this list omitted
+  `REFERENCES`, which `startup_event()` needs for any new table carrying a
+  foreign key; see the note below; updated `DATABASE_URL`
   inside the existing `prod/env` Secrets Manager secret to point at the new
   user; restarted the service; confirmed via
   `information_schema.processlist` that live connections switched from
@@ -229,12 +231,21 @@ point the app at it, confirm it works, *then* burn the leaked admin password.
 
    ```sql
    CREATE USER 'foodmaps'@'%' IDENTIFIED BY '<new password>';
-   GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX
+   GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, INDEX, REFERENCES
      ON food_maps.* TO 'foodmaps'@'%';
    FLUSH PRIVILEGES;
    ```
 
    Do not keep using `admin` as the app login.
+
+   `REFERENCES` is load-bearing and easy to leave out. `startup_event()` runs
+   `Base.metadata.create_all()` against whatever `DATABASE_URL` points at, and
+   MySQL requires `REFERENCES` on the *parent* table to create a foreign key.
+   Without it, the first model added that references `users` fails with
+   `(1142, "REFERENCES command denied ...")`, and because `create_all()` is the
+   first statement in startup, the app exits rather than starting degraded --
+   the container then reports only "unhealthy". Granting `CREATE` without
+   `REFERENCES` works until someone adds a table with a foreign key.
 4. Put the new user's URL (or JSON fields) in the secret. Give the EC2 instance
    role `secretsmanager:GetSecretValue` on that ARN only.
 5. Set `AWS_SECRET_NAME=prod/env` and `AWS_REGION=...` in the systemd unit (or
