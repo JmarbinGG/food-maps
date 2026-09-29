@@ -9,7 +9,7 @@
     content="See how local food sharing works and read stories from donors, volunteers, and partner groups.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
@@ -75,29 +75,12 @@
       animation: fadeIn 0.8s ease-out forwards;
     }
 
-    .timeline-item:nth-child(1) {
-      animation-delay: 0.1s;
-    }
-
-    .timeline-item:nth-child(2) {
-      animation-delay: 0.2s;
-    }
-
-    .timeline-item:nth-child(3) {
-      animation-delay: 0.3s;
-    }
-
-    .timeline-item:nth-child(4) {
-      animation-delay: 0.4s;
-    }
-
-    .timeline-item:nth-child(5) {
-      animation-delay: 0.5s;
-    }
-
-    .timeline-item:nth-child(6) {
-      animation-delay: 0.6s;
-    }
+    .timeline-item:nth-child(1) { animation-delay: 0.1s; }
+    .timeline-item:nth-child(2) { animation-delay: 0.2s; }
+    .timeline-item:nth-child(3) { animation-delay: 0.3s; }
+    .timeline-item:nth-child(4) { animation-delay: 0.4s; }
+    .timeline-item:nth-child(5) { animation-delay: 0.5s; }
+    .timeline-item:nth-child(6) { animation-delay: 0.6s; }
 
     .modal {
       display: none;
@@ -182,11 +165,92 @@
     .edit-toolbar {
       display: none !important;
     }
+
+    body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; letter-spacing: 0; }
+    h1, h2, h3, h4, h5, h6 { letter-spacing: 0; }
+
+    .city-impact {
+      --city-ink: #183d32;
+      --city-muted: #5a6a62;
+      --city-paper: #f4f5ee;
+      --city-line: #dfe5dc;
+      --city-coral: #db684b;
+      color: var(--city-ink);
+    }
+    .city-intro { padding: 4.5rem 0 3.5rem; background: var(--city-paper); border-bottom: 1px solid var(--city-line); }
+    .city-kicker, .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
+    .city-kicker { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1.25rem; color: #4d6a5d; }
+    .city-kicker span, .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral); }
+    .city-intro-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: end; gap: 3rem; }
+    .city-intro h1, .city-story h3 { margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 500; letter-spacing: 0; }
+    .city-intro h1 { font-size: 3.75rem; line-height: 1.04; }
+    .city-intro h1 em { color: #46765f; font-weight: 500; }
+    .city-intro-copy { max-width: 34rem; padding-bottom: 0.3rem; }
+    .city-intro-copy > p { margin: 0 0 1.25rem; color: #43594e; font-size: 1.08rem; }
+    .sample-note { display: inline-flex; align-items: center; gap: 0.5rem; color: #77522d; font-size: 0.78rem; font-weight: 700; }
+    .sample-note .icon-info { color: #b05d36; font-size: 1rem; }
+    .city-explorer { padding: 3.75rem 0 4.5rem; background: #fff; }
+    .city-selector-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+    .section-kicker { margin: 0 0 0.5rem; color: #658071; }
+    .city-selector-heading h2 { margin: 0; font-size: 1.8rem; font-weight: 700; }
+    .city-region { display: inline-flex; align-items: center; gap: 0.45rem; padding-bottom: 0.25rem; color: var(--city-muted); font-size: 0.9rem; font-weight: 600; }
+    .city-region .icon-map-pin, .photo-label .icon-map-pin { color: var(--city-coral); }
+    .city-tabs { display: flex; gap: 0.35rem; margin: 1.5rem 0 1.75rem; overflow-x: auto; border-bottom: 1px solid var(--city-line); scrollbar-width: thin; }
+    .city-tab { flex: 0 0 auto; padding: 0.8rem 1.1rem 0.9rem; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66766e; font: inherit; font-weight: 700; cursor: pointer; }
+    .city-tab:hover, .city-tab:focus-visible, .city-tab.is-active { color: var(--city-ink); }
+    .city-tab:focus-visible, .city-next-step a:focus-visible { outline: 3px solid #dc886f; outline-offset: 3px; }
+    .city-tab.is-active { border-bottom-color: var(--city-coral); }
+    .city-panel { display: grid; grid-template-columns: 1.03fr 0.97fr; align-items: center; gap: clamp(2rem, 5vw, 4.5rem); animation: cityArrive 0.35s ease-out; }
+    @keyframes cityArrive { from { opacity: 0.65; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .city-photo-wrap { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #e6ebe3; }
+    .city-photo-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .photo-label { position: absolute; bottom: 1rem; left: 1rem; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.75rem; background: #fff; color: var(--city-ink); font-size: 0.82rem; font-weight: 700; }
+    .city-story .section-kicker { display: flex; align-items: center; gap: 0.55rem; }
+    .city-story h3 { margin: 0.75rem 0 0.8rem; font-size: 2.6rem; line-height: 1.12; }
+    .city-description { margin: 0; color: var(--city-muted); font-size: 1rem; }
+    .city-story blockquote { position: relative; margin: 1.5rem 0 1.25rem; padding: 1.1rem 1.25rem 1rem 3rem; border-left: 3px solid var(--city-coral); background: #f8f5ed; }
+    .quote-mark { position: absolute; top: 0.65rem; left: 1rem; color: var(--city-coral); font-family: Georgia, serif; font-size: 2.3rem; line-height: 1; }
+    .city-story blockquote p { margin: 0 0 0.5rem; color: #31483d; font-family: 'Fraunces', Georgia, serif; font-size: 1.16rem; line-height: 1.45; }
+    .city-story cite { color: #66766e; font-size: 0.77rem; font-style: normal; font-weight: 600; }
+    .city-neighborhoods > span { color: #658071; }
+    .city-neighborhoods p { margin: 0.35rem 0 0; color: #42584d; font-size: 0.84rem; }
+    .city-neighborhoods b { padding: 0 0.2rem; color: var(--city-coral); }
+    .city-impact-strip { margin-top: 2.5rem; padding: 1.35rem 1.5rem 1.5rem; background: var(--city-ink); color: #fff; }
+    .impact-strip-heading { display: flex; justify-content: space-between; align-items: center; color: #d8e5d9; }
+    .sample-pill { padding: 0.25rem 0.5rem; background: #f2d7c6; color: #603b2c; font-size: 0.63rem; }
+    .impact-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.25fr; align-items: end; gap: 1rem; margin-top: 1.25rem; }
+    .impact-metrics > div { display: flex; flex-direction: column; gap: 0.1rem; }
+    .impact-metrics strong { font-size: 1.9rem; line-height: 1.15; }
+    .impact-metrics strong small { font-size: 1rem; }
+    .impact-metrics > div span { color: #c5d7c9; font-size: 0.82rem; }
+    .impact-metrics > p { margin: 0; color: #c5d7c9; font-size: 0.75rem; text-align: right; }
+    .city-next-step { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1.5rem; }
+    .city-next-step p { margin: 0; color: var(--city-muted); font-size: 0.9rem; }
+    .city-next-step p strong { color: var(--city-ink); }
+    .city-next-step a { display: inline-flex; align-items: center; gap: 0.4rem; color: #9b462f; font-size: 0.88rem; font-weight: 800; text-decoration: none; }
+    body > section.bg-green-600, body > #featured, body > #stories, body > #news, body > #news + section { display: none; }
+
+    @media (max-width: 760px) {
+      .city-intro { padding: 3rem 0 2.5rem; }
+      .city-intro-grid { grid-template-columns: 1fr; gap: 1.25rem; }
+      .city-intro h1 { font-size: 3rem; }
+      .city-explorer { padding: 2.75rem 0 3rem; }
+      .city-selector-heading { align-items: start; flex-direction: column; }
+      .city-panel { grid-template-columns: 1fr; gap: 1.75rem; }
+      .city-photo-wrap { aspect-ratio: 1.3; }
+      .city-story h3 { font-size: 2.2rem; }
+      .impact-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.25rem; }
+      .impact-metrics > p { grid-column: 1 / -1; text-align: left; }
+      .city-next-step { align-items: start; flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .city-panel { animation: none; }
+    }
   </style>
 </head>
 
 <body class="bg-gray-50">
-  <!-- AI Search Modal Container -->
   <div id="ai-search-modal"></div>
   <!-- Navigation -->
   <nav class="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-200 sticky top-0 z-50">
@@ -263,6 +327,79 @@
       </div>
     </div>
   </nav>
+
+  <main class="city-impact">
+    <section class="city-intro">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p class="city-kicker">FOOD MAPS <span></span> LOCAL IMPACT</p>
+        <div class="city-intro-grid">
+          <h1>Every city has<br><em>a story to share.</em></h1>
+          <div class="city-intro-copy">
+            <p>See how neighbors, local food partners, and volunteers make good food go further in their own communities.</p>
+            <span class="sample-note"><i class="icon-info" aria-hidden="true"></i> Concept mockup - all figures and stories are sample content</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="city-explorer" aria-labelledby="city-explorer-title">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="city-selector-heading">
+          <div>
+            <p class="section-kicker">ONE NETWORK, MANY NEIGHBORHOODS</p>
+            <h2 id="city-explorer-title">Explore local impact</h2>
+          </div>
+          <span class="city-region"><i class="icon-map-pin" aria-hidden="true"></i> East Bay, California</span>
+        </div>
+
+        <div class="city-tabs" role="tablist" aria-label="Choose a city">
+          <button class="city-tab is-active" id="city-tab-oakland" type="button" role="tab" aria-selected="true" aria-controls="city-panel" data-city="oakland">Oakland</button>
+          <button class="city-tab" id="city-tab-alameda" type="button" role="tab" aria-selected="false" aria-controls="city-panel" tabindex="-1" data-city="alameda">Alameda</button>
+          <button class="city-tab" id="city-tab-berkeley" type="button" role="tab" aria-selected="false" aria-controls="city-panel" tabindex="-1" data-city="berkeley">Berkeley</button>
+          <button class="city-tab" id="city-tab-san-leandro" type="button" role="tab" aria-selected="false" aria-controls="city-panel" tabindex="-1" data-city="san-leandro">San Leandro</button>
+        </div>
+
+        <div class="city-panel" id="city-panel" role="tabpanel" aria-labelledby="city-tab-oakland" tabindex="0">
+          <div class="city-photo-wrap">
+            <img id="city-photo" src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop" alt="Volunteers sorting food for an Oakland community distribution">
+            <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> <span id="photo-city">Oakland</span>, CA</span>
+          </div>
+          <div class="city-story">
+            <p class="section-kicker" id="city-eyebrow">OAKLAND, CALIFORNIA <span class="story-dot"></span> CITY STORY</p>
+            <h3 id="city-title">Good food, close to home.</h3>
+            <p class="city-description" id="city-description">In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.</p>
+            <blockquote>
+              <span class="quote-mark" aria-hidden="true">“</span>
+              <p id="city-quote">When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.</p>
+              <cite id="city-attribution">Illustrative volunteer story - Oakland</cite>
+            </blockquote>
+            <div class="city-neighborhoods">
+              <span>COMMUNITY FOCUS</span>
+              <p id="city-focus">Neighborhood food partners <b>·</b> Community pickup points <b>·</b> Volunteer routes</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="city-impact-strip" aria-label="Illustrative city impact statistics">
+          <div class="impact-strip-heading">
+            <span>THE LOCAL PICTURE</span>
+            <span class="sample-pill">SAMPLE DATA</span>
+          </div>
+          <div class="impact-metrics">
+            <div><strong id="metric-meals">3,840</strong><span>meals shared</span></div>
+            <div><strong><span id="metric-food">1,260</span> <small>lb</small></strong><span>food rescued</span></div>
+            <div><strong id="metric-partners">24</strong><span>community partners</span></div>
+            <p id="metric-period">Illustrative 12-month snapshot for Oakland</p>
+          </div>
+        </div>
+
+        <div class="city-next-step">
+          <p><strong>Know a story from your city?</strong> Help us tell it with the people who live it.</p>
+          <a href="https://allgoodlivingfoundation.org/volunteer-form">Share a local story <i class="icon-arrow-up-right" aria-hidden="true"></i></a>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <!-- Hero Section -->
   <section class="bg-green-600 py-20">
@@ -991,6 +1128,103 @@
   </script>
 
   <script>
+    const impactCityStories = {
+      oakland: {
+        name: 'Oakland',
+        image: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop',
+        title: 'Good food, close to home.',
+        description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
+        quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
+        attribution: 'Illustrative volunteer story - Oakland',
+        focus: ['Neighborhood food partners', 'Community pickup points', 'Volunteer routes'],
+        meals: '3,840',
+        pounds: '1,260',
+        partners: '24'
+      },
+      alameda: {
+        name: 'Alameda',
+        image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
+        title: 'A little closer makes a difference.',
+        description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
+        quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
+        attribution: 'Illustrative community story - Alameda',
+        focus: ['Local pantry connections', 'Island-wide pickup access', 'Volunteer handoffs'],
+        meals: '1,960',
+        pounds: '680',
+        partners: '13'
+      },
+      berkeley: {
+        name: 'Berkeley',
+        image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
+        title: 'Shared tables, stronger blocks.',
+        description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
+        quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
+        attribution: 'Illustrative partner story - Berkeley',
+        focus: ['Community meal programs', 'Shared food access', 'Local partner network'],
+        meals: '2,710',
+        pounds: '940',
+        partners: '18'
+      },
+      'san-leandro': {
+        name: 'San Leandro',
+        image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
+        title: 'Fresh food finds its next stop.',
+        description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
+        quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
+        attribution: 'Illustrative volunteer story - San Leandro',
+        focus: ['Rescue and redistribution', 'Convenient pickup windows', 'Volunteer coordination'],
+        meals: '2,180',
+        pounds: '760',
+        partners: '15'
+      }
+    };
+
+    const cityTabs = Array.from(document.querySelectorAll('.city-tab'));
+    const cityPanel = document.getElementById('city-panel');
+
+    function selectImpactCity(tab) {
+      const city = impactCityStories[tab.dataset.city];
+      if (!city) return;
+
+      cityTabs.forEach((cityTab) => {
+        const isSelected = cityTab === tab;
+        cityTab.classList.toggle('is-active', isSelected);
+        cityTab.setAttribute('aria-selected', String(isSelected));
+        cityTab.tabIndex = isSelected ? 0 : -1;
+      });
+
+      cityPanel.setAttribute('aria-labelledby', tab.id);
+      document.getElementById('city-photo').src = city.image;
+      document.getElementById('city-photo').alt = `Community food distribution in ${city.name}, California`;
+      document.getElementById('photo-city').textContent = city.name;
+      document.getElementById('city-eyebrow').innerHTML = `${city.name.toUpperCase()}, CALIFORNIA <span class="story-dot"></span> CITY STORY`;
+      document.getElementById('city-title').textContent = city.title;
+      document.getElementById('city-description').textContent = city.description;
+      document.getElementById('city-quote').textContent = city.quote;
+      document.getElementById('city-attribution').textContent = city.attribution;
+      document.getElementById('city-focus').textContent = city.focus.join(' · ');
+      document.getElementById('metric-meals').textContent = city.meals;
+      document.getElementById('metric-food').textContent = city.pounds;
+      document.getElementById('metric-partners').textContent = city.partners;
+      document.getElementById('metric-period').textContent = `Illustrative 12-month snapshot for ${city.name}`;
+    }
+
+    cityTabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectImpactCity(tab));
+      tab.addEventListener('keydown', (event) => {
+        let nextIndex = index;
+        if (event.key === 'ArrowRight') nextIndex = (index + 1) % cityTabs.length;
+        else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + cityTabs.length) % cityTabs.length;
+        else if (event.key === 'Home') nextIndex = 0;
+        else if (event.key === 'End') nextIndex = cityTabs.length - 1;
+        else return;
+
+        event.preventDefault();
+        cityTabs[nextIndex].focus();
+        selectImpactCity(cityTabs[nextIndex]);
+      });
+    });
+
     function openStoriesModal() {
       document.getElementById('storiesModal').classList.add('show');
       document.body.style.overflow = 'hidden';
