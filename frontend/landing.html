@@ -1059,16 +1059,51 @@
         }
 
         // Load slideshow photos
-        function loadSlideshowPhotos() {
+        function parseSlideshowPhotos(value) {
             try {
-                const saved = localStorage.getItem('slideshowPhotos');
-                slideshowPhotos = saved ? JSON.parse(saved) : [...defaultPhotos];
-                renderSlideshow();
+                const photos = typeof value === 'string' ? JSON.parse(value) : value;
+                if (!Array.isArray(photos)) return null;
+                return photos
+                    .filter(photo => photo && typeof photo.url === 'string' && photo.url.trim())
+                    .map(photo => ({
+                        url: photo.url.trim(),
+                        caption: typeof photo.caption === 'string' ? photo.caption : ''
+                    }));
             } catch (error) {
-                console.error('Load slideshow error:', error);
-                slideshowPhotos = [...defaultPhotos];
-                renderSlideshow();
+                return null;
             }
+        }
+
+        // Shared server content wins; localStorage supports legacy and offline visits.
+        async function loadSlideshowPhotos() {
+            slideshowPhotos = [...defaultPhotos];
+            renderSlideshow();
+
+            try {
+                const response = await fetch('/api/pages/landing/content', {
+                    headers: { Accept: 'application/json' }
+                });
+                if (!response.ok) throw new Error(`Load failed (${response.status})`);
+
+                const data = await response.json();
+                const sharedPhotos = parseSlideshowPhotos(data.content?.slideshowPhotos);
+                if (sharedPhotos !== null) {
+                    slideshowPhotos = sharedPhotos.length ? sharedPhotos : [...defaultPhotos];
+                    localStorage.setItem('slideshowPhotos', JSON.stringify(slideshowPhotos));
+                    renderSlideshow();
+                    return;
+                }
+            } catch (error) {
+                console.warn('Shared slideshow load failed; using local fallback:', error);
+            }
+
+            try {
+                const localPhotos = parseSlideshowPhotos(localStorage.getItem('slideshowPhotos'));
+                if (localPhotos?.length) slideshowPhotos = localPhotos;
+            } catch (error) {
+                console.warn('Local slideshow fallback failed:', error);
+            }
+            renderSlideshow();
         }
 
         // Render slideshow
@@ -1230,16 +1265,63 @@
         }
 
         // Save slideshow changes
-        function saveSlideshowChanges() {
+        async function saveSlideshowChanges() {
+            if (!slideshowPhotos.length) {
+                alert('Add at least one photo before saving.');
+                return;
+            }
+
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                alert('Please sign in as an admin to save slideshow changes.');
+                return;
+            }
+
+            const saveButton = document.getElementById('save-slideshow-changes');
+            const originalLabel = saveButton ? saveButton.textContent : '';
+            if (saveButton) {
+                saveButton.disabled = true;
+                saveButton.textContent = 'Saving...';
+            }
+
             try {
-                localStorage.setItem('slideshowPhotos', JSON.stringify(slideshowPhotos));
+                const response = await fetch('/api/pages/landing/content', {
+                    method: 'PUT',
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        Accept: 'application/json'
+                    },
+                    body: JSON.stringify({
+                        content: { slideshowPhotos: JSON.stringify(slideshowPhotos) }
+                    })
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || `Save failed (${response.status})`);
+                }
+
+                const data = await response.json();
+                const savedPhotos = parseSlideshowPhotos(data.content?.slideshowPhotos);
+                if (savedPhotos === null) throw new Error('The server returned invalid slideshow data.');
+
+                slideshowPhotos = savedPhotos;
+                localStorage.setItem('slideshowPhotos', JSON.stringify(savedPhotos));
                 currentSlide = 0;
                 renderSlideshow();
                 closeSlideshowModal();
-                alert('Slideshow updated successfully!');
+                window.dispatchEvent(new CustomEvent('foodmaps:pagecontent-saved', {
+                    detail: { pageId: 'landing', content: data.content }
+                }));
+                alert('Slideshow updated for everyone.');
             } catch (error) {
                 console.error('Save slideshow error:', error);
-                alert('Failed to save slideshow changes');
+                alert(`Failed to save slideshow changes: ${error.message}`);
+            } finally {
+                if (saveButton) {
+                    saveButton.disabled = false;
+                    saveButton.textContent = originalLabel;
+                }
             }
         }
 
