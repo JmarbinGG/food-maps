@@ -9,7 +9,7 @@
     content="See how local food sharing works and read stories from donors, volunteers, and partner groups.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
   <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
@@ -177,30 +177,29 @@
       --city-coral: #db684b;
       color: var(--city-ink);
     }
-    .city-intro { padding: 4.5rem 0 3.5rem; background: var(--city-paper); border-bottom: 1px solid var(--city-line); }
-    .city-kicker, .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
-    .city-kicker { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1.25rem; color: #4d6a5d; }
-    .city-kicker span, .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral); }
-    .city-intro-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: end; gap: 3rem; }
-    .city-intro h1, .city-story h3 { margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 500; letter-spacing: 0; }
-    .city-intro h1 { font-size: 3.75rem; line-height: 1.04; }
-    .city-intro h1 em { color: #46765f; font-weight: 500; }
-    .city-intro-copy { max-width: 34rem; padding-bottom: 0.3rem; }
-    .city-intro-copy > p { margin: 0 0 1.25rem; color: #43594e; font-size: 1.08rem; }
+    .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
+    .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral, #db684b); }
+    .city-story h3 { margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-weight: 500; letter-spacing: 0; }
     .sample-note { display: inline-flex; align-items: center; gap: 0.5rem; color: #77522d; font-size: 0.78rem; font-weight: 700; }
     .sample-note .icon-info { color: #b05d36; font-size: 1rem; }
-    .city-explorer { padding: 3.75rem 0 4.5rem; background: #fff; }
-    .city-selector-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+    .city-explorer { padding: 3rem 0 4.5rem; background: #fff; }
+    .city-selector-heading { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; }
     .section-kicker { margin: 0 0 0.5rem; color: #658071; }
-    .city-selector-heading h2 { margin: 0; font-size: 1.8rem; font-weight: 700; }
-    .city-region { display: inline-flex; align-items: center; gap: 0.45rem; padding-bottom: 0.25rem; color: var(--city-muted); font-size: 0.9rem; font-weight: 600; }
-    .city-region .icon-map-pin, .photo-label .icon-map-pin { color: var(--city-coral); }
+    .city-selector-heading .section-kicker { display: flex; align-items: center; gap: 0.65rem; color: #4d6a5d; }
+    .city-selector-heading h1 { margin: 0; font-family: 'Source Serif 4', Georgia, serif; font-size: 2.6rem; font-weight: 500; line-height: 1.1; letter-spacing: 0; }
+    .city-selector-heading .sample-note { padding-bottom: 0.3rem; }
+    .city-story .section-kicker .icon-map-pin, .photo-label .icon-map-pin { color: var(--city-coral); }
+    .city-story .section-kicker .icon-map-pin { font-size: 0.95rem; }
     .city-tabs { display: flex; gap: 0.35rem; margin: 1.5rem 0 1.75rem; overflow-x: auto; border-bottom: 1px solid var(--city-line); scrollbar-width: thin; }
     .city-tab { flex: 0 0 auto; padding: 0.8rem 1.1rem 0.9rem; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66766e; font: inherit; font-weight: 700; cursor: pointer; }
     .city-tab:hover, .city-tab:focus-visible, .city-tab.is-active { color: var(--city-ink); }
     .city-tab:focus-visible, .city-next-step a:focus-visible { outline: 3px solid #dc886f; outline-offset: 3px; }
     .city-tab.is-active { border-bottom-color: var(--city-coral); }
-    .city-panel { display: grid; grid-template-columns: 1.03fr 0.97fr; align-items: center; gap: clamp(2rem, 5vw, 4.5rem); animation: cityArrive 0.35s ease-out; }
+    .city-panel { display: grid; gap: 3.25rem; animation: cityArrive 0.35s ease-out; }
+    .city-story-row { display: grid; grid-template-columns: 1.03fr 0.97fr; align-items: center; gap: clamp(2rem, 5vw, 4.5rem); }
+    .city-story-row + .city-story-row { padding-top: 3.25rem; border-top: 1px solid var(--city-line); }
+    .city-story-row:nth-child(even) .city-photo-wrap { order: 2; }
+    .story-count { margin-left: auto; color: #8d9a93; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }
     @keyframes cityArrive { from { opacity: 0.65; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .city-photo-wrap { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #e6ebe3; }
     .city-photo-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
@@ -210,7 +209,7 @@
     .city-description { margin: 0; color: var(--city-muted); font-size: 1rem; }
     .city-story blockquote { position: relative; margin: 1.5rem 0 1.25rem; padding: 1.1rem 1.25rem 1rem 3rem; border-left: 3px solid var(--city-coral); background: #f8f5ed; }
     .quote-mark { position: absolute; top: 0.65rem; left: 1rem; color: var(--city-coral); font-family: Georgia, serif; font-size: 2.3rem; line-height: 1; }
-    .city-story blockquote p { margin: 0 0 0.5rem; color: #31483d; font-family: 'Fraunces', Georgia, serif; font-size: 1.16rem; line-height: 1.45; }
+    .city-story blockquote p { margin: 0 0 0.5rem; color: #31483d; font-family: 'Source Serif 4', Georgia, serif; font-size: 1.16rem; line-height: 1.45; }
     .city-story cite { color: #66766e; font-size: 0.77rem; font-style: normal; font-weight: 600; }
     .city-neighborhoods > span { color: #658071; }
     .city-neighborhoods p { margin: 0.35rem 0 0; color: #42584d; font-size: 0.84rem; }
@@ -221,27 +220,45 @@
     .impact-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.25fr; align-items: end; gap: 1rem; margin-top: 1.25rem; }
     .impact-metrics > div { display: flex; flex-direction: column; gap: 0.1rem; }
     .impact-metrics strong { font-size: 1.9rem; line-height: 1.15; }
-    .impact-metrics strong small { font-size: 1rem; }
-    .impact-metrics > div span { color: #c5d7c9; font-size: 0.82rem; }
+    .impact-metrics strong small { font-size: inherit; font-weight: inherit; }
+    .impact-metrics > div > span { color: #c5d7c9; font-size: 0.82rem; }
     .impact-metrics > p { margin: 0; color: #c5d7c9; font-size: 0.75rem; text-align: right; }
     .city-next-step { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1.5rem; }
     .city-next-step p { margin: 0; color: var(--city-muted); font-size: 0.9rem; }
     .city-next-step p strong { color: var(--city-ink); }
     .city-next-step a { display: inline-flex; align-items: center; gap: 0.4rem; color: #9b462f; font-size: 0.88rem; font-weight: 800; text-decoration: none; }
+    .newsletter-band { background: #183d32; color: #fff; padding: 4.5rem 0; }
+    .newsletter-band h2 { font-family: 'Source Serif 4', Georgia, serif; font-size: 2.6rem; font-weight: 500; line-height: 1.1; margin: 0 0 0.75rem; }
+    .newsletter-band .band-kicker { display: flex; align-items: center; justify-content: center; gap: 0.65rem; margin: 0 0 1rem; color: #a9c6b4; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
+    .newsletter-band .band-lede { margin: 0; color: #c5d7c9; font-size: 1.05rem; }
+    .newsletter-band label { color: #d8e5d9; font-weight: 600; }
+    .newsletter-band input[type="text"], .newsletter-band input[type="email"] { width: 100%; padding: 0.75rem 1rem; border: 1px solid #3b5d51; border-radius: 0.5rem; background: #fff; color: #183d32; font: inherit; }
+    .newsletter-band input[type="text"]:focus, .newsletter-band input[type="email"]:focus { outline: 3px solid #dc886f; outline-offset: 2px; border-color: transparent; }
+    .newsletter-band .consent-text { color: #c5d7c9; }
+    .newsletter-band .band-submit { width: 100%; padding: 1rem 2rem; border: 0; border-radius: 0.75rem; background: var(--city-coral, #db684b); color: #fff; font: inherit; font-size: 1.05rem; font-weight: 800; cursor: pointer; transition: background 0.2s ease; }
+    .newsletter-band .band-submit:hover { background: #c4573c; }
+    .newsletter-band .band-submit:focus-visible { outline: 3px solid #f2d7c6; outline-offset: 3px; }
+    .newsletter-band .band-fineprint { color: #a9c6b4; }
+    .newsletter-band .band-fineprint a { color: #f2d7c6; }
+
     body > section.bg-green-600, body > #featured, body > #stories, body > #news, body > #news + section { display: none; }
 
     @media (max-width: 760px) {
-      .city-intro { padding: 3rem 0 2.5rem; }
-      .city-intro-grid { grid-template-columns: 1fr; gap: 1.25rem; }
-      .city-intro h1 { font-size: 3rem; }
-      .city-explorer { padding: 2.75rem 0 3rem; }
+      .city-explorer { padding: 2.25rem 0 3rem; }
       .city-selector-heading { align-items: start; flex-direction: column; }
-      .city-panel { grid-template-columns: 1fr; gap: 1.75rem; }
+      .city-selector-heading h1 { font-size: 2.15rem; }
+      .city-panel { gap: 2.25rem; }
+      .city-story-row { grid-template-columns: 1fr; gap: 1.75rem; }
+      .city-story-row + .city-story-row { padding-top: 2.25rem; }
+      .city-story-row:nth-child(even) .city-photo-wrap { order: 0; }
+      .story-count { margin-left: 0; }
       .city-photo-wrap { aspect-ratio: 1.3; }
       .city-story h3 { font-size: 2.2rem; }
       .impact-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.25rem; }
       .impact-metrics > p { grid-column: 1 / -1; text-align: left; }
       .city-next-step { align-items: start; flex-direction: column; }
+      .newsletter-band { padding: 3rem 0; }
+      .newsletter-band h2 { font-size: 2.15rem; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -329,27 +346,14 @@
   </nav>
 
   <main class="city-impact">
-    <section class="city-intro">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p class="city-kicker">FOOD MAPS <span></span> LOCAL IMPACT</p>
-        <div class="city-intro-grid">
-          <h1>Every city has<br><em>a story to share.</em></h1>
-          <div class="city-intro-copy">
-            <p>See how neighbors, local food partners, and volunteers make good food go further in their own communities.</p>
-            <span class="sample-note"><i class="icon-info" aria-hidden="true"></i> Concept mockup - all figures and stories are sample content</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="city-explorer" aria-labelledby="city-explorer-title">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="city-selector-heading">
           <div>
-            <p class="section-kicker">ONE NETWORK, MANY NEIGHBORHOODS</p>
-            <h2 id="city-explorer-title">Explore local impact</h2>
+            <p class="section-kicker">FOOD MAPS <span class="story-dot"></span> LOCAL IMPACT</p>
+            <h1 id="city-explorer-title">Explore local impact</h1>
           </div>
-          <span class="city-region"><i class="icon-map-pin" aria-hidden="true"></i> East Bay, California</span>
+          <span class="sample-note"><i class="icon-info" aria-hidden="true"></i> Concept mockup - all figures and stories are sample content</span>
         </div>
 
         <div class="city-tabs" role="tablist" aria-label="Choose a city">
@@ -360,24 +364,26 @@
         </div>
 
         <div class="city-panel" id="city-panel" role="tabpanel" aria-labelledby="city-tab-oakland" tabindex="0">
-          <div class="city-photo-wrap">
-            <img id="city-photo" src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop" alt="Volunteers sorting food for an Oakland community distribution">
-            <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> <span id="photo-city">Oakland</span>, CA</span>
-          </div>
-          <div class="city-story">
-            <p class="section-kicker" id="city-eyebrow">OAKLAND, CALIFORNIA <span class="story-dot"></span> CITY STORY</p>
-            <h3 id="city-title">Good food, close to home.</h3>
-            <p class="city-description" id="city-description">In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.</p>
-            <blockquote>
-              <span class="quote-mark" aria-hidden="true">“</span>
-              <p id="city-quote">When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.</p>
-              <cite id="city-attribution">Illustrative volunteer story - Oakland</cite>
-            </blockquote>
-            <div class="city-neighborhoods">
-              <span>COMMUNITY FOCUS</span>
-              <p id="city-focus">Neighborhood food partners <b>·</b> Community pickup points <b>·</b> Volunteer routes</p>
+          <article class="city-story-row">
+            <div class="city-photo-wrap">
+              <img id="city-photo" src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop" alt="Volunteers sorting food for an Oakland community distribution">
+              <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> <span id="photo-city">Oakland</span>, CA</span>
             </div>
-          </div>
+            <div class="city-story">
+              <p class="section-kicker" id="city-eyebrow"><i class="icon-map-pin" aria-hidden="true"></i> OAKLAND, CALIFORNIA <span class="story-dot"></span> CITY STORY <span class="story-count">STORY 1 OF 3</span></p>
+              <h3 id="city-title">Good food, close to home.</h3>
+              <p class="city-description" id="city-description">In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.</p>
+              <blockquote>
+                <span class="quote-mark" aria-hidden="true">“</span>
+                <p id="city-quote">When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.</p>
+                <cite id="city-attribution">Illustrative volunteer story - Oakland</cite>
+              </blockquote>
+              <div class="city-neighborhoods">
+                <span>COMMUNITY FOCUS</span>
+                <p id="city-focus">Neighborhood food partners <b>·</b> Community pickup points <b>·</b> Volunteer routes</p>
+              </div>
+            </div>
+          </article>
         </div>
 
         <div class="city-impact-strip" aria-label="Illustrative city impact statistics">
@@ -591,108 +597,6 @@
     </div>
   </section>
 
-  <!-- Parallax Form Section -->
-  <section class="relative h-[600px] overflow-hidden">
-    <!-- Parallax Background Image -->
-    <div class="absolute inset-0 bg-fixed bg-center bg-cover editable-bg" data-editable-bg="parallax-bg-img" data-edit-label="Parallax background"
-      style="background-image: url('https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=2074&auto=format&fit=crop'); transform: translateY(0); will-change: transform;">
-    </div>
-
-    <!-- Overlay -->
-    <div class="absolute inset-0 bg-black bg-opacity-40"></div>
-
-    <!-- Form Card -->
-    <div class="relative h-full flex items-center justify-end pr-12">
-      <div class="bg-white rounded-2xl shadow-2xl p-8 w-96 max-w-md">
-        <h2 class="text-2xl font-bold text-gray-900 mb-4 editable" data-editable="form-title" data-edit-label="Contact form title" contenteditable="false">
-          Stay In Touch
-        </h2>
-        <p class="text-gray-600 mb-6 editable" data-editable="form-description" data-edit-label="Contact form description" contenteditable="false">
-          Share your story, volunteer, donate food, or get monthly updates.
-        </p>
-        <div id="formSuccess"
-          class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4">
-           Thank you! We'll be in touch soon.
-        </div>
-
-        <form class="space-y-4">
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">First
-                Name</label>
-              <input type="text"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
-              <input type="text"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent">
-            </div>
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-              <input type="email"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="your@email.com">
-            </div>
-
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Mobile
-                Phone</label>
-              <input type="tel"
-                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="+1 (555) 000-0000">
-            </div>
-          </div>
-
-          <div class="text-right">
-            <button type="button" id="nextBtn"
-              class="bg-green-600 text-white px-6 py-2 rounded-lg text-sm font-semibold hover:bg-green-700 transition-colors">
-              NEXT
-            </button>
-          </div>
-
-          <div id="interestSection" class="hidden">
-            <label class="block text-sm font-medium text-gray-900 mb-3">I'm interested
-              in:</label>
-            <div class="space-y-2">
-              <label class="flex items-center">
-                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700">Volunteering</span>
-              </label>
-              <label class="flex items-center">
-                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700">Donating Food</span>
-              </label>
-              <label class="flex items-center">
-                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700">Partnership Opportunities</span>
-              </label>
-              <label class="flex items-center">
-                <input type="checkbox" class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500">
-                <span class="ml-2 text-gray-700">Monthly Updates</span>
-              </label>
-            </div>
-
-            <div class="grid grid-cols-2 gap-4 mt-6">
-              <button type="button" id="backBtn"
-                class="bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition-colors">
-                Back
-              </button>
-              <button type="submit"
-                class="bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700 transition-colors">
-                Let's Go!
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  </section>
-
   <script>
     // Animated counter for statistics
     function animateCounter(id, target, suffix = '') {
@@ -720,171 +624,64 @@
       }, 500);
     });
 
-    // Form step navigation
-    document.getElementById('nextBtn').addEventListener('click', function () {
-      document.getElementById('interestSection').classList.remove('hidden');
-      this.parentElement.classList.add('hidden');
-    });
-
-    document.getElementById('backBtn').addEventListener('click', function () {
-      document.getElementById('interestSection').classList.add('hidden');
-      document.getElementById('nextBtn').parentElement.classList.remove('hidden');
-    });
-
-    // Form submission handler
-    document.addEventListener('DOMContentLoaded', () => {
-      const impactForm = document.querySelector('form');
-      if (impactForm) {
-        impactForm.addEventListener('submit', async function (e) {
-          e.preventDefault();
-
-          const formData = {
-            firstName: this.querySelector('input[type="text"]').value,
-            lastName: this.querySelectorAll('input[type="text"]')[1].value,
-            email: this.querySelector('input[type="email"]').value,
-            phone: this.querySelector('input[type="tel"]').value,
-            interests: Array.from(this.querySelectorAll('input[type="checkbox"]:checked'))
-              .map(cb => cb.nextElementSibling.textContent.trim())
-          };
-
-          try {
-            // Store in localStorage
-            const submissions = JSON.parse(localStorage.getItem('impactFormSubmissions') || '[]');
-            submissions.push({
-              ...formData,
-              timestamp: new Date().toISOString()
-            });
-            localStorage.setItem('impactFormSubmissions', JSON.stringify(submissions));
-
-            // Show success message
-            const successMsg = document.getElementById('formSuccess');
-            if (successMsg) {
-              successMsg.classList.remove('hidden');
-              setTimeout(() => successMsg.classList.add('hidden'), 5000);
-            }
-
-            // Reset form
-            this.reset();
-            document.getElementById('interestSection').classList.add('hidden');
-            document.getElementById('nextBtn').parentElement.classList.remove('hidden');
-
-            console.log('Form submitted successfully:', formData);
-          } catch (error) {
-            console.error('Error submitting form:', error);
-            alert('Thank you for your interest! We will be in touch soon.');
-          }
-        });
-      }
-    });
-
-    // Parallax scroll effect
-    window.addEventListener('scroll', function () {
-      const parallax = document.querySelector('.bg-fixed');
-      if (parallax) {
-        const scrolled = window.pageYOffset;
-        const parallaxSection = parallax.closest('section');
-        if (parallaxSection) {
-          const sectionTop = parallaxSection.offsetTop;
-          const sectionHeight = parallaxSection.offsetHeight;
-          const scrollPosition = scrolled - sectionTop;
-
-          if (scrollPosition > -sectionHeight && scrollPosition < window.innerHeight + sectionHeight) {
-            const translateY = scrollPosition * 0.5;
-            parallax.style.transform = `translateY(${translateY}px)`;
-          }
-        }
-      }
-    });
   </script>
 
-  <!-- CTA Section -->
-  <section class="gradient-bg hero-pattern py-20">
-    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-      <h2 class="text-4xl md:text-5xl font-bold text-white mb-6 editable" data-editable="cta-title" data-edit-label="Call to action title"
-        contenteditable="false">Help Your Community Share Food</h2>
-      <p class="text-xl text-white/90 mb-8 editable" data-editable="cta-description" data-edit-label="Call to action description" contenteditable="false">
-        Every food post helps someone nearby and keeps good food in use.
-      </p>
-      <div class="flex flex-col sm:flex-row gap-4 justify-center">
-        <a href="index.html"
-          class="bg-white text-green-600 px-8 py-4 rounded-xl font-bold text-lg hover:bg-gray-100 transition-colors shadow-lg">
-          Open Food Maps
-        </a>
-        <a href="https://allgoodlivingfoundation.org/donate"
-          class="bg-orange-600 text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-orange-700 transition-colors shadow-lg">
-          Donate
-        </a>
-      </div>
-    </div>
-  </section>
-
   <!-- Newsletter Section -->
-  <section class="bg-white py-20">
+  <section class="newsletter-band">
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div
-        class="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl p-8 md:p-12 shadow-xl border border-green-100">
-        <div class="text-center mb-8">
-          <h2 class="text-3xl md:text-4xl font-bold text-gray-900 mb-4 editable" data-editable="newsletter-title" data-edit-label="Newsletter title"
-            contenteditable="false">
-            Get Updates
-          </h2>
-          <p class="text-lg text-gray-600 editable" data-editable="newsletter-description" data-edit-label="Newsletter description" contenteditable="false">
-            Subscribe for local stories, program updates, and ways to help.
-          </p>
+      <div class="text-center mb-8">
+        <p class="band-kicker">FOOD MAPS <span class="story-dot"></span> NEWSLETTER</p>
+        <h2 class="editable" data-editable="newsletter-title" data-edit-label="Newsletter title" contenteditable="false">
+          Get Updates
+        </h2>
+        <p class="band-lede editable" data-editable="newsletter-description" data-edit-label="Newsletter description" contenteditable="false">
+          Subscribe for local stories, program updates, and ways to help.
+        </p>
+      </div>
+
+      <form id="newsletterForm" data-newsletter-form data-source="impact-story" class="max-w-2xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label class="block text-sm mb-2" for="newsletter-first">First Name *</label>
+            <input type="text" id="newsletter-first" name="firstName" required placeholder="John">
+          </div>
+          <div>
+            <label class="block text-sm mb-2" for="newsletter-last">Last Name *</label>
+            <input type="text" id="newsletter-last" name="lastName" required placeholder="Doe">
+          </div>
         </div>
 
-        <form id="newsletterForm" data-newsletter-form data-source="impact-story" class="max-w-2xl mx-auto">
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">First Name *</label>
-              <input type="text" name="firstName" required
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="John">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Last Name *</label>
-              <input type="text" name="lastName" required
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-                placeholder="Doe">
-            </div>
-          </div>
+        <div class="mb-4">
+          <label class="block text-sm mb-2" for="newsletter-email">Email Address *</label>
+          <input type="email" id="newsletter-email" name="email" required placeholder="john@example.com">
+        </div>
 
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-2">Email Address *</label>
-            <input type="email" name="email" required
-              class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
-              placeholder="john@example.com">
-          </div>
+        <div class="mb-6">
+          <label class="flex items-start">
+            <input type="checkbox" name="consent" required
+              class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mt-1">
+            <span class="ml-2 text-sm consent-text">
+              I agree to receive updates and newsletters from Food Maps. You can unsubscribe at any time.
+            </span>
+          </label>
+        </div>
 
-          <div class="mb-6">
-            <label class="flex items-start">
-              <input type="checkbox" name="consent" required
-                class="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500 mt-1">
-              <span class="ml-2 text-sm text-gray-600">
-                I agree to receive updates and newsletters from Food Maps. You can unsubscribe at any time.
-              </span>
-            </label>
-          </div>
+        <div id="newsletterSuccess" data-newsletter-success
+          class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4 text-center">
+        </div>
 
-          <div id="newsletterSuccess" data-newsletter-success
-            class="hidden bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg mb-4 text-center">
-          </div>
+        <div id="newsletterError" data-newsletter-error
+          class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">
+        </div>
 
-          <div id="newsletterError" data-newsletter-error
-            class="hidden bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-4 text-center">
-          </div>
+        <button type="submit" class="band-submit">
+          Subscribe to Newsletter
+        </button>
 
-          <button type="submit"
-            class="w-full bg-gradient-to-r from-green-600 to-green-700 text-white px-8 py-4 rounded-xl font-bold text-lg hover:from-green-700 hover:to-green-800 transition-all shadow-lg transform hover:scale-105">
-            Subscribe to Newsletter
-          </button>
-
-          <p class="text-xs text-gray-500 text-center mt-4">
-            We respect your privacy. Read our <a href="privacy.html"
-              class="text-green-600 hover:text-green-700 underline">Privacy Policy</a>.
-          </p>
-        </form>
-      </div>
+        <p class="text-xs text-center mt-4 band-fineprint">
+          We respect your privacy. Read our <a href="privacy.html" class="underline">Privacy Policy</a>.
+        </p>
+      </form>
     </div>
   </section>
 
@@ -1131,51 +928,155 @@
     const impactCityStories = {
       oakland: {
         name: 'Oakland',
-        image: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop',
-        title: 'Good food, close to home.',
-        description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
-        quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
-        attribution: 'Illustrative volunteer story - Oakland',
-        focus: ['Neighborhood food partners', 'Community pickup points', 'Volunteer routes'],
         meals: '3,840',
         pounds: '1,260',
-        partners: '24'
+        partners: '24',
+        stories: [
+          {
+            kicker: 'CITY STORY',
+            image: 'https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Volunteers sorting food for an Oakland community distribution',
+            title: 'Good food, close to home.',
+            description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
+            quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
+            attribution: 'Illustrative volunteer story - Oakland',
+            focus: ['Neighborhood food partners', 'Community pickup points', 'Volunteer routes']
+          },
+          {
+            kicker: 'VOLUNTEER STORY',
+            image: 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Crates of fresh produce ready for a volunteer pickup in Oakland',
+            title: 'A route that fits a lunch break.',
+            description: 'A short list of stops near work or home is enough for one volunteer to cover, so a market can hand off extra produce the same afternoon.',
+            quote: 'I pick up two crates on my way home. It takes twenty minutes, and the pantry has them out before dinner.',
+            attribution: 'Illustrative volunteer story - Oakland',
+            focus: ['Short pickup routes', 'Same-day handoff', 'Flexible shifts']
+          },
+          {
+            kicker: 'PARTNER STORY',
+            image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A neighborhood kitchen packing up food at the end of the day',
+            title: 'Extra trays, put to use.',
+            description: 'A corner restaurant can post what did not sell before closing, and a group a few blocks away can claim it while the food is still good.',
+            quote: 'We used to throw out the last trays. Now someone claims them before we lock up.',
+            attribution: 'Illustrative partner story - Oakland',
+            focus: ['Restaurant surplus', 'End-of-day posts', 'Nearby claims']
+          }
+        ]
       },
       alameda: {
         name: 'Alameda',
-        image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
-        title: 'A little closer makes a difference.',
-        description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
-        quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
-        attribution: 'Illustrative community story - Alameda',
-        focus: ['Local pantry connections', 'Island-wide pickup access', 'Volunteer handoffs'],
         meals: '1,960',
         pounds: '680',
-        partners: '13'
+        partners: '13',
+        stories: [
+          {
+            kicker: 'CITY STORY',
+            image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Neighbors sharing groceries at a community table in Alameda',
+            title: 'A little closer makes a difference.',
+            description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
+            quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
+            attribution: 'Illustrative community story - Alameda',
+            focus: ['Local pantry connections', 'Island-wide pickup access', 'Volunteer handoffs']
+          },
+          {
+            kicker: 'VOLUNTEER STORY',
+            image: 'https://images.unsplash.com/photo-1546793665-c74683f339c1?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A volunteer loading grocery bags into a car in Alameda',
+            title: 'Two stops on the way home.',
+            description: 'Volunteers on the island can pair a grocery pickup with a drop at a pantry a few blocks on, without a drive across the bridge.',
+            quote: 'Everything is close here. I can do a pickup and a drop-off and still be home for dinner.',
+            attribution: 'Illustrative volunteer story - Alameda',
+            focus: ['Short island routes', 'Grocery pickups', 'Neighborhood drop-offs']
+          },
+          {
+            kicker: 'PARTNER STORY',
+            image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A small market setting aside prepared food for donation',
+            title: 'A shelf that stays stocked.',
+            description: 'A small market can post what did not sell that week, and a community fridge nearby can keep something on the shelf most days.',
+            quote: 'People check the fridge on their way past. If there is food in it, it gets used.',
+            attribution: 'Illustrative partner story - Alameda',
+            focus: ['Community fridge', 'Weekly surplus', 'Steady restocking']
+          }
+        ]
       },
       berkeley: {
         name: 'Berkeley',
-        image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
-        title: 'Shared tables, stronger blocks.',
-        description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
-        quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
-        attribution: 'Illustrative partner story - Berkeley',
-        focus: ['Community meal programs', 'Shared food access', 'Local partner network'],
         meals: '2,710',
         pounds: '940',
-        partners: '18'
+        partners: '18',
+        stories: [
+          {
+            kicker: 'CITY STORY',
+            image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A shared community meal being set out in Berkeley',
+            title: 'Shared tables, stronger blocks.',
+            description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
+            quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
+            attribution: 'Illustrative partner story - Berkeley',
+            focus: ['Community meal programs', 'Shared food access', 'Local partner network']
+          },
+          {
+            kicker: 'VOLUNTEER STORY',
+            image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A student volunteer carrying a box of produce between classes',
+            title: 'Students with an afternoon free.',
+            description: 'Volunteers with a few open hours between classes can cover the weekday pickups that would otherwise be missed.',
+            quote: 'Between classes I have two hours. That is enough to move a load of produce across town.',
+            attribution: 'Illustrative volunteer story - Berkeley',
+            focus: ['Weekday coverage', 'Campus volunteers', 'Produce runs']
+          },
+          {
+            kicker: 'PARTNER STORY',
+            image: 'https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Farmers market vendors packing up produce at closing time',
+            title: 'From the market stall to the meal program.',
+            description: 'Market vendors can pass along what is left at closing, and a meal program down the road can cook with it the next morning.',
+            quote: 'Whatever is left at the end of market goes into the pot instead of the bin.',
+            attribution: 'Illustrative partner story - Berkeley',
+            focus: ['Farmers market surplus', 'Meal programs', 'Next-day cooking']
+          }
+        ]
       },
       'san-leandro': {
         name: 'San Leandro',
-        image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
-        title: 'Fresh food finds its next stop.',
-        description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
-        quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
-        attribution: 'Illustrative volunteer story - San Leandro',
-        focus: ['Rescue and redistribution', 'Convenient pickup windows', 'Volunteer coordination'],
         meals: '2,180',
         pounds: '760',
-        partners: '15'
+        partners: '15',
+        stories: [
+          {
+            kicker: 'CITY STORY',
+            image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Boxes of rescued groceries staged for pickup in San Leandro',
+            title: 'Fresh food finds its next stop.',
+            description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
+            quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
+            attribution: 'Illustrative volunteer story - San Leandro',
+            focus: ['Rescue and redistribution', 'Convenient pickup windows', 'Volunteer coordination']
+          },
+          {
+            kicker: 'VOLUNTEER STORY',
+            image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=1400&auto=format&fit=crop',
+            alt: 'A volunteer driver checking a pickup list before setting out',
+            title: 'One driver, a few stops.',
+            description: 'A single volunteer with a car can link two or three pickups into one loop, so the smaller donations still get collected.',
+            quote: 'On my own I can only carry so much. A planned loop means nothing gets left behind.',
+            attribution: 'Illustrative volunteer story - San Leandro',
+            focus: ['Planned loops', 'Small-batch pickups', 'Driver coordination']
+          },
+          {
+            kicker: 'PARTNER STORY',
+            image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?q=80&w=1400&auto=format&fit=crop',
+            alt: 'Unsold bread and pastries boxed up at a bakery counter',
+            title: 'A bakery closes out its day.',
+            description: 'A bakery can post the unsold loaves before closing so a group nearby can collect them while the bread is still fresh.',
+            quote: 'Bread does not keep. Getting it out the door the same night is the whole thing.',
+            attribution: 'Illustrative partner story - San Leandro',
+            focus: ['Bakery donations', 'Same-night pickup', 'Short distances']
+          }
+        ]
       }
     };
 
@@ -1194,15 +1095,28 @@
       });
 
       cityPanel.setAttribute('aria-labelledby', tab.id);
-      document.getElementById('city-photo').src = city.image;
-      document.getElementById('city-photo').alt = `Community food distribution in ${city.name}, California`;
-      document.getElementById('photo-city').textContent = city.name;
-      document.getElementById('city-eyebrow').innerHTML = `${city.name.toUpperCase()}, CALIFORNIA <span class="story-dot"></span> CITY STORY`;
-      document.getElementById('city-title').textContent = city.title;
-      document.getElementById('city-description').textContent = city.description;
-      document.getElementById('city-quote').textContent = city.quote;
-      document.getElementById('city-attribution').textContent = city.attribution;
-      document.getElementById('city-focus').textContent = city.focus.join(' · ');
+      cityPanel.innerHTML = city.stories.map((story, i) => `
+          <article class="city-story-row">
+            <div class="city-photo-wrap">
+              <img src="${story.image}" alt="${story.alt}">
+              <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> ${city.name}, CA</span>
+            </div>
+            <div class="city-story">
+              <p class="section-kicker"><i class="icon-map-pin" aria-hidden="true"></i> ${city.name.toUpperCase()}, CALIFORNIA <span class="story-dot"></span> ${story.kicker} <span class="story-count">STORY ${i + 1} OF ${city.stories.length}</span></p>
+              <h3>${story.title}</h3>
+              <p class="city-description">${story.description}</p>
+              <blockquote>
+                <span class="quote-mark" aria-hidden="true">“</span>
+                <p>${story.quote}</p>
+                <cite>${story.attribution}</cite>
+              </blockquote>
+              <div class="city-neighborhoods">
+                <span>COMMUNITY FOCUS</span>
+                <p>${story.focus.join(' <b>·</b> ')}</p>
+              </div>
+            </div>
+          </article>`).join('');
+
       document.getElementById('metric-meals').textContent = city.meals;
       document.getElementById('metric-food').textContent = city.pounds;
       document.getElementById('metric-partners').textContent = city.partners;
@@ -1224,6 +1138,9 @@
         selectImpactCity(cityTabs[nextIndex]);
       });
     });
+
+    const initialCityTab = cityTabs.find((tab) => tab.classList.contains('is-active')) || cityTabs[0];
+    if (initialCityTab) selectImpactCity(initialCityTab);
 
     function openStoriesModal() {
       document.getElementById('storiesModal').classList.add('show');
