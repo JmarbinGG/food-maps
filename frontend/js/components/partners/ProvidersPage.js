@@ -206,7 +206,7 @@ const SCHOOL_ELIGIBILITY_NOTE =
 
 const PROVIDERS_COPY_DEFAULTS = {
   "hero-badge": "Providers",
-  "hero-title": "Find food nearby",
+  "hero-title": "Find food<br><em>nearby.</em>",
   "hero-subtitle":
     "Pantries, community closets, school sites, and meal programs — filter by type, then call or get directions.",
   "school-note": "<span class=\"font-semibold\">School sites:</span> Schools only serve their students and families.",
@@ -214,24 +214,24 @@ const PROVIDERS_COPY_DEFAULTS = {
 
 const ProvidersHero = React.memo(function ProvidersHero({ fields, search, setSearch, searchRef }) {
   return (
-    <section className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
+    <section className="bg-[var(--fm-hero-paper)] text-[var(--fm-hero-ink)] border-b border-[#dfe5dc]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 pb-8">
         <p
-          className="text-sm font-semibold uppercase tracking-wide text-green-200 mb-2 editable"
+          className="section-kicker uppercase text-[var(--fm-hero-muted)] mb-5 editable"
           data-editable="hero-badge"
           contentEditable={false}
           suppressContentEditableWarning
           dangerouslySetInnerHTML={{ __html: fields["hero-badge"] }}
         />
         <h1
-          className="text-3xl sm:text-4xl font-bold tracking-tight mb-2 editable"
+          className="fm-hero-title editable"
           data-editable="hero-title"
           contentEditable={false}
           suppressContentEditableWarning
           dangerouslySetInnerHTML={{ __html: fields["hero-title"] }}
         />
         <p
-          className="text-green-100 text-base sm:text-lg max-w-xl leading-relaxed editable"
+          className="mt-2 text-[var(--fm-hero-muted)] text-base sm:text-lg max-w-xl leading-relaxed editable"
           data-editable="hero-subtitle"
           contentEditable={false}
           suppressContentEditableWarning

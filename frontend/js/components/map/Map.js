@@ -738,7 +738,7 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
           .setPopup(
             new mapboxgl.Popup({ offset: 25, maxWidth: '320px' })
               .setHTML(`
-                <div style="padding: 0; min-width: 280px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                <div style="padding: 0; min-width: 280px; font-family: var(--fm-font-sans);">
                   <div style="padding: 16px 20px;">
                     <h3 style="font-size: 20px; font-weight: 700; color: #111827; margin: 0 0 12px 0; line-height: 1.3;">
                       ${listing.title}

@@ -12,7 +12,7 @@
         content="Browse food distribution providers across the Bay Area.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
 
     <script crossorigin
         src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
@@ -21,13 +21,13 @@
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
-    <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
+    <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20261002-display-scale">
     <script src="js/lib/i18n_platform.js?v=20260812d"></script>
 
     <style type="text/tailwindcss">
         @layer base {
             body {
-                font-family: 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+                font-family: var(--fm-font-sans);
                 line-height: 1.65;
                 letter-spacing: 0.01em;
             }
@@ -190,7 +190,7 @@
 
     <script src="js/lib/pageEditor.js?v=20260916-edit-labels"></script>
     <script src="js/lib/socialMediaLinks.js?v=20260916-social-icons"></script>
-    <script type="text/babel" src="js/components/partners/ProvidersPage.js?v=20260916-social-icons"></script>    <script type="text/babel">
+    <script type="text/babel" src="js/components/partners/ProvidersPage.js?v=20261002-hero-type"></script>    <script type="text/babel">
         (function mountProvidersPage(attempt) {
             const rootEl = document.getElementById('providers-root');
             if (!rootEl) return;

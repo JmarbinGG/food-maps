@@ -10,26 +10,29 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" rel="stylesheet" crossorigin="anonymous">
-  <link href="assets/nouri/nouri-ai.css?v=20260915-toast-icons" rel="stylesheet">
+  <link href="assets/nouri/nouri-ai.css?v=20261002-impact-fonts" rel="stylesheet">
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+      font-family: var(--fm-font-sans);
     }
 
     .hero-gradient {
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: var(--fm-hero-paper);
     }
   </style>
-    <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812d">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20261002-display-scale">
     <script src="js/lib/i18n_platform.js?v=20260812d"></script>
 </head>
 
 <body class="bg-gray-50">
   <!-- Header -->
-  <header class="hero-gradient text-white shadow-lg">
+  <header class="hero-gradient text-[var(--fm-hero-ink)] border-b border-[#dfe5dc]">
     <div class="container mx-auto px-4 py-6">
       <div class="flex justify-between items-center gap-4">
-        <h1 class="text-3xl font-bold">Smart Search</h1>
+        <h1 class="fm-hero-title">Smart Search</h1>
         <div class="flex items-center gap-3">
           <div data-language-picker></div>
           <a href="/" class="bg-white text-purple-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition">
@@ -37,7 +40,7 @@
           </a>
         </div>
       </div>
-      <p class="mt-2 text-purple-100">Speak or type to find food near you</p>
+      <p class="mt-2 text-[var(--fm-hero-muted)]">Speak or type to find food near you</p>
     </div>
   </header>
 

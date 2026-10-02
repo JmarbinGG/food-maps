@@ -162,7 +162,7 @@ function PlateGuide() {
             onClick={() => setActiveId("protein")}
           />
           <circle cx="160" cy="160" r="36" fill="#fff" stroke="#e5eee8" strokeWidth="2" />
-          <text x="160" y="166" textAnchor="middle" fontSize="13" fontFamily="Manrope, sans-serif" fontWeight="700" fill="#0f3d2e">
+          <text x="160" y="166" textAnchor="middle" fontSize="13" fontFamily="DM Sans, sans-serif" fontWeight="700" fill="#0f3d2e">
             Plate
           </text>
         </svg>
@@ -236,10 +236,10 @@ function NutritionPage() {
         <div className="nx-hero__content">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
             <p className="nx-brand">Food Maps</p>
-            <h1 className="nx-display text-3xl sm:text-5xl max-w-xl mb-4 font-semibold">
+            <h1 className="fm-hero-title max-w-xl">
               Eat well with shared food
             </h1>
-            <p className="text-white/85 text-lg sm:text-xl max-w-md leading-relaxed mb-8">
+            <p className="mt-4 text-[var(--fm-hero-muted)] text-lg sm:text-xl max-w-md leading-relaxed mb-8">
               Stretch rescued meals into balanced plates — simple habits for real kitchens.
             </p>
             <div className="flex flex-wrap gap-3">
@@ -251,7 +251,7 @@ function NutritionPage() {
               </a>
               <a
                 href="#plate"
-                className="inline-flex items-center justify-center border border-white/50 text-white px-6 py-3 rounded-xl font-semibold hover:bg-white/10 transition-colors"
+                className="inline-flex items-center justify-center border border-[#183d32]/40 text-[#183d32] px-6 py-3 rounded-xl font-semibold hover:bg-[#183d32]/10 transition-colors"
               >
                 See how it works
               </a>

@@ -87,25 +87,25 @@ const PARTNERS_COPY_DEFAULTS = {
 
 const PartnersHero = React.memo(function PartnersHero({ fields, partnerCount, loading }) {
   return (
-    <header className="bg-gradient-to-br from-green-900 via-green-800 to-green-700 text-white border-b border-green-900">
+    <header className="bg-[var(--fm-hero-paper)] text-[var(--fm-hero-ink)] border-b border-[#dfe5dc]">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-10 sm:pt-16 sm:pb-14">
         <div className="text-center">
           <span
-            className="inline-flex items-center px-3 py-1 rounded-md bg-green-950/40 text-green-100 text-xs font-semibold mb-5 border border-green-600 editable"
+            className="inline-flex items-center px-3 py-1 rounded-md bg-[#dfe5dc] text-[var(--fm-hero-ink)] text-xs font-semibold mb-5 border border-[#183d32]/20 editable"
             data-editable="hero-badge"
             contentEditable={false}
             suppressContentEditableWarning
             dangerouslySetInnerHTML={{ __html: fields["hero-badge"] }}
           />
           <h1
-            className="text-4xl sm:text-5xl lg:text-6xl font-bold mb-5 tracking-tight editable"
+            className="fm-hero-title editable"
             data-editable="hero-title"
             contentEditable={false}
             suppressContentEditableWarning
             dangerouslySetInnerHTML={{ __html: fields["hero-title"] }}
           />
           <p
-            className="text-base sm:text-lg text-green-100 max-w-2xl mx-auto leading-relaxed editable"
+            className="mt-5 text-base sm:text-lg text-[var(--fm-hero-muted)] max-w-2xl leading-relaxed editable"
             data-editable="hero-subtitle"
             contentEditable={false}
             suppressContentEditableWarning

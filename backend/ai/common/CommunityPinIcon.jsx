@@ -42,7 +42,7 @@ export function renderCommunityPinSvg({ communityId = null, count = 0, color = n
                 <circle cx="${badgeCx}" cy="${badgeCy}" r="${badgeR}"
                         fill="#ef4444" stroke="#ffffff" stroke-width="1.75" />
                 <text x="${badgeCx}" y="${badgeCy}" text-anchor="middle" dominant-baseline="central"
-                      fill="#ffffff" font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif"
+                      fill="#ffffff" font-family="DM Sans, sans-serif"
                       font-weight="700" font-size="${countStr.length >= 3 ? 9 : 11}">${countStr}</text>
             ` : ''}
         </svg>
@@ -87,7 +87,7 @@ function CommunityPinIcon({ communityId = null, size = 20, count = 0, className 
                         textAnchor="middle"
                         dominantBaseline="central"
                         fill="#ffffff"
-                        fontFamily="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"
+                        fontFamily="DM Sans, sans-serif"
                         fontWeight="700"
                         fontSize={countStr.length >= 3 ? 6 : 7}
                     >
