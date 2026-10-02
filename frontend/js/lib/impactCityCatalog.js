@@ -18,9 +18,7 @@
     const src = partial || {};
     return {
       id: src.id || uid('story'),
-      kicker: src.kicker || 'CITY STORY',
       image: src.image || FALLBACK_IMAGE,
-      alt: src.alt || '',
       title: src.title || 'A local story',
       description: src.description || '',
       quote: src.quote || '',
@@ -61,41 +59,15 @@
           meals: '3,840',
           pounds: '1,260',
           partners: '24',
-          stories: [
-            story({
-              id: 'oakland-1',
-              kicker: 'CITY STORY',
-              image: FALLBACK_IMAGE,
-              alt: 'Volunteers sorting food for an Oakland community distribution',
-              title: 'Good food, close to home.',
-              description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
-              quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
-              attribution: 'Illustrative volunteer story - Oakland',
-              focus: 'Neighborhood food partners, Community pickup points, Volunteer routes',
-            }),
-            story({
-              id: 'oakland-2',
-              kicker: 'VOLUNTEER STORY',
-              image: 'https://images.unsplash.com/photo-1488459716781-31db52582fe9?q=80&w=1400&auto=format&fit=crop',
-              alt: 'Crates of fresh produce ready for a volunteer pickup in Oakland',
-              title: 'A route that fits a lunch break.',
-              description: 'A short list of stops near work or home is enough for one volunteer to cover, so a market can hand off extra produce the same afternoon.',
-              quote: 'I pick up two crates on my way home. It takes twenty minutes, and the pantry has them out before dinner.',
-              attribution: 'Illustrative volunteer story - Oakland',
-              focus: 'Short pickup routes, Same-day handoff, Flexible shifts',
-            }),
-            story({
-              id: 'oakland-3',
-              kicker: 'PARTNER STORY',
-              image: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A neighborhood kitchen packing up food at the end of the day',
-              title: 'Extra trays, put to use.',
-              description: 'A corner restaurant can post what did not sell before closing, and a group a few blocks away can claim it while the food is still good.',
-              quote: 'We used to throw out the last trays. Now someone claims them before we lock up.',
-              attribution: 'Illustrative partner story - Oakland',
-              focus: 'Restaurant surplus, End-of-day posts, Nearby claims',
-            }),
-          ],
+          stories: [story({
+            id: 'oakland-1',
+            image: FALLBACK_IMAGE,
+            title: 'Good food, close to home.',
+            description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
+            quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
+            attribution: 'Illustrative volunteer story - Oakland',
+            focus: 'Neighborhood food partners, Community pickup points, Volunteer routes',
+          })],
         }),
         city({
           id: 'alameda',
@@ -103,41 +75,15 @@
           meals: '1,960',
           pounds: '680',
           partners: '13',
-          stories: [
-            story({
-              id: 'alameda-1',
-              kicker: 'CITY STORY',
-              image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
-              alt: 'Neighbors sharing groceries at a community table in Alameda',
-              title: 'A little closer makes a difference.',
-              description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
-              quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
-              attribution: 'Illustrative community story - Alameda',
-              focus: 'Local pantry connections, Island-wide pickup access, Volunteer handoffs',
-            }),
-            story({
-              id: 'alameda-2',
-              kicker: 'VOLUNTEER STORY',
-              image: 'https://images.unsplash.com/photo-1546793665-c74683f339c1?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A volunteer loading grocery bags into a car in Alameda',
-              title: 'Two stops on the way home.',
-              description: 'Volunteers on the island can pair a grocery pickup with a drop at a pantry a few blocks on, without a drive across the bridge.',
-              quote: 'Everything is close here. I can do a pickup and a drop-off and still be home for dinner.',
-              attribution: 'Illustrative volunteer story - Alameda',
-              focus: 'Short island routes, Grocery pickups, Neighborhood drop-offs',
-            }),
-            story({
-              id: 'alameda-3',
-              kicker: 'PARTNER STORY',
-              image: 'https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A small market setting aside prepared food for donation',
-              title: 'A shelf that stays stocked.',
-              description: 'A small market can post what did not sell that week, and a community fridge nearby can keep something on the shelf most days.',
-              quote: 'People check the fridge on their way past. If there is food in it, it gets used.',
-              attribution: 'Illustrative partner story - Alameda',
-              focus: 'Community fridge, Weekly surplus, Steady restocking',
-            }),
-          ],
+          stories: [story({
+            id: 'alameda-1',
+            image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
+            title: 'A little closer makes a difference.',
+            description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
+            quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
+            attribution: 'Illustrative community story - Alameda',
+            focus: 'Local pantry connections, Island-wide pickup access, Volunteer handoffs',
+          })],
         }),
         city({
           id: 'berkeley',
@@ -145,41 +91,15 @@
           meals: '2,710',
           pounds: '940',
           partners: '18',
-          stories: [
-            story({
-              id: 'berkeley-1',
-              kicker: 'CITY STORY',
-              image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A shared community meal being set out in Berkeley',
-              title: 'Shared tables, stronger blocks.',
-              description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
-              quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
-              attribution: 'Illustrative partner story - Berkeley',
-              focus: 'Community meal programs, Shared food access, Local partner network',
-            }),
-            story({
-              id: 'berkeley-2',
-              kicker: 'VOLUNTEER STORY',
-              image: 'https://images.unsplash.com/photo-1512058564366-18510be2db19?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A student volunteer carrying a box of produce between classes',
-              title: 'Students with an afternoon free.',
-              description: 'Volunteers with a few open hours between classes can cover the weekday pickups that would otherwise be missed.',
-              quote: 'Between classes I have two hours. That is enough to move a load of produce across town.',
-              attribution: 'Illustrative volunteer story - Berkeley',
-              focus: 'Weekday coverage, Campus volunteers, Produce runs',
-            }),
-            story({
-              id: 'berkeley-3',
-              kicker: 'PARTNER STORY',
-              image: 'https://images.unsplash.com/photo-1555244162-803834f70033?q=80&w=1400&auto=format&fit=crop',
-              alt: 'Farmers market vendors packing up produce at closing time',
-              title: 'From the market stall to the meal program.',
-              description: 'Market vendors can pass along what is left at closing, and a meal program down the road can cook with it the next morning.',
-              quote: 'Whatever is left at the end of market goes into the pot instead of the bin.',
-              attribution: 'Illustrative partner story - Berkeley',
-              focus: 'Farmers market surplus, Meal programs, Next-day cooking',
-            }),
-          ],
+          stories: [story({
+            id: 'berkeley-1',
+            image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
+            title: 'Shared tables, stronger blocks.',
+            description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
+            quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
+            attribution: 'Illustrative partner story - Berkeley',
+            focus: 'Community meal programs, Shared food access, Local partner network',
+          })],
         }),
         city({
           id: 'san-leandro',
@@ -187,41 +107,15 @@
           meals: '2,180',
           pounds: '760',
           partners: '15',
-          stories: [
-            story({
-              id: 'san-leandro-1',
-              kicker: 'CITY STORY',
-              image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
-              alt: 'Boxes of rescued groceries staged for pickup in San Leandro',
-              title: 'Fresh food finds its next stop.',
-              description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
-              quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
-              attribution: 'Illustrative volunteer story - San Leandro',
-              focus: 'Rescue and redistribution, Convenient pickup windows, Volunteer coordination',
-            }),
-            story({
-              id: 'san-leandro-2',
-              kicker: 'VOLUNTEER STORY',
-              image: 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=1400&auto=format&fit=crop',
-              alt: 'A volunteer driver checking a pickup list before setting out',
-              title: 'One driver, a few stops.',
-              description: 'A single volunteer with a car can link two or three pickups into one loop, so the smaller donations still get collected.',
-              quote: 'On my own I can only carry so much. A planned loop means nothing gets left behind.',
-              attribution: 'Illustrative volunteer story - San Leandro',
-              focus: 'Planned loops, Small-batch pickups, Driver coordination',
-            }),
-            story({
-              id: 'san-leandro-3',
-              kicker: 'PARTNER STORY',
-              image: 'https://images.unsplash.com/photo-1578662996442-48f60103fc96?q=80&w=1400&auto=format&fit=crop',
-              alt: 'Unsold bread and pastries boxed up at a bakery counter',
-              title: 'A bakery closes out its day.',
-              description: 'A bakery can post the unsold loaves before closing so a group nearby can collect them while the bread is still fresh.',
-              quote: 'Bread does not keep. Getting it out the door the same night is the whole thing.',
-              attribution: 'Illustrative partner story - San Leandro',
-              focus: 'Bakery donations, Same-night pickup, Short distances',
-            }),
-          ],
+          stories: [story({
+            id: 'san-leandro-1',
+            image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
+            title: 'Fresh food finds its next stop.',
+            description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
+            quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
+            attribution: 'Illustrative volunteer story - San Leandro',
+            focus: 'Rescue and redistribution, Convenient pickup windows, Volunteer coordination',
+          })],
         }),
       ],
     };
@@ -264,37 +158,6 @@
       .split(/[,·|]/)
       .map((part) => part.trim())
       .filter(Boolean);
-  }
-
-  function shortRegion(region) {
-    if (!region) return '';
-    return String(region).toLowerCase() === 'california' ? 'CA' : region;
-  }
-
-  function storyMarkup(item, index, total, selected, editing) {
-    const region = selected.region ? ', ' + escapeHtml(selected.region.toUpperCase()) : '';
-    const place = escapeHtml(selected.name) + (selected.region ? ', ' + escapeHtml(shortRegion(selected.region)) : '');
-    const parts = focusParts(item.focus);
-    const alt = item.alt || ('Community food distribution in ' + selected.name);
-    return ''
-      + '<article class="city-story-row' + (editing && item.id === storyId ? ' is-editing' : '') + '">'
-      + '<div class="city-photo-wrap">'
-      + '<img src="' + escapeHtml(item.image || FALLBACK_IMAGE) + '" alt="' + escapeHtml(alt) + '">'
-      + '<span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> ' + place + '</span>'
-      + '</div>'
-      + '<div class="city-story">'
-      + '<p class="section-kicker"><i class="icon-map-pin" aria-hidden="true"></i> '
-      + escapeHtml(selected.name.toUpperCase()) + region
-      + ' <span class="story-dot"></span> ' + escapeHtml(item.kicker || 'CITY STORY')
-      + ' <span class="story-count">STORY ' + (index + 1) + ' OF ' + total + '</span></p>'
-      + '<h3>' + escapeHtml(item.title) + '</h3>'
-      + '<p class="city-description">' + escapeHtml(item.description) + '</p>'
-      + '<blockquote><span class="quote-mark" aria-hidden="true">“</span>'
-      + '<p>' + escapeHtml(item.quote) + '</p>'
-      + '<cite>' + escapeHtml(item.attribution) + '</cite></blockquote>'
-      + '<div class="city-neighborhoods"><span>COMMUNITY FOCUS</span>'
-      + '<p>' + parts.map(escapeHtml).join(' <b>·</b> ') + '</p></div>'
-      + '</div></article>';
   }
 
   function authToken() {
@@ -371,8 +234,9 @@
 
     if (nav) {
       nav.innerHTML = '';
-      nav.hidden = !editing;
-      if (editing) {
+      const showStories = selected.stories.length > 1 || editing;
+      nav.hidden = !showStories;
+      if (showStories) {
         selected.stories.forEach((item, index) => {
           const chip = document.createElement('button');
           chip.type = 'button';
@@ -384,10 +248,34 @@
       }
     }
 
-    if (panel) {
-      panel.innerHTML = selected.stories
-        .map((item, index) => storyMarkup(item, index, selected.stories.length, selected, editing))
-        .join('');
+    const photo = document.getElementById('city-photo');
+    if (photo) {
+      photo.src = activeStory.image || FALLBACK_IMAGE;
+      photo.alt = 'Community food distribution in ' + selected.name;
+    }
+    const photoCity = document.getElementById('photo-city');
+    const photoRegion = document.getElementById('photo-region');
+    if (photoCity) photoCity.textContent = selected.name;
+    if (photoRegion) photoRegion.textContent = selected.region ? ', ' + selected.region : '';
+
+    const eyebrow = document.getElementById('city-eyebrow');
+    if (eyebrow) {
+      eyebrow.innerHTML = escapeHtml(selected.name.toUpperCase())
+        + (selected.region ? ', ' + escapeHtml(selected.region.toUpperCase()) : '')
+        + ' <span class="story-dot"></span> CITY STORY';
+    }
+    const title = document.getElementById('city-title');
+    if (title) title.textContent = activeStory.title;
+    const description = document.getElementById('city-description');
+    if (description) description.textContent = activeStory.description;
+    const quote = document.getElementById('city-quote');
+    if (quote) quote.textContent = activeStory.quote;
+    const attribution = document.getElementById('city-attribution');
+    if (attribution) attribution.textContent = activeStory.attribution;
+    const focus = document.getElementById('city-focus');
+    if (focus) {
+      const parts = focusParts(activeStory.focus);
+      focus.innerHTML = parts.map(escapeHtml).join(' <b>·</b> ');
     }
     const meals = document.getElementById('metric-meals');
     const pounds = document.getElementById('metric-food');
@@ -443,15 +331,13 @@
       ['impact-new-city', 'New city name', ''],
     ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2])));
     [
-      ['impact-story-kicker', 'Story label', activeStory && activeStory.kicker],
       ['impact-story-title', 'Story title', activeStory && activeStory.title],
       ['impact-story-image', 'Story photo URL', activeStory && activeStory.image],
-      ['impact-story-alt', 'Photo description', activeStory && activeStory.alt],
       ['impact-story-description', 'Story', activeStory && activeStory.description],
       ['impact-story-quote', 'Quote', activeStory && activeStory.quote],
       ['impact-story-attribution', 'Attribution', activeStory && activeStory.attribution],
       ['impact-story-focus', 'Focus points, separated by commas', activeStory && activeStory.focus],
-    ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2], { wide: true, multiline: item[0] === 'impact-story-description' || item[0] === 'impact-story-quote' })));
+    ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2], { wide: true, multiline: item[0] !== 'impact-story-title' && item[0] !== 'impact-story-image' && item[0] !== 'impact-story-attribution' && item[0] !== 'impact-story-focus' })));
     root.appendChild(grid);
 
     const actions = document.createElement('div');
@@ -499,10 +385,8 @@
     selected.meals = plain(inputValue('impact-metric-meals'));
     selected.pounds = plain(inputValue('impact-metric-pounds'));
     selected.partners = plain(inputValue('impact-metric-partners'));
-    activeStory.kicker = plain(inputValue('impact-story-kicker')) || 'CITY STORY';
     activeStory.title = plain(inputValue('impact-story-title'));
     activeStory.image = plain(inputValue('impact-story-image')) || FALLBACK_IMAGE;
-    activeStory.alt = plain(inputValue('impact-story-alt'));
     activeStory.description = plain(inputValue('impact-story-description'));
     activeStory.quote = plain(inputValue('impact-story-quote'));
     activeStory.attribution = plain(inputValue('impact-story-attribution'));
@@ -518,10 +402,8 @@
     setInput('impact-metric-meals', selected.meals);
     setInput('impact-metric-pounds', selected.pounds);
     setInput('impact-metric-partners', selected.partners);
-    setInput('impact-story-kicker', activeStory.kicker);
     setInput('impact-story-title', activeStory.title);
     setInput('impact-story-image', activeStory.image);
-    setInput('impact-story-alt', activeStory.alt);
     setInput('impact-story-description', activeStory.description);
     setInput('impact-story-quote', activeStory.quote);
     setInput('impact-story-attribution', activeStory.attribution);

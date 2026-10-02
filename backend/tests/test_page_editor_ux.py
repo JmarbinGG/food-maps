@@ -63,8 +63,7 @@ def test_impact_story_modal_before_init():
 def test_impact_story_catalog_is_repeatable():
     html = IMPACT.read_text(encoding="utf-8")
     script = (REPO / "frontend" / "js" / "lib" / "impactCityCatalog.js").read_text(encoding="utf-8")
-    assert "impactCityCatalog.js?v=20261002-city-stories-3" in html
-    assert "city-story-row" in script
+    assert "impactCityCatalog.js?v=20261002-city-stories-2" in html
     assert "FoodMapsImpactCatalog.init" in html
     assert "data-no-edit" in html
     assert "__impact_catalog" in script
