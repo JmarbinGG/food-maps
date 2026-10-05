@@ -49,12 +49,12 @@ def test_polish_dedupes_search_list_when_cards_present():
 
 def test_polish_replaces_dogoods_branding():
     out = polish_assistant_response("Welcome to DoGoods!", [], lang="en")
-    assert "Food Maps" in out
+    assert "Dogoods food maps" in out
     assert "DoGoods" not in out
 
     out = polish_assistant_response("Visit dogoods.store for more info.", [], lang="en")
     assert "dogoods.store" not in out.lower()
-    assert "Food Maps" in out
+    assert "Dogoods food maps" in out
 
 
 def test_polish_does_not_inject_claim_boilerplate():

@@ -28,7 +28,7 @@ function TutorialMode({ user, onClose, onComplete }) {
   const getTutorialSteps = () => {
     const baseSteps = [
       {
-        title: "Welcome to Food Maps! ",
+        title: "Welcome to Dogoods food maps! ",
         description: "Let's take a quick tour to help you get started. This tutorial will show you how to make the most of our platform.",
         target: null,
         position: "center",
@@ -361,7 +361,7 @@ function TutorialMode({ user, onClose, onComplete }) {
 
   const handleComplete = () => {
     if (typeof window.showAlert === 'function') {
-      window.showAlert('Great job! You\'re ready to use Food Maps. Explore and enjoy!', {
+      window.showAlert('Great job! You\'re ready to use Dogoods food maps. Explore and enjoy!', {
         title: 'Tutorial Complete! ',
         variant: 'success'
       });
@@ -629,7 +629,7 @@ function TutorialLauncher({ user, onLaunch }) {
       <div className="flex items-start gap-3">
         <div className="text-3xl"></div>
         <div className="flex-1">
-          <h4 className="font-bold text-gray-900 mb-1">New to Food Maps?</h4>
+          <h4 className="font-bold text-gray-900 mb-1">New to Dogoods food maps?</h4>
           <p className="text-sm text-gray-600 mb-3">Take a quick tour to learn how to use the app!</p>
           <button
             onClick={() => {

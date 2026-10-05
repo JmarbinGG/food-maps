@@ -1,5 +1,5 @@
 """
-Food Maps AI Conversation Engine — Supabase edition (legacy module; prefer backend.ai.ai_engine).
+Dogoods food maps AI Conversation Engine — Supabase edition (legacy module; prefer backend.ai.ai_engine).
 
 Talks to:
   - OpenAI GPT-4.1 (reasoning + tool calls)
@@ -149,44 +149,44 @@ def _supabase_headers(extra: Optional[dict[str, Any]] = None) -> dict[str, Any]:
 
 
 async def supabase_get(table: str, params: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
-    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    """Removed: Dogoods food maps uses MySQL/SQLAlchemy only."""
     raise RuntimeError(
-        f"Supabase PostgREST removed (get {table}). Food Maps uses MySQL only."
+        f"Supabase PostgREST removed (get {table}). Dogoods food maps uses MySQL only."
     )
 
 
 async def supabase_post(table: str, body: Any) -> Any:
-    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    """Removed: Dogoods food maps uses MySQL/SQLAlchemy only."""
     raise RuntimeError(
-        f"Supabase PostgREST removed (post {table}). Food Maps uses MySQL only."
+        f"Supabase PostgREST removed (post {table}). Dogoods food maps uses MySQL only."
     )
 
 
 async def supabase_patch(table: str, params: dict[str, Any], body: dict[str, Any]) -> Any:
-    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    """Removed: Dogoods food maps uses MySQL/SQLAlchemy only."""
     raise RuntimeError(
-        f"Supabase PostgREST removed (patch {table}). Food Maps uses MySQL only."
+        f"Supabase PostgREST removed (patch {table}). Dogoods food maps uses MySQL only."
     )
 
 
 async def supabase_delete(table: str, params: dict[str, Any]) -> int:
-    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    """Removed: Dogoods food maps uses MySQL/SQLAlchemy only."""
     raise RuntimeError(
-        f"Supabase PostgREST removed (delete {table}). Food Maps uses MySQL only."
+        f"Supabase PostgREST removed (delete {table}). Dogoods food maps uses MySQL only."
     )
 
 
 async def supabase_rpc(fn_name: str, body: dict[str, Any]) -> Any:
-    """Removed: Food Maps uses MySQL/SQLAlchemy only."""
+    """Removed: Dogoods food maps uses MySQL/SQLAlchemy only."""
     raise RuntimeError(
-        f"Supabase RPC removed ({fn_name}). Food Maps uses MySQL only."
+        f"Supabase RPC removed ({fn_name}). Dogoods food maps uses MySQL only."
     )
 
 
 async def fetch_donor_listing_defaults(user_id: str) -> dict[str, Any]:
     """Load donor profile fields to stamp onto new food_listings rows.
 
-    Integer Food Maps user ids read from MySQL. UUID ids still use Supabase
+    Integer Dogoods food maps user ids read from MySQL. UUID ids still use Supabase
     when available; never invent an empty admin/community profile just because
     Supabase is missing.
     """
@@ -946,7 +946,7 @@ def _build_system_prompt(training_data: dict[str, Any]) -> str:
 
     base = training_data.get(
         "system_base",
-        "You are Nouri, the Food Maps AI Assistant — a warm and helpful community food sharing assistant for Food Maps. Always refer to the product as Food Maps.",
+        "You are Nouri, the Dogoods food maps AI Assistant — a warm and helpful community food sharing assistant for Dogoods food maps. Always refer to the product as Dogoods food maps.",
     )
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -1404,23 +1404,23 @@ def _build_system_prompt(training_data: dict[str, Any]) -> str:
         "listing. Want to come back to it?' If they say yes / nod, "
         "resume from the saved fields. If they say no, drop it cleanly.\n"
         "\n"
-        "## When the user asks something IRRELEVANT to Food Maps entirely\n"
-        "Food Maps is for food sharing, food safety, pickups, donations, "
+        "## When the user asks something IRRELEVANT to Dogoods food maps entirely\n"
+        "Dogoods food maps is for food sharing, food safety, pickups, donations, "
         "recipes, storage tips, and community impact. For anything "
         "outside that scope (general trivia, math homework, coding, "
         "personal advice, medical/legal advice, politics), reply ONCE "
         "with a friendly redirect:\n"
         "  'That's outside what I can help with here — I'm focused on "
-        "   food sharing on Food Maps. Want help posting a listing, "
+        "   food sharing on Dogoods food maps. Want help posting a listing, "
         "   finding food nearby, or tracking your impact?'\n"
         "Don't lecture, don't moralize, don't repeat the redirect more "
         "than once per topic.\n"
         "\n"
         "## When a user lists IRRELEVANT or non-food items\n"
         "Examples: 'I want to share my old shoes', 'donate this lamp', "
-        "'list my couch'. Food Maps lists FOOD only. Decline warmly, "
+        "'list my couch'. Dogoods food maps lists FOOD only. Decline warmly, "
         "explain why, and suggest the right venue:\n"
-        "  'Food Maps is set up just for food and meals, so I can't list "
+        "  'Dogoods food maps is set up just for food and meals, so I can't list "
         "   the lamp here. Local Buy Nothing groups or Freecycle are "
         "   great for non-food items. Got any food you'd like to share "
         "   instead?'\n"
@@ -1436,7 +1436,7 @@ def _build_system_prompt(training_data: dict[str, Any]) -> str:
         "## When a recipient asks for food you can't provide\n"
         "Examples: 'I want a Lamborghini', 'can you give me cash?', "
         "'send me an Amazon gift card'. Decline once, redirect to what "
-        "Food Maps actually does: 'I can connect you with free food "
+        "Dogoods food maps actually does: 'I can connect you with free food "
         "nearby, but I can't help with cars/cash/gift cards. Want me to "
         "search for available food in your area?'\n"
         "\n"
@@ -2361,7 +2361,7 @@ def _build_system_prompt(training_data: dict[str, Any]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Role-specific behaviour (strict Food Maps rules — helpers-only module;
+# Role-specific behaviour (strict Dogoods food maps rules — helpers-only module;
 # production chat uses backend.ai.ai_engine.ConversationEngine)
 # ---------------------------------------------------------------------------
 
@@ -4067,7 +4067,7 @@ class ConversationEngine:
                 "(8) IGNORE-AND-STEER: if the user asks something off-topic mid-flow (weather, "
                 "trivia, jokes, unrelated chat), briefly decline and steer back to the open "
                 "task. If they persist, ask once whether to pause the flow. "
-                "(9) FOOD ONLY: Food Maps lists FOOD. If a user tries to list non-food items "
+                "(9) FOOD ONLY: Dogoods food maps lists FOOD. If a user tries to list non-food items "
                 "(furniture, electronics, clothes), decline warmly and suggest Buy Nothing / "
                 "Freecycle. If a recipient asks for cash/cars/gift cards, decline and offer to "
                 "search for available food instead. Stay scoped to food sharing, food safety, "
@@ -4095,7 +4095,7 @@ class ConversationEngine:
                 "(8) IGNORAR Y REDIRIGIR: si en medio del flujo el usuario pregunta algo fuera "
                 "de tema (clima, chistes, trivia), declina brevemente y vuelve a la tarea. Si "
                 "insiste, pregunta una vez si pausamos el flujo. "
-                "(9) SOLO COMIDA: Food Maps es para comida. Si intenta publicar objetos no "
+                "(9) SOLO COMIDA: Dogoods food maps es para comida. Si intenta publicar objetos no "
                 "alimenticios (muebles, ropa, electrónicos), declina con amabilidad y sugiere "
                 "Buy Nothing o Freecycle. Si pide dinero/coches/tarjetas de regalo, declina y "
                 "ofrece buscar comida disponible. Mantente en el ámbito de comida, seguridad "

@@ -24,7 +24,7 @@ function Header({ user, onAuthClick, onLogout, currentView, onViewChange, curren
           <a href="/" className="flex items-center gap-2 cursor-pointer shrink-0">
             <img
               src="/assets/logos/foodmaps-logo.png"
-              alt="Food Maps"
+              alt="Dogoods food maps"
               className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover"
             />
           </a>

@@ -19,7 +19,8 @@ _LISTING_ID_RE = re.compile(
     r"\b(?:listing\s*)?#\s*[0-9a-f-]{8,}\b|\blisting_id\s*[:=]\s*\S+",
     re.I,
 )
-_DOGOODS_BRAND_RE = re.compile(r"\bDo\s*Goods\b", re.I)
+_DOGOODS_BRAND_RE = re.compile(r"\bDo\s*Goods\b(?! food maps)", re.I)
+_FOOD_MAPS_RE = re.compile(r"(?<!Do Good )(?<!Dogoods )\bFood Maps\b")
 _DOGGOODS_STORE_RE = re.compile(r"dogoods\.store", re.I)
 
 _LISTING_UI_KEYS = (
@@ -185,9 +186,10 @@ def _dedupe_search_prose(text: str, actions: list[dict]) -> str:
 
 
 def _fix_branding(text: str) -> str:
-    """Replace legacy DoGoods branding in user-visible replies."""
-    out = _DOGOODS_BRAND_RE.sub("Food Maps", text)
-    return _DOGGOODS_STORE_RE.sub("Food Maps", out)
+    """Use the Dogoods food maps name in user-visible replies."""
+    out = _DOGOODS_BRAND_RE.sub("Dogoods food maps", text)
+    out = _FOOD_MAPS_RE.sub("Dogoods food maps", out)
+    return _DOGGOODS_STORE_RE.sub("Dogoods food maps", out)
 
 
 def polish_assistant_response(

@@ -74,6 +74,17 @@ def test_impact_story_catalog_is_repeatable():
     assert "cities:" in script
 
 
+def test_support_donation_page_embeds_donorbox():
+    page = (REPO / "frontend" / "donate.html").read_text(encoding="utf-8")
+    app = (REPO / "backend" / "app.py").read_text(encoding="utf-8")
+    assert 'src="https://donorbox.org/widgets.js"' in page
+    assert 'campaign="support-do-good-food-maps"' in page
+    assert 'type="donation_form"' in page
+    assert 'enable-auto-scroll="true"' in page
+    assert "pageId: 'donate'" in page
+    assert '"donate"' in app
+
+
 def test_impact_story_titles_have_edit_labels():
     text = IMPACT.read_text(encoding="utf-8")
     for key, label in (

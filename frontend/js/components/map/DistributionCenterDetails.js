@@ -259,7 +259,7 @@ async function shareDistributionCenter(center) {
   const url = getDistributionCenterShareUrl(center);
   const title = center.name || 'Food distribution center';
   const bits = [
-    `Check out ${center.name || 'this distribution center'} on Food Maps`,
+    `Check out ${center.name || 'this distribution center'} on Dogoods food maps`,
   ];
   if (center.address) bits.push(center.address);
   if (center.hours) bits.push(`Hours: ${center.hours}`);

@@ -51,12 +51,12 @@ function ReferralDashboard({ onClose }) {
   };
 
   const shareReferralCode = () => {
-    const shareText = `Join Food Maps and help reduce food waste! Use my referral code: ${referralData.referral_code}`;
+    const shareText = `Join Dogoods food maps and help reduce food waste! Use my referral code: ${referralData.referral_code}`;
     const shareUrl = `${window.location.origin}?ref=${referralData.referral_code}`;
     
     if (navigator.share) {
       navigator.share({
-        title: 'Join Food Maps',
+        title: 'Join Dogoods food maps',
         text: shareText,
         url: shareUrl
       });
@@ -133,7 +133,7 @@ function ReferralDashboard({ onClose }) {
             <ul className="text-sm text-gray-600 space-y-1">
               <li>• Share your referral code with friends</li>
               <li>• They enter it when signing up</li>
-              <li>• Help grow the Food Maps community</li>
+              <li>• Help grow the Dogoods food maps community</li>
               <li>• Reduce food waste together!</li>
             </ul>
           </div>

@@ -933,7 +933,7 @@ function App() {
 
   const initializeApp = async () => {
     try {
-      console.log('Initializing Food Maps app...');
+      console.log('Initializing Dogoods food maps app...');
 
       // Always initialize mock data first with error handling
       // let mockData = null;

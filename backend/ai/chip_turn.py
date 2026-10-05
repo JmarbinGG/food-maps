@@ -629,7 +629,7 @@ def chips_for_turn_class(
         return ["They pick up", "I'll drop off"]
 
     if turn == "request_fork":
-        # Food Maps has no Request Food header; listings already show in the
+        # Dogoods food maps has no Request Food header; listings already show in the
         # sidebar — never offer Open Share Food here.
         if es:
             return ["Hazlo por mí", "Guíame paso a paso"]

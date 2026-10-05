@@ -8,14 +8,14 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <title>Food Maps - Share and Find Food</title>
+    <title>Dogoods food maps - Share and Find Food</title>
     <meta name="description"
         content="A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
     <meta name="keywords" content="food distribution, AI routing, automated dispatch, food rescue, smart logistics">
-    <meta property="og:title" content="Food Maps - Share and Find Food">
+    <meta property="og:title" content="Dogoods food maps - Share and Find Food">
     <meta property="og:description"
         content="A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
-    <meta name="twitter:title" content="Food Maps - Share and Find Food">
+    <meta name="twitter:title" content="Dogoods food maps - Share and Find Food">
     <meta name="twitter:description"
         content="A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -586,7 +586,7 @@
 </head>
 
 <body>
-    <div id="boot-loader" class="boot-loader" role="status" aria-live="polite" aria-label="Loading Food Maps">
+    <div id="boot-loader" class="boot-loader" role="status" aria-live="polite" aria-label="Loading Dogoods food maps">
         <div class="boot-loader__logo-wrap" aria-hidden="true">
             <div class="boot-loader__logo-halo"></div>
             <img class="boot-loader__logo"
@@ -595,12 +595,24 @@
             <div class="boot-loader__shine"></div>
             <div class="boot-loader__pulse-ring"></div>
         </div>
-        <div class="boot-loader__title">Loading Food Maps</div>
+        <div class="boot-loader__title">Loading Dogoods food maps</div>
         <div id="boot-loader-subtitle" class="boot-loader__subtitle">Loading map and listings...</div>
     </div>
 
     <div id="root" class="app-root--hidden"></div>
     <div id="notification-toggle-container"></div>
+    <footer class="bg-gray-900 text-gray-300 py-6">
+        <div class="max-w-7xl mx-auto px-4 flex justify-center">
+            <div class="flex space-x-4">
+                <a href="https://www.instagram.com/dogoodfoodmaps/" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Instagram" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61594695751036" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Facebook" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+                </a>
+            </div>
+        </div>
+    </footer>
 
     <script>
         window.hideBootLoader = function () {

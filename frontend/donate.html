@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support Do Good Food Maps</title>
+  <meta name="description" content="Do Good Food Maps, a project of the All Good Living Foundation, puts local food pantries, community closets, and other food resources on one map. Your gift is tax-deductible to the extent allowed by law.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20261002-display-scale">
+  <script src="js/lib/i18n_platform.js?v=20260812d"></script>
+  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+  <style>
+    .support-page {
+      --support-ink: #183d32;
+      --support-muted: #5a6a62;
+      --support-paper: #f4f5ee;
+      --support-line: #dfe5dc;
+      --support-coral: #db684b;
+      color: var(--support-ink);
+      background: var(--support-paper);
+    }
+    .skip-form {
+      position: absolute;
+      left: 1rem;
+      top: -3rem;
+      z-index: 80;
+      background: #fff;
+      color: var(--support-ink);
+      padding: 0.6rem 0.9rem;
+      border-radius: 0.5rem;
+      font-weight: 700;
+    }
+    .skip-form:focus { top: 5.5rem; }
+    .support-hero { padding: 4.25rem 0 1.5rem; }
+    .support-kicker {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      margin: 0 0 1.1rem;
+      color: #4d6a5d;
+      font-size: 0.72rem;
+      font-weight: 800;
+      letter-spacing: 0.11em;
+    }
+    .support-kicker span, .support-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--support-coral);
+      display: inline-block;
+    }
+    .support-hero .fm-hero-title { margin: 0; }
+    .support-lede {
+      max-width: 38rem;
+      margin: 1.25rem 0 0;
+      color: #43594e;
+    }
+    .donate-fallback:focus-visible {
+      outline: 3px solid #dc886f;
+      outline-offset: 3px;
+    }
+    .support-layout { padding: 0.5rem 0 4.5rem; }
+    .support-grid {
+      display: grid;
+      gap: 2rem;
+      align-items: start;
+    }
+    .support-story h2 {
+      margin: 1.75rem 0 0.75rem;
+      font-family: var(--fm-font-display) !important;
+      font-size: 2rem;
+      font-weight: 500 !important;
+      letter-spacing: 0;
+    }
+    .support-story p { margin: 0 0 1rem; color: #43594e; }
+    .support-goal {
+      display: flex;
+      align-items: baseline;
+      gap: 0.75rem;
+      margin: 1.5rem 0 0;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--support-line);
+    }
+    .support-goal strong {
+      font-family: var(--fm-font-display);
+      font-size: 2.4rem;
+      font-weight: 500;
+      line-height: 1;
+    }
+    .support-goal span { color: var(--support-muted); font-size: 0.92rem; font-weight: 700; }
+    .support-tax {
+      margin: 1.25rem 0 0;
+      color: var(--support-muted);
+      font-size: 0.92rem;
+    }
+    .donate-card {
+      background: #fff;
+      border: 1px solid var(--support-line);
+      border-radius: 1.25rem;
+      padding: 1.35rem 1.25rem 1.1rem;
+      box-shadow: 0 18px 40px rgba(24, 61, 50, 0.08);
+    }
+    .donate-card h2 {
+      margin: 0.35rem 0 0.45rem;
+      font-family: var(--fm-font-display) !important;
+      font-size: 2.15rem;
+      font-weight: 500 !important;
+      letter-spacing: 0;
+    }
+    .donate-card .donate-note { margin: 0 0 1rem; color: var(--support-muted); }
+    .donate-waiting { margin: 0 0 0.75rem; color: #658071; font-size: 0.92rem; }
+    dbox-widget { display: block; width: 100%; min-height: 28rem; }
+    .donate-fallback {
+      display: inline-block;
+      margin-top: 0.85rem;
+      color: #42584d;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    @media (min-width: 960px) {
+      .support-grid { grid-template-columns: minmax(0, 1fr) 28rem; gap: 3.5rem; }
+      .donate-card { position: sticky; top: 6.25rem; }
+    }
+    @media (max-width: 959px) {
+      .support-hero { padding-top: 2.75rem; }
+      .donate-card { order: -1; }
+    }
+    @media (max-width: 760px) {
+      .support-hero .fm-hero-title { font-size: 3rem !important; }
+    }
+  </style>
+</head>
+
+<body class="support-page">
+  <a class="skip-form" href="#support-form">Skip to the donation form</a>
+
+  <nav class="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-20">
+        <div class="flex items-center">
+          <a href="landing.html" class="cursor-pointer">
+            <img src="/assets/logos/foodmaps-logo.png" alt="Dogoods food maps" class="w-16 h-16 rounded-full object-cover shadow-lg">
+          </a>
+        </div>
+        <div class="hidden lg:flex items-center gap-5 xl:gap-7">
+          <a href="index.html?tutorial=1" class="text-gray-600 hover:text-green-600 font-medium transition-colors">How It Works</a>
+          <a href="impactStory.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Impact Story</a>
+          <a href="partners.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Partners</a>
+          <a href="providers.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Providers</a>
+          <a href="nutrition.html" class="hidden text-gray-600 hover:text-green-600 font-medium transition-colors">Nutrition</a>
+          <div data-language-picker></div>
+          <a href="#support-form" aria-current="page"
+            class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg">
+            Donate
+          </a>
+          <a href="index.html"
+            class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transition-all shadow-lg">
+            Get Started
+          </a>
+        </div>
+        <div class="lg:hidden">
+          <button id="mobile-menu-btn" type="button" class="text-gray-600 hover:text-green-600 p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-expanded="false" aria-controls="mobile-menu">
+            <div class="icon-menu text-2xl"></div>
+          </button>
+        </div>
+      </div>
+      <div id="mobile-menu" class="lg:hidden hidden bg-white/95 backdrop-blur-lg border-t border-gray-200 pb-4">
+        <div class="flex flex-col space-y-4 pt-4">
+          <a href="index.html?tutorial=1" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">How It Works</a>
+          <a href="impactStory.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Impact Story</a>
+          <a href="partners.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Partners</a>
+          <a href="providers.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Providers</a>
+          <div data-language-picker="mobile" class="px-2"></div>
+          <a href="#support-form" class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold text-center mx-2">Donate</a>
+          <a href="index.html" class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold text-center mx-2">Get Started</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <section class="support-hero">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p class="support-kicker section-kicker">ALL GOOD LIVING FOUNDATION <span></span> A 501(C)(3) PROJECT</p>
+        <h1 class="fm-hero-title editable" data-editable="donate-title" data-edit-label="Donation page title" contenteditable="false">Support Do Good<br><em>Dogoods food maps.</em></h1>
+        <p class="support-lede editable" data-editable="donate-lede" data-edit-label="Donation page introduction" contenteditable="false">Too many East Bay families don't know where to find free, nutritious food, even when it's just around the corner. Do Good Food Maps, a project of the All Good Living Foundation, puts local food pantries, community closets, and other food resources on one easy-to-use map, so no family has to go hungry for lack of information.</p>
+      </div>
+    </section>
+
+    <section class="support-layout" aria-labelledby="support-reasons-title">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="support-grid">
+          <div class="support-story">
+            <h2 id="support-reasons-title" class="editable" data-editable="donate-reasons-title" data-edit-label="Gift heading" contenteditable="false">Give today and help put good food on the map.</h2>
+            <p class="editable" data-editable="donate-gift-copy" data-edit-label="What the gift supports" contenteditable="false">Your gift helps us keep the map accurate and up to date, add new food distributors, secure food across the Bay Area, and connect families in need with healthy food when they need it most. Every dollar goes toward closing the gap between available food and the people who need it.</p>
+            <p class="support-goal"><strong>$20,000</strong><span>campaign goal</span></p>
+            <p class="support-tax editable" data-editable="donate-tax-note" data-edit-label="Tax note" contenteditable="false">The Do Good Food Maps is part of the All Good Living Foundation, a 501(c)(3) nonprofit. Your donation is tax-deductible to the extent allowed by law. Please keep this receipt for your records.</p>
+          </div>
+
+          <section class="donate-card" id="support-form" aria-labelledby="donate-form-title">
+            <p class="support-kicker section-kicker">GIVE <span class="support-dot"></span> SECURE FORM</p>
+            <h2 id="donate-form-title" class="editable" data-editable="donate-form-title" data-edit-label="Form heading" contenteditable="false">Donate</h2>
+            <p class="donate-note editable" data-editable="donate-form-note" data-edit-label="Form note" contenteditable="false">Give today and help put good food on the map.</p>
+            <div data-no-edit="true">
+              <p class="donate-waiting" id="donate-waiting">The secure form is loading.</p>
+              <script type="module" src="https://donorbox.org/widgets.js" async></script>
+              <dbox-widget campaign="support-do-good-food-maps" type="donation_form" enable-auto-scroll="true"></dbox-widget>
+              <noscript>
+                <a class="donate-fallback" href="https://donorbox.org/support-do-good-food-maps">Open the donation form</a>
+              </noscript>
+              <a class="donate-fallback" href="https://donorbox.org/support-do-good-food-maps" target="_blank" rel="noopener noreferrer">If the form does not appear, open it on Donorbox.</a>
+            </div>
+          </section>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 text-gray-300 py-16">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex space-x-4 mb-8">
+        <a href="https://www.instagram.com/dogoodfoodmaps/" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Instagram" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+        </a>
+        <a href="https://www.facebook.com/profile.php?id=61594695751036" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Facebook" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+        </a>
+      </div>
+      <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+        <p class="text-gray-400 mb-0">&copy; 2026 Dogoods food maps. All rights reserved. Built to help communities share food.</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <a href="impactStory.html" class="text-gray-400 hover:text-emerald-400">Impact Story</a>
+          <a href="privacy.html" class="text-gray-400 hover:text-emerald-400">Privacy Policy</a>
+          <a href="terms.html" class="text-gray-400 hover:text-emerald-400">Terms of Service</a>
+          <a href="cookies.html" class="text-gray-400 hover:text-emerald-400">Cookie Policy</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="js/lib/pageEditor.js?v=20260916-edit-labels"></script>
+  <script>
+    window.FoodMapsPageEditor.init({
+      pageId: 'donate',
+      fullPage: false,
+      excludeSelectors: ['#support-form', 'dbox-widget']
+    });
+    customElements.whenDefined('dbox-widget').then(function () {
+      var waiting = document.getElementById('donate-waiting');
+      if (waiting) waiting.hidden = true;
+    });
+    document.addEventListener('DOMContentLoaded', function () {
+      var mobileMenuBtn = document.getElementById('mobile-menu-btn');
+      var mobileMenu = document.getElementById('mobile-menu');
+      if (!mobileMenuBtn || !mobileMenu) return;
+      function setMenu(open) {
+        mobileMenu.classList.toggle('hidden', !open);
+        mobileMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        mobileMenuBtn.innerHTML = open
+          ? '<div class="icon-x text-2xl"></div>'
+          : '<div class="icon-menu text-2xl"></div>';
+      }
+      mobileMenuBtn.addEventListener('click', function (event) {
+        event.preventDefault();
+        setMenu(mobileMenu.classList.contains('hidden'));
+      });
+      mobileMenu.querySelectorAll('a').forEach(function (link) {
+        link.addEventListener('click', function () { setMenu(false); });
+      });
+    });
+  </script>
+</body>
+
+</html>

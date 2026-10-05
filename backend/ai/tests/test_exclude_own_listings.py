@@ -1,7 +1,7 @@
 """Own listings must never appear in Find Food / Nouri search results.
 
 Exercises the MySQL ``backend.ai.tools._search_food_near_user`` /
-``_claim_listing`` paths (numeric Food Maps ids).
+``_claim_listing`` paths (numeric Dogoods food maps ids).
 """
 from __future__ import annotations
 

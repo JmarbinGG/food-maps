@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Migration script to add Safety and Trust features to Food Maps
+Migration script to add Safety and Trust features to Dogoods food maps
 Adds trust scores, verification fields, and safety report tables
 """
 

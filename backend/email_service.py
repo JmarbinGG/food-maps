@@ -81,7 +81,7 @@ def send_reset_email(to_email: str, reset_code: str, user_name: str) -> None:
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2d5a27;">Password Reset Request</h2>
           <p>Hi {safe_name},</p>
-          <p>You requested a password reset for your Food Maps account.</p>
+          <p>You requested a password reset for your Dogoods food maps account.</p>
           <div style="background-color: #f8f9fa; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
             <h3 style="color: #2d5a27; margin: 0;">Your verification code is:</h3>
             <h1 style="color: #2d5a27; font-size: 32px; letter-spacing: 4px; margin: 10px 0;">{reset_code}</h1>
@@ -89,7 +89,7 @@ def send_reset_email(to_email: str, reset_code: str, user_name: str) -> None:
           <p>This code will expire in 15 minutes.</p>
           <p>If you did not request this password reset, please ignore this email.</p>
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">Food Maps - Connecting communities through food sharing</p>
+          <p style="color: #666; font-size: 12px;">Dogoods food maps - Connecting communities through food sharing</p>
         </div>
       </body>
     </html>
@@ -99,7 +99,7 @@ def send_reset_email(to_email: str, reset_code: str, user_name: str) -> None:
 
 Hi {user_name},
 
-You requested a password reset for your Food Maps account.
+You requested a password reset for your Dogoods food maps account.
 
 Your verification code is: {reset_code}
 
@@ -107,12 +107,12 @@ This code will expire in 15 minutes.
 
 If you did not request this password reset, please ignore this email.
 
-Food Maps - Connecting communities through food sharing
+Dogoods food maps - Connecting communities through food sharing
 """
 
     _send_email(
         to_email=to_email,
-        subject="Password Reset - Food Maps",
+        subject="Password Reset - Dogoods food maps",
         text_content=text_content,
         html_content=html_content,
     )
@@ -128,16 +128,16 @@ def send_verification_email(to_email: str, user_name: str, verification_link: st
     safe_link = _html_escape(verification_link, quote=True)
     text_content = f"""Hello {user_name},
 
-Thank you for joining Food Maps! Please verify your email address by visiting the link below:
+Thank you for joining Dogoods food maps! Please verify your email address by visiting the link below:
 
 {verification_link}
 
 This link will expire in 24 hours.
 
-If you did not create an account with Food Maps, please ignore this email.
+If you did not create an account with Dogoods food maps, please ignore this email.
 
 Best regards,
-The Food Maps Team
+The Dogoods food maps Team
 """
 
     html_content = f"""
@@ -146,11 +146,11 @@ The Food Maps Team
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <h2 style="color: #2d5a27;">Verify Your Email Address</h2>
           <p>Hello {safe_name},</p>
-          <p>Thank you for joining Food Maps! Please verify your email address by clicking the link below:</p>
+          <p>Thank you for joining Dogoods food maps! Please verify your email address by clicking the link below:</p>
           <p><a href="{safe_link}">{safe_link}</a></p>
           <p>This link will expire in 24 hours.</p>
-          <p>If you did not create an account with Food Maps, please ignore this email.</p>
-          <p>Best regards,<br>The Food Maps Team</p>
+          <p>If you did not create an account with Dogoods food maps, please ignore this email.</p>
+          <p>Best regards,<br>The Dogoods food maps Team</p>
         </div>
       </body>
     </html>
@@ -158,7 +158,7 @@ The Food Maps Team
 
     _send_email(
         to_email=to_email,
-        subject="Verify Your Email - Food Maps",
+        subject="Verify Your Email - Dogoods food maps",
         text_content=text_content,
         html_content=html_content,
     )

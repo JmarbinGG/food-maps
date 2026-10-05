@@ -1,5 +1,5 @@
 """
-Automated-messaging system for Food Maps AI (Nouri).
+Automated-messaging system for Dogoods food maps AI (Nouri).
 
 Responsibilities
 ----------------
@@ -150,7 +150,7 @@ def _template_en(user_name: str, food, donor_name: str) -> str:
     location = f" at {short_addr}" if short_addr else ""
     return (
         f"Hi {name}! {donor_name or 'A donor'} just posted \"{title}\"{location}.{window} "
-        f"Open Food Maps to claim it. Reply STOP to opt out."
+        f"Open Dogoods food maps to claim it. Reply STOP to opt out."
     )
 
 
@@ -165,7 +165,7 @@ def _template_es(user_name: str, food, donor_name: str) -> str:
     location = f" en {short_addr}" if short_addr else ""
     return (
         f"¡Hola {name}! {donor_name or 'Un donante'} acaba de publicar \"{title}\"{location}.{window} "
-        f"Abre Food Maps para reclamarlo. Responde STOP para cancelar."
+        f"Abre Dogoods food maps para reclamarlo. Responde STOP para cancelar."
     )
 
 

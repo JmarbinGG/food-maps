@@ -1,5 +1,5 @@
 """
-Food Maps AI (Nouri) tools — MySQL edition.
+Dogoods food maps AI (Nouri) tools — MySQL edition.
 
 OpenAI function-calling tool definitions and handlers.
 All data operations go through SQLAlchemy against the main MySQL database.
@@ -122,7 +122,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
+                    "user_id": {"type": "string", "description": "Dogoods food maps numeric user id"},
                     "food_type": {
                         "type": "string",
                         "description": (
@@ -176,7 +176,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
+                    "user_id": {"type": "string", "description": "Dogoods food maps numeric user id"},
                     "hours": {
                         "type": "integer",
                         "description": "How far back to look (default 72).",
@@ -208,7 +208,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
+                    "user_id": {"type": "string", "description": "Dogoods food maps numeric user id"},
                     "community_id": {
                         "type": "string",
                         "description": "Community id (must be the caller's own community).",
@@ -867,7 +867,7 @@ TOOL_DEFINITIONS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "user_id": {"type": "string", "description": "Food Maps numeric user id"},
+                    "user_id": {"type": "string", "description": "Dogoods food maps numeric user id"},
                     "status": {
                         "type": "string",
                         "enum": ["active", "completed", "all"],
@@ -1053,7 +1053,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "show_map",
             "description": (
-                "ACTION: switch the Food Maps UI to the interactive map view so the user "
+                "ACTION: switch the Dogoods food maps UI to the interactive map view so the user "
                 "can see available food listings on the map. Call this whenever the user "
                 "asks to 'show the map', 'open the map', 'see food on the map', 'view "
                 "listings on the map', or anything similar. DO NOT EXPLAIN, JUST CALL — "
@@ -1085,7 +1085,7 @@ TOOL_DEFINITIONS = [
                 "the recipient asks 'how do I get there?', 'show me directions', "
                 "'route to listing #N', 'cómo llego', 'dame las direcciones', or "
                 "right AFTER a successful claim so they can see the path to pickup. "
-                "Pass listing_id as the Food Maps numeric listing id from "
+                "Pass listing_id as the Dogoods food maps numeric listing id from "
                 "search/claim results, OR the display number (#1, #2) from the "
                 "latest search. If they ask for directions to their pickup "
                 "without a number, omit listing_id and the server uses their "
@@ -1101,7 +1101,7 @@ TOOL_DEFINITIONS = [
                     "listing_id": {
                         "type": "string",
                         "description": (
-                            "Food Maps numeric listing id, or search display index "
+                            "Dogoods food maps numeric listing id, or search display index "
                             "('1', '2', '#3'). Optional when the user just claimed "
                             "— uses latest claim."
                         ),
@@ -1124,7 +1124,7 @@ TOOL_DEFINITIONS = [
                 "ACTION: open the listing detail modal for a specific food listing. "
                 "Call this when the recipient asks to 'show details', 'view listing', "
                 "'tell me more about #N', 'what's on that listing', or 'open listing #N'. "
-                "Pass listing_id as the Food Maps numeric listing id OR the search "
+                "Pass listing_id as the Dogoods food maps numeric listing id OR the search "
                 "card number (#1, #2). If they just claimed and ask for details without "
                 "a number, omit listing_id and the server uses their most recent claim."
             ),
@@ -1135,7 +1135,7 @@ TOOL_DEFINITIONS = [
                     "listing_id": {
                         "type": "string",
                         "description": (
-                            "Food Maps numeric listing id, or search display index "
+                            "Dogoods food maps numeric listing id, or search display index "
                             "('1', '2', '#3'). Optional when the user just claimed "
                             "— uses latest claim."
                         ),
@@ -1150,7 +1150,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "navigate_ui",
             "description": (
-                "ACTION: drive the Food Maps web UI on the user's behalf — open or close "
+                "ACTION: drive the Dogoods food maps web UI on the user's behalf — open or close "
                 "views, panels and modals. Call this whenever the user asks to 'open', "
                 "'show', 'go to', 'close', 'hide', 'exit', 'leave', 'back to map', etc. "
                 "DO NOT EXPLAIN, JUST CALL — the UI will navigate immediately and the "
@@ -1501,14 +1501,14 @@ _UUID_RE = re.compile(r"^[0-9a-f-]{36}$", re.I)
 
 
 def _reject_non_mysql_user(user_id) -> Optional[dict]:
-    """Return an error dict when user_id is not a Food Maps numeric id."""
+    """Return an error dict when user_id is not a Dogoods food maps numeric id."""
     uid = str(user_id or "").strip()
     if uid.isdigit():
         return None
     return {
         "ok": False,
-        "error": "Food Maps requires a numeric user id",
-        "message": "Food Maps requires a numeric user id",
+        "error": "Dogoods food maps requires a numeric user id",
+        "message": "Dogoods food maps requires a numeric user id",
     }
 
 
@@ -1832,7 +1832,7 @@ async def _get_recent_listings(
     category: Optional[str] = None,
     **kwargs,
 ) -> dict:
-    """Recent donations. Integer Food Maps ids → MySQL; UUID → legacy Supabase."""
+    """Recent donations. Integer Dogoods food maps ids → MySQL; UUID → legacy Supabase."""
 
     from backend.app import SessionLocal
     from backend.models import FoodResource, FoodCategory, User
@@ -1928,14 +1928,14 @@ async def _get_community_listings(
 
     cid = _to_int(community_id)
     if cid is None:
-        # Non-integer community id without UUID user: not a Food Maps MySQL id.
+        # Non-integer community id without UUID user: not a Dogoods food maps MySQL id.
         logger.warning(
-            "get_community_listings: refusing non-integer community_id=%r for Food Maps",
+            "get_community_listings: refusing non-integer community_id=%r for Dogoods food maps",
             community_id,
         )
         return {
             "success": False,
-            "error": "community_id must be a Food Maps integer id",
+            "error": "community_id must be a Dogoods food maps integer id",
             "listings": [],
             "total": 0,
         }
@@ -3125,7 +3125,7 @@ _QUERY_WHITELIST: dict[str, dict] = {
                    "created_at"],
     },
     "requests": {
-        # Food Maps MySQL FoodRequest — not Supabase food_listings.
+        # Dogoods food maps MySQL FoodRequest — not Supabase food_listings.
         "model_import": ("backend.models", "FoodRequest"),
         "fields": {
             "id": "id", "recipient_id": "recipient_id", "category": "category",
@@ -3186,19 +3186,19 @@ async def _run_safe_query(
     except (TypeError, ValueError):
         limit = 25
 
-    # Legacy UUID-only entity tables (none currently). Food Maps entities
+    # Legacy UUID-only entity tables (none currently). Dogoods food maps entities
     # must use model_import + SQLAlchemy above — never silently empty via
     if not spec.get("model_import") and spec.get("supabase_table"):
         logger.error(
             "run_safe_query: entity=%r still points at supabase_table=%r — "
-            "refusing (Food Maps uses MySQL). Migrate the whitelist entry.",
+            "refusing (Dogoods food maps uses MySQL). Migrate the whitelist entry.",
             entity,
             spec.get("supabase_table"),
         )
         return {
             "error": (
                 f"entity '{entity}' is legacy UUID/Supabase-only and is not "
-                "available for Food Maps integer-id queries"
+                "available for Dogoods food maps integer-id queries"
             ),
         }
 
@@ -3377,14 +3377,14 @@ async def _claim_listing(
     quantity: Optional[object] = None,
     **_ignored,
 ) -> dict:
-    """Claim a listing by integer Food Maps id (MySQL)."""
+    """Claim a listing by integer Dogoods food maps id (MySQL)."""
     uid_raw = str(user_id or "").strip()
     lid_raw = str(listing_id or "").strip()
 
     if _UUID_RE.match(lid_raw) or (lid_raw and _to_int(lid_raw) is None and not lid_raw.isdigit()):
         return {
             "error": (
-                "Food Maps requires an integer listing id from search results "
+                "Dogoods food maps requires an integer listing id from search results "
                 "(or the display list number 1, 2, 3… after search_food_near_user)."
             ),
             "ok": False,
@@ -3392,7 +3392,7 @@ async def _claim_listing(
 
     if uid_raw and not uid_raw.isdigit():
         return {
-            "error": "Food Maps requires a numeric user id",
+            "error": "Dogoods food maps requires a numeric user id",
             "ok": False,
         }
 
@@ -4204,7 +4204,7 @@ async def _check_recipient_role_block(user_id: str) -> Optional[dict]:
     'confirm the community' errors — they should be told immediately to
     switch to a donor account.
 
-    Integer Food Maps ids use SessionLocal only.
+    Integer Dogoods food maps ids use SessionLocal only.
     """
     if not user_id:
         return None
@@ -4237,7 +4237,7 @@ async def _check_recipient_role_block(user_id: str) -> Optional[dict]:
                         "current_role": "recipient",
                         "required_role": "donor",
                     }
-                # Integer Food Maps path: do not fall through to Supabase.
+                # Integer Dogoods food maps path: do not fall through to Supabase.
                 return None
             except Exception:
                 # Still do not hit Supabase for digit ids — avoid empty "success".
@@ -4458,7 +4458,7 @@ async def _post_food_listing(
         allergens=allergens,
         dietary_tags=dietary_tags,
         images=cleaned_images,
-        # Food Maps MySQL: community_* resolves against DistributionCenter and
+        # Dogoods food maps MySQL: community_* resolves against DistributionCenter and
         # is stamped onto FoodResource.community_id (+ User when confirmed/unset).
         community_name=community_name,
         community_id=community_id,
@@ -5565,7 +5565,7 @@ async def _show_route_to_listing(
     """Build a driving route from the user's saved address to a listing.
 
     Returns an envelope the frontend turns into a blue line on the map.
-    Food Maps MySQL path only (numeric user_id + FoodResource listing id).
+    Dogoods food maps MySQL path only (numeric user_id + FoodResource listing id).
     """
     profile = (mode or "driving").strip().lower()
     if profile not in {"driving", "walking", "cycling"}:

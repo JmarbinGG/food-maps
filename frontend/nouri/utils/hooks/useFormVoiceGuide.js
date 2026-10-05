@@ -1,6 +1,6 @@
 /**
  * Form voice guide — thin adapter over unified NouriGuideContext / engine.
- * Food Maps SPA does not use react-router; lang comes from props or settings.
+ * Dogoods food maps SPA does not use react-router; lang comes from props or settings.
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { useNouriGuide } from '../NouriGuideContext.jsx';

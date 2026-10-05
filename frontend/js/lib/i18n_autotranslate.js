@@ -441,7 +441,7 @@
     'Both': 'Ambos',
 
     // -------- Tutorial --------
-    'New to Food Maps?': '¿Nuevo en Food Maps?',
+    'New to Dogoods food maps?': '¿Nuevo en Dogoods food maps?',
 
     // -------- Auth / placeholders --------
     'Your email': 'Tu correo electrónico',
@@ -509,7 +509,7 @@
     'Invalid date': 'Fecha inválida',
 
     // === TutorialMode ===
-    'Welcome to Food Maps!': '¡Bienvenido a Food Maps!',
+    'Welcome to Dogoods food maps!': '¡Bienvenido a Dogoods food maps!',
     "Let's take a quick tour to help you get started. This tutorial will show you how to make the most of our platform.":
       'Hagamos un recorrido rápido para ayudarte a comenzar. Este tutorial te mostrará cómo aprovechar al máximo nuestra plataforma.',
     'Your Dashboard': 'Tu Panel',
@@ -576,8 +576,8 @@
     'You can restart the tutorial anytime from your profile menu!':
       '¡Puedes reiniciar el tutorial en cualquier momento desde tu menú de perfil!',
     'Tutorial Skipped': 'Tutorial Omitido',
-    "Great job! You're ready to use Food Maps. Explore and enjoy!":
-      '¡Buen trabajo! Estás listo para usar Food Maps. ¡Explora y disfruta!',
+    "Great job! You're ready to use Dogoods food maps. Explore and enjoy!":
+      '¡Buen trabajo! Estás listo para usar Dogoods food maps. ¡Explora y disfruta!',
     'Tutorial Complete!': '¡Tutorial Completado!',
     'Take a quick tour to learn how to use the app!':
       '¡Haz un recorrido rápido para aprender a usar la aplicación!',
@@ -1120,7 +1120,7 @@
     'Share Referral Code': 'Compartir Código de Referido',
     'Share your referral code with friends': 'Comparte tu código de referido con amigos',
     'They enter it when signing up': 'Lo ingresan cuando se registran',
-    'Help grow the Food Maps community': 'Ayuda a crecer la comunidad de Food Maps',
+    'Help grow the Dogoods food maps community': 'Ayuda a crecer la comunidad de Dogoods food maps',
     'Reduce food waste together!': '¡Reduce el desperdicio de comida juntos!',
 
     // === StoreOwnerDashboard ===
@@ -1204,7 +1204,7 @@
 
     // === FeedbackModal ===
     'Send Feedback': 'Enviar Comentarios',
-    'Help us improve Food Maps': 'Ayúdanos a mejorar Food Maps',
+    'Help us improve Dogoods food maps': 'Ayúdanos a mejorar Dogoods food maps',
     'What type of feedback is this?': '¿Qué tipo de comentario es este?',
     'Bug Report': 'Reporte de Error',
     "Report something that isn't working": 'Reporta algo que no funciona',
@@ -1380,7 +1380,7 @@
       'Solo alertas críticas de seguridad y recogidas urgentes',
 
     // === Landing / static HTML ===
-    'Food Maps - Share and Find Food': 'Food Maps - Comparte y Encuentra Comida',
+    'Dogoods food maps - Share and Find Food': 'Dogoods food maps - Comparte y Encuentra Comida',
     'A simple food sharing app for donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.':
       'Una aplicación simple para compartir comida entre donantes, voluntarios y familias. Publica comida, encuentra opciones cercanas y organiza la recogida rápidamente.',
     'A simple way to connect food donors, volunteers, and families. Post food, find nearby options, and arrange pickup quickly.':

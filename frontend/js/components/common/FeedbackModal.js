@@ -153,7 +153,7 @@ function FeedbackModal({ onClose, initialData = null }) {
         <div className="sticky top-0 bg-white border-b border-gray-200 p-4 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-gray-800">Send Feedback</h2>
-            <p className="text-sm text-gray-600">Help us improve Food Maps</p>
+            <p className="text-sm text-gray-600">Help us improve Dogoods food maps</p>
           </div>
           <button
             onClick={onClose}

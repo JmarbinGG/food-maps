@@ -10,7 +10,7 @@ import { NOURI_GOALS, getStepMeta } from './registry'
 const STEP_RE = /(?:GUIDED\s*[—–-]\s*STEP|GUIADO\s*[—–-]\s*PASO)\s*(\d+)\s*(?:of|de)\s*(\d+)\s*(?:\(([^)]+)\))?\s*(?:[—–-]\s*([^\n[]+))?/i
 const FIELD_RE = /\[field:([a-z0-9_]+)\]/i
 
-/** Keyword → field for headerless guided coaching replies (Food Maps CreateListing). */
+/** Keyword → field for headerless guided coaching replies (Dogoods food maps CreateListing). */
 const FIELD_HINTS = [
   { field: 'title', re: /\btitle\b|food name|nombre del alimento|what food are you sharing|qué estás donando|que estas donando|fresh vegetables|verduras/i },
   { field: 'description', re: /\bdescription\b|descripción|descripcion|short sentence|frase corta/i },

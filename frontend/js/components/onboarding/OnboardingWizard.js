@@ -11,7 +11,7 @@ function OnboardingWizard({ user, onComplete, onSkip }) {
 
   const getStepsForUserRole = (role) => {
     const commonSteps = [
-      { key: 'welcome', title: 'Welcome to Food Maps' },
+      { key: 'welcome', title: 'Welcome to Dogoods food maps' },
       { key: 'location', title: 'Set Your Location' }
     ];
 

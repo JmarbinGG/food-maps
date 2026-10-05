@@ -1,5 +1,5 @@
 """
-Centralised error types for the Food Maps AI router (Nouri).
+Centralised error types for the Dogoods food maps AI router (Nouri).
 
 Provides a small hierarchy of :class:`AIError` HTTP exceptions with
 language-aware user-facing messages (sourced from

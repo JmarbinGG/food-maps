@@ -90,7 +90,7 @@ def test_registry_aliases_and_counts_node():
 
 
 def test_share_guided_order_matches_create_listing():
-    """Open → Title → … → Continue → Finish (Food Maps CreateListing order)."""
+    """Open → Title → … → Continue → Finish (Dogoods food maps CreateListing order)."""
     text = FLOW.read_text(encoding="utf-8")
     m = re.search(r"_SHARE_GUIDED_UI\s*:", text)
     assert m
@@ -137,4 +137,4 @@ def test_find_guided_order_matches_food_maps_map():
 def test_no_dogoods_branding_in_registry():
     text = REGISTRY.read_text(encoding="utf-8")
     assert "DoGoods" not in text
-    assert "Food Maps" in text
+    assert "Dogoods food maps" in text

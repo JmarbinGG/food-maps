@@ -287,7 +287,7 @@ function Header({ menuItems: menuItemsProp }) {
                             <div className="h-10 w-10 bg-[#2CABE3] rounded-full flex items-center justify-center text-white">
                                 <i className="fas fa-seedling text-xl"></i>
                             </div>
-                            <span className="ml-2 text-xl font-semibold text-gray-900">Food Maps</span>
+                            <span className="ml-2 text-xl font-semibold text-gray-900">Dogoods food maps</span>
                         </Link>
                     </div>
 

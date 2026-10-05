@@ -8413,7 +8413,7 @@ var NOURI_GOALS = {
     formId: "share-food",
     route: "/share",
     goal: "share food",
-    welcome: "Welcome to Food Maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.",
+    welcome: "Welcome to Dogoods food maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.",
     // Keep indices aligned with backend `_SHARE_GUIDED_UI` (CreateListing fields).
     steps: [
       { section: "Open Share Food", label: "Open Share Food", fieldName: "" },
@@ -8435,7 +8435,7 @@ var NOURI_GOALS = {
     formId: "request-food",
     route: "/find",
     goal: "request food",
-    welcome: "Welcome! On Food Maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
+    welcome: "Welcome! On Dogoods food maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
     // Aligned with backend `_REQUEST_GUIDED_UI` (6 steps).
     steps: [
       { section: "Stay in chat", label: "Stay in chat", fieldName: "title" },
@@ -8459,7 +8459,7 @@ var NOURI_GOALS = {
     formId: "find-food",
     route: "/find",
     goal: "find food",
-    welcome: "Find Food is the Food Maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.",
+    welcome: "Find Food is the Dogoods food maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.",
     // Aligned with backend `_FIND_GUIDED_UI` (5 steps).
     steps: [
       { section: "Open the map", label: "Open map", fieldName: "search" },
@@ -8483,7 +8483,7 @@ var NOURI_GOALS = {
     formId: "signup",
     route: "/signup",
     goal: "sign up",
-    welcome: "Create your Food Maps account.",
+    welcome: "Create your Dogoods food maps account.",
     steps: [
       { section: "Account", label: "Name", fieldName: "name" },
       { section: "Account", label: "Email", fieldName: "email" },
@@ -8702,7 +8702,7 @@ function shouldSuggestHumanHandoff() {
 }
 function openHumanSupport(opts = {}) {
   const count = getGuideFailureCount();
-  const defaultMsg = count >= FAILURE_THRESHOLD ? "Nouri could not help me after several tries. I need a person to assist." : "I need help from a person with Food Maps.";
+  const defaultMsg = count >= FAILURE_THRESHOLD ? "Nouri could not help me after several tries. I need a person to assist." : "I need help from a person with Dogoods food maps.";
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("nouri:open-human-support", {
       detail: {
@@ -10571,7 +10571,7 @@ var WELCOME_CATEGORIES = {
       accent: "emerald",
       title: "Not sure?",
       blurb: "I\u2019ll walk you through it",
-      prompts: ["I'm not sure what to do \u2014 help me", "How does Food Maps work?"]
+      prompts: ["I'm not sure what to do \u2014 help me", "How does Dogoods food maps work?"]
     },
     {
       key: "find",
@@ -10613,7 +10613,7 @@ var WELCOME_CATEGORIES = {
       accent: "emerald",
       title: "\xBFNo est\xE1s seguro?",
       blurb: "Te gu\xEDo paso a paso",
-      prompts: ["No s\xE9 qu\xE9 hacer \u2014 ay\xFAdame", "\xBFC\xF3mo funciona Food Maps?"]
+      prompts: ["No s\xE9 qu\xE9 hacer \u2014 ay\xFAdame", "\xBFC\xF3mo funciona Dogoods food maps?"]
     },
     {
       key: "find",
@@ -10669,13 +10669,13 @@ function getSuggestions(lang) {
     "\xBFCu\xE1les son mis pr\xF3ximas recogidas?",
     "Muestra mis estad\xEDsticas de impacto",
     "Quiero compartir comida",
-    "\xBFC\xF3mo funciona Food Maps?"
+    "\xBFC\xF3mo funciona Dogoods food maps?"
   ] : [
     "What food is available near me?",
     "What are my upcoming pickups?",
     "Show my impact stats",
     "I want to share some food",
-    "How does Food Maps work?"
+    "How does Dogoods food maps work?"
   ];
 }
 function dateLocale(lang) {
@@ -17780,7 +17780,7 @@ function HumanSupportBridge() {
       }
     };
     const onOpenSupport = (event) => {
-      openWithPrefill(event?.detail?.message || "I need help from a person with Food Maps.");
+      openWithPrefill(event?.detail?.message || "I need help from a person with Dogoods food maps.");
     };
     const onHandoffSuggested = () => {
       openWithPrefill("Nouri could not help me after several tries. I need a person to assist.");

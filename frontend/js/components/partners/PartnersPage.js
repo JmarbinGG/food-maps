@@ -1,4 +1,4 @@
-// Food Maps Partners page — platform green / dark green palette.
+// Dogoods food maps Partners page — platform green / dark green palette.
 
 const localPartners = [
   {
@@ -78,7 +78,7 @@ const PARTNERS_COPY_DEFAULTS = {
   "hero-badge": "Community Partners",
   "hero-title": 'Together we rescue food, <span class="text-green-200">not just plates</span>',
   "hero-subtitle":
-    "Local businesses, food banks, and nonprofits power Food Maps every day. Their impact is your community's impact.",
+    "Local businesses, food banks, and nonprofits power Dogoods food maps every day. Their impact is your community's impact.",
   "cta-badge": "Now welcoming new partners",
   "cta-title": "Put your brand behind real community impact",
   "cta-subtitle":

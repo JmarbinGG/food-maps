@@ -142,7 +142,7 @@ async def _load_user_recipe_context(user_id: str) -> dict:
     if not uid:
         return ctx
 
-    # Food Maps integer ids → MySQL User row (never Supabase).
+    # Dogoods food maps integer ids → MySQL User row (never Supabase).
     if uid.isdigit():
         try:
             from backend.app import SessionLocal
@@ -191,7 +191,7 @@ async def _load_claimed_ingredients(user_id: str, limit: int = 10) -> list[str]:
     if not uid:
         return titles
 
-    # Food Maps: claimed listings live on FoodResource.recipient_id.
+    # Dogoods food maps: claimed listings live on FoodResource.recipient_id.
     if uid.isdigit():
         try:
             from backend.app import SessionLocal

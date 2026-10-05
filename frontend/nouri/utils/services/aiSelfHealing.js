@@ -84,7 +84,7 @@ function isRetryableStatus(status) {
 }
 
 /**
- * Fetch with Food Maps auth headers, AbortController timeout, and retries.
+ * Fetch with Dogoods food maps auth headers, AbortController timeout, and retries.
  * @param {string} url
  * @param {RequestInit} init
  * @param {{ timeout?: number, signal?: AbortSignal, label?: string, retries?: number, backoff?: number[] }} [opts]

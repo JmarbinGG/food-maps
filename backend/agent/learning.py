@@ -1,4 +1,4 @@
-"""User preference learning (Food Maps MySQL — Supabase I/O removed)."""
+"""User preference learning (Dogoods food maps MySQL — Supabase I/O removed)."""
 
 import logging
 from typing import Any, Dict, List

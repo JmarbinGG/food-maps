@@ -55,7 +55,7 @@ def generate_referral_code():
     alphabet = string.ascii_uppercase + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(8))
 
-app = FastAPI(title="Food Maps Agentic API", version="1.0.0")
+app = FastAPI(title="Dogoods food maps Agentic API", version="1.0.0")
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
 if os.getenv("USE_RDS", "").strip().lower() not in {"1", "true", "yes", "on"}:
     load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
@@ -993,6 +993,7 @@ ALLOWED_PAGE_IDS = frozenset({
     "terms",
     "cookies",
     "nutrition",
+    "donate",
 })
 MAX_PAGE_CONTENT_BYTES = 500_000
 
@@ -3978,7 +3979,7 @@ async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Email Verified - Food Maps</title>
+            <title>Email Verified - Dogoods food maps</title>
             <style>
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -4025,7 +4026,7 @@ async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
                 <div class="icon">✅</div>
                 <h1>Email Verified!</h1>
                 <p>Your email has been successfully verified. Your trust score has increased by 5 points!</p>
-                <a href="/" class="button">Return to Food Maps</a>
+                <a href="/" class="button">Return to Dogoods food maps</a>
             </div>
         </body>
         </html>
@@ -4036,7 +4037,7 @@ async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Link Expired - Food Maps</title>
+            <title>Link Expired - Dogoods food maps</title>
             <style>
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -4083,7 +4084,7 @@ async def verify_email_endpoint(token: str, db: Session = Depends(get_db)):
                 <div class="icon">⏰</div>
                 <h1>Link Expired</h1>
                 <p>This verification link has expired. Please request a new verification email from your account settings.</p>
-                <a href="/" class="button">Return to Food Maps</a>
+                <a href="/" class="button">Return to Dogoods food maps</a>
             </div>
         </body>
         </html>

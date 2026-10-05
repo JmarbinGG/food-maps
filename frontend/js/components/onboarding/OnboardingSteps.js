@@ -13,7 +13,7 @@ function OnboardingStep({ step, stepIndex, user, data, onDataUpdate, onNext, onP
         <div className="icon-heart text-3xl text-green-600"></div>
       </div>
       <div>
-        <h3 className="text-2xl font-bold mb-4">Welcome to Food Maps, {user.name}!</h3>
+        <h3 className="text-2xl font-bold mb-4">Welcome to Dogoods food maps, {user.name}!</h3>
         <p className="text-gray-600 mb-6">
           {user.role === 'donor' && "Thank you for joining our mission to eliminate food waste. Let's set up your account to start sharing food with your community."}
           {user.role === 'recipient' && "Welcome! We're here to help connect you with available food in your area. Let's personalize your experience."}

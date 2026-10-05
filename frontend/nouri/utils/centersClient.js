@@ -1,5 +1,5 @@
 /**
- * Food Maps API client (centers / communities).
+ * Dogoods food maps API client (centers / communities).
  * Formerly named supabaseClient — no Supabase dependency.
  */
 function getToken() {

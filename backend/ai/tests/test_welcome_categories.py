@@ -99,9 +99,9 @@ class TestWelcomeCategoriesSource:
         text = CHAT_I18N.read_text(encoding="utf-8")
         for key in ("guide", "find", "share", "request", "manage"):
             assert f"key: '{key}'" in text
-        assert "Food Maps" in text
+        assert "Dogoods food maps" in text
         # Product copy must not mention the reference product name
-        assert "How does Food Maps work?" in text
+        assert "How does Dogoods food maps work?" in text
         assert "How does DoGoods work?" not in text
 
 

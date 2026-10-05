@@ -15,7 +15,7 @@ def _labels(chips):
 NOT_SURE_USER = "I'm not sure what to do — help me"
 
 ORIENTATION_MENU = (
-    "No problem! I can help you with a few things on Food Maps:\n"
+    "No problem! I can help you with a few things on Dogoods food maps:\n"
     "1. Find free food near you\n"
     "2. Share extra food you have\n"
     "3. Request food that is not listed yet\n"
@@ -23,7 +23,7 @@ ORIENTATION_MENU = (
 )
 
 SOUNDS_GOOD_MENU = (
-    "I'm here to help. What can you do on Food Maps? Find free food, "
+    "I'm here to help. What can you do on Dogoods food maps? Find free food, "
     "share extra food, or request food. Which sounds good?"
 )
 

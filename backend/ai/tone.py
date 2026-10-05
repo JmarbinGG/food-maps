@@ -14,10 +14,10 @@ TONE_TEMPERATURE: dict[str, float] = {
 }
 
 _TONE_BRANDING_EN = (
-    'MUST: refer to the product as "Food Maps" — never "DoGoods" or dogoods.store.'
+    'MUST: refer to the product as "Dogoods food maps" — never "DoGoods" or dogoods.store.'
 )
 _TONE_BRANDING_ES = (
-    'DEBES: llama al producto "Food Maps" — nunca "DoGoods" ni dogoods.store.'
+    'DEBES: llama al producto "Dogoods food maps" — nunca "DoGoods" ni dogoods.store.'
 )
 
 _TONE_PROMPTS_EN: dict[str, str] = {
@@ -30,7 +30,7 @@ _TONE_PROMPTS_EN: dict[str, str] = {
     "professional": (
         "ACTIVE CONVERSATION TONE: professional.\n"
         "MUST: complete sentences, formal polite address, clear structure, no slang, no emoji.\n"
-        "Example opener: \"Certainly. Food Maps connects donors with recipients in your area.\"\n"
+        "Example opener: \"Certainly. Dogoods food maps connects donors with recipients in your area.\"\n"
         "MUST NOT: contractions (don't, I'm, here's), exclamation marks, casual slang, "
         "or neighborly chitchat."
     ),
@@ -58,7 +58,7 @@ _TONE_PROMPTS_ES: dict[str, str] = {
     "professional": (
         "TONO ACTIVO: profesional.\n"
         "DEBES: oraciones completas, cortesía formal, sin jerga ni emoji.\n"
-        "Ejemplo: \"Por supuesto. Food Maps conecta donantes con quienes necesitan comida.\"\n"
+        "Ejemplo: \"Por supuesto. Dogoods food maps conecta donantes con quienes necesitan comida.\"\n"
         "NO: contracciones informales ni tono de chat casual."
     ),
     "casual": (

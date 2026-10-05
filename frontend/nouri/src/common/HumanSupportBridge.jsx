@@ -1,6 +1,6 @@
 /**
  * Bridges Nouri human-handoff events into the AI chat panel.
- * Food Maps does not mount the DoGoods UserChatWidget (no realtime support inbox).
+ * Dogoods food maps does not mount the DoGoods UserChatWidget (no realtime support inbox).
  */
 import { useEffect } from 'react';
 
@@ -19,7 +19,7 @@ export default function HumanSupportBridge() {
     };
 
     const onOpenSupport = (event) => {
-      openWithPrefill(event?.detail?.message || 'I need help from a person with Food Maps.');
+      openWithPrefill(event?.detail?.message || 'I need help from a person with Dogoods food maps.');
     };
     const onHandoffSuggested = () => {
       openWithPrefill('Nouri could not help me after several tries. I need a person to assist.');

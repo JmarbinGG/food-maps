@@ -60,7 +60,7 @@ export function openHumanSupport(opts = {}) {
   const count = getGuideFailureCount()
   const defaultMsg = count >= FAILURE_THRESHOLD
     ? 'Nouri could not help me after several tries. I need a person to assist.'
-    : 'I need help from a person with Food Maps.'
+    : 'I need help from a person with Dogoods food maps.'
 
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('nouri:open-human-support', {

@@ -150,7 +150,7 @@ const SMSConsentManager = ({ user, onClose, onUpdate }) => {
 
     if (isOptingIn && !consent.consent_given) {
       // Show confirmation dialog for first-time opt-in
-      const confirmMessage = `By clicking OK, you agree to receive text messages from Food Maps at ${currentPhone}.\n\n` +
+      const confirmMessage = `By clicking OK, you agree to receive text messages from Dogoods food maps at ${currentPhone}.\n\n` +
         `Message frequency varies. Message and data rates may apply. Reply STOP to opt out anytime.\n\n` +
         `You've selected ${selectedTypes.length} notification type(s).`;
 
