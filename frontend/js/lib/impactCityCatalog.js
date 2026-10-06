@@ -21,6 +21,7 @@
       image: src.image || FALLBACK_IMAGE,
       title: src.title || 'A local story',
       description: src.description || '',
+      body: src.body || '',
       quote: src.quote || '',
       attribution: src.attribution || '',
       focus: Array.isArray(src.focus) ? src.focus.join(', ') : (src.focus || ''),
@@ -35,6 +36,7 @@
           image: src.image,
           title: src.title,
           description: src.description,
+          body: src.body,
           quote: src.quote,
           attribution: src.attribution,
           focus: src.focus,
@@ -64,6 +66,7 @@
             image: FALLBACK_IMAGE,
             title: 'Good food, close to home.',
             description: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.',
+            body: 'In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.\n\nVolunteers map the shortest handoff, so produce that is still good in the morning can reach a kitchen the same day. Neighbors who cannot cross town meet a pickup close to home, and the people who sorted the food can see exactly where it went. Markets, community groups, and volunteer drivers share one route instead of each solving the same problem alone.',
             quote: 'When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.',
             attribution: 'Illustrative volunteer story - Oakland',
             focus: 'Neighborhood food partners, Community pickup points, Volunteer routes',
@@ -80,6 +83,7 @@
             image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?q=80&w=1400&auto=format&fit=crop',
             title: 'A little closer makes a difference.',
             description: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.',
+            body: 'Across Alameda, local food partners and volunteers can make pickups easier to reach and help fresh groceries find nearby homes.\n\nA pantry on one side of the island and a market on the other can share what they have without asking a family to make a long trip. Volunteers keep the handoff personal: a name, a time, and a bag of food that stays in the neighborhood. When the stop is close, more people can take part, and less fresh food sits unused.',
             quote: 'The best part is knowing the food is going to someone just down the street. It makes helping feel personal.',
             attribution: 'Illustrative community story - Alameda',
             focus: 'Local pantry connections, Island-wide pickup access, Volunteer handoffs',
@@ -96,6 +100,7 @@
             image: 'https://images.unsplash.com/photo-1469571486292-0ba58a3f068b?q=80&w=1400&auto=format&fit=crop',
             title: 'Shared tables, stronger blocks.',
             description: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.',
+            body: 'In Berkeley, neighborhood organizations can coordinate surplus food with community fridges, meal programs, and nearby families.\n\nA campus kitchen, a community fridge, and a block meal can all draw from the same surplus instead of competing for it. Partners post what they have, and a nearby group claims it before it is overlooked. The story of the food stays local: who cooked it, who carried it, and which table it landed on.',
             quote: 'When local groups share what they have, fewer good ingredients get overlooked and more people can take part.',
             attribution: 'Illustrative partner story - Berkeley',
             focus: 'Community meal programs, Shared food access, Local partner network',
@@ -112,6 +117,7 @@
             image: 'https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1400&auto=format&fit=crop',
             title: 'Fresh food finds its next stop.',
             description: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.',
+            body: 'San Leandro partners can connect grocery and restaurant surplus with local pickup points through simple, coordinated volunteer routes.\n\nA clear window for pickup means a volunteer can collect from a grocer and reach a pantry without guessing the timing. Restaurant surplus that would have closed with the kitchen can be on its way while it is still fresh. The route is short on purpose, so the time goes to the food and the people waiting for it.',
             quote: 'A clear pickup plan gives our volunteers more time to focus on the people and the food, not the logistics.',
             attribution: 'Illustrative volunteer story - San Leandro',
             focus: 'Rescue and redistribution, Convenient pickup windows, Volunteer coordination',
@@ -153,6 +159,14 @@
     }
   }
 
+  function fullStoryText(item) {
+    if (!item) return '';
+    const body = String(item.body || '').trim();
+    const excerpt = String(item.description || '').trim();
+    if (!body || body === excerpt) return '';
+    return body;
+  }
+
   function focusParts(value) {
     return String(value || '')
       .split(/[,·|]/)
@@ -169,6 +183,7 @@
   let savedSnapshot = clone(catalog);
   let cityId = catalog.cities[0].id;
   let storyId = catalog.cities[0].stories[0].id;
+  let storyExpanded = false;
   let dirty = false;
   let wasEditing = false;
   let formReady = false;
@@ -189,6 +204,7 @@
     cityId = selected.id;
     const storyMatch = selected.stories.find((item) => item.id === nextStoryId);
     storyId = (storyMatch || selected.stories[0]).id;
+    storyExpanded = false;
     renderPublic();
     syncForm();
   }
@@ -230,7 +246,15 @@
     });
 
     const panel = document.getElementById('city-panel');
-    if (panel) panel.setAttribute('aria-labelledby', 'city-tab-' + selected.id);
+    const full = fullStoryText(activeStory);
+    const expanded = storyExpanded && Boolean(full);
+    if (panel) {
+      panel.setAttribute('aria-labelledby', 'city-tab-' + selected.id);
+      panel.classList.toggle('is-expandable', Boolean(full));
+      panel.classList.toggle('is-expanded', expanded);
+      if (full) panel.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+      else panel.removeAttribute('aria-expanded');
+    }
 
     if (nav) {
       nav.innerHTML = '';
@@ -267,7 +291,12 @@
     const title = document.getElementById('city-title');
     if (title) title.textContent = activeStory.title;
     const description = document.getElementById('city-description');
-    if (description) description.textContent = activeStory.description;
+    if (description) {
+      description.textContent = expanded ? full : activeStory.description;
+      description.classList.toggle('is-full', expanded);
+    }
+    const more = document.getElementById('city-story-more');
+    if (more) more.textContent = expanded ? 'Show less' : 'Read the full story';
     const quote = document.getElementById('city-quote');
     if (quote) quote.textContent = activeStory.quote;
     const attribution = document.getElementById('city-attribution');
@@ -333,7 +362,8 @@
     [
       ['impact-story-title', 'Story title', activeStory && activeStory.title],
       ['impact-story-image', 'Story photo URL', activeStory && activeStory.image],
-      ['impact-story-description', 'Story', activeStory && activeStory.description],
+      ['impact-story-description', 'Excerpt', activeStory && activeStory.description],
+      ['impact-story-body', 'Full story', activeStory && activeStory.body],
       ['impact-story-quote', 'Quote', activeStory && activeStory.quote],
       ['impact-story-attribution', 'Attribution', activeStory && activeStory.attribution],
       ['impact-story-focus', 'Focus points, separated by commas', activeStory && activeStory.focus],
@@ -388,6 +418,7 @@
     activeStory.title = plain(inputValue('impact-story-title'));
     activeStory.image = plain(inputValue('impact-story-image')) || FALLBACK_IMAGE;
     activeStory.description = plain(inputValue('impact-story-description'));
+    activeStory.body = plain(inputValue('impact-story-body'));
     activeStory.quote = plain(inputValue('impact-story-quote'));
     activeStory.attribution = plain(inputValue('impact-story-attribution'));
     activeStory.focus = plain(inputValue('impact-story-focus'));
@@ -405,6 +436,7 @@
     setInput('impact-story-title', activeStory.title);
     setInput('impact-story-image', activeStory.image);
     setInput('impact-story-description', activeStory.description);
+    setInput('impact-story-body', activeStory.body);
     setInput('impact-story-quote', activeStory.quote);
     setInput('impact-story-attribution', activeStory.attribution);
     setInput('impact-story-focus', activeStory.focus);
@@ -549,8 +581,34 @@
     observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
   }
 
+  function bindStoryExpand() {
+    const panel = document.getElementById('city-panel');
+    if (!panel || panel.dataset.expandBound) return;
+    panel.dataset.expandBound = 'true';
+
+    function toggleStory() {
+      if (!fullStoryText(currentStory())) return;
+      storyExpanded = !storyExpanded;
+      renderPublic();
+    }
+
+    panel.addEventListener('click', toggleStory);
+    panel.addEventListener('keydown', (event) => {
+      if (event.target !== panel) return;
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      toggleStory();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape' || !storyExpanded) return;
+      storyExpanded = false;
+      renderPublic();
+    });
+  }
+
   async function init(options) {
     pageId = (options && options.pageId) || 'impactStory';
+    bindStoryExpand();
     mountAdmin();
     watchEditMode();
     await loadCatalog();
