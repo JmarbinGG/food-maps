@@ -8,6 +8,7 @@
   'use strict';
 
   const CATALOG_KEY = '__impact_catalog';
+  const VISIBLE_STORY_LIMIT = 3;
   const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop';
 
   function uid(prefix) {
@@ -288,6 +289,56 @@
       .filter(Boolean);
   }
 
+  function shortRegion(region) {
+    if (!region) return '';
+    return String(region).toLowerCase() === 'california' ? 'CA' : region;
+  }
+
+  function storyMarkup(item, index, total, selected, editing) {
+    const region = selected.region ? ', ' + escapeHtml(selected.region.toUpperCase()) : '';
+    const place = escapeHtml(selected.name) + (selected.region ? ', ' + escapeHtml(shortRegion(selected.region)) : '');
+    const parts = focusParts(item.focus);
+    const alt = item.alt || ('Community food distribution in ' + selected.name);
+    const full = fullStoryText(item);
+    const expanded = Boolean(full) && expandedStories.has(item.id);
+    return ''
+      + '<article class="city-story-row'
+      + (expanded ? ' is-expanded' : '')
+      + (editing && item.id === storyId ? ' is-editing' : '') + '">'
+      + '<div class="city-photo-wrap">'
+      + '<img src="' + escapeHtml(item.image || FALLBACK_IMAGE) + '" alt="' + escapeHtml(alt) + '">'
+      + '<span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> ' + place + '</span>'
+      + '</div>'
+      + '<div class="city-story">'
+      + '<p class="section-kicker"><i class="icon-map-pin" aria-hidden="true"></i> '
+      + escapeHtml(selected.name.toUpperCase()) + region
+      + ' <span class="story-dot"></span> ' + escapeHtml(item.kicker || 'CITY STORY')
+      + ' <span class="story-count">STORY ' + (index + 1) + ' OF ' + total + '</span></p>'
+      + '<h3>' + escapeHtml(item.title) + '</h3>'
+      + '<p class="city-description' + (expanded ? ' is-full' : '') + '">'
+      + escapeHtml(expanded ? full : item.description) + '</p>'
+      + (full
+        ? '<button type="button" class="city-story-more" data-story="' + escapeHtml(item.id)
+          + '" aria-expanded="' + (expanded ? 'true' : 'false') + '">'
+          + (expanded ? 'Show less' : 'Read the full story') + '</button>'
+        : '')
+      + '<blockquote><span class="quote-mark" aria-hidden="true">“</span>'
+      + '<p>' + escapeHtml(item.quote) + '</p>'
+      + '<cite>' + escapeHtml(item.attribution) + '</cite></blockquote>'
+      + '<div class="city-neighborhoods"><span>COMMUNITY FOCUS</span>'
+      + '<p>' + parts.map(escapeHtml).join(' <b>·</b> ') + '</p></div>'
+      + '</div></article>';
+  }
+
+  function storiesToggleMarkup(selected, hidden) {
+    const label = hidden > 0
+      ? 'Show ' + hidden + ' more ' + escapeHtml(selected.name) + (hidden === 1 ? ' story' : ' stories')
+      : 'Show fewer stories';
+    return '<div class="city-stories-toggle">'
+      + '<button type="button" class="city-stories-more" aria-expanded="' + (hidden > 0 ? 'false' : 'true') + '">'
+      + label + '</button></div>';
+  }
+
   function authToken() {
     return localStorage.getItem('auth_token') || localStorage.getItem('token') || '';
   }
@@ -297,7 +348,8 @@
   let savedSnapshot = clone(catalog);
   let cityId = catalog.cities[0].id;
   let storyId = catalog.cities[0].stories[0].id;
-  let storyExpanded = false;
+  const expandedStories = new Set();
+  let showAllStories = false;
   let dirty = false;
   let wasEditing = false;
   let formReady = false;
@@ -318,7 +370,8 @@
     cityId = selected.id;
     const storyMatch = selected.stories.find((item) => item.id === nextStoryId);
     storyId = (storyMatch || selected.stories[0]).id;
-    storyExpanded = false;
+    expandedStories.clear();
+    showAllStories = false;
     renderPublic();
     syncForm();
   }
@@ -360,21 +413,14 @@
     });
 
     const panel = document.getElementById('city-panel');
-    const full = fullStoryText(activeStory);
-    const expanded = storyExpanded && Boolean(full);
-    if (panel) {
-      panel.setAttribute('aria-labelledby', 'city-tab-' + selected.id);
-      panel.classList.toggle('is-expandable', Boolean(full));
-      panel.classList.toggle('is-expanded', expanded);
-      if (full) panel.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-      else panel.removeAttribute('aria-expanded');
-    }
+    if (panel) panel.setAttribute('aria-labelledby', 'city-tab-' + selected.id);
 
     if (nav) {
+      // Visitors see every story in the tab, so the chips are only the admin's
+      // picker for which story the form below edits.
       nav.innerHTML = '';
-      const showStories = selected.stories.length > 1 || editing;
-      nav.hidden = !showStories;
-      if (showStories) {
+      nav.hidden = !editing;
+      if (editing) {
         selected.stories.forEach((item, index) => {
           const chip = document.createElement('button');
           chip.type = 'button';
@@ -386,40 +432,21 @@
       }
     }
 
-    const photo = document.getElementById('city-photo');
-    if (photo) {
-      photo.src = activeStory.image || FALLBACK_IMAGE;
-      photo.alt = 'Community food distribution in ' + selected.name;
+    if (panel) {
+      const total = selected.stories.length;
+      const shown = (editing || showAllStories)
+        ? selected.stories
+        : selected.stories.slice(0, VISIBLE_STORY_LIMIT);
+      const hidden = total - shown.length;
+      let markup = shown
+        .map((item, index) => storyMarkup(item, index, total, selected, editing))
+        .join('');
+      if (!editing && (hidden > 0 || total > VISIBLE_STORY_LIMIT)) {
+        markup += storiesToggleMarkup(selected, hidden);
+      }
+      panel.innerHTML = markup;
     }
-    const photoCity = document.getElementById('photo-city');
-    const photoRegion = document.getElementById('photo-region');
-    if (photoCity) photoCity.textContent = selected.name;
-    if (photoRegion) photoRegion.textContent = selected.region ? ', ' + selected.region : '';
 
-    const eyebrow = document.getElementById('city-eyebrow');
-    if (eyebrow) {
-      eyebrow.innerHTML = escapeHtml(selected.name.toUpperCase())
-        + (selected.region ? ', ' + escapeHtml(selected.region.toUpperCase()) : '')
-        + ' <span class="story-dot"></span> CITY STORY';
-    }
-    const title = document.getElementById('city-title');
-    if (title) title.textContent = activeStory.title;
-    const description = document.getElementById('city-description');
-    if (description) {
-      description.textContent = expanded ? full : activeStory.description;
-      description.classList.toggle('is-full', expanded);
-    }
-    const more = document.getElementById('city-story-more');
-    if (more) more.textContent = expanded ? 'Show less' : 'Read the full story';
-    const quote = document.getElementById('city-quote');
-    if (quote) quote.textContent = activeStory.quote;
-    const attribution = document.getElementById('city-attribution');
-    if (attribution) attribution.textContent = activeStory.attribution;
-    const focus = document.getElementById('city-focus');
-    if (focus) {
-      const parts = focusParts(activeStory.focus);
-      focus.innerHTML = parts.map(escapeHtml).join(' <b>·</b> ');
-    }
     const meals = document.getElementById('metric-meals');
     const pounds = document.getElementById('metric-food');
     const partners = document.getElementById('metric-partners');
@@ -473,15 +500,26 @@
       ['impact-metric-partners', 'Community partners', selected && selected.partners],
       ['impact-new-city', 'New city name', ''],
     ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2])));
+    const singleLineStoryFields = [
+      'impact-story-title',
+      'impact-story-kicker',
+      'impact-story-image',
+      'impact-story-attribution',
+      'impact-story-focus',
+    ];
     [
       ['impact-story-title', 'Story title', activeStory && activeStory.title],
+      ['impact-story-kicker', 'Story label, shown above the title', activeStory && activeStory.kicker],
       ['impact-story-image', 'Story photo URL', activeStory && activeStory.image],
       ['impact-story-description', 'Excerpt', activeStory && activeStory.description],
       ['impact-story-body', 'Full story', activeStory && activeStory.body],
       ['impact-story-quote', 'Quote', activeStory && activeStory.quote],
       ['impact-story-attribution', 'Attribution', activeStory && activeStory.attribution],
       ['impact-story-focus', 'Focus points, separated by commas', activeStory && activeStory.focus],
-    ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2], { wide: true, multiline: item[0] !== 'impact-story-title' && item[0] !== 'impact-story-image' && item[0] !== 'impact-story-attribution' && item[0] !== 'impact-story-focus' })));
+    ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2], {
+      wide: true,
+      multiline: singleLineStoryFields.indexOf(item[0]) === -1,
+    })));
     root.appendChild(grid);
 
     const actions = document.createElement('div');
@@ -530,6 +568,7 @@
     selected.pounds = plain(inputValue('impact-metric-pounds'));
     selected.partners = plain(inputValue('impact-metric-partners'));
     activeStory.title = plain(inputValue('impact-story-title'));
+    activeStory.kicker = plain(inputValue('impact-story-kicker')) || 'CITY STORY';
     activeStory.image = plain(inputValue('impact-story-image')) || FALLBACK_IMAGE;
     activeStory.description = plain(inputValue('impact-story-description'));
     activeStory.body = plain(inputValue('impact-story-body'));
@@ -548,6 +587,7 @@
     setInput('impact-metric-pounds', selected.pounds);
     setInput('impact-metric-partners', selected.partners);
     setInput('impact-story-title', activeStory.title);
+    setInput('impact-story-kicker', activeStory.kicker);
     setInput('impact-story-image', activeStory.image);
     setInput('impact-story-description', activeStory.description);
     setInput('impact-story-body', activeStory.body);
@@ -700,22 +740,32 @@
     if (!panel || panel.dataset.expandBound) return;
     panel.dataset.expandBound = 'true';
 
-    function toggleStory() {
-      if (!fullStoryText(currentStory())) return;
-      storyExpanded = !storyExpanded;
-      renderPublic();
-    }
+    panel.addEventListener('click', (event) => {
+      const target = event.target;
+      if (!target || typeof target.closest !== 'function') return;
 
-    panel.addEventListener('click', toggleStory);
-    panel.addEventListener('keydown', (event) => {
-      if (event.target !== panel) return;
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      toggleStory();
+      if (target.closest('.city-stories-more')) {
+        showAllStories = !showAllStories;
+        renderPublic();
+        const again = panel.querySelector('.city-stories-more');
+        if (again) again.focus();
+        return;
+      }
+
+      const toggle = target.closest('.city-story-more');
+      if (!toggle) return;
+      const id = toggle.dataset.story;
+      if (expandedStories.has(id)) expandedStories.delete(id);
+      else expandedStories.add(id);
+      renderPublic();
+      // The row is rebuilt, so hand focus back to the button that replaced it.
+      const moved = panel.querySelector('.city-story-more[data-story="' + id + '"]');
+      if (moved) moved.focus();
     });
+
     document.addEventListener('keydown', (event) => {
-      if (event.key !== 'Escape' || !storyExpanded) return;
-      storyExpanded = false;
+      if (event.key !== 'Escape' || !expandedStories.size) return;
+      expandedStories.clear();
       renderPublic();
     });
   }

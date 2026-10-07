@@ -63,7 +63,7 @@ def test_impact_story_modal_before_init():
 def test_impact_story_catalog_is_repeatable():
     html = IMPACT.read_text(encoding="utf-8")
     script = (REPO / "frontend" / "js" / "lib" / "impactCityCatalog.js").read_text(encoding="utf-8")
-    assert "impactCityCatalog.js?v=20261006-story-expand" in html
+    assert "impactCityCatalog.js?v=20261007-city-stories" in html
     assert "FoodMapsImpactCatalog.init" in html
     assert "data-no-edit" in html
     assert "__impact_catalog" in script
@@ -72,6 +72,17 @@ def test_impact_story_catalog_is_repeatable():
     assert "function removeCity" in script
     assert "function removeStory" in script
     assert "cities:" in script
+
+
+def test_impact_story_stacks_stories_with_expanders():
+    html = IMPACT.read_text(encoding="utf-8")
+    script = (REPO / "frontend" / "js" / "lib" / "impactCityCatalog.js").read_text(encoding="utf-8")
+    assert "city-story-row" in script
+    assert "city-story-more" in script
+    assert "VISIBLE_STORY_LIMIT" in script
+    assert "city-stories-more" in script
+    assert ".city-story-row" in html
+    assert ".city-stories-more" in html
 
 
 def test_support_donation_page_embeds_donorbox():

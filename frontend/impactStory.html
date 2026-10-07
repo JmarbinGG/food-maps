@@ -200,19 +200,25 @@
     .city-tab:hover, .city-tab:focus-visible, .city-tab.is-active { color: var(--city-ink); }
     .city-tab:focus-visible, .city-next-step a:focus-visible { outline: 3px solid #dc886f; outline-offset: 3px; }
     .city-tab.is-active { border-bottom-color: var(--city-coral); }
-    .city-panel { display: grid; grid-template-columns: 1.03fr 0.97fr; align-items: center; gap: clamp(2rem, 5vw, 4.5rem); animation: cityArrive 0.35s ease-out; }
+    .city-panel { display: grid; gap: 3.25rem; animation: cityArrive 0.35s ease-out; }
+    .city-story-row { display: grid; grid-template-columns: 1.03fr 0.97fr; align-items: center; gap: clamp(2rem, 5vw, 4.5rem); }
+    .city-story-row + .city-story-row { padding-top: 3.25rem; border-top: 1px solid var(--city-line); }
+    .city-story-row:nth-child(even) .city-photo-wrap { order: 2; }
+    .city-story-row.is-editing { outline: 2px dashed var(--city-coral); outline-offset: 1.25rem; }
+    .story-count { margin-left: auto; color: #8d9a93; font-size: 0.68rem; font-weight: 800; letter-spacing: 0.11em; }
+    .city-stories-toggle { padding-top: 2.75rem; border-top: 1px solid var(--city-line); text-align: center; }
+    .city-stories-more { border: 1px solid var(--city-line); border-radius: 999px; padding: 0.6rem 1.15rem; background: #fff; color: var(--city-ink); font: inherit; font-size: 0.85rem; font-weight: 800; cursor: pointer; }
+    .city-stories-more:hover { border-color: var(--city-coral); background: #f8f5ed; }
+    .city-stories-more:focus-visible, .city-story-more:focus-visible { outline: 3px solid #dc886f; outline-offset: 3px; }
     @keyframes cityArrive { from { opacity: 0.65; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .city-photo-wrap { position: relative; overflow: hidden; aspect-ratio: 1.18; background: #e6ebe3; }
     .city-photo-wrap img { display: block; width: 100%; height: 100%; object-fit: cover; }
     .photo-label { position: absolute; bottom: 1rem; left: 1rem; display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 0.75rem; background: #fff; color: var(--city-ink); font-size: 0.82rem; font-weight: 700; }
     .city-story .section-kicker { display: flex; align-items: center; gap: 0.55rem; }
     .city-story h3 { margin: 0.75rem 0 0.8rem; font-size: 2.6rem; line-height: 1.12; }
-    .city-panel.is-expandable { cursor: pointer; }
-    .city-panel.is-expandable:focus-visible { outline: 3px solid #dc886f; outline-offset: 4px; }
     .city-description { margin: 0; color: var(--city-muted); font-size: 1rem; }
     .city-description.is-full { color: #31483d; font-size: 1.05rem; line-height: 1.7; white-space: pre-line; }
-    .city-story-more { display: none; margin: 1.15rem 0 0; color: #9b462f; font-size: 0.82rem; font-weight: 800; }
-    .city-panel.is-expandable .city-story-more { display: block; }
+    .city-story-more { display: block; margin: 1.15rem 0 0; padding: 0; border: 0; background: none; color: #9b462f; font: inherit; font-size: 0.82rem; font-weight: 800; text-align: left; cursor: pointer; }
     .city-story blockquote { position: relative; margin: 1.5rem 0 1.25rem; padding: 1.1rem 1.25rem 1rem 3rem; border-left: 3px solid var(--city-coral); background: #f8f5ed; }
     .quote-mark { position: absolute; top: 0.65rem; left: 1rem; color: var(--city-coral); font-family: Georgia, serif; font-size: 2.3rem; line-height: 1; }
     .city-story blockquote p { margin: 0 0 0.5rem; color: #31483d; font-family: var(--fm-font-display); font-size: 1.16rem; line-height: 1.45; }
@@ -260,7 +266,13 @@
       .city-intro h1 { font-size: 3rem; }
       .city-explorer { padding: 2.75rem 0 3rem; }
       .city-selector-heading { align-items: start; flex-direction: column; }
-      .city-panel { grid-template-columns: 1fr; gap: 1.75rem; }
+      .city-panel { gap: 2.25rem; }
+      .city-story-row { grid-template-columns: 1fr; gap: 1.75rem; }
+      .city-story-row + .city-story-row { padding-top: 2.25rem; }
+      .city-story-row:nth-child(even) .city-photo-wrap { order: 0; }
+      .city-story-row.is-editing { outline-offset: 0.75rem; }
+      .story-count { margin-left: 0; }
+      .city-stories-toggle { padding-top: 2rem; }
       .city-photo-wrap { aspect-ratio: 1.3; }
       .city-story h3 { font-size: 2.2rem; }
       .impact-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.25rem; }
@@ -384,25 +396,26 @@
         <div class="city-story-nav" id="city-story-nav" data-no-edit="true" aria-label="Stories in this city"></div>
 
         <div class="city-panel" id="city-panel" data-no-edit="true" role="tabpanel" tabindex="0">
-          <div class="city-photo-wrap">
-            <img id="city-photo" src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop" alt="Volunteers sorting food for an Oakland community distribution">
-            <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> <span id="photo-city">Oakland</span><span id="photo-region">, California</span></span>
-          </div>
-          <div class="city-story">
-            <p class="section-kicker" id="city-eyebrow">OAKLAND, CALIFORNIA <span class="story-dot"></span> CITY STORY</p>
-            <h3 id="city-title">Good food, close to home.</h3>
-            <p class="city-description" id="city-description">In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.</p>
-            <blockquote>
-              <span class="quote-mark" aria-hidden="true">“</span>
-              <p id="city-quote">When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.</p>
-              <cite id="city-attribution">Illustrative volunteer story - Oakland</cite>
-            </blockquote>
-            <div class="city-neighborhoods">
-              <span>COMMUNITY FOCUS</span>
-              <p id="city-focus">Neighborhood food partners <b>·</b> Community pickup points <b>·</b> Volunteer routes</p>
+          <article class="city-story-row">
+            <div class="city-photo-wrap">
+              <img src="https://images.unsplash.com/photo-1593113598332-cd288d649433?q=80&w=1400&auto=format&fit=crop" alt="Volunteers sorting food for an Oakland community distribution">
+              <span class="photo-label"><i class="icon-map-pin" aria-hidden="true"></i> Oakland, CA</span>
             </div>
-            <p class="city-story-more" id="city-story-more">Read the full story</p>
-          </div>
+            <div class="city-story">
+              <p class="section-kicker"><i class="icon-map-pin" aria-hidden="true"></i> OAKLAND, CALIFORNIA <span class="story-dot"></span> CITY STORY <span class="story-count">STORY 1 OF 3</span></p>
+              <h3>Good food, close to home.</h3>
+              <p class="city-description">In Oakland, neighborhood markets and community groups can work together to move fresh food from a nearby pickup to the tables that need it.</p>
+              <blockquote>
+                <span class="quote-mark" aria-hidden="true">“</span>
+                <p>When a pickup is close by, more neighbors can lend a hand. The food stays in the community, and everyone feels part of making it happen.</p>
+                <cite>Illustrative volunteer story - Oakland</cite>
+              </blockquote>
+              <div class="city-neighborhoods">
+                <span>COMMUNITY FOCUS</span>
+                <p>Neighborhood food partners <b>·</b> Community pickup points <b>·</b> Volunteer routes</p>
+              </div>
+            </div>
+          </article>
         </div>
 
         <div class="city-impact-strip" data-no-edit="true" aria-label="Illustrative city impact statistics">
@@ -1143,7 +1156,7 @@
 
   <script src="js/lib/newsletterSignup.js?v=20260814-newsletter"></script>
   <script src="js/lib/pageEditor.js?v=20260916-edit-labels"></script>
-  <script src="js/lib/impactCityCatalog.js?v=20261006-story-expand"></script>
+  <script src="js/lib/impactCityCatalog.js?v=20261007-city-stories"></script>
   <script>
     window.FoodMapsPageEditor.init({
       pageId: 'impactStory',
