@@ -1,6 +1,7 @@
 """Smoke checks for page editor UX fixes (no browser)."""
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -54,10 +55,32 @@ def test_save_payload_supports_editor_meta():
     assert "fm-field-label-input" in text
 
 
-def test_impact_story_modal_before_init():
+def test_impact_story_loads_the_page_editor():
     text = IMPACT.read_text(encoding="utf-8")
-    assert text.index('id="storiesModal"') < text.index("FoodMapsPageEditor.init")
     assert "pageEditor.js?v=20260916-edit-labels" in text
+    assert "FoodMapsPageEditor.init" in text
+
+
+def test_impact_story_has_no_hidden_legacy_sections():
+    """The city tabs are the page. The old hero/featured/stories/news/gallery
+    sections and the stories modal were display:none here, so every field they
+    contributed to the admin panel edited content no visitor could see."""
+    text = IMPACT.read_text(encoding="utf-8")
+    for gone in ('id="storiesModal"', 'id="featured"', 'id="stories"', 'id="news"',
+                 "Our Impact Story", "openStoriesModal", "animateCounter",
+                 "body > section.bg-green-600"):
+        assert gone not in text, gone
+
+
+def test_every_impact_story_editable_field_is_named():
+    """Without data-edit-label the editor falls back to a DOM path, so the
+    panel shows rows like "Main0 Section0 Div0 Span0"."""
+    text = IMPACT.read_text(encoding="utf-8")
+    unnamed = [
+        tag for tag in re.findall(r"<[^>]*\sdata-editable(?:-img|-bg)?=\"[^\"]*\"[^>]*>", text)
+        if "data-edit-label=" not in tag
+    ]
+    assert not unnamed, f"editable fields with no label: {unnamed}"
 
 
 def test_impact_story_catalog_is_repeatable():
@@ -98,8 +121,10 @@ def test_impact_story_newsletter_is_full_width():
 def test_impact_story_leads_with_city_tabs():
     html = IMPACT.read_text(encoding="utf-8")
     assert "city-intro" not in html
-    assert '<h1 id="city-explorer-title">' in html
-    assert html.index('id="city-tabs"') < html.index('id="storiesModal"')
+    assert 'id="city-explorer-title"' in html
+    # the explorer heading is the page's h1, and the tabs are its first content
+    assert html.index('id="city-explorer-title"') < html.index('id="city-tabs"')
+    assert html.index("<h1") == html.index('<h1 id="city-explorer-title"')
 
 
 def test_support_donation_page_embeds_donorbox():
@@ -116,9 +141,18 @@ def test_support_donation_page_embeds_donorbox():
 def test_impact_story_titles_have_edit_labels():
     text = IMPACT.read_text(encoding="utf-8")
     for key, label in (
-        ("sarah-title", "Sarah story title"),
-        ("michael-title", "Michael story title"),
-        ("hero-title", "Page title"),
-        ("modal-foodbank-title", "Food bank story title"),
+        ("explorer-title", "Page title"),
+        ("explorer-kicker", "Explorer kicker"),
+        ("mockup-note", "Mockup disclaimer"),
+        ("newsletter-title", "Newsletter title"),
+        ("footer-copyright", "Footer copyright"),
     ):
-        assert f'data-editable="{key}" data-edit-label="{label}"' in text
+        assert f'data-editable="{key}"' in text
+        assert f'data-edit-label="{label}"' in text
+
+
+def test_impact_story_footer_links_are_not_text_editable():
+    """Each footer <li> wraps an <a> plus an icon <div>; editing one as text
+    would replace that markup with a plain string."""
+    text = IMPACT.read_text(encoding="utf-8")
+    assert text.count('<ul class="space-y-3" data-no-edit="true">') == 2
