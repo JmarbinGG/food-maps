@@ -30,7 +30,6 @@ import AIRecipePanel from './food/AIRecipePanel.jsx';
 
 import AIQueryPanel from './assistant/AIQueryPanel.jsx';
 
-import AIHealthBanner from './common/AIHealthBanner.jsx';
 
 import AICaptionBar from './common/AICaptionBar.jsx';
 
@@ -57,8 +56,6 @@ function NouriShell() {
   return (
 
     <>
-
-      <AIHealthBanner />
 
       <AICaptionBar />
 

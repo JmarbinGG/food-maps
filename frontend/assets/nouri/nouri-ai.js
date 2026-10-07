@@ -7359,7 +7359,7 @@ var require_prop_types = __commonJS({
 });
 
 // src/main.jsx
-var import_react27 = __toESM(require_react(), 1);
+var import_react26 = __toESM(require_react(), 1);
 var import_client = __toESM(require_client(), 1);
 
 // node_modules/react-toastify/dist/react-toastify.esm.mjs
@@ -8005,8 +8005,17 @@ async function withAiAuth(init = {}) {
 var AI_STATUS = {
   HEALTHY: "healthy",
   DEGRADED: "degraded",
-  DOWN: "down"
+  DOWN: "down",
+  // No API key on the server. A settled state, not an outage: retrying
+  // cannot fix it, so the UI says "offline" rather than "reconnecting".
+  UNCONFIGURED: "unconfigured"
 };
+function aiLinkTone(status) {
+  const value = typeof status === "string" ? status : status && status.status;
+  if (value === AI_STATUS.UNCONFIGURED) return "off";
+  if (!value || value === AI_STATUS.HEALTHY) return "ok";
+  return "retry";
+}
 var AiHealthMonitor = class {
   constructor() {
     this.status = { status: AI_STATUS.HEALTHY, lastCheck: null };
@@ -8035,6 +8044,7 @@ var AiHealthMonitor = class {
     }
   }
   recordFailure() {
+    if (this.status.status === AI_STATUS.UNCONFIGURED) return;
     this.status = { status: AI_STATUS.DEGRADED, lastCheck: Date.now() };
     this._notify();
   }
@@ -8043,10 +8053,10 @@ var AiHealthMonitor = class {
       const res = await fetch("/api/ai/health", { method: "GET" });
       if (!res.ok) throw new Error(`health ${res.status}`);
       const data = await res.json();
-      const openaiOk = data.openai_configured !== false && data.status === "ok";
       const circuit = String(data.circuit_state || "closed").toLowerCase();
       let status = AI_STATUS.HEALTHY;
-      if (!openaiOk) status = AI_STATUS.DOWN;
+      if (data.openai_configured === false) status = AI_STATUS.UNCONFIGURED;
+      else if (data.status !== "ok") status = AI_STATUS.DOWN;
       else if (circuit === "open") status = AI_STATUS.DEGRADED;
       this.status = { status, lastCheck: Date.now(), detail: data };
     } catch (_2) {
@@ -10523,6 +10533,9 @@ var STRINGS = {
     jumpLatest: "Jump to latest",
     latest: "Latest",
     signInForFeatures: "Sign in for claims, photos, and voice.",
+    aiLinkOk: "Connected",
+    aiLinkRetry: "Reconnecting\u2026",
+    aiLinkOff: "Assistant offline \u2014 no AI key configured",
     chatLanguage: "Chat language",
     conversationTone: "Tone",
     photoCaptionPlaceholder: "Add a caption (optional)",
@@ -10535,6 +10548,9 @@ var STRINGS = {
     jumpLatest: "Ir al final",
     latest: "Reciente",
     signInForFeatures: "Inicia sesi\xF3n para reclamar, fotos y voz.",
+    aiLinkOk: "Conectado",
+    aiLinkRetry: "Reconectando\u2026",
+    aiLinkOff: "Asistente desconectado \u2014 sin clave de IA",
     chatLanguage: "Idioma del chat",
     conversationTone: "Tono",
     photoCaptionPlaceholder: "A\xF1ade un pie de foto (opcional)",
@@ -10702,6 +10718,11 @@ function getToneLabels(lang) {
 }
 function onlineToneLabel(tone, lang) {
   return getToneLabels(lang)[tone] || tone;
+}
+function aiLinkLabel(lang, tone) {
+  if (tone === "off") return t2(lang, "aiLinkOff");
+  if (tone === "retry") return t2(lang, "aiLinkRetry");
+  return t2(lang, "aiLinkOk");
 }
 
 // utils/mediaRecorder.js
@@ -12933,6 +12954,7 @@ function AIChatPanel() {
     }
   }, [messages, applyToolResults, executeUIActionsFromToolResults, executeUIAction, MAP_TOOLS2]);
   const [isOpen, setIsOpen] = (0, import_react10.useState)(false);
+  const [linkTone, setLinkTone] = (0, import_react10.useState)(() => aiLinkTone(aiHealth.getStatus()));
   const [isExpanded, setIsExpanded] = (0, import_react10.useState)(false);
   const [inputText, setInputText] = (0, import_react10.useState)("");
   const [showMenu, setShowMenu] = (0, import_react10.useState)(false);
@@ -12975,6 +12997,7 @@ function AIChatPanel() {
   (0, import_react10.useEffect)(() => {
     if (!canAttachFiles) setShowAttachMenu(false);
   }, [canAttachFiles]);
+  (0, import_react10.useEffect)(() => aiHealth.subscribe((status) => setLinkTone(aiLinkTone(status))), []);
   (0, import_react10.useEffect)(() => {
     const role = String(communityRole || "").toLowerCase();
     const prev = prevCommunityRoleRef.current;
@@ -14147,6 +14170,12 @@ ${imageBlock}` : imageBlock;
       if (!isLoading) handleSend();
     }
   }, [handleSend, isLoading, suggestionsOpen, filteredSuggestions, suggestionIndex, acceptSuggestion]);
+  const LINK_STATUS_STYLES = {
+    ok: { dot: "bg-emerald-500 animate-pulse shadow-emerald-400/60", text: "text-emerald-600" },
+    retry: { dot: "bg-amber-500 animate-pulse shadow-amber-400/60", text: "text-amber-600" },
+    off: { dot: "bg-gray-400 shadow-gray-300/60", text: "text-gray-500" }
+  };
+  const linkStatus = LINK_STATUS_STYLES[linkTone] || LINK_STATUS_STYLES.ok;
   if (!isOpen) {
     return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "fixed bottom-20 right-4 sm:bottom-24 sm:right-5 z-[46] group fab-base pointer-events-auto", style: { perspective: "600px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "absolute -top-14 -left-12 animate-float-slow opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "relative bg-white rounded-2xl px-3 py-2 shadow-lg border border-emerald-200/50", children: [
@@ -14204,6 +14233,16 @@ ${imageBlock}` : imageBlock;
           ]
         }
       ),
+      linkTone !== "ok" && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "absolute top-0 right-0 pointer-events-none", role: "status", "aria-live": "polite", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+          "span",
+          {
+            className: `block w-3 h-3 rounded-full ring-2 ring-white shadow-sm ${linkStatus.dot}`,
+            "aria-hidden": "true"
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "sr-only", children: aiLinkLabel(language, linkTone) })
+      ] }),
       /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("style", { children: `
           @keyframes bob {
             0%, 100% { transform: translateY(0) rotateY(0deg); }
@@ -14264,16 +14303,23 @@ ${imageBlock}` : imageBlock;
               ] }) }),
               /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { children: [
                 /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("h3", { className: "font-semibold text-sm text-gray-900 leading-tight", children: "Nouri" }),
-                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("p", { className: "text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
-                    "span",
-                    {
-                      className: "w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400/60",
-                      "aria-hidden": "true"
-                    }
-                  ),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: isAuthenticated ? onlineToneLabel(language, getToneLabels(language)[tone] || tone) : t2(language, "signInForFeatures") })
-                ] })
+                /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+                  "p",
+                  {
+                    className: `text-[10px] flex items-center gap-1.5 leading-tight mt-0.5 ${linkStatus.text}`,
+                    "aria-live": "polite",
+                    children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)(
+                        "span",
+                        {
+                          className: `w-1.5 h-1.5 rounded-full shadow-sm ${linkStatus.dot}`,
+                          "aria-hidden": "true"
+                        }
+                      ),
+                      /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { children: linkTone !== "ok" ? aiLinkLabel(language, linkTone) : isAuthenticated ? onlineToneLabel(tone, language) : t2(language, "signInForFeatures") })
+                    ]
+                  }
+                )
               ] })
             ] }),
             /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "flex items-center gap-1", children: [
@@ -17360,126 +17406,21 @@ AIQueryPanel.propTypes = {
   className: import_prop_types8.default.string
 };
 
-// src/common/AIHealthBanner.jsx
+// src/common/AICaptionBar.jsx
 var import_react20 = __toESM(require_react(), 1);
 var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
-function AIHealthBanner() {
-  const [status, setStatus] = (0, import_react20.useState)(aiHealth.getStatus());
-  (0, import_react20.useEffect)(() => {
-    const unsub = aiHealth.subscribe(setStatus);
-    return unsub;
-  }, []);
-  if (!status || status.status === AI_STATUS.HEALTHY) return null;
-  const isDown = status.status === AI_STATUS.DOWN;
-  const title = isDown ? "Repairing AI link" : "Healing AI link";
-  const subtitle = isDown ? "Reconnecting circuits to the neural backbone" : "Patching the connection in the background";
-  const accent = isDown ? "from-rose-400 via-fuchsia-400 to-cyan-400" : "from-amber-300 via-cyan-300 to-violet-400";
-  return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-    "div",
-    {
-      role: "status",
-      "aria-live": "polite",
-      "aria-label": `${title}. ${subtitle}`,
-      className: "fixed top-4 right-4 z-[9999] w-[300px] max-w-[calc(100vw-2rem)] pointer-events-none",
-      children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "ai-heal-card relative px-4 py-3 text-white pointer-events-auto", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-scan", "aria-hidden": "true" }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "relative z-10 flex items-center gap-3", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "relative w-14 h-14 flex-shrink-0", "aria-hidden": "true", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
-              "svg",
-              {
-                viewBox: "0 0 56 56",
-                className: "absolute inset-0 w-full h-full",
-                children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("defs", { children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("linearGradient", { id: "aiHealWire", x1: "0", y1: "0", x2: "1", y2: "0", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "0%", stopColor: "#22d3ee" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "50%", stopColor: "#a78bfa" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "100%", stopColor: "#ec4899" })
-                    ] }),
-                    /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("radialGradient", { id: "aiHealNode", cx: "0.5", cy: "0.5", r: "0.5", children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "0%", stopColor: "#fff", stopOpacity: "1" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "60%", stopColor: "#22d3ee", stopOpacity: "0.9" }),
-                      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("stop", { offset: "100%", stopColor: "#22d3ee", stopOpacity: "0" })
-                    ] })
-                  ] }),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("path", { d: "M4 28 L18 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("path", { d: "M38 28 L52 28", stroke: "url(#aiHealWire)", strokeWidth: "2.5", strokeLinecap: "round", opacity: "0.85" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-                    "path",
-                    {
-                      d: "M18 28 L38 28",
-                      stroke: "url(#aiHealWire)",
-                      strokeWidth: "2.5",
-                      strokeLinecap: "round",
-                      fill: "none",
-                      className: "ai-heal-weld"
-                    }
-                  ),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: "4", cy: "28", r: "2.5", fill: "#22d3ee", className: "ai-heal-node" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("circle", { cx: "52", cy: "28", r: "2.5", fill: "#ec4899", className: "ai-heal-node" }),
-                  /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-                    "circle",
-                    {
-                      cx: "28",
-                      cy: "28",
-                      r: "6",
-                      fill: "url(#aiHealNode)",
-                      style: { transformOrigin: "28px 28px" },
-                      className: "ai-heal-flash"
-                    }
-                  )
-                ]
-              }
-            ),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "absolute top-1/2 left-1/2 w-0 h-0", "aria-hidden": "true", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-cyan-300 shadow-[0_0_6px_rgba(34,211,238,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-fuchsia-300 shadow-[0_0_6px_rgba(232,121,249,1)]" }),
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-spark absolute top-0 left-0 w-1 h-1 rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,1)]" })
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "absolute inset-0 flex items-center justify-center pointer-events-none", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "ai-heal-tool-orbit", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("i", { className: "fas fa-wrench text-[10px] text-cyan-200 ai-heal-tool-shake drop-shadow-[0_0_4px_rgba(34,211,238,0.9)]" }) }) })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "flex items-center gap-1.5", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: `text-[13px] font-semibold tracking-wide bg-gradient-to-r ${accent} bg-clip-text text-transparent`, children: title }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { className: "mt-0.5 flex items-center gap-1.5 text-[11px] text-slate-300/90", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "truncate", children: subtitle }),
-              /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { className: "inline-flex items-end gap-[2px] ml-0.5", children: [
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-cyan-300" }),
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-fuchsia-300" }),
-                /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "ai-heal-dot w-1 h-1 rounded-full bg-violet-300" })
-              ] })
-            ] })
-          ] })
-        ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { className: "relative z-10 mt-2 h-[3px] rounded-full bg-slate-700/60 overflow-hidden", children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
-          "div",
-          {
-            className: `h-full w-1/3 rounded-full bg-gradient-to-r ${accent}`,
-            style: { animation: "ai-scan-sweep 1.6s linear infinite" }
-          }
-        ) })
-      ] })
-    }
-  );
-}
-var AIHealthBanner_default = AIHealthBanner;
-
-// src/common/AICaptionBar.jsx
-var import_react21 = __toESM(require_react(), 1);
-var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
 function AICaptionBar() {
   const { settings } = useAccessibility();
-  const [caption, setCaption] = (0, import_react21.useState)("");
-  const [speaking, setSpeaking] = (0, import_react21.useState)(false);
-  (0, import_react21.useEffect)(() => {
+  const [caption, setCaption] = (0, import_react20.useState)("");
+  const [speaking, setSpeaking] = (0, import_react20.useState)(false);
+  (0, import_react20.useEffect)(() => {
     return subscribeAiVoice(({ captionText, isSpeaking }) => {
       setCaption(captionText || "");
       setSpeaking(isSpeaking);
     });
   }, []);
   if (!settings.alwaysShowCaptions || !caption) return null;
-  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(
     "div",
     {
       className: "nouri-ai-caption-bar",
@@ -17488,7 +17429,7 @@ function AICaptionBar() {
       "aria-atomic": "true",
       "aria-label": speaking ? "AI is speaking" : "AI caption",
       children: [
-        /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "sr-only", children: speaking ? "Speaking: " : "Caption: " }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { className: "sr-only", children: speaking ? "Speaking: " : "Caption: " }),
         caption
       ]
     }
@@ -17496,12 +17437,12 @@ function AICaptionBar() {
 }
 
 // src/common/FormVoiceGuideHost.jsx
-var import_react24 = __toESM(require_react(), 1);
+var import_react23 = __toESM(require_react(), 1);
 
 // src/common/FormVoiceGuide.jsx
-var import_react22 = __toESM(require_react(), 1);
+var import_react21 = __toESM(require_react(), 1);
 var import_prop_types9 = __toESM(require_prop_types(), 1);
-var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
 function FormVoiceGuide({ guide, className = "" }) {
   const {
     welcomeMessage,
@@ -17520,33 +17461,33 @@ function FormVoiceGuide({ guide, className = "" }) {
   const showingField = Boolean(activeHint?.text);
   const displayText = currentCaption || (showingField ? activeHint.text : welcomeMessage);
   const showCaptionBlock = alwaysShowCaptions || preferText || isMuted;
-  return /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(import_jsx_runtime19.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: showingField ? activeHint.text : "" }),
-    /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(import_jsx_runtime18.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { id: FORM_GUIDE_DESC_ID, className: "sr-only", children: showingField ? activeHint.text : "" }),
+    /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
       "div",
       {
         className: `relative flex items-start gap-3 rounded-xl border border-[#2CABE3]/40 bg-[#2CABE3]/10 px-4 py-3 shadow-sm ${className}`,
         role: "region",
         "aria-label": "AI form guide",
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("div", { className: "flex-shrink-0 mt-0.5", children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("div", { className: "flex-shrink-0 mt-0.5", children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
             "div",
             {
               className: `w-9 h-9 rounded-full flex items-center justify-center transition-all duration-300 ${isSpeaking ? "bg-[#2CABE3] shadow-lg shadow-[#2CABE3]/40" : "bg-[#2CABE3]/15"}`,
               "aria-hidden": "true",
-              children: isSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "flex items-end gap-0.5 h-4", children: [1, 2, 3].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+              children: isSpeaking ? /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "flex items-end gap-0.5 h-4", children: [1, 2, 3].map((i2) => /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
                 "span",
                 {
                   className: "w-1 bg-white rounded-full animate-bounce",
                   style: { height: `${8 + i2 * 4}px`, animationDelay: `${i2 * 0.12}s` }
                 },
                 i2
-              )) }) : /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-robot text-[#2CABE3] text-sm" })
+              )) }) : /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", { className: "fas fa-robot text-[#2CABE3] text-sm" })
             }
           ) }),
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "flex-1 min-w-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs font-semibold text-[#2CABE3] mb-0.5 uppercase tracking-wide", children: showingField ? activeHint.label || "Field help" : "AI guide" }),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "flex-1 min-w-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { className: "text-xs font-semibold text-[#2CABE3] mb-0.5 uppercase tracking-wide", children: showingField ? activeHint.label || "Field help" : "AI guide" }),
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
               "p",
               {
                 className: "text-sm text-gray-800 leading-snug",
@@ -17556,22 +17497,22 @@ function FormVoiceGuide({ guide, className = "" }) {
                 children: showingField ? activeHint.text : welcomeMessage
               }
             ),
-            !showingField && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs text-gray-500 mt-1.5", children: "Click or tap any field for step-by-step help." }),
-            showCaptionBlock && displayText && /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)(
+            !showingField && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { className: "text-xs text-gray-500 mt-1.5", children: "Click or tap any field for step-by-step help." }),
+            showCaptionBlock && displayText && /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)(
               "p",
               {
                 className: "mt-2 text-sm font-medium text-gray-900 border-t border-[#2CABE3]/25 pt-2",
                 "aria-label": "Caption",
                 children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("span", { className: "text-xs uppercase tracking-wide text-gray-500 mr-2", children: "Caption" }),
+                  /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("span", { className: "text-xs uppercase tracking-wide text-gray-500 mr-2", children: "Caption" }),
                   displayText
                 ]
               }
             ),
-            preferText && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("p", { className: "text-xs text-gray-600 mt-1", children: "Voice is off in accessibility settings. Text captions are shown instead." })
+            preferText && !isMuted && /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("p", { className: "text-xs text-gray-600 mt-1", children: "Voice is off in accessibility settings. Text captions are shown instead." })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime19.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime18.jsxs)("div", { className: "flex items-center gap-1 flex-shrink-0", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
               "button",
               {
                 type: "button",
@@ -17579,10 +17520,10 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: "Replay welcome",
                 "aria-label": "Replay welcome message",
                 className: "w-7 h-7 rounded-full flex items-center justify-center text-[#2CABE3] hover:bg-[#2CABE3]/15 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2CABE3]",
-                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", { className: "fas fa-redo text-xs", "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
               "button",
               {
                 type: "button",
@@ -17590,10 +17531,10 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: isMuted ? "Unmute voice guide" : "Mute voice guide",
                 "aria-label": isMuted ? "Unmute voice guide" : "Mute voice guide",
                 className: `w-7 h-7 rounded-full flex items-center justify-center transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2CABE3] ${isMuted ? "bg-rose-100 text-rose-600 hover:bg-rose-200" : "text-gray-500 hover:bg-gray-100"}`,
-                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", { className: `fas ${isMuted ? "fa-volume-xmark" : "fa-volume-high"} text-xs`, "aria-hidden": "true" })
               }
             ),
-            /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime18.jsx)(
               "button",
               {
                 type: "button",
@@ -17601,7 +17542,7 @@ function FormVoiceGuide({ guide, className = "" }) {
                 title: "Dismiss guide",
                 "aria-label": "Dismiss voice guide",
                 className: "w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:bg-gray-100 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-500",
-                children: /* @__PURE__ */ (0, import_jsx_runtime19.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
+                children: /* @__PURE__ */ (0, import_jsx_runtime18.jsx)("i", { className: "fas fa-xmark text-xs", "aria-hidden": "true" })
               }
             )
           ] })
@@ -17632,7 +17573,7 @@ FormVoiceGuide.propTypes = {
 };
 
 // utils/hooks/useFormVoiceGuide.js
-var import_react23 = __toESM(require_react(), 1);
+var import_react22 = __toESM(require_react(), 1);
 var SHARE_FOOD_WELCOME = "Welcome! I can guide you through sharing food step by step.";
 var REQUEST_FOOD_WELCOME = "Welcome! I can help you request food from the community.";
 var BULK_UPLOAD_WELCOME = "Upload a CSV of food listings. I can guide you through each step.";
@@ -17658,9 +17599,9 @@ function useFormVoiceGuide({
     notifyFieldActivity
   } = useNouriGuide();
   const guideLang = resolveGuideLang(null, settings.preferredLanguage, lang);
-  const welcomedRef = (0, import_react23.useRef)(false);
-  const fieldTimerRef = (0, import_react23.useRef)(null);
-  (0, import_react23.useEffect)(() => {
+  const welcomedRef = (0, import_react22.useRef)(false);
+  const fieldTimerRef = (0, import_react22.useRef)(null);
+  (0, import_react22.useEffect)(() => {
     if (welcomedRef.current || guide.isDismissed || !welcomeMessage) return;
     if (settings.preferTextOverVoice && preferText) {
     }
@@ -17679,7 +17620,7 @@ function useFormVoiceGuide({
     settings.preferTextOverVoice,
     preferText
   ]);
-  const speakField = (0, import_react23.useCallback)((fieldName) => {
+  const speakField = (0, import_react22.useCallback)((fieldName) => {
     if (guide.isDismissed) return;
     const entry = resolvedHints[fieldName];
     if (!entry) return;
@@ -17693,19 +17634,19 @@ function useFormVoiceGuide({
       onFieldFocus({ formId, fieldName, label, text, hints: resolvedHints }, guideLang);
     }, FIELD_DEBOUNCE_MS);
   }, [guide.isDismissed, resolvedHints, formId, guideLang, onFieldFocus, notifyFieldActivity]);
-  const speakWelcome = (0, import_react23.useCallback)(() => {
+  const speakWelcome = (0, import_react22.useCallback)(() => {
     if (guide.isDismissed || !welcomeMessage) return;
     registerForm({ formId, welcomeMessage, hints: resolvedHints }, guideLang);
   }, [guide.isDismissed, welcomeMessage, formId, resolvedHints, guideLang, registerForm]);
-  const reportError3 = (0, import_react23.useCallback)((fieldName, errorMessage) => {
+  const reportError3 = (0, import_react22.useCallback)((fieldName, errorMessage) => {
     const entry = resolvedHints[fieldName];
     const label = entry && typeof entry !== "string" ? entry.label : fieldName;
     reportFieldError2(formId, fieldName, errorMessage, label);
   }, [formId, resolvedHints, reportFieldError2]);
-  (0, import_react23.useEffect)(() => () => {
+  (0, import_react22.useEffect)(() => () => {
     if (fieldTimerRef.current) clearTimeout(fieldTimerRef.current);
   }, []);
-  (0, import_react23.useEffect)(() => {
+  (0, import_react22.useEffect)(() => {
     if (guide.isDismissed) return;
     const t3 = setTimeout(() => reapplyPendingGuideField(), 60);
     return () => clearTimeout(t3);
@@ -17740,7 +17681,7 @@ function useFormVoiceGuide({
 }
 
 // src/common/FormVoiceGuideHost.jsx
-var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
 var DEFAULTS_BY_FORM = {
   "share-food": { welcome: SHARE_FOOD_WELCOME, hints: SHARE_FOOD_HINTS },
   "share-listing": { welcome: SHARE_FOOD_WELCOME, hints: SHARE_FOOD_HINTS },
@@ -17761,13 +17702,13 @@ function FormVoiceGuideHost({
     welcomeMessage: welcomeMessage || defaults.welcome,
     fieldHints: fieldHints && Object.keys(fieldHints).length ? { ...defaults.hints, ...fieldHints } : defaults.hints
   });
-  return /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(FormVoiceGuide, { guide, className });
+  return /* @__PURE__ */ (0, import_jsx_runtime19.jsx)(FormVoiceGuide, { guide, className });
 }
 
 // src/common/HumanSupportBridge.jsx
-var import_react25 = __toESM(require_react(), 1);
+var import_react24 = __toESM(require_react(), 1);
 function HumanSupportBridge() {
-  (0, import_react25.useEffect)(() => {
+  (0, import_react24.useEffect)(() => {
     const openWithPrefill = (message) => {
       window.dispatchEvent(new CustomEvent("nouri:open-chat", {
         detail: { message: message || "" }
@@ -17796,15 +17737,15 @@ function HumanSupportBridge() {
 }
 
 // src/common/AccessibilitySettings.jsx
-var import_react26 = __toESM(require_react(), 1);
-var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
+var import_react25 = __toESM(require_react(), 1);
+var import_jsx_runtime20 = __toESM(require_jsx_runtime(), 1);
 function ToggleRow({ id, label, description, checked, onChange }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-row", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-row-text", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("label", { htmlFor: id, className: "nouri-a11y-label", children: label }),
-      description && /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { id: `${id}-desc`, className: "nouri-a11y-desc", children: description })
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "nouri-a11y-row", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "nouri-a11y-row-text", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("label", { htmlFor: id, className: "nouri-a11y-label", children: label }),
+      description && /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { id: `${id}-desc`, className: "nouri-a11y-desc", children: description })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)(
       "button",
       {
         id,
@@ -17815,8 +17756,8 @@ function ToggleRow({ id, label, description, checked, onChange }) {
         onClick: () => onChange(!checked),
         className: `nouri-a11y-switch ${checked ? "is-on" : ""}`,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "nouri-a11y-switch-thumb", "aria-hidden": "true" }),
-          /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("span", { className: "sr-only", children: label })
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "nouri-a11y-switch-thumb", "aria-hidden": "true" }),
+          /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("span", { className: "sr-only", children: label })
         ]
       }
     )
@@ -17824,13 +17765,13 @@ function ToggleRow({ id, label, description, checked, onChange }) {
 }
 function AccessibilitySettings() {
   const { settings, updateSetting, resetSettings } = useNouriGuide();
-  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-panel", role: "region", "aria-labelledby": "nouri-a11y-heading", children: [
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("h2", { id: "nouri-a11y-heading", className: "nouri-a11y-title", children: "Accessibility" }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { className: "nouri-a11y-intro", children: "Customize display, motion, and how Nouri speaks. Settings save on this device." }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-lang", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("label", { htmlFor: "a11y-preferred-language", className: "nouri-a11y-label", children: "Preferred language" }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("p", { id: "a11y-preferred-language-desc", className: "nouri-a11y-desc", children: "Nouri will try to respond in this language in chat and guided steps." }),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+  return /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "nouri-a11y-panel", role: "region", "aria-labelledby": "nouri-a11y-heading", children: [
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("h2", { id: "nouri-a11y-heading", className: "nouri-a11y-title", children: "Accessibility" }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { className: "nouri-a11y-intro", children: "Customize display, motion, and how Nouri speaks. Settings save on this device." }),
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "nouri-a11y-lang", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("label", { htmlFor: "a11y-preferred-language", className: "nouri-a11y-label", children: "Preferred language" }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("p", { id: "a11y-preferred-language-desc", className: "nouri-a11y-desc", children: "Nouri will try to respond in this language in chat and guided steps." }),
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         "select",
         {
           id: "a11y-preferred-language",
@@ -17838,12 +17779,12 @@ function AccessibilitySettings() {
           value: settings.preferredLanguage || "en",
           onChange: (e2) => updateSetting("preferredLanguage", e2.target.value),
           className: "nouri-a11y-select",
-          children: SUPPORTED_GUIDE_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("option", { value: code, children: GUIDE_LANGUAGE_LABELS[code] }, code))
+          children: SUPPORTED_GUIDE_LANGUAGES.map((code) => /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("option", { value: code, children: GUIDE_LANGUAGE_LABELS[code] }, code))
         }
       )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)("div", { className: "nouri-a11y-toggles", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsxs)("div", { className: "nouri-a11y-toggles", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-large-text",
@@ -17853,7 +17794,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("largeText", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-high-contrast",
@@ -17863,7 +17804,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("highContrast", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-reduce-motion",
@@ -17873,7 +17814,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("reduceMotion", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-captions",
@@ -17883,7 +17824,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("alwaysShowCaptions", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-form-voice",
@@ -17893,7 +17834,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("formVoiceGuideEnabled", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-prefer-text",
@@ -17903,7 +17844,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("preferTextOverVoice", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-simple-language",
@@ -17913,7 +17854,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("simpleLanguage", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-easy-mode",
@@ -17923,7 +17864,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("easyMode", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-list-first-find",
@@ -17933,7 +17874,7 @@ function AccessibilitySettings() {
           onChange: (v2) => updateSetting("listFirstFind", v2)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime20.jsx)(
         ToggleRow,
         {
           id: "a11y-screen-reader",
@@ -17944,25 +17885,24 @@ function AccessibilitySettings() {
         }
       )
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("div", { className: "nouri-a11y-footer", children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)("button", { type: "button", onClick: resetSettings, className: "nouri-a11y-reset", children: "Reset accessibility settings" }) })
+    /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("div", { className: "nouri-a11y-footer", children: /* @__PURE__ */ (0, import_jsx_runtime20.jsx)("button", { type: "button", onClick: resetSettings, className: "nouri-a11y-reset", children: "Reset accessibility settings" }) })
   ] });
 }
 
 // src/main.jsx
-var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
+var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
 var mountRoots = /* @__PURE__ */ new Map();
 function NouriShell() {
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsxs)(import_jsx_runtime22.Fragment, { children: [
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIHealthBanner_default, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AICaptionBar, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriGuideBar, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(HumanSupportBridge, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AIChatPanel_default, {}),
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Q, { position: "top-center", autoClose: 4e3, hideProgressBar: true, theme: "colored" })
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsxs)(import_jsx_runtime21.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(AICaptionBar, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(NouriGuideBar, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(HumanSupportBridge, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(AIChatPanel_default, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Q, { position: "top-center", autoClose: 4e3, hideProgressBar: true, theme: "colored" })
   ] });
 }
 function Providers({ children }) {
-  return /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriGuideProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(MapProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(UIControlProvider, { children }) }) }) });
+  return /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(AuthProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(NouriGuideProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(MapProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(UIControlProvider, { children }) }) }) });
 }
 function mountChat(hostId) {
   let host = document.getElementById(hostId);
@@ -17975,7 +17915,7 @@ function mountChat(hostId) {
   const root = (0, import_client.createRoot)(host);
   mountRoots.set(hostId, root);
   root.render(
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(NouriShell, {}) })
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(NouriShell, {}) })
   );
   return root;
 }
@@ -17984,14 +17924,14 @@ function mountPanel(Component, hostId, props = {}) {
   if (!host) return null;
   if (mountRoots.has(hostId)) {
     mountRoots.get(hostId).render(
-      /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Component, { ...props }) })
+      /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Component, { ...props }) })
     );
     return mountRoots.get(hostId);
   }
   const root = (0, import_client.createRoot)(host);
   mountRoots.set(hostId, root);
   root.render(
-    /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime22.jsx)(Component, { ...props }) })
+    /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Providers, { children: /* @__PURE__ */ (0, import_jsx_runtime21.jsx)(Component, { ...props }) })
   );
   return root;
 }

@@ -32,7 +32,9 @@ import {
   getToneLabels,
   chatLang,
   onlineToneLabel,
+  aiLinkLabel,
 } from '../../utils/chatI18n.js'
+import { aiHealth, aiLinkTone } from '../../utils/services/aiSelfHealing.js'
 import { createMediaRecorder } from '../../utils/mediaRecorder.js'
 import RecipeCard from './RecipeCard.jsx'
 import StorageTipCard from './StorageTipCard.jsx'
@@ -2509,6 +2511,9 @@ function AIChatPanel() {
   }, [messages, applyToolResults, executeUIActionsFromToolResults, executeUIAction, MAP_TOOLS])
 
   const [isOpen, setIsOpen] = useState(false)
+  // Connection to the AI backend, shown in the header and on the closed
+  // bubble. Replaces the old full-page AIHealthBanner overlay.
+  const [linkTone, setLinkTone] = useState(() => aiLinkTone(aiHealth.getStatus()))
   const [isExpanded, setIsExpanded] = useState(false)
   const [inputText, setInputText] = useState('')
   const [showMenu, setShowMenu] = useState(false)
@@ -2571,6 +2576,9 @@ function AIChatPanel() {
   useEffect(() => {
     if (!canAttachFiles) setShowAttachMenu(false)
   }, [canAttachFiles])
+
+  // The monitor polls /api/ai/health on its own; just mirror what it reports.
+  useEffect(() => aiHealth.subscribe((status) => setLinkTone(aiLinkTone(status))), [])
 
   // When the user switches donor ↔ recipient, drop prior chat so Nouri
   // doesn't keep acting under the old role from history.
@@ -4011,6 +4019,15 @@ function AIChatPanel() {
     }
   }, [handleSend, isLoading, suggestionsOpen, filteredSuggestions, suggestionIndex, acceptSuggestion])
 
+  // Connection styling. 'off' deliberately does not animate: nothing is in
+  // progress, so a pulsing dot would promise a recovery that is not coming.
+  const LINK_STATUS_STYLES = {
+    ok: { dot: 'bg-emerald-500 animate-pulse shadow-emerald-400/60', text: 'text-emerald-600' },
+    retry: { dot: 'bg-amber-500 animate-pulse shadow-amber-400/60', text: 'text-amber-600' },
+    off: { dot: 'bg-gray-400 shadow-gray-300/60', text: 'text-gray-500' },
+  }
+  const linkStatus = LINK_STATUS_STYLES[linkTone] || LINK_STATUS_STYLES.ok
+
   // ─── Floating bubble (closed state) ──────
   if (!isOpen) {
     return (
@@ -4097,6 +4114,18 @@ function AIChatPanel() {
           <div className="absolute inset-0 rounded-full ring-2 ring-emerald-300/0 group-hover:ring-emerald-300/40 transition-all duration-300" />
         </button>
 
+        {/* AI link state, so a closed panel still shows it. Sits outside the
+            button so it never swallows the click that opens the panel. */}
+        {linkTone !== 'ok' && (
+          <span className="absolute top-0 right-0 pointer-events-none" role="status" aria-live="polite">
+            <span
+              className={`block w-3 h-3 rounded-full ring-2 ring-white shadow-sm ${linkStatus.dot}`}
+              aria-hidden="true"
+            />
+            <span className="sr-only">{aiLinkLabel(language, linkTone)}</span>
+          </span>
+        )}
+
         {/* Inline keyframes */}
         <style>{`
           @keyframes bob {
@@ -4164,15 +4193,20 @@ function AIChatPanel() {
           </div>
           <div>
             <h3 className="font-semibold text-sm text-gray-900 leading-tight">Nouri</h3>
-            <p className="text-emerald-600 text-[10px] flex items-center gap-1.5 leading-tight mt-0.5">
+            <p
+              className={`text-[10px] flex items-center gap-1.5 leading-tight mt-0.5 ${linkStatus.text}`}
+              aria-live="polite"
+            >
               <span
-                className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shadow-sm shadow-emerald-400/60"
+                className={`w-1.5 h-1.5 rounded-full shadow-sm ${linkStatus.dot}`}
                 aria-hidden="true"
               />
               <span>
-                {isAuthenticated
-                  ? onlineToneLabel(language, getToneLabels(language)[tone] || tone)
-                  : chatT(language, 'signInForFeatures')}
+                {linkTone !== 'ok'
+                  ? aiLinkLabel(language, linkTone)
+                  : isAuthenticated
+                    ? onlineToneLabel(tone, language)
+                    : chatT(language, 'signInForFeatures')}
               </span>
             </p>
           </div>

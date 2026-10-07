@@ -8,6 +8,9 @@ const STRINGS = {
     jumpLatest: 'Jump to latest',
     latest: 'Latest',
     signInForFeatures: 'Sign in for claims, photos, and voice.',
+    aiLinkOk: 'Connected',
+    aiLinkRetry: 'Reconnecting\u2026',
+    aiLinkOff: 'Assistant offline \u2014 no AI key configured',
     chatLanguage: 'Chat language',
     conversationTone: 'Tone',
     photoCaptionPlaceholder: 'Add a caption (optional)',
@@ -21,6 +24,9 @@ const STRINGS = {
     jumpLatest: 'Ir al final',
     latest: 'Reciente',
     signInForFeatures: 'Inicia sesión para reclamar, fotos y voz.',
+    aiLinkOk: 'Conectado',
+    aiLinkRetry: 'Reconectando\u2026',
+    aiLinkOff: 'Asistente desconectado \u2014 sin clave de IA',
     chatLanguage: 'Idioma del chat',
     conversationTone: 'Tono',
     photoCaptionPlaceholder: 'Añade un pie de foto (opcional)',
@@ -215,4 +221,11 @@ export function getToneLabels(lang) {
 
 export function onlineToneLabel(tone, lang) {
   return getToneLabels(lang)[tone] || tone;
+}
+
+/** Status line for the assistant's connection to the AI backend. */
+export function aiLinkLabel(lang, tone) {
+  if (tone === 'off') return t(lang, 'aiLinkOff');
+  if (tone === 'retry') return t(lang, 'aiLinkRetry');
+  return t(lang, 'aiLinkOk');
 }
