@@ -85,6 +85,16 @@ def test_impact_story_stacks_stories_with_expanders():
     assert ".city-stories-more" in html
 
 
+def test_impact_story_newsletter_is_full_width():
+    html = IMPACT.read_text(encoding="utf-8")
+    assert '<section class="newsletter-band">' in html
+    assert ".newsletter-band {" in html
+    # newsletterSignup.js keys off these
+    for hook in ('data-newsletter-form', 'data-newsletter-success', 'data-newsletter-error',
+                 'name="firstName"', 'name="email"', 'name="consent"'):
+        assert hook in html
+
+
 def test_impact_story_leads_with_city_tabs():
     html = IMPACT.read_text(encoding="utf-8")
     assert "city-intro" not in html
