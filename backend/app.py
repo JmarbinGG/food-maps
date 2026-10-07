@@ -169,6 +169,23 @@ MAX_QUERY_STRING_BYTES = 2048
 MAX_QUERY_PARAM_NAME_CHARS = 64
 MAX_QUERY_PARAM_VALUE_CHARS = 512
 MAX_JSON_STRING_CHARS = 5000
+# Per-path override for routes whose payload is legitimately one long string.
+# The admin page editor stores a whole page's editable fields under one key,
+# and the Impact Story catalog puts every city and story in a single JSON
+# string, so 5000 chars rejects an ordinary save. Values here stay under
+# MAX_API_BODY_BYTES, which remains the real ceiling, and the handler still
+# sanitizes every field (see _sanitize_page_field_value).
+LONG_JSON_STRING_PATH_PREFIXES = (
+    ("/api/pages/", 60_000),
+)
+
+
+def _max_json_string_chars_for(path: str) -> int:
+    lowered = (path or "").lower()
+    for prefix, limit in LONG_JSON_STRING_PATH_PREFIXES:
+        if lowered.startswith(prefix):
+            return limit
+    return MAX_JSON_STRING_CHARS
 MAX_JSON_KEY_CHARS = 128
 MAX_JSON_OBJECT_KEYS = 200
 MAX_JSON_ARRAY_ITEMS = 500
@@ -191,9 +208,11 @@ def _sanitize_text(value: str, *, max_chars: int, label: str) -> str:
     return value.strip()
 
 
-def _sanitize_json_payload(value: Any, depth: int = 0) -> Any:
+def _sanitize_json_payload(value: Any, depth: int = 0, max_string_chars: Optional[int] = None) -> Any:
     if depth > MAX_JSON_NESTING_DEPTH:
         raise HTTPException(status_code=400, detail="JSON payload is too deeply nested")
+
+    string_cap = MAX_JSON_STRING_CHARS if max_string_chars is None else max_string_chars
 
     if isinstance(value, dict):
         if len(value) > MAX_JSON_OBJECT_KEYS:
@@ -203,16 +222,16 @@ def _sanitize_json_payload(value: Any, depth: int = 0) -> Any:
             if not isinstance(key, str):
                 raise HTTPException(status_code=400, detail="JSON object keys must be strings")
             clean_key = _sanitize_text(key, max_chars=MAX_JSON_KEY_CHARS, label="JSON field name")
-            sanitized[clean_key] = _sanitize_json_payload(item, depth + 1)
+            sanitized[clean_key] = _sanitize_json_payload(item, depth + 1, string_cap)
         return sanitized
 
     if isinstance(value, list):
         if len(value) > MAX_JSON_ARRAY_ITEMS:
             raise HTTPException(status_code=413, detail="JSON array is too large")
-        return [_sanitize_json_payload(item, depth + 1) for item in value]
+        return [_sanitize_json_payload(item, depth + 1, string_cap) for item in value]
 
     if isinstance(value, str):
-        return _sanitize_text(value, max_chars=MAX_JSON_STRING_CHARS, label="JSON field value")
+        return _sanitize_text(value, max_chars=string_cap, label="JSON field value")
 
     # JSON scalar values allowed as-is.
     if isinstance(value, (int, float, bool)) or value is None:
@@ -286,7 +305,9 @@ async def _sanitize_api_input(request: Request, call_next):
                     except json.JSONDecodeError:
                         raise HTTPException(status_code=400, detail="Malformed JSON request body")
 
-                    sanitized_payload = _sanitize_json_payload(parsed)
+                    sanitized_payload = _sanitize_json_payload(
+                        parsed, max_string_chars=_max_json_string_chars_for(path)
+                    )
                     sanitized_body = json.dumps(sanitized_payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
                     await _set_request_body(request, sanitized_body)
                 elif "application/x-www-form-urlencoded" in content_type:
@@ -995,7 +1016,12 @@ ALLOWED_PAGE_IDS = frozenset({
     "nutrition",
     "donate",
 })
-MAX_PAGE_CONTENT_BYTES = 500_000
+# page_contents.content is a TEXT column: 65,535 bytes in MySQL, and the whole
+# request also has to fit MAX_API_BODY_BYTES. The old 500_000 was unreachable
+# through either, so a payload "within the limit" could still fail at the
+# column. Lifting this past ~64KB needs LONGTEXT and a dedicated route — see
+# "Impact Story catalog storage" in docs/ENGINEERING_ROADMAP.md.
+MAX_PAGE_CONTENT_BYTES = 60_000
 
 
 def _sanitize_page_field_value(value: Any) -> str:

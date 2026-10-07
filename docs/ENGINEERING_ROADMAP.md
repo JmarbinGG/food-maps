@@ -3,7 +3,7 @@
 Working backlog for engineering process, documentation, and infrastructure work.
 This is not a product roadmap; feature work lives elsewhere.
 
-**Last reviewed:** 2026-08-11
+**Last reviewed:** 2026-10-07
 **Target:** by end of year, a new contributor can clone, run, and ship a change
 without a synchronous handoff from an existing team member.
 
@@ -267,6 +267,21 @@ Not scheduled. Recorded with the caveats that affect how they should be scoped.
   keeps you out of PCI scope. Decide the nonprofit receipting and refund story
   early; that is harder to retrofit than the button.
 - **AI agent PR review.** Fits naturally into Phase 2 once CI exists.
+- **Impact Story catalog storage.** The page's cities and stories are saved as
+  one JSON string under the `__impact_catalog` key of the `page_contents` row
+  for `impactStory`, which piggybacks on the admin page editor's storage. Three
+  limits stack up against it: the request sanitizer's per-JSON-string cap
+  (raised to 60,000 chars for `/api/pages/*` in `_max_json_string_chars_for`,
+  5,000 everywhere else), `MAX_API_BODY_BYTES` at 64KB, and the `content`
+  column being `TEXT` (65,535 bytes). Twelve stories with long-form bodies are
+  ~14KB, so roughly 50 stories fit before saves start failing. The durable fix
+  is a `impact_cities` / `impact_stories` pair of tables, or at minimum a
+  dedicated route backed by `LONGTEXT`, with the catalog posted as structured
+  JSON rather than a string — which would also let a single story be edited
+  without rewriting the whole catalog, and give real per-field validation
+  instead of one opaque blob. Not urgent: do it when the catalog approaches
+  ~40 stories, or the first time a story needs anything the current flat
+  story shape cannot express.
 - **Refine the main Food Maps page UI.**
 - **Supplier page for listing submission.** Check first whether this is actually
   a new surface. Donor roles and listing creation already exist, so this may be
