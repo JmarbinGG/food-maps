@@ -7,7 +7,21 @@ const AI_STATUS = {
   HEALTHY: 'healthy',
   DEGRADED: 'degraded',
   DOWN: 'down',
+  // No API key on the server. A settled state, not an outage: retrying
+  // cannot fix it, so the UI says "offline" rather than "reconnecting".
+  UNCONFIGURED: 'unconfigured',
 };
+
+/**
+ * Collapse a health status into what the UI needs to show.
+ * 'ok' = connected, 'retry' = something is being retried, 'off' = settled off.
+ */
+function aiLinkTone(status) {
+  const value = typeof status === 'string' ? status : (status && status.status);
+  if (value === AI_STATUS.UNCONFIGURED) return 'off';
+  if (!value || value === AI_STATUS.HEALTHY) return 'ok';
+  return 'retry';
+}
 
 class AiHealthMonitor {
   constructor() {
@@ -39,6 +53,8 @@ class AiHealthMonitor {
   }
 
   recordFailure() {
+    // A failed call when the server has no API key is expected, not news.
+    if (this.status.status === AI_STATUS.UNCONFIGURED) return;
     this.status = { status: AI_STATUS.DEGRADED, lastCheck: Date.now() };
     this._notify();
   }
@@ -48,10 +64,10 @@ class AiHealthMonitor {
       const res = await fetch('/api/ai/health', { method: 'GET' });
       if (!res.ok) throw new Error(`health ${res.status}`);
       const data = await res.json();
-      const openaiOk = data.openai_configured !== false && data.status === 'ok';
       const circuit = String(data.circuit_state || 'closed').toLowerCase();
       let status = AI_STATUS.HEALTHY;
-      if (!openaiOk) status = AI_STATUS.DOWN;
+      if (data.openai_configured === false) status = AI_STATUS.UNCONFIGURED;
+      else if (data.status !== 'ok') status = AI_STATUS.DOWN;
       else if (circuit === 'open') status = AI_STATUS.DEGRADED;
       this.status = { status, lastCheck: Date.now(), detail: data };
     } catch (_) {
@@ -73,7 +89,7 @@ class AiHealthMonitor {
 }
 
 export const aiHealth = new AiHealthMonitor();
-export { AI_STATUS };
+export { AI_STATUS, aiLinkTone };
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
