@@ -85,6 +85,13 @@ def test_impact_story_stacks_stories_with_expanders():
     assert ".city-stories-more" in html
 
 
+def test_impact_story_leads_with_city_tabs():
+    html = IMPACT.read_text(encoding="utf-8")
+    assert "city-intro" not in html
+    assert '<h1 id="city-explorer-title">' in html
+    assert html.index('id="city-tabs"') < html.index('id="storiesModal"')
+
+
 def test_support_donation_page_embeds_donorbox():
     page = (REPO / "frontend" / "donate.html").read_text(encoding="utf-8")
     app = (REPO / "backend" / "app.py").read_text(encoding="utf-8")

@@ -177,24 +177,19 @@
       --city-coral: #db684b;
       color: var(--city-ink);
     }
-    .city-intro { padding: 4.5rem 0 3.5rem; background: var(--city-paper); border-bottom: 1px solid var(--city-line); }
-    .city-kicker, .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
-    .city-kicker { display: flex; align-items: center; gap: 0.65rem; margin-bottom: 1.25rem; color: #4d6a5d; }
-    .city-kicker span, .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral); }
-    .city-intro-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: end; gap: 3rem; }
-    .city-intro h1, .city-story h3 { margin: 0; font-family: var(--fm-font-display); font-weight: 500; letter-spacing: 0; }
-    .city-intro h1 { font-size: 3.75rem; line-height: 1.04; }
-    .city-intro h1 em { color: #46765f; font-weight: 500; }
-    .city-intro-copy { max-width: 34rem; padding-bottom: 0.3rem; }
-    .city-intro-copy > p { margin: 0 0 1.25rem; color: #43594e; font-size: 1.08rem; }
+    .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
+    .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral, #db684b); }
+    .city-story h3 { margin: 0; font-family: var(--fm-font-display); font-weight: 500; letter-spacing: 0; }
     .sample-note { display: inline-flex; align-items: center; gap: 0.5rem; color: #77522d; font-size: 0.78rem; font-weight: 700; }
     .sample-note .icon-info { color: #b05d36; font-size: 1rem; }
-    .city-explorer { padding: 3.75rem 0 4.5rem; background: #fff; }
-    .city-selector-heading { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
+    .city-explorer { padding: 3rem 0 4.5rem; background: #fff; }
+    .city-selector-heading { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; }
     .section-kicker { margin: 0 0 0.5rem; color: #658071; }
-    .city-selector-heading h2 { margin: 0; font-size: 1.8rem; font-weight: 700; }
-    .city-region { display: inline-flex; align-items: center; gap: 0.45rem; padding-bottom: 0.25rem; color: var(--city-muted); font-size: 0.9rem; font-weight: 600; }
-    .city-region .icon-map-pin, .photo-label .icon-map-pin { color: var(--city-coral); }
+    .city-selector-heading .section-kicker { display: flex; align-items: center; gap: 0.65rem; color: #4d6a5d; }
+    .city-selector-heading h1 { margin: 0; font-family: var(--fm-font-display); font-size: 2.6rem; font-weight: 500; line-height: 1.1; letter-spacing: 0; }
+    .city-selector-heading .sample-note { padding-bottom: 0.3rem; }
+    .city-story .section-kicker .icon-map-pin, .photo-label .icon-map-pin { color: var(--city-coral); }
+    .city-story .section-kicker .icon-map-pin { font-size: 0.95rem; }
     .city-tabs { display: flex; gap: 0.35rem; margin: 1.5rem 0 1.75rem; overflow-x: auto; border-bottom: 1px solid var(--city-line); scrollbar-width: thin; }
     .city-tab { flex: 0 0 auto; padding: 0.8rem 1.1rem 0.9rem; border: 0; border-bottom: 3px solid transparent; background: transparent; color: #66766e; font: inherit; font-weight: 700; cursor: pointer; }
     .city-tab:hover, .city-tab:focus-visible, .city-tab.is-active { color: var(--city-ink); }
@@ -261,11 +256,9 @@
     body > section.bg-green-600, body > #featured, body > #stories, body > #news, body > #news + section { display: none; }
 
     @media (max-width: 760px) {
-      .city-intro { padding: 3rem 0 2.5rem; }
-      .city-intro-grid { grid-template-columns: 1fr; gap: 1.25rem; }
-      .city-intro h1 { font-size: 3rem; }
-      .city-explorer { padding: 2.75rem 0 3rem; }
+      .city-explorer { padding: 2.25rem 0 3rem; }
       .city-selector-heading { align-items: start; flex-direction: column; }
+      .city-selector-heading h1 { font-size: 2.15rem; }
       .city-panel { gap: 2.25rem; }
       .city-story-row { grid-template-columns: 1fr; gap: 1.75rem; }
       .city-story-row + .city-story-row { padding-top: 2.25rem; }
@@ -367,27 +360,14 @@
   </nav>
 
   <main class="city-impact">
-    <section class="city-intro">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p class="city-kicker">FOOD MAPS <span></span> LOCAL IMPACT</p>
-        <div class="city-intro-grid">
-          <h1 class="fm-hero-title">Every city has<br><em>a story to share.</em></h1>
-          <div class="city-intro-copy">
-            <p>See how neighbors, local food partners, and volunteers make good food go further in their own communities.</p>
-            <span class="sample-note"><i class="icon-info" aria-hidden="true"></i> Concept mockup - all figures and stories are sample content</span>
-          </div>
-        </div>
-      </div>
-    </section>
-
     <section class="city-explorer" aria-labelledby="city-explorer-title">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="city-selector-heading">
           <div>
-            <p class="section-kicker">ONE NETWORK, MANY NEIGHBORHOODS</p>
-            <h2 id="city-explorer-title">Explore local impact</h2>
+            <p class="section-kicker">DOGOODS FOOD MAPS <span class="story-dot"></span> LOCAL IMPACT</p>
+            <h1 id="city-explorer-title">Explore local impact</h1>
           </div>
-          <span class="city-region"><i class="icon-map-pin" aria-hidden="true"></i> East Bay, California</span>
+          <span class="sample-note"><i class="icon-info" aria-hidden="true"></i> Concept mockup - all figures and stories are sample content</span>
         </div>
 
         <div class="city-tabs" id="city-tabs" data-no-edit="true" role="tablist" aria-label="Choose a city"></div>
