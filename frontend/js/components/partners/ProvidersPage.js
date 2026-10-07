@@ -1,4 +1,4 @@
-// Dogoods food maps Providers page — platform greens (#10b981 / #059669 / #f0fdf4).
+// Do Good Food Maps Providers page — platform greens (#10b981 / #059669 / #f0fdf4).
 
 const PROVIDER_TYPE_TAGS = [
   "Food pantry",

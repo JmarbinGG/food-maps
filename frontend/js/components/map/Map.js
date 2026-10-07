@@ -25,7 +25,7 @@ function getEffectiveStatusFromListing(listing) {
   return rawStatus || 'available';
 }
 
-// Dogoods food maps operates in the SF Bay Area. Far-away / placeholder coords
+// Do Good Food Maps operates in the SF Bay Area. Far-away / placeholder coords
 // (0,0 or out-of-region pins) must not yank the default camera away.
 const BAY_AREA_CENTER = Object.freeze([-122.2711, 37.8044]); // Oakland / inner East Bay
 const BAY_AREA_DEFAULT_ZOOM = 10;

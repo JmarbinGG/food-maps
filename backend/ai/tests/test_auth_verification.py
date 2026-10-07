@@ -1,6 +1,6 @@
 """Regression tests for Bearer-token verification on /api/ai/* routes.
 
-Dogoods food maps AI auth is JWT-only (``JWT_SECRET`` HS256). Supabase JWT /
+Do Good Food Maps AI auth is JWT-only (``JWT_SECRET`` HS256). Supabase JWT /
 GoTrue verification paths have been removed.
 """
 from __future__ import annotations

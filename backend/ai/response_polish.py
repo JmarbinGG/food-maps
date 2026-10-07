@@ -19,8 +19,12 @@ _LISTING_ID_RE = re.compile(
     r"\b(?:listing\s*)?#\s*[0-9a-f-]{8,}\b|\blisting_id\s*[:=]\s*\S+",
     re.I,
 )
-_DOGOODS_BRAND_RE = re.compile(r"\bDo\s*Goods\b(?! food maps)", re.I)
-_FOOD_MAPS_RE = re.compile(r"(?<!Do Good )(?<!Dogoods )\bFood Maps\b")
+BRAND_NAME = "Do Good Food Maps"
+# The old name still shows up in model output, so collapse it first; the two
+# bare-name rules below then have nothing left to double-rewrite.
+_OLD_BRAND_NAME_RE = re.compile(r"\bDo\s*Goods?\s+food\s+maps\b", re.I)
+_DOGOODS_BRAND_RE = re.compile(r"\bDo\s*Goods\b(?!\s+Food\s+Maps)", re.I)
+_FOOD_MAPS_RE = re.compile(r"(?<!Do Good )\bFood Maps\b")
 _DOGGOODS_STORE_RE = re.compile(r"dogoods\.store", re.I)
 
 _LISTING_UI_KEYS = (
@@ -186,10 +190,13 @@ def _dedupe_search_prose(text: str, actions: list[dict]) -> str:
 
 
 def _fix_branding(text: str) -> str:
-    """Use the Dogoods food maps name in user-visible replies."""
-    out = _DOGOODS_BRAND_RE.sub("Dogoods food maps", text)
-    out = _FOOD_MAPS_RE.sub("Dogoods food maps", out)
-    return _DOGGOODS_STORE_RE.sub("Dogoods food maps", out)
+    """Use the Do Good Food Maps name in user-visible replies."""
+    # The domain goes first: the bare-name rule below also matches the
+    # "dogoods" in "dogoods.store" and would leave a stray ".store" behind.
+    out = _DOGGOODS_STORE_RE.sub(BRAND_NAME, text)
+    out = _OLD_BRAND_NAME_RE.sub(BRAND_NAME, out)
+    out = _DOGOODS_BRAND_RE.sub(BRAND_NAME, out)
+    return _FOOD_MAPS_RE.sub(BRAND_NAME, out)
 
 
 def polish_assistant_response(

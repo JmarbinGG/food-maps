@@ -190,7 +190,7 @@ def format_welcome_menu(language: str = "en") -> str:
             "1️⃣ **Buscar comida** cerca de ti (escribe «buscar comida» o «tengo hambre»)\n"
             "2️⃣ **Compartir comida** que te sobre (escribe «donar comida» o «publicar»)\n"
             "3️⃣ **Ver mis reservas** / recogidas (escribe «mis reservas»)\n"
-            "4️⃣ **Cómo funciona** Dogoods food maps (escribe «cómo funciona»)\n\n"
+            "4️⃣ **Cómo funciona** Do Good Food Maps (escribe «cómo funciona»)\n\n"
             "No hace falta ser perfecto — una frase corta está bien. "
             "¿Qué te gustaría hacer?"
         )
@@ -200,7 +200,7 @@ def format_welcome_menu(language: str = "en") -> str:
         "1️⃣ **Find food** near you (try «find food» or «I'm hungry»)\n"
         "2️⃣ **Share food** you have extra (try «donate food» or «post a listing»)\n"
         "3️⃣ **My pickups / claims** (try «my pickups» or «my claims»)\n"
-        "4️⃣ **How Dogoods food maps works** (try «how does this work»)\n\n"
+        "4️⃣ **How Do Good Food Maps works** (try «how does this work»)\n\n"
         "You don't need the perfect words — a short sentence is fine. "
         "What would you like to do?"
     )

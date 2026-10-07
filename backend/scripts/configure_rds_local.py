@@ -100,7 +100,7 @@ def open_security_group(instance_id: str, region: str, cidr: str) -> list[str]:
                         "IpProtocol": "tcp",
                         "FromPort": MYSQL_PORT,
                         "ToPort": MYSQL_PORT,
-                        "IpRanges": [{"CidrIp": cidr, "Description": "Dogoods food maps local dev"}],
+                        "IpRanges": [{"CidrIp": cidr, "Description": "Do Good Food Maps local dev"}],
                     }
                 ],
             )

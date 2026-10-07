@@ -4,7 +4,7 @@ import { formatDate } from '../../utils/helpers';
 
 async function patchFoodListings(ids, status) {
     for (const id of ids) {
-        console.warn('Receipt listing status update skipped (Dogoods food maps claims flow):', id, status);
+        console.warn('Receipt listing status update skipped (Do Good Food Maps claims flow):', id, status);
     }
 }
 
@@ -58,13 +58,13 @@ export default function Receipt({ receipt, items, onUpdate }) {
     // Handle pickup button click
     const handlePickup = async () => {
         if (loading) return;
-        alert('Receipt pickup updates are managed in the Dogoods food maps app claims flow.');
+        alert('Receipt pickup updates are managed in the Do Good Food Maps app claims flow.');
     };
 
     // Handle reclaim button click (for expired receipts)
     const handleReclaim = async () => {
         if (loading) return;
-        alert('Receipt reclaim is managed in the Dogoods food maps app claims flow.');
+        alert('Receipt reclaim is managed in the Do Good Food Maps app claims flow.');
     };
 
 

@@ -39,7 +39,7 @@ def run_server():
     rapid_restart_window = 60  # seconds
     restart_times = []
     
-    logger.info("Starting Dogoods food maps API server with auto-restart...")
+    logger.info("Starting Do Good Food Maps API server with auto-restart...")
     
     while True:
         try:

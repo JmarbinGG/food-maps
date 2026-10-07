@@ -997,7 +997,7 @@ def _guided_format_step(
             "MODO GUIADO = tutorial IDIOTA-PROOF (como a un niño).\n"
             "CRÍTICO: NO llames navigate_ui. NO abras ninguna página tú.\n"
             "Solo DILE en el tutorial cómo abrirla "
-            "(Dogoods food maps: Compartir = botón verde arriba derecha; Buscar comida = mapa de inicio "
+            "(Do Good Food Maps: Compartir = botón verde arriba derecha; Buscar comida = mapa de inicio "
             "vía el logo — en GUIADO de buscar NO uses el botón verde Buscar comida, abre el chat). "
             "Ellos la abren.\n"
             "Palabras cortas. UNA sola acción. Frases de 5–12 palabras.\n"
@@ -1024,7 +1024,7 @@ def _guided_format_step(
         "GUIDED MODE = IDIOT-PROOF baby-step TUTORIAL.\n"
         "CRITICAL: Do NOT call navigate_ui. Do NOT open any page yourself.\n"
         "Only TELL the user how to open the page in the tutorial "
-        "(Dogoods food maps: Share Food = top-right green button; Find Food = home map via logo — "
+        "(Do Good Food Maps: Share Food = top-right green button; Find Food = home map via logo — "
         "do NOT send them to the green Find Food button in guided Find, that opens chat). "
         "They open it.\n"
         "Tiny words. ONE action only. Sentences of about 5–12 words.\n"
@@ -1044,7 +1044,7 @@ def _guided_format_step(
     )
 
 
-# Idiot-proof UI walkthrough for Dogoods food maps Share Food (CreateListing).
+# Idiot-proof UI walkthrough for Do Good Food Maps Share Food (CreateListing).
 # Keep in sync with frontend/nouri/utils/nouriGuide/registry.js → share-food.steps.
 _SHARE_GUIDED_UI: tuple[dict, ...] = (
     {
@@ -1054,7 +1054,7 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Look at the TOP RIGHT of Dogoods food maps.\n"
+            "1) Look at the TOP RIGHT of Do Good Food Maps.\n"
             "2) Find the green button that says Share Food.\n"
             "3) Click Share Food.\n"
             "4) Wait until you see the Share Food form (Basic Info / Safety Check).\n"
@@ -1062,7 +1062,7 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Mira ARRIBA A LA DERECHA en Dogoods food maps.\n"
+            "1) Mira ARRIBA A LA DERECHA en Do Good Food Maps.\n"
             "2) Busca el botón verde Compartir comida.\n"
             "3) Haz clic en Compartir comida.\n"
             "4) Espera el formulario Share Food (Información básica / Seguridad).\n"
@@ -1283,7 +1283,7 @@ _SHARE_GUIDED_UI: tuple[dict, ...] = (
     },
 )
 
-# Dogoods food maps: requests are handled via Nouri chat (no separate Request Food header button).
+# Do Good Food Maps: requests are handled via Nouri chat (no separate Request Food header button).
 _REQUEST_GUIDED_UI: tuple[dict, ...] = (
     {
         "section_en": "Stay in chat",
@@ -1292,13 +1292,13 @@ _REQUEST_GUIDED_UI: tuple[dict, ...] = (
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Dogoods food maps uses Share Food and Find Food in the top bar.\n"
+            "1) Do Good Food Maps uses Share Food and Find Food in the top bar.\n"
             "2) To request help, stay in this Nouri chat — no separate Request Food page.\n"
             "3) Ask: 'Ready to tell me what food you need? Say done.'"
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Dogoods food maps usa Compartir y Buscar comida en la barra de arriba.\n"
+            "1) Do Good Food Maps usa Compartir y Buscar comida en la barra de arriba.\n"
             "2) Para pedir ayuda, quédate en este chat con Nouri.\n"
             "3) Pregunta: '¿Listo para decirme qué comida necesitas? Di listo.'"
         ),
@@ -1343,14 +1343,14 @@ _REQUEST_GUIDED_UI: tuple[dict, ...] = (
         "field": "school_district",
         "body_en": (
             "Baby step:\n"
-            "• Check the ZIP button next to the Dogoods food maps logo.\n"
+            "• Check the ZIP button next to the Do Good Food Maps logo.\n"
             "• Tap it if you need to change your search area.\n"
             "• Or tell me your ZIP / neighborhood in chat.\n"
             "• Say done."
         ),
         "body_es": (
             "Paso de bebé:\n"
-            "• Mira el botón ZIP junto al logo de Dogoods food maps.\n"
+            "• Mira el botón ZIP junto al logo de Do Good Food Maps.\n"
             "• Púlsalo si quieres cambiar la zona.\n"
             "• O dime tu ZIP / barrio en el chat.\n"
             "• Di listo."
@@ -1400,19 +1400,19 @@ _FIND_GUIDED_UI: tuple[dict, ...] = (
         "is_open_step": True,
         "body_en": (
             "Tell them this, very slowly:\n"
-            "1) Find Food on Dogoods food maps IS the home map — not a separate form.\n"
-            "2) Tap the Dogoods food maps logo (top left) if you are on another screen.\n"
+            "1) Find Food on Do Good Food Maps IS the home map — not a separate form.\n"
+            "2) Tap the Do Good Food Maps logo (top left) if you are on another screen.\n"
             "3) Wait until you see the map with food pins, and/or All Listings on the left.\n"
             "4) Do NOT use the green Find Food button for this tutorial — that opens chat.\n"
-            "5) Ask: 'Do you see the Dogoods food maps map now? Say done.'"
+            "5) Ask: 'Do you see the Do Good Food Maps map now? Say done.'"
         ),
         "body_es": (
             "Diles esto, muy despacio:\n"
-            "1) Buscar comida en Dogoods food maps ES el mapa de inicio — no hay otro formulario.\n"
-            "2) Pulsa el logo de Dogoods food maps (arriba izquierda) si estás en otra pantalla.\n"
+            "1) Buscar comida en Do Good Food Maps ES el mapa de inicio — no hay otro formulario.\n"
+            "2) Pulsa el logo de Do Good Food Maps (arriba izquierda) si estás en otra pantalla.\n"
             "3) Espera ver el mapa con pines y/o Todas las publicaciones a la izquierda.\n"
             "4) NO uses el botón verde Buscar comida en este tutorial — abre el chat.\n"
-            "5) Pregunta: '¿Ya ves el mapa de Dogoods food maps? Di listo.'"
+            "5) Pregunta: '¿Ya ves el mapa de Do Good Food Maps? Di listo.'"
         ),
     },
     {
@@ -1421,7 +1421,7 @@ _FIND_GUIDED_UI: tuple[dict, ...] = (
         "field": "zip",
         "body_en": (
             "Baby step:\n"
-            "• Look next to the Dogoods food maps logo for the green ZIP chip.\n"
+            "• Look next to the Do Good Food Maps logo for the green ZIP chip.\n"
             "• Tap it — a box titled Update search area opens.\n"
             "• Type your ZIP code, then tap Search this area.\n"
             "• Say done when the area looks right."
@@ -1644,12 +1644,12 @@ def _page_key_from_path(path: str) -> str:
 
 _PAGE_KNOWLEDGE_EN: dict[str, str] = {
     "home": (
-        "HOME (/). Dogoods food maps map is the main Find Food surface. Top bar CTAs: "
+        "HOME (/). Do Good Food Maps map is the main Find Food surface. Top bar CTAs: "
         "green Share Food (donors) or Find Food (recipients), plus ZIP area. "
         "Offer Share Food (/share → create) or Find Food (map). Use navigate_ui."
     ),
     "share": (
-        "SHARE FOOD (/share) — Dogoods food maps CreateListing form. Step 1 Basic Info: "
+        "SHARE FOOD (/share) — Do Good Food Maps CreateListing form. Step 1 Basic Info: "
         "title, description, optional photos, category, perishability, quantity, "
         "unit, pickup address (Mapbox), pickup window start/end. Step 2 Safety Check "
         "(or Skip). Listing may await admin approval. Hands-on: collect in chat then "
@@ -1657,7 +1657,7 @@ _PAGE_KNOWLEDGE_EN: dict[str, str] = {
         "navigate_ui target=create only if not already on share. Photos are optional."
     ),
     "find": (
-        "FIND FOOD — Dogoods food maps home map (currentView=map). There is no separate Find Food form. "
+        "FIND FOOD — Do Good Food Maps home map (currentView=map). There is no separate Find Food form. "
         "Header green Find Food opens Nouri chat (not the map). Guide users to the logo/home map, "
         "ZIP chip → Update search area → Search this area, Map/List toggle, All Listings sidebar, "
         "pin → Details, Claim / Claim This Food, then Confirm Your Claim (4-digit SMS). "
@@ -1668,7 +1668,7 @@ _PAGE_KNOWLEDGE_EN: dict[str, str] = {
         "navigate_ui target=near-me."
     ),
     "request": (
-        "REQUEST FOOD — Dogoods food maps has no separate Request Food header button. "
+        "REQUEST FOOD — Do Good Food Maps has no separate Request Food header button. "
         "Help in Nouri chat and/or send them to Find Food on the map. "
         "post_food_request only if they explicitly want a posted need."
     ),
@@ -1744,25 +1744,25 @@ _PAGE_KNOWLEDGE_EN: dict[str, str] = {
 
 _PAGE_KNOWLEDGE_ES: dict[str, str] = {
     "home": (
-        "INICIO (/). El mapa de Dogoods food maps es Buscar comida. Barra superior: botón verde "
+        "INICIO (/). El mapa de Do Good Food Maps es Buscar comida. Barra superior: botón verde "
         "Compartir comida (donantes) o Buscar comida, más ZIP. Usa navigate_ui."
     ),
     "share": (
-        "COMPARTIR COMIDA (/share) — formulario CreateListing de Dogoods food maps. "
+        "COMPARTIR COMIDA (/share) — formulario CreateListing de Do Good Food Maps. "
         "Paso 1: título, descripción, fotos opcionales, categoría, perecedero, cantidad, "
         "unidad, dirección Mapbox, ventana de recogida. Paso 2: revisión de seguridad "
         "(o saltar). Puede quedar pendiente de aprobación. Fotos opcionales. "
         "navigate_ui target=create si no están en compartir."
     ),
     "find": (
-        "BUSCAR COMIDA — el mapa de inicio de Dogoods food maps (no hay formulario aparte). "
+        "BUSCAR COMIDA — el mapa de inicio de Do Good Food Maps (no hay formulario aparte). "
         "El botón verde Buscar comida abre el chat de Nouri. Guía: logo/mapa, chip ZIP → "
         "Actualizar zona → Buscar en esta zona, Mapa/Lista, pines → Detalles, Reclamar / "
         "Reclamar esta comida, luego Confirmar reclamo (SMS 4 dígitos). navigate_ui target=map."
     ),
     "near-me": "CERCA DE MÍ (/near-me). Misma lógica que Find. navigate_ui target=near-me.",
     "request": (
-        "SOLICITAR — Dogoods food maps no tiene botón Solicitar en la barra. "
+        "SOLICITAR — Do Good Food Maps no tiene botón Solicitar en la barra. "
         "Ayuda en el chat de Nouri y/o envía a Buscar comida en el mapa."
     ),
     "claim": "RECLAMAR (/claim). Usa claim_listing o navega target=claim.",
@@ -1782,7 +1782,7 @@ _PAGE_KNOWLEDGE_ES: dict[str, str] = {
     "recipes": "RECETAS (/recipes). navigate_ui target=meal-planning.",
     "admin": "ADMIN (/admin…). navigate_ui target=admin o dispatch.",
     "contact": "CONTACTO (/contact).",
-    "how-it-works": "CÓMO FUNCIONA (/how-it-works). Explica Buscar/Compartir en Dogoods food maps.",
+    "how-it-works": "CÓMO FUNCIONA (/how-it-works). Explica Buscar/Compartir en Do Good Food Maps.",
     "sponsors": "PATROCINADORES (/sponsors). navigate_ui target=partners.",
     "faqs": "PREGUNTAS FRECUENTES (/faqs).",
 }
@@ -1810,23 +1810,23 @@ def build_page_knowledge_prompt(
         if lang == "es":
             return (
                 f"CONOCIMIENTO DE PÁGINA: el usuario está en `{path_val or page_key}`. "
-                "Ayúdalo con lo que esa pantalla permite en Dogoods food maps. "
+                "Ayúdalo con lo que esa pantalla permite en Do Good Food Maps. "
                 "Si no sabes el detalle, ofrece Buscar comida / Compartir comida."
             )
         return (
             f"PAGE KNOWLEDGE: the user is on `{path_val or page_key}`. "
-            "Help with what that Dogoods food maps screen can do. "
+            "Help with what that Do Good Food Maps screen can do. "
             "If unsure, offer Find Food / Share Food."
         )
     if lang == "es":
         return (
-            "CONOCIMIENTO DE ESTA PÁGINA (Dogoods food maps — sé preciso):\n"
+            "CONOCIMIENTO DE ESTA PÁGINA (Do Good Food Maps — sé preciso):\n"
             f"{body}\n"
             "Usa navigate_ui cuando deban cambiar de pantalla. "
             "No inventes pantallas que no existan."
         )
     return (
-        "PAGE KNOWLEDGE (Dogoods food maps — be precise):\n"
+        "PAGE KNOWLEDGE (Do Good Food Maps — be precise):\n"
         f"{body}\n"
         "Use navigate_ui when they should change screens. "
         "Do not invent screens that do not exist."
@@ -2057,7 +2057,7 @@ def assistance_mode_tool_block_reason(
         return (
             "GUIDED tutorial mode — do NOT open pages with navigate_ui. "
             "TELL the user in the tutorial how to open the page themselves "
-            "(look at the Dogoods food maps logo for the home map, or the green Share Food button for donors). "
+            "(look at the Do Good Food Maps logo for the home map, or the green Share Food button for donors). "
             "Never navigate for them while guiding."
         )
     if mode == "open_page":
@@ -6415,7 +6415,7 @@ def resolve_listing_id_from_search(
     raw_id,
     user_id: str,
 ) -> tuple[Optional[str], Optional[str]]:
-    """Map search-card index (#N) or a Dogoods food maps numeric listing id.
+    """Map search-card index (#N) or a Do Good Food Maps numeric listing id.
 
     UUIDs are rejected — listings are integer ids on MySQL.
     """
@@ -6425,7 +6425,7 @@ def resolve_listing_id_from_search(
     s = str(raw_id).strip()
     if re.match(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", s, re.I):
         return None, (
-            "Dogoods food maps listings use numeric ids or the search card number "
+            "Do Good Food Maps listings use numeric ids or the search card number "
             "(#1, #2), not UUIDs."
         )
     try:

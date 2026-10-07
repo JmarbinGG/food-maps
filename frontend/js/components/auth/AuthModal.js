@@ -62,7 +62,7 @@ function AuthModal({ onClose, onAuth }) {
       email: 'admin@foodmaps.demo',
       role: 'admin',
       onboardingCompleted: true,
-      address: 'Dogoods food maps HQ',
+      address: 'Do Good Food Maps HQ',
       coords: { lat: 40.7500, lng: -73.9850 }
     },
     {
@@ -437,7 +437,7 @@ function AuthModal({ onClose, onAuth }) {
                   </p>
                 )}
                 <p className="text-xs text-[var(--text-secondary)] mt-1">
-                  Required. Get this from your school or Dogoods food maps coordinator.
+                  Required. Get this from your school or Do Good Food Maps coordinator.
                 </p>
               </div>
             )}

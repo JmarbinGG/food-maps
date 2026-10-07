@@ -1,1 +1,1 @@
-"""Dogoods food maps AI backend (Nouri) — mounted onto the main FastAPI app as a sub-router."""
+"""Do Good Food Maps AI backend (Nouri) — mounted onto the main FastAPI app as a sub-router."""

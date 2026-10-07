@@ -260,7 +260,7 @@ def sync_pages(conn, pages: list[tuple[str, dict]]) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Sync production Dogoods food maps data into local MySQL")
+    parser = argparse.ArgumentParser(description="Sync production Do Good Food Maps data into local MySQL")
     parser.add_argument("--prod", default=os.getenv("PROD_BASE_URL", PROD_DEFAULT))
     parser.add_argument("--local-db", default=os.getenv("LOCAL_DATABASE_URL", LOCAL_DEFAULT))
     parser.add_argument("--email", default=os.getenv("PROD_SYNC_EMAIL", "aslanabdulkarim84@gmail.com"))

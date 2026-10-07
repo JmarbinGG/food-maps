@@ -1,7 +1,7 @@
 """
-Dogoods food maps AI Conversation Engine — MySQL edition.
+Do Good Food Maps AI Conversation Engine — MySQL edition.
 
-Powers Nouri, the Dogoods food maps AI assistant. Talks to:
+Powers Nouri, the Do Good Food Maps AI assistant. Talks to:
   - OpenAI GPT-4.1 (reasoning + tool calls)
   - OpenAI Whisper (speech-to-text)
   - OpenAI TTS (text-to-speech)
@@ -418,7 +418,7 @@ def _build_action_policy() -> str:
         "to fetch candidates — never ask the user for an id.\n"
         "\n"
         "## Finding food — no live GPS, ever\n"
-        "Dogoods food maps does NOT use browser geolocation in chat. NEVER ask the "
+        "Do Good Food Maps does NOT use browser geolocation in chat. NEVER ask the "
         "user to enable GPS, share coordinates, or open a picker. For "
         "ANY 'I'm hungry' / 'find food' / 'nearby' request, call "
         "search_food_near_user with their user_id — it uses their saved "
@@ -434,7 +434,7 @@ def _build_action_policy() -> str:
         "Community scope (critical): search_food_near_user / "
         "get_recent_listings only return the user's own community. "
         "NEVER invent, mention, or "
-        "offer food from other schools/communities (including Dogoods food maps "
+        "offer food from other schools/communities (including Do Good Food Maps "
         "Warehouse unless the user belongs to it). If results are empty, "
         "say nothing is available in their community right now — do not "
         "suggest another school's listings.\n"
@@ -532,7 +532,7 @@ def _build_action_policy() -> str:
         "Never run a rigid checklist and never re-ask something they "
         "already answered.\n"
         "\n"
-        "## Know the whole Dogoods food maps app\n"
+        "## Know the whole Do Good Food Maps app\n"
         "You receive LIVE APP STATE + PAGE KNOWLEDGE for the route the "
         "user is on (/share, /find, /request, /claim, /profile, "
         "/settings, /receipts, /dashboard, /listings, /near-me, auth, "
@@ -774,7 +774,7 @@ def _build_action_policy() -> str:
         "For a single listing, keep using claim_listing.\n"
         "\n"
         "## Non-food / off-scope requests\n"
-        "Dogoods food maps is FOOD only. Old couches, cash, gift cards, cars, "
+        "Do Good Food Maps is FOOD only. Old couches, cash, gift cards, cars, "
         "trivia, medical/legal advice → decline warmly in one line, "
         "point to the right venue if there is one, and steer back to "
         "food ('want help finding food or sharing some?'). Never "
@@ -891,7 +891,7 @@ def _build_system_prompt(training_data: dict, conversation_tone: str = "warm") -
 
     base = training_data.get(
         "system_base",
-        "You are Nouri, the Dogoods food maps AI assistant — a warm and helpful community food-sharing guide for the Dogoods food maps platform. Always refer to the product as Dogoods food maps and yourself as Nouri.",
+        "You are Nouri, the Do Good Food Maps AI assistant — a warm and helpful community food-sharing guide for the Do Good Food Maps platform. Always refer to the product as Do Good Food Maps and yourself as Nouri.",
     )
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -903,9 +903,9 @@ def _build_system_prompt(training_data: dict, conversation_tone: str = "warm") -
     action_policy = _build_action_policy()
     branding_rules = (
         "## Branding (never violate)\n"
-        "- Product name: Dogoods food maps. Assistant name: Nouri.\n"
+        "- Product name: Do Good Food Maps. Assistant name: Nouri.\n"
         "- NEVER say DoGoods, dogoods.store, or describe a different product.\n"
-        "- If the user asks what this app is, explain Dogoods food maps community food sharing."
+        "- If the user asks what this app is, explain Do Good Food Maps community food sharing."
     )
     return (
         f"{base}\n\nCurrent date and time: {now_str}\n\n"
@@ -2120,7 +2120,7 @@ class ConversationEngine:
         • Recipients: new available listings near them in the last 2 hours
         • Donors: their live listings expiring within 48 hours
 
-        Integer Dogoods food maps ids only. Empty DB yields no chips.
+        Integer Do Good Food Maps ids only. Empty DB yields no chips.
         """
         if not profile or not user_id:
             return []

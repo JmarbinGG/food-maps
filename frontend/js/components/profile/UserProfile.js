@@ -510,7 +510,7 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
                       </p>
                     )}
                     <p className="text-xs text-gray-500">
-                      Set by your signup approval code. Contact a Dogoods food maps admin to change it.
+                      Set by your signup approval code. Contact a Do Good Food Maps admin to change it.
                     </p>
                   </div>
                 ) : (
@@ -761,7 +761,7 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
                 <ul className="text-sm text-gray-600 space-y-1">
                   <li>• Share your referral code with friends</li>
                   <li>• They enter it when signing up</li>
-                  <li>• Help grow the Dogoods food maps community</li>
+                  <li>• Help grow the Do Good Food Maps community</li>
                   <li>• Reduce food waste together!</li>
                 </ul>
               </div>

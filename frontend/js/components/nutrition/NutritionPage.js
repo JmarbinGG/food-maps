@@ -1,4 +1,4 @@
-// Dogoods food maps Nutrition — editorial, interactive guidance for shared food.
+// Do Good Food Maps Nutrition — editorial, interactive guidance for shared food.
 
 const PLATE_PARTS = [
   {
@@ -235,7 +235,7 @@ function NutritionPage() {
         <div className="nx-hero__media" aria-hidden="true" />
         <div className="nx-hero__content">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 w-full">
-            <p className="nx-brand">Dogoods food maps</p>
+            <p className="nx-brand">Do Good Food Maps</p>
             <h1 className="fm-hero-title max-w-xl">
               Eat well with shared food
             </h1>
@@ -328,7 +328,7 @@ function NutritionPage() {
               Meals from what shows up
             </h2>
             <p className="text-[var(--nx-stone)] text-lg leading-relaxed">
-              Built from items that often appear on Dogoods food maps and at local pantries.
+              Built from items that often appear on Do Good Food Maps and at local pantries.
             </p>
           </div>
           <div className="lg:col-span-8">
@@ -399,7 +399,7 @@ function NutritionPage() {
               href="index.html"
               className="inline-flex items-center justify-center bg-white text-[var(--nx-forest)] px-7 py-3.5 rounded-xl font-semibold hover:bg-[var(--nx-sage)] transition-colors"
             >
-              Open Dogoods food maps
+              Open Do Good Food Maps
             </a>
             <a
               href="providers.html"

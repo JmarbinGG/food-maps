@@ -217,7 +217,7 @@ class TestVoiceEndpoint:
         assert resp.status_code == 504
         body = resp.json()
         code = body.get("error_code") or (body.get("detail") or {}).get("error_code") if isinstance(body.get("detail"), dict) else None
-        assert code in (None, "timeout") or body.get("detail")  # Dogoods food maps may redact 5xx detail
+        assert code in (None, "timeout") or body.get("detail")  # Do Good Food Maps may redact 5xx detail
 
     @patch("backend.ai.routes.conversation_engine")
     def test_voice_runtime_error_returns_503(self, mock_engine, client):

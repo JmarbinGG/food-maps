@@ -9,8 +9,8 @@ const STEPS = [
         id: 'welcome',
         target: null,
         icon: 'fa-seedling',
-        title: 'Welcome to Dogoods food maps!',
-        content: 'Dogoods food maps connects families with free food and resources in Alameda County. Let\'s walk through the platform together — it only takes a minute.',
+        title: 'Welcome to Do Good Food Maps!',
+        content: 'Do Good Food Maps connects families with free food and resources in Alameda County. Let\'s walk through the platform together — it only takes a minute.',
         placement: 'center',
         route: '/'
     },
@@ -82,7 +82,7 @@ const STEPS = [
         target: null,
         icon: 'fa-check-circle',
         title: 'You\'re All Set!',
-        content: 'You now know how to navigate Dogoods food maps. Click the help button (?) in the header anytime to restart this tour.',
+        content: 'You now know how to navigate Do Good Food Maps. Click the help button (?) in the header anytime to restart this tour.',
         placement: 'center',
         route: null
     }

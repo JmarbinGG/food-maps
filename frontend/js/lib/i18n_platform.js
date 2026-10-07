@@ -1,4 +1,4 @@
-// Shared i18n bootstrap for every Dogoods food maps page.
+// Shared i18n bootstrap for every Do Good Food Maps page.
 // Include ONCE in <head> on any HTML page:
 //   <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20260812c">
 //   <script src="js/lib/i18n_platform.js?v=20260812c"></script>

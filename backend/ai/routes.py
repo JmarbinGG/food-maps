@@ -1,5 +1,5 @@
 """
-Dogoods food maps AI (Nouri) — FastAPI router (mounted onto the main Dogoods food maps app).
+Do Good Food Maps AI (Nouri) — FastAPI router (mounted onto the main Do Good Food Maps app).
 
 Endpoints:
   POST /api/ai/chat            - Text conversation
@@ -110,20 +110,20 @@ def _enforce_rate_limit(request: Request) -> None:
 
 
 def _parse_user_id(raw: str) -> str:
-    """Accept a non-empty Dogoods food maps user_id string."""
+    """Accept a non-empty Do Good Food Maps user_id string."""
     if not raw:
         raise HTTPException(400, "user_id required")
     return str(raw).strip()
 
 
 def _require_voice_user_id(user_id: str) -> None:
-    """Dogoods food maps accepts local numeric IDs for voice turns."""
+    """Do Good Food Maps accepts local numeric IDs for voice turns."""
     if str(user_id).isdigit():
         return
     raise HTTPException(400, "user_id must be a numeric id")
 
 
-# --- Bearer token verification (Dogoods food maps JWT only) ---
+# --- Bearer token verification (Do Good Food Maps JWT only) ---
 
 def _try_hs256_payload(token: str, secret: str) -> dict | None:
     """Decode an HS256 token with ``secret`` and return its payload on success."""
@@ -161,7 +161,7 @@ def _auth_role_from_credentials(
 
 
 def _auth_user_id(credentials: HTTPAuthorizationCredentials | None) -> str | None:
-    """Verify Bearer token with Dogoods food maps JWT_SECRET; return ``sub`` or None."""
+    """Verify Bearer token with Do Good Food Maps JWT_SECRET; return ``sub`` or None."""
     if credentials is None:
         return None
     return _try_hs256(credentials.credentials, JWT_SECRET)
@@ -1044,12 +1044,12 @@ async def ai_public_chat(
         {
             "role": "system",
             "content": (
-                "You are Nouri, talking to an anonymous visitor on the Dogoods food maps landing page. "
+                "You are Nouri, talking to an anonymous visitor on the Do Good Food Maps landing page. "
                 "They are not signed in. Do NOT call any tools. Do NOT ask for or reference "
                 "their account, pickups, listings, or reminders. Answer general questions about "
-                "how Dogoods food maps works, food sharing, food safety, and community impact in Alameda County. "
+                "how Do Good Food Maps works, food sharing, food safety, and community impact in Alameda County. "
                 "Keep replies concise (2-4 sentences) and friendly. If they need account-specific "
-                "help, politely suggest they sign up or sign in on Dogoods food maps."
+                "help, politely suggest they sign up or sign in on Do Good Food Maps."
             ),
         },
         {"role": "user", "content": body.message},
@@ -1392,7 +1392,7 @@ async def ai_voice(
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
     # Voice is a real-user only surface (recording audio requires an
-    # active session). Accept Dogoods food maps numeric IDs or UUIDs; reject
+    # active session). Accept Do Good Food Maps numeric IDs or UUIDs; reject
     # garbled input with 400 before ownership checks.
     _require_voice_user_id(uid)
     await _require_owner(credentials, uid)
@@ -1615,7 +1615,7 @@ async def ai_query(
         payload = {
             "model": CHAT_MODEL,
             "messages": [
-                {"role": "system", "content": "You are Nouri, the Dogoods food maps data assistant. Be concise."},
+                {"role": "system", "content": "You are Nouri, the Do Good Food Maps data assistant. Be concise."},
                 {"role": "user", "content": prompt},
             ],
             "temperature": 0.3,
@@ -1787,7 +1787,7 @@ async def ai_insights(
         "donor": "Keep your listings fresh and pickups smooth.",
         "organizer": "Your dispatch queue at a glance.",
         "recipient": "Food and pickups tailored for you.",
-    }.get(role, "Your Dogoods food maps assistant insights.")
+    }.get(role, "Your Do Good Food Maps assistant insights.")
 
     return {
         "role": role,
@@ -2069,7 +2069,7 @@ async def process_pending_reminders() -> int:
     for t in tasks:
         if t["phone"] and t["sms_consent"]:
             prefix = prefix_map.get(t["reminder_type"], "📋 Reminder")
-            body = f"[Dogoods food maps] {prefix}: {t['message']}"
+            body = f"[Do Good Food Maps] {prefix}: {t['message']}"
             if await _send_sms_via_main_app(t["phone"], body):
                 sent += 1
         else:

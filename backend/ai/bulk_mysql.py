@@ -1,4 +1,4 @@
-"""MySQL helpers for AI bulk listing routes (Dogoods food maps platform)."""
+"""MySQL helpers for AI bulk listing routes (Do Good Food Maps platform)."""
 from __future__ import annotations
 
 import json
@@ -189,7 +189,7 @@ def resolve_community_mysql(
 ) -> tuple[Optional[str], Optional[str]]:
     """Resolve community name/id against MySQL DistributionCenter catalog.
 
-    Dogoods food maps has no separate ``communities`` table; active distribution
+    Do Good Food Maps has no separate ``communities`` table; active distribution
     centers are the chip/catalog source of truth for local MySQL.
     """
     from backend.app import SessionLocal

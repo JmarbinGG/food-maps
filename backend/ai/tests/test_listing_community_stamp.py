@@ -110,7 +110,7 @@ async def test_post_listing_stamps_food_resource_community_id():
 
 @pytest.mark.asyncio
 async def test_post_listing_rejects_non_digit_user_id():
-    """MySQL-only post path requires a numeric Dogoods food maps user id."""
+    """MySQL-only post path requires a numeric Do Good Food Maps user id."""
     from backend.ai.tools import _post_food_listing_legacy_sqlalchemy
 
     result = await _post_food_listing_legacy_sqlalchemy(

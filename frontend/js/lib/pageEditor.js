@@ -1,5 +1,5 @@
 /**
- * Shared admin page editor for Dogoods food maps marketing/content pages.
+ * Shared admin page editor for Do Good Food Maps marketing/content pages.
  *
  * Editing UX matches Admin → Distribution Centers: a form panel with fields,
  * live preview on the page, Save / Cancel. No blue dashed borders on the page.

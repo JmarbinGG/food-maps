@@ -1,5 +1,5 @@
 /**
- * Unified Accessibility + AI Guide context (DoGoods engine + Dogoods food maps storage).
+ * Unified Accessibility + AI Guide context (DoGoods engine + Do Good Food Maps storage).
  */
 import React, {
   createContext,

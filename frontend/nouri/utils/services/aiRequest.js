@@ -1,6 +1,6 @@
 /**
  * Shared helpers for every /api/ai/* client call.
- * Dogoods food maps auth: Bearer from localStorage (auth_token / token).
+ * Do Good Food Maps auth: Bearer from localStorage (auth_token / token).
  */
 
 function readLocalToken() {
@@ -24,7 +24,7 @@ export async function getAiAuthHeaders(extra = {}) {
 }
 
 export function clearAiAuthCache() {
-  /* Dogoods food maps reads localStorage live — nothing to clear. */
+  /* Do Good Food Maps reads localStorage live — nothing to clear. */
 }
 
 /**

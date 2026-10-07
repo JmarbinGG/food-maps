@@ -35,7 +35,7 @@ export const NOURI_GOALS = {
     route: '/share',
     goal: 'share food',
     welcome:
-      'Welcome to Dogoods food maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.',
+      'Welcome to Do Good Food Maps Share Food! Look under this light-blue AI GUIDE card and fill Basic Info top to bottom, then Safety Check.',
     // Keep indices aligned with backend `_SHARE_GUIDED_UI` (CreateListing fields).
     steps: [
       { section: 'Open Share Food', label: 'Open Share Food', fieldName: '' },
@@ -58,7 +58,7 @@ export const NOURI_GOALS = {
     route: '/find',
     goal: 'request food',
     welcome:
-      "Welcome! On Dogoods food maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
+      "Welcome! On Do Good Food Maps, tell Nouri what you need in chat, or use Find Food on the map. Click or tap whenever you need help.",
     // Aligned with backend `_REQUEST_GUIDED_UI` (6 steps).
     steps: [
       { section: 'Stay in chat', label: 'Stay in chat', fieldName: 'title' },
@@ -84,7 +84,7 @@ export const NOURI_GOALS = {
     route: '/find',
     goal: 'find food',
     welcome:
-      'Find Food is the Dogoods food maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.',
+      'Find Food is the Do Good Food Maps home map. Set your ZIP, browse pins or the list, then Claim and confirm with your SMS code.',
     // Aligned with backend `_FIND_GUIDED_UI` (5 steps).
     steps: [
       { section: 'Open the map', label: 'Open map', fieldName: 'search' },
@@ -108,7 +108,7 @@ export const NOURI_GOALS = {
     formId: 'signup',
     route: '/signup',
     goal: 'sign up',
-    welcome: 'Create your Dogoods food maps account.',
+    welcome: 'Create your Do Good Food Maps account.',
     steps: [
       { section: 'Account', label: 'Name', fieldName: 'name' },
       { section: 'Account', label: 'Email', fieldName: 'email' },
@@ -198,7 +198,7 @@ export function resolveGoalKey(formId) {
   return goalKeyFromFormId(formId);
 }
 
-/** Hint text maps for form voice guide (Dogoods food maps CreateListing fields). */
+/** Hint text maps for form voice guide (Do Good Food Maps CreateListing fields). */
 export const SHARE_FOOD_HINTS = {
   title: 'Enter a short name for the food you are sharing.',
   description: 'Add a few details so neighbors know what to expect.',

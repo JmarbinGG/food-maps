@@ -61,7 +61,7 @@ export function welcomeGreeting(lang, userName) {
   return first ? `Hi, ${first}!` : 'Hi there!';
 }
 
-// Genesis starter cards (Dogoods food maps branding; same card set as the reference AI UI).
+// Genesis starter cards (Do Good Food Maps branding; same card set as the reference AI UI).
 const WELCOME_CATEGORIES = {
   en: [
     {
@@ -70,7 +70,7 @@ const WELCOME_CATEGORIES = {
       accent: 'emerald',
       title: 'Not sure?',
       blurb: 'I’ll walk you through it',
-      prompts: ["I'm not sure what to do — help me", 'How does Dogoods food maps work?'],
+      prompts: ["I'm not sure what to do — help me", 'How does Do Good Food Maps work?'],
     },
     {
       key: 'find',
@@ -112,7 +112,7 @@ const WELCOME_CATEGORIES = {
       accent: 'emerald',
       title: '¿No estás seguro?',
       blurb: 'Te guío paso a paso',
-      prompts: ['No sé qué hacer — ayúdame', '¿Cómo funciona Dogoods food maps?'],
+      prompts: ['No sé qué hacer — ayúdame', '¿Cómo funciona Do Good Food Maps?'],
     },
     {
       key: 'find',
@@ -178,14 +178,14 @@ export function getSuggestions(lang) {
         '¿Cuáles son mis próximas recogidas?',
         'Muestra mis estadísticas de impacto',
         'Quiero compartir comida',
-        '¿Cómo funciona Dogoods food maps?',
+        '¿Cómo funciona Do Good Food Maps?',
       ]
     : [
         'What food is available near me?',
         'What are my upcoming pickups?',
         'Show my impact stats',
         'I want to share some food',
-        'How does Dogoods food maps work?',
+        'How does Do Good Food Maps work?',
       ];
 }
 

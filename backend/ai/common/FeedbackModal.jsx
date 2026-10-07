@@ -118,7 +118,7 @@ function FeedbackModal({ isOpen, onClose }) {
                             </button>
                         </div>
                         <p className="text-primary-50 text-sm mt-1">
-                            We value your feedback! Help us improve Dogoods food maps.
+                            We value your feedback! Help us improve Do Good Food Maps.
                         </p>
                     </div>
 

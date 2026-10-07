@@ -32,7 +32,7 @@ function HeroSlideshow({ children }) {
         }
     ];
 
-    // Dogoods food maps: use built-in defaults (no remote slide table).
+    // Do Good Food Maps: use built-in defaults (no remote slide table).
     useEffect(() => {
         setSlides(defaultSlides);
         setLoading(false);

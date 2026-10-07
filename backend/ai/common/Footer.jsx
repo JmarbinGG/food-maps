@@ -259,7 +259,7 @@ function Footer({
                 {/* Bottom Section */}
                 <div className="border-t border-gray-400 mt-10 sm:mt-12 pt-6 sm:pt-8">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-600 text-center md:text-left">
-                        <p>© 2026 Dogoods food maps. All rights reserved.</p>
+                        <p>© 2026 Do Good Food Maps. All rights reserved.</p>
                         <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
                             <a href="/privacy" className="hover:text-gray-900 transition-colors">Privacy Policy</a>
                             <a href="/terms" className="hover:text-gray-900 transition-colors">Terms of Service</a>

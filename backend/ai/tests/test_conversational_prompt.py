@@ -84,6 +84,6 @@ class TestSystemPromptShape:
 
     def test_system_prompt_uses_food_maps_branding(self):
         prompt = _build_system_prompt(_load_training_data(), "warm")
-        assert "Product name: Dogoods food maps" in prompt
+        assert "Product name: Do Good Food Maps" in prompt
         assert "NEVER say DoGoods" in prompt
         assert "DoGoods connects" not in prompt

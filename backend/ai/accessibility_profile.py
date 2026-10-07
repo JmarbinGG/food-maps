@@ -71,7 +71,7 @@ async def save_accessibility_profile(user_id: str, profile: dict) -> None:
     if not user_id or not isinstance(profile, dict) or not profile:
         return
     uid = str(user_id).strip()
-    # Dogoods food maps integer ids: persist via AIUserPreference, not Supabase.
+    # Do Good Food Maps integer ids: persist via AIUserPreference, not Supabase.
     if uid.isdigit():
         try:
             import json

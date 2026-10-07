@@ -1,7 +1,7 @@
 """
-Dogoods food maps AI Tool Signatures & Implementations (legacy; prefer backend.ai.tools)
+Do Good Food Maps AI Tool Signatures & Implementations (legacy; prefer backend.ai.tools)
 ----------------------------------------------
-OpenAI function-calling tool definitions for the Dogoods food maps AI assistant.
+OpenAI function-calling tool definitions for the Do Good Food Maps AI assistant.
 Implements: search_food_near_user, get_user_profile, get_pickup_schedule,
             create_reminder, get_mapbox_route, query_distribution_centers,
             get_user_dashboard, check_pickup_schedule.
@@ -38,7 +38,7 @@ async def _require_listing_approval() -> bool:
 async def _require_request_approval() -> bool:
     """True when food requests must wait for admin approval.
 
-    Dogoods food maps has no request-approval queue yet — keep off.
+    Do Good Food Maps has no request-approval queue yet — keep off.
     """
     return False
 
@@ -46,7 +46,7 @@ async def _require_request_approval() -> bool:
 async def _require_claim_approval() -> bool:
     """True when recipient claims must wait for admin approval before pickup.
 
-    Dogoods food maps uses SMS pending_confirmation instead — keep off.
+    Do Good Food Maps uses SMS pending_confirmation instead — keep off.
     """
     return False
 
@@ -947,7 +947,7 @@ TOOL_DEFINITIONS = [
         "function": {
             "name": "ui_action",
             "description": (
-                "Drive the Dogoods food maps web UI on the user's behalf. Use this when "
+                "Drive the Do Good Food Maps web UI on the user's behalf. Use this when "
                 "the user asks you to navigate, open something, close something, "
                 "or otherwise interact with the app. The frontend will execute "
                 "the action when it receives the response. Always confirm in "
@@ -1430,7 +1430,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "navigate_ui",
-            "description": "Alias of ui_action. Drive the Dogoods food maps web UI on the user's behalf.",
+            "description": "Alias of ui_action. Drive the Do Good Food Maps web UI on the user's behalf.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -4217,7 +4217,7 @@ async def _fetch_all_active_community_rows(
     *,
     select: str = "id,name",
 ) -> list[dict]:
-    """Return every active community row from Dogoods food maps MySQL centers.
+    """Return every active community row from Do Good Food Maps MySQL centers.
 
     ``select`` is accepted for call-site compatibility; MySQL returns a
     fixed catalog shape (id, name, and common center fields).
@@ -4251,7 +4251,7 @@ async def _get_active_communities(
     if not communities:
         return {"communities": [], "total": 0, "summary": "No active communities found."}
 
-    # Integer Dogoods food maps users only — sort by distance when profile has coords.
+    # Integer Do Good Food Maps users only — sort by distance when profile has coords.
     user_lat = user_lng = None
     if user_id and str(user_id).strip().isdigit():
         try:
@@ -4582,7 +4582,7 @@ async def _resolve_community(community_name: Optional[str], community_id: Option
     """Resolve a community name or id to (id, name). Returns (None, None) on miss.
 
     Enforcement: only active catalog communities resolve. Free-text counties
-    and invented hubs return (None, None). Dogoods food maps uses MySQL distribution
+    and invented hubs return (None, None). Do Good Food Maps uses MySQL distribution
     centers as the catalog (no Supabase).
     """
     try:
