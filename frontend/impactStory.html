@@ -89,7 +89,7 @@
       --city-coral: #db684b;
       color: var(--city-ink);
     }
-    .section-kicker, .impact-strip-heading, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
+    .section-kicker, .city-neighborhoods > span { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.11em; }
     .story-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--city-coral, #db684b); }
     .city-story h3 { margin: 0; font-family: var(--fm-font-display); font-weight: 500; letter-spacing: 0; }
     .sample-note { display: inline-flex; align-items: center; gap: 0.5rem; color: #77522d; font-size: 0.78rem; font-weight: 700; }
@@ -133,15 +133,6 @@
     .city-neighborhoods > span { color: #658071; }
     .city-neighborhoods p { margin: 0.35rem 0 0; color: #42584d; font-size: 0.84rem; }
     .city-neighborhoods b { padding: 0 0.2rem; color: var(--city-coral); }
-    .city-impact-strip { margin-top: 2.5rem; padding: 1.35rem 1.5rem 1.5rem; background: var(--city-ink); color: #fff; }
-    .impact-strip-heading { display: flex; justify-content: space-between; align-items: center; color: #d8e5d9; }
-    .sample-pill { padding: 0.25rem 0.5rem; background: #f2d7c6; color: #603b2c; font-size: 0.63rem; }
-    .impact-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.25fr; align-items: end; gap: 1rem; margin-top: 1.25rem; }
-    .impact-metrics > div { display: flex; flex-direction: column; gap: 0.1rem; }
-    .impact-metrics strong { font-size: 1.9rem; line-height: 1.15; }
-    .impact-metrics strong small { font-size: inherit; font-weight: inherit; }
-    .impact-metrics > div > span { color: #c5d7c9; font-size: 0.82rem; }
-    .impact-metrics > p { margin: 0; color: #c5d7c9; font-size: 0.75rem; text-align: right; }
     .city-next-step { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding-top: 1.5rem; }
     .city-next-step p { margin: 0; color: var(--city-muted); font-size: 0.9rem; }
     .city-next-step p strong { color: var(--city-ink); }
@@ -193,8 +184,6 @@
       .city-stories-toggle { padding-top: 2rem; }
       .city-photo-wrap { aspect-ratio: 1.3; }
       .city-story h3 { font-size: 2.2rem; }
-      .impact-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.25rem; }
-      .impact-metrics > p { grid-column: 1 / -1; text-align: left; }
       .city-next-step { align-items: start; flex-direction: column; }
       .newsletter-band { padding: 3rem 0; }
       .newsletter-band h2 { font-size: 2.15rem; }
@@ -323,19 +312,6 @@
               </div>
             </div>
           </article>
-        </div>
-
-        <div class="city-impact-strip" data-no-edit="true" aria-label="Illustrative city impact statistics">
-          <div class="impact-strip-heading">
-            <span>THE LOCAL PICTURE</span>
-            <span class="sample-pill">SAMPLE DATA</span>
-          </div>
-          <div class="impact-metrics">
-            <div><strong id="metric-meals">3,840</strong><span>meals shared</span></div>
-            <div><strong><span id="metric-food">1,260</span> <small>lb</small></strong><span>food rescued</span></div>
-            <div><strong id="metric-partners">24</strong><span>community partners</span></div>
-            <p id="metric-period">Illustrative 12-month snapshot for Oakland</p>
-          </div>
         </div>
 
         <div class="city-next-step">
@@ -523,7 +499,7 @@
 
   <script src="js/lib/newsletterSignup.js?v=20260814-newsletter"></script>
   <script src="js/lib/pageEditor.js?v=20260916-edit-labels"></script>
-  <script src="js/lib/impactCityCatalog.js?v=20261007-city-stories"></script>
+  <script src="js/lib/impactCityCatalog.js?v=20261008-no-stats"></script>
   <script>
     window.FoodMapsPageEditor.init({
       pageId: 'impactStory',

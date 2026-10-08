@@ -86,7 +86,7 @@ def test_every_impact_story_editable_field_is_named():
 def test_impact_story_catalog_is_repeatable():
     html = IMPACT.read_text(encoding="utf-8")
     script = (REPO / "frontend" / "js" / "lib" / "impactCityCatalog.js").read_text(encoding="utf-8")
-    assert "impactCityCatalog.js?v=20261007-city-stories" in html
+    assert "impactCityCatalog.js?v=20261008-no-stats" in html
     assert "FoodMapsImpactCatalog.init" in html
     assert "data-no-edit" in html
     assert "__impact_catalog" in script

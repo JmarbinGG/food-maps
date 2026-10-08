@@ -447,14 +447,6 @@
       panel.innerHTML = markup;
     }
 
-    const meals = document.getElementById('metric-meals');
-    const pounds = document.getElementById('metric-food');
-    const partners = document.getElementById('metric-partners');
-    const period = document.getElementById('metric-period');
-    if (meals) meals.textContent = selected.meals;
-    if (pounds) pounds.textContent = selected.pounds;
-    if (partners) partners.textContent = selected.partners;
-    if (period) period.textContent = 'Illustrative 12-month snapshot for ' + selected.name;
   }
 
   function field(id, label, value, options) {
@@ -495,9 +487,6 @@
     [
       ['impact-city-name', 'City', selected && selected.name],
       ['impact-city-region', 'Region', selected && selected.region],
-      ['impact-metric-meals', 'Meals shared', selected && selected.meals],
-      ['impact-metric-pounds', 'Food rescued (lb)', selected && selected.pounds],
-      ['impact-metric-partners', 'Community partners', selected && selected.partners],
       ['impact-new-city', 'New city name', ''],
     ].forEach((item) => grid.appendChild(field(item[0], item[1], item[2])));
     const singleLineStoryFields = [
@@ -564,9 +553,6 @@
     if (!selected || !activeStory || !formReady) return;
     selected.name = plain(inputValue('impact-city-name')) || selected.name;
     selected.region = plain(inputValue('impact-city-region'));
-    selected.meals = plain(inputValue('impact-metric-meals'));
-    selected.pounds = plain(inputValue('impact-metric-pounds'));
-    selected.partners = plain(inputValue('impact-metric-partners'));
     activeStory.title = plain(inputValue('impact-story-title'));
     activeStory.kicker = plain(inputValue('impact-story-kicker')) || 'CITY STORY';
     activeStory.image = plain(inputValue('impact-story-image')) || FALLBACK_IMAGE;
@@ -583,9 +569,6 @@
     if (!selected || !activeStory || !formReady) return;
     setInput('impact-city-name', selected.name);
     setInput('impact-city-region', selected.region);
-    setInput('impact-metric-meals', selected.meals);
-    setInput('impact-metric-pounds', selected.pounds);
-    setInput('impact-metric-partners', selected.partners);
     setInput('impact-story-title', activeStory.title);
     setInput('impact-story-kicker', activeStory.kicker);
     setInput('impact-story-image', activeStory.image);

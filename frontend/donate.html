@@ -38,7 +38,7 @@
       font-weight: 700;
     }
     .skip-form:focus { top: 5.5rem; }
-    .support-hero { padding: 4.25rem 0 1.5rem; }
+    .support-hero { padding: 4.25rem 0 4.5rem; }
     .support-kicker {
       display: flex;
       align-items: center;
@@ -66,10 +66,8 @@
       outline: 3px solid #dc886f;
       outline-offset: 3px;
     }
-    .support-layout { padding: 0.5rem 0 4.5rem; }
     .support-grid {
       display: grid;
-      gap: 2rem;
       align-items: start;
     }
     .support-story h2 {
@@ -125,12 +123,29 @@
       font-weight: 700;
     }
     @media (min-width: 960px) {
-      .support-grid { grid-template-columns: minmax(0, 1fr) 28rem; gap: 3.5rem; }
-      .donate-card { position: sticky; top: 6.25rem; }
+      .support-grid {
+        grid-template-columns: minmax(0, 1fr) 28rem;
+        grid-template-areas:
+          "kicker ."
+          "title form"
+          "lede form"
+          "story form";
+        column-gap: 3.5rem;
+      }
+      .support-grid > .support-kicker { grid-area: kicker; }
+      .support-hero .fm-hero-title { grid-area: title; }
+      .support-lede { grid-area: lede; }
+      .support-story { grid-area: story; }
+      .donate-card {
+        grid-area: form;
+        position: sticky;
+        top: 6.25rem;
+        margin-top: 0;
+      }
     }
     @media (max-width: 959px) {
       .support-hero { padding-top: 2.75rem; }
-      .donate-card { order: -1; }
+      .donate-card { margin-top: 2rem; }
     }
     @media (max-width: 760px) {
       .support-hero .fm-hero-title { font-size: 3rem !important; }
@@ -186,23 +201,12 @@
   </nav>
 
   <main>
-    <section class="support-hero">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <p class="support-kicker section-kicker">ALL GOOD LIVING FOUNDATION <span></span> A 501(C)(3) PROJECT</p>
-        <h1 class="fm-hero-title editable" data-editable="donate-title" data-edit-label="Donation page title" contenteditable="false">Support<br><em>Do Good Food Maps.</em></h1>
-        <p class="support-lede editable" data-editable="donate-lede" data-edit-label="Donation page introduction" contenteditable="false">Too many East Bay families don't know where to find free, nutritious food, even when it's just around the corner. Do Good Food Maps, a project of the All Good Living Foundation, puts local food pantries, community closets, and other food resources on one easy-to-use map, so no family has to go hungry for lack of information.</p>
-      </div>
-    </section>
-
-    <section class="support-layout" aria-labelledby="support-reasons-title">
+    <section class="support-hero" aria-labelledby="donate-title">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="support-grid">
-          <div class="support-story">
-            <h2 id="support-reasons-title" class="editable" data-editable="donate-reasons-title" data-edit-label="Gift heading" contenteditable="false">Give today and help put good food on the map.</h2>
-            <p class="editable" data-editable="donate-gift-copy" data-edit-label="What the gift supports" contenteditable="false">Your gift helps us keep the map accurate and up to date, add new food distributors, secure food across the Bay Area, and connect families in need with healthy food when they need it most. Every dollar goes toward closing the gap between available food and the people who need it.</p>
-            <p class="support-goal"><strong>$20,000</strong><span>campaign goal</span></p>
-            <p class="support-tax editable" data-editable="donate-tax-note" data-edit-label="Tax note" contenteditable="false">The Do Good Food Maps is part of the All Good Living Foundation, a 501(c)(3) nonprofit. Your donation is tax-deductible to the extent allowed by law. Please keep this receipt for your records.</p>
-          </div>
+          <p class="support-kicker section-kicker">ALL GOOD LIVING FOUNDATION <span></span> A 501(C)(3) PROJECT</p>
+          <h1 id="donate-title" class="fm-hero-title editable" data-editable="donate-title" data-edit-label="Donation page title" contenteditable="false">Support<br><em>Do Good Food Maps.</em></h1>
+          <p class="support-lede editable" data-editable="donate-lede" data-edit-label="Donation page introduction" contenteditable="false">Too many East Bay families don't know where to find free, nutritious food, even when it's just around the corner. Do Good Food Maps, a project of the All Good Living Foundation, puts local food pantries, community closets, and other food resources on one easy-to-use map, so no family has to go hungry for lack of information.</p>
 
           <section class="donate-card" id="support-form" aria-labelledby="donate-form-title">
             <p class="support-kicker section-kicker">GIVE <span class="support-dot"></span> SECURE FORM</p>
@@ -218,6 +222,13 @@
               <a class="donate-fallback" href="https://donorbox.org/support-do-good-food-maps" target="_blank" rel="noopener noreferrer">If the form does not appear, open it on Donorbox.</a>
             </div>
           </section>
+
+          <div class="support-story">
+            <h2 id="support-reasons-title" class="editable" data-editable="donate-reasons-title" data-edit-label="Gift heading" contenteditable="false">Give today and help put good food on the map.</h2>
+            <p class="editable" data-editable="donate-gift-copy" data-edit-label="What the gift supports" contenteditable="false">Your gift helps us keep the map accurate and up to date, add new food distributors, secure food across the Bay Area, and connect families in need with healthy food when they need it most. Every dollar goes toward closing the gap between available food and the people who need it.</p>
+            <p class="support-goal"><strong>$20,000</strong><span>campaign goal</span></p>
+            <p class="support-tax editable" data-editable="donate-tax-note" data-edit-label="Tax note" contenteditable="false">The Do Good Food Maps is part of the All Good Living Foundation, a 501(c)(3) nonprofit. Your donation is tax-deductible to the extent allowed by law. Please keep this receipt for your records.</p>
+          </div>
         </div>
       </div>
     </section>
