@@ -50,6 +50,7 @@
       object-fit: cover;
       border-radius: 1rem;
     }
+    .community-layout img.is-logo { object-fit: contain; background: var(--city-paper); padding: 1.5rem; }
     .community-layout h1 { margin: 0 0 1rem; font-size: 2.8rem; line-height: 1.1; }
     .community-detail { display: flex; gap: 0.55rem; margin: 0 0 0.55rem; color: #42584d; }
     .community-detail .icon-map-pin,
@@ -144,7 +145,7 @@
     </div>
   </footer>
 
-  <script src="js/lib/activeCommunities.js?v=20261012-communities-all"></script>
+  <script src="js/lib/activeCommunities.js?v=20261013-community-logos"></script>
   <script>
     (function () {
       var catalog = window.DoGoodActiveCommunities;
@@ -172,12 +173,13 @@
       }
 
       document.title = community.name + ' - Do Good Food Maps';
-      var photo = text(community.image);
+      var photo = text(community.image) || 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=600&fit=crop';
       var phone = text(community.phone);
+      var logoClass = community.image_fit === 'contain' ? ' class="is-logo"' : '';
       root.innerHTML =
         '<a class="community-back" href="communities.html"><span class="icon-arrow-left" aria-hidden="true"></span> Back to Communities</a>' +
         '<article class="community-layout">' +
-          (photo ? '<img src="' + photo + '" alt="' + text(community.name) + '">' : '') +
+          '<img' + logoClass + ' src="' + photo + '" alt="' + text(community.name) + '">' +
           '<div>' +
             '<h1 class="fm-hero-title">' + text(community.name) + '</h1>' +
             '<p class="community-detail"><span class="icon-map-pin" aria-hidden="true"></span><span>' + text(community.location) + '</span></p>' +

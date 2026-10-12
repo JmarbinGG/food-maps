@@ -46,6 +46,11 @@
       text-align: center;
       font-size: 3.4rem;
     }
+    .communities-hero .fm-hero-title {
+      margin-left: auto !important;
+      margin-right: auto !important;
+      text-align: center !important;
+    }
     .communities-lede {
       max-width: 36rem;
       margin: 1rem auto 0;
@@ -88,6 +93,7 @@
     .community-card:hover { transform: translateY(-2px); }
     .community-card:focus-visible { outline: 3px solid #dc886f; outline-offset: 3px; }
     .community-card img { width: 100%; height: 16rem; object-fit: cover; }
+    .community-card img.is-logo { object-fit: contain; background: var(--city-paper); padding: 1.25rem; }
     .community-card-body { padding: 1.1rem 1.15rem 1.2rem; }
     .community-card h2 { margin: 0 0 0.7rem; font-size: 1.35rem; line-height: 1.2; }
     .community-meta { display: flex; gap: 0.45rem; margin: 0 0 0.4rem; color: #42584d; font-size: 0.86rem; }
@@ -220,7 +226,7 @@
     </div>
   </footer>
 
-  <script src="js/lib/activeCommunities.js?v=20261012-communities-all"></script>
+  <script src="js/lib/activeCommunities.js?v=20261013-community-logos"></script>
   <script>
     (function () {
       var catalog = window.DoGoodActiveCommunities;
@@ -256,10 +262,11 @@
           card.className = 'community-card';
           card.setAttribute('role', 'listitem');
           card.tabIndex = 0;
-          var photo = text(community.image);
+          var photo = text(community.image) || 'https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=800&h=600&fit=crop';
           var phone = text(community.phone);
+          var logoClass = community.image_fit === 'contain' ? ' class="is-logo"' : '';
           card.innerHTML =
-            (photo ? '<img src="' + photo + '" alt="' + text(community.name) + ' community">' : '') +
+            '<img' + logoClass + ' src="' + photo + '" alt="' + text(community.name) + ' community">' +
             '<div class="community-card-body">' +
               '<h2>' + text(community.name) + '</h2>' +
               '<p class="community-meta"><span class="icon-map-pin" aria-hidden="true"></span><span>' + text(community.location) + '</span></p>' +

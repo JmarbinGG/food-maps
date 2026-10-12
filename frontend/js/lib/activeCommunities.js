@@ -217,7 +217,7 @@
       contact: 'Alex',
       hours: 'Mon-Fri 9am-4pm',
       phone: '(341) 732-9347',
-      image: 'https://google.com/uc?id=1gzwEG1VLaRdT95EbGOGokvCxMlNnDrr9',
+      image: 'https://lh3.googleusercontent.com/d/1gzwEG1VLaRdT95EbGOGokvCxMlNnDrr9',
       food_given_lb: 4148,
       families_helped: 515,
       school_staff_helped: 0
@@ -229,7 +229,8 @@
       contact: 'Lisa',
       hours: 'Tuesday - Friday 9 AM - 5PM',
       phone: '(510) 985-9915',
-      image: '',
+      image: '/assets/logos/trybe-logo.svg',
+      image_fit: 'contain',
       food_given_lb: 0,
       families_helped: 0,
       school_staff_helped: 0
@@ -241,7 +242,8 @@
       contact: 'Carinne Salnave',
       hours: '',
       phone: '(510) 879-2338',
-      image: '',
+      image: 'https://resources.finalsite.net/images/f_auto,q_auto/v1762295980/ousdorg/ousdorg/yudcimijzwaehjxikib2/MetWestLogo.png',
+      image_fit: 'contain',
       food_given_lb: 1409,
       families_helped: 36,
       school_staff_helped: 0
