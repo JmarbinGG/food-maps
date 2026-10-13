@@ -133,7 +133,7 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
       // Create custom marker element
       const color = (typeof window.getCenterLegendColor === 'function')
         ? window.getCenterLegendColor(center)
-        : '#6B7280';
+        : '#0057FF';
       const el = document.createElement('div');
       el.className = 'distribution-center-marker';
       el.innerHTML = `
@@ -424,6 +424,7 @@ function DistributionCenterMap({ user, onCenterSelect, initialCenterId = null, o
         {(window.MAP_LEGEND_PROVIDER_TYPES || [
           { label: 'Schools', color: '#0057FF' },
           { label: 'Food Pantry', color: '#E0007A' },
+          { label: 'Hot meals', color: '#7C3AED' },
           { label: 'Food Rescue', color: '#7A3E09' },
           { label: 'Community Garden', color: '#00A651' },
           { label: 'Foodbank', color: '#E10600' },

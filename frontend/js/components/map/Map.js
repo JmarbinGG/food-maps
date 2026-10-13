@@ -78,6 +78,11 @@ const MAP_LEGEND_PROVIDER_TYPES = Object.freeze([
     match: ['food pantry'],
   },
   {
+    label: 'Hot meals',
+    color: '#7C3AED',
+    match: ['community meal / hot meals'],
+  },
+  {
     label: 'Food Rescue',
     color: '#7A3E09',
     match: ['food rescue'],
@@ -104,7 +109,7 @@ const MAP_LEGEND_PROVIDER_TYPES = Object.freeze([
   },
 ]);
 
-const MAP_LEGEND_DEFAULT_CENTER_COLOR = '#6B7280';
+const MAP_LEGEND_DEFAULT_CENTER_COLOR = '#0057FF';
 
 function parseCenterProviderTypes(raw) {
   if (typeof window.parseProviderTypes === 'function') {
@@ -1039,19 +1044,6 @@ function MapComponent({ listings = [], selectedListing, onListingSelect, user })
                 <span>{entry.label}</span>
               </div>
             ))}
-            <div className="flex items-center gap-1.5 mb-0.5">
-              <div style={{
-                width: '14px',
-                height: '14px',
-                borderRadius: '50% 50% 50% 0',
-                transform: 'rotate(-45deg)',
-                backgroundColor: MAP_LEGEND_DEFAULT_CENTER_COLOR,
-                flexShrink: 0,
-                border: '1.5px solid white',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.25)',
-              }} />
-              <span>Other centers</span>
-            </div>
           </>
         )}
       </div>
