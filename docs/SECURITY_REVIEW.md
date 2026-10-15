@@ -3,6 +3,7 @@
 **Date:** 2026-08-11
 **Reviewed commit:** `6df7612`
 **Reviewer:** internal code review (AI-assisted)
+**Addendum:** 2026-10-14 — review of private community maps added S-14, S-15, and a note on S-2
 **Open critical item:** [S-0](#s-0-live-database-credentials-committed-to-a-public-repository) — `foodapitest` rotated and closed to the public internet as of 2026-08-24; RDS connection-log review and the git-history scrub decision are still open
 
 Companion to [ENGINEERING_ROADMAP.md](./ENGINEERING_ROADMAP.md). Findings and
@@ -81,6 +82,8 @@ theoretical worst case.
 | [S-11](#s-11-public-repository-and-no-branch-protection) | Public repository and no branch protection | Medium (process) |
 | [S-12](#s-12-dockerignore-is-untracked-so-container-builds-can-copy-env) | `.dockerignore` is untracked, so container builds can copy `.env` | High |
 | [S-13](#s-13-compiled-bytecode-is-committed-including-for-a-deliberately-excluded-script) | Compiled bytecode committed, including for a deliberately excluded script | Low |
+| [S-14](#s-14-listing-creation-trusted-a-client-supplied-donor_id) | Listing creation trusted a client-supplied `donor_id` | High — **fixed** |
+| [S-15](#s-15-concurrent-joins-to-the-same-community-return-a-500) | Concurrent joins to the same community return a 500 | Low |
 
 ---
 
@@ -334,6 +337,19 @@ The header should only ever be trusted when a proxy you control has appended it.
 - [ ] If no proxy exists, ignore the header entirely.
 - [ ] Add a regression test asserting that a spoofed `X-Forwarded-For` does not
       reset the signup limit.
+
+**Update 2026-10-14: approval codes now gate private maps.** A user who holds
+an unclaimed approval code can join that community and see its private-map
+listings, so guessing codes is now a way to read private listings. Codes are 3
+letters plus 6 digits, so each school prefix has 900,000 values.
+`GET /api/approval-codes/validate` needs no sign-in and is limited only by IP,
+which this finding makes bypassable, so it can be used to enumerate codes.
+`POST /api/user/communities/join` also has a per-account cap (10 attempts per
+10 minutes, `JOIN_COMMUNITY_RATE_LIMIT_*`) that a spoofed header can't reset,
+but the validate endpoint has nothing equivalent. Fixing S-2 closes this.
+
+- [ ] Include `/api/approval-codes/validate` in the spoofed-header regression
+      test.
 
 ---
 
@@ -663,6 +679,48 @@ harmless right up until it is not.
 
 ---
 
+### S-14. Listing creation trusted a client-supplied `donor_id`
+
+**Severity:** High — **fixed 2026-10-14**
+**Location:** `create_listing` in `backend/app.py` (`POST /api/listings/create`)
+
+When no `Authorization` header was sent, the endpoint used the `donor_id` query
+parameter as the donor. Anyone could post a listing as any user by naming their
+id, and the listing showed that user as the donor. Once private maps existed it
+also let a caller post onto a private map that the named donor belonged to.
+
+**Fix:** the endpoint now returns 401 without a valid token and always uses the
+token's user. `donor_id` is still accepted so old callers don't break, but it is
+ignored. Regression tests are in `backend/tests/test_private_maps.py`
+(`test_requires_sign_in`, `test_donor_id_param_is_ignored`).
+
+**Actions**
+- [x] Require a valid JWT and take the donor from it.
+- [ ] Look for other endpoints that fall back to a client-supplied user id when
+      no token is present.
+
+---
+
+### S-15. Concurrent joins to the same community return a 500
+
+**Severity:** Low
+**Location:** `join_community_with_code` in `backend/app.py`
+(`POST /api/user/communities/join`)
+
+The "already a member" check runs before the insert. If one user sends two
+requests with two different codes for the same community at the same moment,
+both pass the check. The second insert then violates the
+`uq_user_community` unique constraint and the user gets a generic 500 instead of
+"already a member". Data stays consistent: the transaction rolls back, so the
+second code is not consumed and no duplicate row is written. The only effect is
+a confusing error.
+
+**Actions**
+- [ ] Catch `IntegrityError` on the membership insert, roll back, and return the
+      same 400 "already a member" response.
+
+---
+
 ## Prioritized task list
 
 **Do now** — this one is not a "this week" item:
@@ -686,11 +744,13 @@ harmless right up until it is not.
 
 **Next** — small code changes with clear security value:
 
-- [ ] Fix `X-Forwarded-For` handling (S-2)
+- [ ] Fix `X-Forwarded-For` handling (S-2). This also protects approval codes,
+      which now gate private maps.
 - [ ] Restrict CORS to known origins (S-8)
 - [ ] Delete `food_api.py`, remove the `JWT_SECRET` fallback in `ai/routes.py` (S-5)
 - [ ] Bound the rate-limit dictionaries (S-4)
 - [ ] Replace the git-based static file blocklist (S-3)
+- [ ] Return 400 instead of 500 on concurrent community joins (S-15)
 
 **Then** — needs design or coordination:
 

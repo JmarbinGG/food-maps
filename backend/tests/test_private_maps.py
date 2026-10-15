@@ -245,6 +245,26 @@ class TestCreateListing:
         row = db_session.query(FoodResource).filter(FoodResource.id == res.json()["listing"]["id"]).one()
         assert row.pickup_window_start == datetime(2026, 10, 15, 10, 30)
 
+    def test_requires_sign_in(self, client, world, db_session):
+        before = db_session.query(FoodResource).count()
+        params = {
+            "donor_id": world["donor"].id, "title": "Spoofed", "desc": "", "category": "prepared",
+            "qty": 1, "unit": "pot", "perishability": "high", "address": "1 Main St",
+            "pickup_start": "2026-10-15T10:00:00Z", "pickup_end": "2026-10-15T12:00:00Z",
+            "is_private": "true", "map_community_id": HIDDEN,
+        }
+        assert client.post("/api/listings/create", params=params).status_code == 401
+        bad = {"Authorization": "Bearer not-a-token"}
+        assert client.post("/api/listings/create", params=params, headers=bad).status_code == 401
+        assert db_session.query(FoodResource).count() == before
+
+    def test_donor_id_param_is_ignored(self, client, world):
+        # A member names the donor's id, but the listing is still theirs.
+        world["member"].role = UserRole.DONOR
+        res = self._create(client, world["member"], donor_id=world["donor"].id)
+        assert res.status_code == 200, res.text
+        assert res.json()["listing"]["donor_id"] == world["member"].id
+
     def test_public_listing_unchanged(self, client, world):
         res = self._create(client, world["donor"])
         assert res.status_code == 200, res.text
