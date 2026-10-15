@@ -19,6 +19,7 @@ from backend.app import (  # noqa: E402
     JWT_SECRET,
     app,
     approval_validate_attempts_by_ip,
+    join_community_attempts_by_user,
     pwd_context,
     signup_attempts_by_ip,
 )
@@ -54,6 +55,7 @@ def db_session():
 def client(db_session):
     signup_attempts_by_ip.clear()
     approval_validate_attempts_by_ip.clear()
+    join_community_attempts_by_user.clear()
 
     def _override_get_db():
         try:
@@ -67,6 +69,7 @@ def client(db_session):
     app.dependency_overrides.clear()
     signup_attempts_by_ip.clear()
     approval_validate_attempts_by_ip.clear()
+    join_community_attempts_by_user.clear()
 
 
 def _center(db_session, cid, name, private=False):
@@ -194,6 +197,21 @@ class TestJoinCommunity:
                            headers=_headers(user)).status_code == 400
         assert client.post("/api/user/communities/join",
                            json={"approval_code": "HID100001"}).status_code in (401, 403)
+
+    def test_per_user_join_limit_ignores_forwarded_ip(self, client, db_session):
+        user = _user(db_session)
+        with patch("backend.app.JOIN_COMMUNITY_RATE_LIMIT_MAX_ATTEMPTS", 3):
+            for i in range(3):
+                res = client.post(
+                    "/api/user/communities/join", json={"approval_code": f"ZZZ00000{i}"},
+                    headers={**_headers(user), "X-Forwarded-For": f"10.0.0.{i}"},
+                )
+                assert res.status_code == 400
+            res = client.post(
+                "/api/user/communities/join", json={"approval_code": "ZZZ000009"},
+                headers={**_headers(user), "X-Forwarded-For": "10.0.0.99"},
+            )
+        assert res.status_code == 429
 
     def test_list_communities(self, client, db_session):
         _center(db_session, 8, "Ruby Bridges")

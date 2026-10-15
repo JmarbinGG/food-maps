@@ -304,3 +304,35 @@ class TestAdminPrivateMapToggle:
         res = client.put("/api/admin/communities/999/private-map",
                          json={"private_map_enabled": True}, headers=_headers(world["admin"]))
         assert res.status_code == 404
+
+
+class TestByIdLeaks:
+    def test_center_inventory_hides_private_listings(self, client, world, db_session):
+        world["public"].community_id = HIDDEN
+        db_session.commit()
+        res = client.get(f"/api/centers/{HIDDEN}/inventory")
+        assert res.status_code == 200, res.text
+        body = res.json()
+        rows = body if isinstance(body, list) else body.get("inventory", [])
+        names = {r.get("name") for r in rows}
+        assert "Public apples" in names
+        assert "Hidden bread" not in names
+
+    def test_hidden_center_404_for_public(self, client, world, db_session):
+        center = db_session.query(DistributionCenter).filter(DistributionCenter.id == HIDDEN).one()
+        center.hide_from_public = True
+        db_session.commit()
+        assert client.get(f"/api/centers/{HIDDEN}").status_code == 404
+        assert client.get(f"/api/centers/{HIDDEN}", headers=_headers(world["member"])).status_code == 404
+        assert client.get(f"/api/centers/{HIDDEN}", headers=_headers(world["admin"])).status_code == 200
+
+    def test_ai_open_listing_respects_private_maps(self, world, session_factory):
+        from backend.ai.tools import _open_listing
+
+        lid = world["secret"].id
+        with patch("backend.app.SessionLocal", session_factory), \
+             patch("backend.ai.tools._resolve_listing_id_for_details", return_value=(lid, None)):
+            outsider = asyncio.run(_open_listing(user_id=str(world["outsider"].id), listing_id=lid))
+            member = asyncio.run(_open_listing(user_id=str(world["member"].id), listing_id=lid))
+        assert outsider["ok"] is False and "Hidden bread" not in str(outsider)
+        assert member["ok"] is True and member["title"] == "Hidden bread"

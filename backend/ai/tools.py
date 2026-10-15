@@ -5542,13 +5542,18 @@ async def _open_listing(
     if err:
         return {"error": err, "ok": False, "success": False}
 
-    from backend.app import SessionLocal
-    from backend.models import FoodResource
+    from backend.app import SessionLocal, _listing_visible_clause
+    from backend.models import FoodResource, User
 
     def _sync() -> dict:
         db = SessionLocal()
         try:
-            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            viewer = db.query(User).filter(User.id == _to_int(user_id)).first()
+            listing = (
+                db.query(FoodResource)
+                .filter(FoodResource.id == lid, _listing_visible_clause(db, viewer))
+                .first()
+            )
             if not listing:
                 return {"error": f"Listing #{lid} not found", "ok": False, "success": False}
             title = getattr(listing, "title", None) or f"Listing #{lid}"
@@ -5597,7 +5602,12 @@ async def _show_route_to_listing(
             user = db.query(User).filter(User.id == uid).first()
             if not user:
                 return {"error": "User not found"}
-            listing = db.query(FoodResource).filter(FoodResource.id == lid).first()
+            from backend.app import _listing_visible_clause
+            listing = (
+                db.query(FoodResource)
+                .filter(FoodResource.id == lid, _listing_visible_clause(db, user))
+                .first()
+            )
             if not listing:
                 return {"error": f"Listing #{lid} not found"}
 

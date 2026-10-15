@@ -346,6 +346,11 @@ APPROVAL_VALIDATE_RATE_LIMIT_MAX_ATTEMPTS = 20
 APPROVAL_VALIDATE_RATE_LIMIT_WINDOW = timedelta(minutes=10)
 approval_validate_attempts_by_ip: Dict[str, List[datetime]] = {}
 approval_validate_attempts_lock = Lock()
+# Per-account cap on community joins: the per-IP limit trusts X-Forwarded-For.
+JOIN_COMMUNITY_RATE_LIMIT_MAX_ATTEMPTS = 10
+JOIN_COMMUNITY_RATE_LIMIT_WINDOW = timedelta(minutes=10)
+join_community_attempts_by_user: Dict[int, List[datetime]] = {}
+join_community_attempts_lock = Lock()
 
 APPROVAL_CODE_RE = re.compile(r"^[A-Z]{3}\d{6}$")
 
@@ -3026,6 +3031,19 @@ async def join_community_with_code(
     """Join an additional community by claiming one of its approval codes."""
     enforce_approval_validate_rate_limit(request)
     user = _require_user_from_credentials(credentials, db)
+    now = datetime.utcnow()
+    with join_community_attempts_lock:
+        attempts = [
+            ts for ts in join_community_attempts_by_user.get(user.id, [])
+            if ts > now - JOIN_COMMUNITY_RATE_LIMIT_WINDOW
+        ]
+        if len(attempts) >= JOIN_COMMUNITY_RATE_LIMIT_MAX_ATTEMPTS:
+            raise HTTPException(
+                status_code=429,
+                detail="Too many join attempts. Please try again in a few minutes.",
+            )
+        attempts.append(now)
+        join_community_attempts_by_user[user.id] = attempts
 
     code = _normalize_approval_code(payload.approval_code)
     if not _approval_code_format_ok(code):
@@ -3822,7 +3840,11 @@ async def delete_distribution_center(center_id: int, admin_user: User = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/centers/{center_id}", response_model=DistributionCenterWithInventory)
-async def get_distribution_center(center_id: int, db: Session = Depends(get_db)):
+async def get_distribution_center(
+    center_id: int,
+    db: Session = Depends(get_db),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+):
     """Get a specific distribution center with inventory"""
     try:
         center = db.query(DistributionCenter).filter(
@@ -3831,6 +3853,10 @@ async def get_distribution_center(center_id: int, db: Session = Depends(get_db))
         
         if not center:
             raise HTTPException(status_code=404, detail="Distribution center not found")
+        if center.hide_from_public:
+            viewer = _optional_viewer(credentials, db)
+            if not (viewer and _user_is_admin(viewer)):
+                raise HTTPException(status_code=404, detail="Distribution center not found")
         
         return center
     except HTTPException:
@@ -3857,6 +3883,7 @@ async def get_center_inventory(center_id: int, db: Session = Depends(get_db)):
             db.query(FoodResource)
             .filter(FoodResource.community_id == center_id)
             .filter(FoodResource.status == "available")
+            .filter(public_listing_clause())
             .order_by(FoodResource.created_at.desc())
             .all()
         )
