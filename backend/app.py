@@ -31,6 +31,7 @@ from backend.schemas import (
     ApprovalCodeGenerateRequest,
     AdminUserCommunityUpdate,
     JoinCommunityRequest,
+    CommunityPrivateMapUpdate,
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
@@ -3070,6 +3071,37 @@ async def get_available_maps(
     for center in _private_maps_for_user(db, viewer):
         maps.append({"key": str(center.id), "label": center.name, "community_id": center.id})
     return {"maps": maps}
+
+
+@app.put("/api/admin/communities/{community_id}/private-map")
+async def update_community_private_map(
+    community_id: int,
+    payload: CommunityPrivateMapUpdate,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Turn a community's private map on/off, or hide its public pin."""
+    center = db.query(DistributionCenter).filter(DistributionCenter.id == community_id).first()
+    if not center:
+        raise HTTPException(status_code=404, detail="Community not found")
+    if payload.private_map_enabled is not None:
+        center.private_map_enabled = payload.private_map_enabled
+    if payload.hide_from_public is not None:
+        center.hide_from_public = payload.hide_from_public
+    db.commit()
+    db.refresh(center)
+    private_listings = (
+        db.query(FoodResource)
+        .filter(FoodResource.is_private == True, FoodResource.community_id == center.id)  # noqa: E712
+        .count()
+    )
+    return {
+        "success": True,
+        "id": center.id,
+        "private_map_enabled": bool(center.private_map_enabled),
+        "hide_from_public": bool(center.hide_from_public),
+        "private_listing_count": private_listings,
+    }
 
 
 @app.get("/api/admin/communities")

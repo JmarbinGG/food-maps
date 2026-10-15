@@ -332,6 +332,46 @@ function AdminPanel({ onClose }) {
       }
     };
 
+    // Per-community private map switches; notes keyed by center id.
+    const [privateMapNotes, setPrivateMapNotes] = React.useState({});
+    const [privateMapSaving, setPrivateMapSaving] = React.useState(null);
+
+    const handleUpdatePrivateMap = async (center, patch) => {
+      setPrivateMapSaving(center.id);
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(`/api/admin/communities/${center.id}/private-map`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(patch)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          alert(data.detail || 'Failed to update private map');
+          return;
+        }
+        setCenters((prev) => prev.map((c) => (c.id === center.id
+          ? { ...c, private_map_enabled: data.private_map_enabled, hide_from_public: data.hide_from_public }
+          : c)));
+        let note = '';
+        if (patch.private_map_enabled === false && data.private_listing_count > 0) {
+          note = `${data.private_listing_count} private listing(s) stay hidden from members until you turn the private map back on.`;
+        } else if (patch.private_map_enabled === true) {
+          note = 'Members can now switch to this private map.';
+        }
+        setPrivateMapNotes((prev) => ({ ...prev, [center.id]: note }));
+        try { window.dispatchEvent(new CustomEvent('foodmaps:communities_changed')); } catch (_) { /* ignore */ }
+      } catch (error) {
+        console.error('Error updating private map:', error);
+        alert('Failed to update private map');
+      } finally {
+        setPrivateMapSaving(null);
+      }
+    };
+
     const handleEditCenter = (center) => {
       const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
         ? window.FoodMapsSocialMedia
@@ -1676,6 +1716,49 @@ function AdminPanel({ onClose }) {
                               );
                             })}
                           </div>
+                        </div>
+
+                        <div className={`mt-3 rounded-lg border p-3 ${center.private_map_enabled ? 'border-indigo-200 bg-indigo-50/60' : 'border-gray-200 bg-gray-50'}`}>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-indigo-800 mb-2 flex items-center gap-1">
+                            <span className="icon-lock" aria-hidden="true"></span>
+                            Private map
+                          </p>
+                          {[
+                            {
+                              field: 'private_map_enabled',
+                              label: 'Private map',
+                              help: 'Members can switch to a map of listings posted only for this community.',
+                            },
+                            {
+                              field: 'hide_from_public',
+                              label: 'Hide public pin',
+                              help: 'Map-only community: don\'t show it as a pin on the public map.',
+                            },
+                          ].map(({ field, label, help }) => {
+                            const on = Boolean(center[field]);
+                            return (
+                              <div key={field} className="flex items-start justify-between gap-3 py-1.5">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-gray-800">{label}</p>
+                                  <p className="text-xs text-gray-500">{help}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={on}
+                                  aria-label={`${label} for ${center.name}`}
+                                  disabled={privateMapSaving === center.id}
+                                  onClick={() => handleUpdatePrivateMap(center, { [field]: !on })}
+                                  className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${on ? 'bg-indigo-600' : 'bg-gray-300'}`}
+                                >
+                                  <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${on ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                          {privateMapNotes[center.id] && (
+                            <p role="status" className="text-xs text-indigo-800 mt-1">{privateMapNotes[center.id]}</p>
+                          )}
                         </div>
 
                         {(() => {

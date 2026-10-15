@@ -72,8 +72,8 @@ def world(db_session):
     """Hidden map (9), another private map (10), a member, a non-member, a donor, an admin."""
     for cid, name in ((HIDDEN, "Do Good Hidden Map"), (OTHER_PRIVATE, "Other Private")):
         db_session.add(DistributionCenter(
-            id=cid, name=name, address="x", coords_lat=None, coords_lng=None,
-            is_active=True, private_map_enabled=True,
+            id=cid, name=name, address="x", coords_lat=37.0, coords_lng=-122.0,
+            is_active=True, private_map_enabled=True, created_at=datetime.utcnow(),
         ))
     db_session.commit()
 
@@ -95,6 +95,10 @@ def world(db_session):
     member = user("member@example.com", UserRole.RECIPIENT, (HIDDEN,), phone="5555550101")
     outsider = user("outsider@example.com", UserRole.RECIPIENT, phone="5555550102")
     admin = user("admin@example.com", UserRole.ADMIN, admin=True)
+    # /api/centers requires an owner on every center.
+    for center in db_session.query(DistributionCenter).all():
+        center.owner_id = admin.id
+    db_session.commit()
 
     def listing(title, private=False, community_id=None):
         row = FoodResource(
@@ -264,3 +268,39 @@ def test_recommended_skips_private_listings(client, world):
         body = res.json()
         rows = body if isinstance(body, list) else (body.get("listings") or body.get("recommendations") or [])
         assert "Hidden bread" not in {r.get("title") for r in rows}
+
+
+class TestAdminPrivateMapToggle:
+    def test_admin_turns_private_map_off_and_on(self, client, world):
+        url = f"/api/admin/communities/{HIDDEN}/private-map"
+        res = client.put(url, json={"private_map_enabled": False}, headers=_headers(world["admin"]))
+        assert res.status_code == 200, res.text
+        assert res.json()["private_map_enabled"] is False
+        assert res.json()["private_listing_count"] == 1
+        # Members lose the map while it's off; its listings stay hidden from the public map.
+        maps = client.get("/api/maps", headers=_headers(world["member"])).json()["maps"]
+        assert [m["key"] for m in maps] == ["public"]
+        assert "Hidden bread" not in _titles(client.get("/api/listings/get", headers=_headers(world["member"])))
+
+        client.put(url, json={"private_map_enabled": True}, headers=_headers(world["admin"]))
+        maps = client.get("/api/maps", headers=_headers(world["member"])).json()["maps"]
+        assert [m["key"] for m in maps] == ["public", str(HIDDEN)]
+
+    def test_hide_from_public_controls_centers_pin(self, client, world):
+        url = f"/api/admin/communities/{HIDDEN}/private-map"
+        client.put(url, json={"hide_from_public": True}, headers=_headers(world["admin"]))
+        names = {c["name"] for c in client.get("/api/centers").json()}
+        assert "Do Good Hidden Map" not in names
+        admin_rows = client.get("/api/centers", headers=_headers(world["admin"])).json()
+        hidden = next(c for c in admin_rows if c["id"] == HIDDEN)
+        assert hidden["hide_from_public"] is True and hidden["private_map_enabled"] is True
+
+    def test_non_admin_rejected(self, client, world):
+        res = client.put(f"/api/admin/communities/{HIDDEN}/private-map",
+                         json={"private_map_enabled": False}, headers=_headers(world["member"]))
+        assert res.status_code in (401, 403)
+
+    def test_unknown_community(self, client, world):
+        res = client.put("/api/admin/communities/999/private-map",
+                         json={"private_map_enabled": True}, headers=_headers(world["admin"]))
+        assert res.status_code == 404

@@ -52,6 +52,11 @@ class JoinCommunityRequest(BaseModel):
     approval_code: str
 
 
+class CommunityPrivateMapUpdate(BaseModel):
+    private_map_enabled: Optional[bool] = None
+    hide_from_public: Optional[bool] = None
+
+
 class UserLoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -215,6 +220,8 @@ class DistributionCenterResponse(BaseModel):
     logo_url: Optional[str] = None
     is_active: bool
     created_at: datetime
+    private_map_enabled: Optional[bool] = False
+    hide_from_public: Optional[bool] = False
 
     class Config:
         from_attributes = True
