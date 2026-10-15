@@ -48,6 +48,10 @@ class AdminUserCommunityUpdate(BaseModel):
     community_id: Optional[int] = None
 
 
+class JoinCommunityRequest(BaseModel):
+    approval_code: str
+
+
 class UserLoginRequest(BaseModel):
     email: EmailStr
     password: str

@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func, case, inspect as sa_inspect
+from sqlalchemy import text, func, case, or_, inspect as sa_inspect
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
@@ -30,6 +30,7 @@ from backend.schemas import (
     UserLoginRequest,
     ApprovalCodeGenerateRequest,
     AdminUserCommunityUpdate,
+    JoinCommunityRequest,
     ForgotPasswordRequest,
     ResetPasswordRequest,
 )
@@ -39,7 +40,7 @@ from backend.models import (
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
-    ApprovalCode, PlatformSetting,
+    ApprovalCode, PlatformSetting, UserCommunity,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -392,6 +393,20 @@ def _jwt_user_id(credentials: HTTPAuthorizationCredentials) -> int:
     return user_id
 
 
+def _optional_viewer(
+    credentials: Optional[HTTPAuthorizationCredentials],
+    db: Session,
+) -> Optional[User]:
+    """Signed-in user for endpoints that also serve anonymous visitors."""
+    if credentials is None or not getattr(credentials, "credentials", None):
+        return None
+    try:
+        user_id = _jwt_user_id(credentials)
+    except Exception:
+        return None
+    return db.query(User).filter(User.id == user_id).first()
+
+
 def _require_user_from_credentials(
     credentials: HTTPAuthorizationCredentials,
     db: Session,
@@ -546,6 +561,22 @@ def _backfill_user_is_admin() -> None:
             print(f"[warn] is_admin backfill skipped: {exc}")
 
 
+def _backfill_user_communities() -> None:
+    """Give every user with a signup community a matching membership row."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "INSERT INTO user_communities (user_id, community_id, approval_code, joined_at) "
+                "SELECT u.id, u.community_id, u.approval_number, COALESCE(u.created_at, CURRENT_TIMESTAMP) "
+                "FROM users u "
+                "WHERE u.community_id IS NOT NULL AND NOT EXISTS ("
+                "SELECT 1 FROM user_communities uc "
+                "WHERE uc.user_id = u.id AND uc.community_id = u.community_id)"
+            ))
+    except Exception as exc:
+        print(f"[warn] user_communities backfill skipped: {exc}")
+
+
 def _client_ip(request: Request) -> str:
     """Best-effort client IP extraction with proxy header fallback."""
     forwarded_for = request.headers.get("x-forwarded-for")
@@ -672,6 +703,92 @@ async def _community_name_for_id(community_id: Optional[int]) -> Optional[str]:
     except Exception:
         pass
     return None
+
+
+def _find_open_approval_code(db: Session, code: str) -> Optional[ApprovalCode]:
+    return (
+        db.query(ApprovalCode)
+        .filter(
+            ApprovalCode.code == code,
+            ApprovalCode.is_claimed == False,  # noqa: E712
+            ApprovalCode.is_revoked == False,  # noqa: E712
+        )
+        .first()
+    )
+
+
+def _cas_claim_approval_code(db: Session, code_row: ApprovalCode, user_id: int) -> bool:
+    """Claim the code only if it is still open; False means someone beat us to it."""
+    claimed = (
+        db.query(ApprovalCode)
+        .filter(
+            ApprovalCode.id == code_row.id,
+            ApprovalCode.is_claimed == False,  # noqa: E712
+            ApprovalCode.is_revoked == False,  # noqa: E712
+        )
+        .update(
+            {
+                ApprovalCode.is_claimed: True,
+                ApprovalCode.claimed_by: user_id,
+                ApprovalCode.claimed_at: datetime.utcnow(),
+            },
+            synchronize_session=False,
+        )
+    )
+    return bool(claimed)
+
+
+def _user_community_ids(db: Session, user: User) -> set:
+    """Every community the user belongs to, signup ("home") community included."""
+    ids = {
+        int(cid)
+        for (cid,) in db.query(UserCommunity.community_id).filter(UserCommunity.user_id == user.id)
+    }
+    if user.community_id is not None:
+        ids.add(int(user.community_id))
+    return ids
+
+
+def _private_maps_for_user(db: Session, user: Optional[User]) -> List[DistributionCenter]:
+    """Private-map communities the user can open (admins: all of them)."""
+    if user is None:
+        return []
+    query = db.query(DistributionCenter).filter(
+        DistributionCenter.private_map_enabled == True,  # noqa: E712
+        or_(DistributionCenter.is_active == True, DistributionCenter.is_active.is_(None)),  # noqa: E712
+    )
+    if not _user_is_admin(user):
+        ids = _user_community_ids(db, user)
+        if not ids:
+            return []
+        query = query.filter(DistributionCenter.id.in_(ids))
+    return query.order_by(DistributionCenter.name).all()
+
+
+def _user_memberships(db: Session, user: User) -> List[Dict[str, Any]]:
+    ids = _user_community_ids(db, user)
+    if not ids:
+        return []
+    centers = {
+        c.id: c
+        for c in db.query(DistributionCenter).filter(DistributionCenter.id.in_(ids)).all()
+    }
+    joined = {
+        r.community_id: r.joined_at
+        for r in db.query(UserCommunity).filter(UserCommunity.user_id == user.id).all()
+    }
+    rows = []
+    for cid in ids:
+        center = centers.get(cid)
+        rows.append({
+            "community_id": cid,
+            "community_name": (center.name if center and center.name else f"Community #{cid}"),
+            "private_map_enabled": bool(center and center.private_map_enabled),
+            "is_home": user.community_id is not None and int(user.community_id) == cid,
+            "joined_at": joined[cid].isoformat() if joined.get(cid) else None,
+        })
+    rows.sort(key=lambda r: (not r["is_home"], r["community_name"].lower()))
+    return rows
 
 
 def _ip_email_key(request: Request, email: Optional[str]) -> str:
@@ -1146,6 +1263,7 @@ async def get_me(credentials: HTTPAuthorizationCredentials = Depends(security), 
             "community_id": user.community_id,
             "community_name": community_name,
             "approval_number": user.approval_number,
+            "communities": _user_memberships(db, user),
             "phone": user.phone,
             "address": user.address,
             "coords_lat": user.coords_lat,
@@ -1182,6 +1300,7 @@ async def get_user_profile(credentials: HTTPAuthorizationCredentials = Depends(s
             "community_id": user.community_id,
             "community_name": community_name,
             "approval_number": user.approval_number,
+            "communities": _user_memberships(db, user),
             "phone": user.phone,
             "address": user.address,
             "coords_lat": user.coords_lat,
@@ -1476,10 +1595,11 @@ async def startup_event():
     )
     _add_missing_model_columns(
         User, FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
-        ApprovalCode, PlatformSetting,
+        ApprovalCode, PlatformSetting, UserCommunity,
         AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
     )
     _backfill_user_is_admin()
+    _backfill_user_communities()
 
     # Local SQLite: ensure smoke accounts exist for role-switch testing.
     try:
@@ -2408,15 +2528,7 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
             raise HTTPException(status_code=400, detail="Email already registered")
 
         # Look up an unclaimed, non-revoked code (CAS claim after user insert)
-        code_row = (
-            db.query(ApprovalCode)
-            .filter(
-                ApprovalCode.code == approval_raw,
-                ApprovalCode.is_claimed == False,  # noqa: E712
-                ApprovalCode.is_revoked == False,  # noqa: E712
-            )
-            .first()
-        )
+        code_row = _find_open_approval_code(db, approval_raw)
         if not code_row:
             # Same message for missing/claimed/revoked to avoid leaking status
             raise HTTPException(status_code=400, detail="Invalid or already used approval code")
@@ -2450,25 +2562,14 @@ async def create_user(payload: UserRegisterRequest, request: Request, db: Sessio
         
         db.add(user)
         db.flush()  # get user.id before claim
+        db.add(UserCommunity(
+            user_id=user.id,
+            community_id=code_row.community_id,
+            approval_code=code_row.code,
+        ))
 
         # CAS claim: only succeed if still unclaimed
-        claimed = (
-            db.query(ApprovalCode)
-            .filter(
-                ApprovalCode.id == code_row.id,
-                ApprovalCode.is_claimed == False,  # noqa: E712
-                ApprovalCode.is_revoked == False,  # noqa: E712
-            )
-            .update(
-                {
-                    ApprovalCode.is_claimed: True,
-                    ApprovalCode.claimed_by: user.id,
-                    ApprovalCode.claimed_at: datetime.utcnow(),
-                },
-                synchronize_session=False,
-            )
-        )
-        if not claimed:
+        if not _cas_claim_approval_code(db, code_row, user.id):
             db.rollback()
             raise HTTPException(status_code=400, detail="Invalid or already used approval code")
 
@@ -2838,6 +2939,73 @@ async def validate_approval_code(
         "community_name": community_name,
         "school_code": row.school_code,
     }
+
+
+@app.get("/api/user/communities")
+async def get_user_communities(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Communities the signed-in user belongs to."""
+    user = _require_user_from_credentials(credentials, db)
+    return {"communities": _user_memberships(db, user)}
+
+
+@app.post("/api/user/communities/join")
+async def join_community_with_code(
+    payload: JoinCommunityRequest,
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """Join an additional community by claiming one of its approval codes."""
+    enforce_approval_validate_rate_limit(request)
+    user = _require_user_from_credentials(credentials, db)
+
+    code = _normalize_approval_code(payload.approval_code)
+    if not _approval_code_format_ok(code):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid approval code format. Use 3 letters followed by 6 digits (e.g. RBE123456).",
+        )
+    code_row = _find_open_approval_code(db, code)
+    if not code_row:
+        raise HTTPException(status_code=400, detail="Invalid or already used approval code")
+    # Check before claiming so a duplicate join doesn't burn the code.
+    if int(code_row.community_id) in _user_community_ids(db, user):
+        raise HTTPException(status_code=400, detail="You're already a member of this community")
+
+    db.add(UserCommunity(
+        user_id=user.id,
+        community_id=code_row.community_id,
+        approval_code=code_row.code,
+    ))
+    if user.community_id is None:
+        # First community becomes the home community, same as signup.
+        user.community_id = code_row.community_id
+        user.approval_number = code_row.code
+    db.flush()
+    if not _cas_claim_approval_code(db, code_row, user.id):
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid or already used approval code")
+    db.commit()
+
+    memberships = _user_memberships(db, user)
+    joined = next(m for m in memberships if m["community_id"] == int(code_row.community_id))
+    return {"success": True, "community": joined, "communities": memberships}
+
+
+@app.get("/api/maps")
+async def get_available_maps(
+    db: Session = Depends(get_db),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+):
+    """Maps the viewer can switch between: the public map plus private community maps."""
+    maps: List[Dict[str, Any]] = [{"key": "public", "label": "Public map", "community_id": None}]
+    viewer = _optional_viewer(credentials, db)
+    for center in _private_maps_for_user(db, viewer):
+        maps.append({"key": str(center.id), "label": center.name, "community_id": center.id})
+    return {"maps": maps}
 
 
 @app.get("/api/admin/communities")

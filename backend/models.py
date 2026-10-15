@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SQLEnum
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -116,6 +116,19 @@ class ApprovalCode(Base):
     claimed_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+
+class UserCommunity(Base):
+    """Community memberships. users.community_id stays the signup ("home")
+    community; every community a user belongs to, home included, has a row."""
+    __tablename__ = "user_communities"
+    __table_args__ = (UniqueConstraint("user_id", "community_id", name="uq_user_community"),)
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    community_id = Column(Integer, nullable=False, index=True)
+    approval_code = Column(String(9), nullable=True)  # code used to join, if any
+    joined_at = Column(DateTime, default=datetime.utcnow)
 
 
 class FoodResource(Base):
@@ -261,6 +274,8 @@ class DistributionCenter(Base):
     # Providers page: JSON array of type tags + optional logo path/URL
     provider_types = Column(Text, nullable=True)       # JSON: ["Food pantry", "Community Closet", ...]
     logo_url = Column(String(512), nullable=True)
+    # Members get a private map of this community's private listings.
+    private_map_enabled = Column(Boolean, default=False)
 
     # Community Trust Signals
     verified_by_aglf = Column(Boolean, default=False)  # Verified by All Good Living Foundation
