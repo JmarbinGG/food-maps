@@ -885,6 +885,25 @@ def serialize_user(user: Optional[User]) -> Optional[dict]:
         return {"id": getattr(user, "id", None), "name": getattr(user, "name", None)}
 
 
+def _parse_client_datetime(value: Any, label: str) -> Optional[datetime]:
+    """Parse an ISO-8601 time from the client into a naive UTC datetime.
+
+    Browsers send toISOString() values like 2026-10-15T01:30:00.000Z, which
+    MySQL rejects as a DATETIME literal. Blank clears the field."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid {label}")
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
+
+
 def serialize_listing(item: FoodResource, include_donor: bool = True, include_donor_contact: bool = False) -> dict:
     """Return a safe, client-friendly listing dict. Converts enums/datetimes and includes donor if available."""
     # Only include full donor details if listing is claimed, otherwise just include basic info
@@ -2434,11 +2453,11 @@ async def update_listing(listing_id: int, request: Request, db: Session = Depend
             except Exception:
                 pass
         if pickup_start_provided:
-            item.pickup_window_start = pickup_start
+            item.pickup_window_start = _parse_client_datetime(pickup_start, "pickup start")
         if pickup_end_provided:
-            item.pickup_window_end = pickup_end
+            item.pickup_window_end = _parse_client_datetime(pickup_end, "pickup end")
         if expiration_date_provided:
-            item.expiration_date = expiration_date
+            item.expiration_date = _parse_client_datetime(expiration_date, "expiration date")
         if status is not None:
             # Validate against the canonical state list. Without this the
             # donor could set status to any string (including arbitrary
@@ -4596,8 +4615,8 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             qty=qty,
             unit=unit,
             perishability=perishability,
-            pickup_window_start=pickup_start,
-            pickup_window_end=pickup_end,
+            pickup_window_start=_parse_client_datetime(pickup_start, "pickup start"),
+            pickup_window_end=_parse_client_datetime(pickup_end, "pickup end"),
             address=address,
             images=images_json,
             status=listing_status,

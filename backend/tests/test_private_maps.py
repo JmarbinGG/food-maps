@@ -9,7 +9,7 @@ from unittest.mock import patch
 import jwt
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -47,18 +47,6 @@ def session_factory():
 @pytest.fixture()
 def db_session(session_factory):
     session = session_factory()
-
-    # create_listing stores pickup times as the raw strings it receives, which
-    # MySQL accepts but SQLite's DateTime type rejects.
-    @event.listens_for(session, "before_flush")
-    def _coerce_pickup_strings(sess, _ctx, _instances):
-        for obj in sess.new:
-            if isinstance(obj, FoodResource):
-                for attr in ("pickup_window_start", "pickup_window_end"):
-                    value = getattr(obj, attr)
-                    if isinstance(value, str):
-                        setattr(obj, attr, datetime.fromisoformat(value))
-
     try:
         yield session
     finally:
@@ -209,7 +197,8 @@ class TestCreateListing:
         params = {
             "donor_id": user.id, "title": "Soup", "desc": "", "category": "prepared",
             "qty": 1, "unit": "pot", "perishability": "high", "address": "1 Main St",
-            "pickup_start": "2026-10-15T10:00:00", "pickup_end": "2026-10-15T12:00:00",
+            # Browser toISOString() format, which MySQL rejects as a raw literal.
+            "pickup_start": "2026-10-15T10:00:00.000Z", "pickup_end": "2026-10-15T12:00:00.000Z",
             **extra,
         }
         with patch.dict(os.environ, {"MAPBOX_TOKEN": ""}):
@@ -227,6 +216,17 @@ class TestCreateListing:
         assert res.status_code == 403
         res = self._create(client, world["donor"], is_private="true")
         assert res.status_code == 403
+
+    def test_bad_pickup_time_is_400(self, client, world):
+        res = self._create(client, world["donor"], pickup_start="tomorrow-ish")
+        assert res.status_code == 400
+        assert "pickup start" in res.json()["detail"]
+
+    def test_pickup_times_stored_as_utc(self, client, world, db_session):
+        res = self._create(client, world["donor"], pickup_start="2026-10-15T03:30:00-07:00")
+        assert res.status_code == 200, res.text
+        row = db_session.query(FoodResource).filter(FoodResource.id == res.json()["listing"]["id"]).one()
+        assert row.pickup_window_start == datetime(2026, 10, 15, 10, 30)
 
     def test_public_listing_unchanged(self, client, world):
         res = self._create(client, world["donor"])
