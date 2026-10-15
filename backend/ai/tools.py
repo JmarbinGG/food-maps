@@ -19,6 +19,7 @@ from typing import Optional
 import httpx
 
 from backend.aws_secrets import load_aws_secrets
+from backend.models import public_listing_clause
 
 # Pull secrets (e.g. MAPBOX_TOKEN) from AWS Secrets Manager into the
 # process env BEFORE we read module-level config below. In production the
@@ -1762,6 +1763,7 @@ async def _search_food_near_user(
                     viewer_is_admin = bool(getattr(user, "is_admin", False))
 
             q = db.query(FoodResource).filter(FoodResource.status == "available")
+            q = q.filter(public_listing_clause())
             q = q.filter(FoodResource.donor_id != uid)
             q = _apply_browse_community_scope(
                 q,
@@ -1866,6 +1868,7 @@ async def _get_recent_listings(
             q = (
                 db.query(FoodResource)
                 .filter(FoodResource.status == "available")
+                .filter(public_listing_clause())
                 .filter(FoodResource.created_at >= cutoff)
             )
             if uid is not None:
@@ -1982,6 +1985,7 @@ async def _get_community_listings(
             q = (
                 db.query(FoodResource)
                 .filter(FoodResource.status == "available")
+                .filter(public_listing_clause())
                 .filter(FoodResource.community_id == cid)
             )
             if category:
@@ -2888,6 +2892,7 @@ async def _search_food_by_location(
         db = SessionLocal()
         try:
             q = db.query(FoodResource).filter(FoodResource.status == "available")
+            q = q.filter(public_listing_clause())
             if food_type:
                 try:
                     cat = FoodCategory(food_type.lower())
@@ -3396,7 +3401,10 @@ async def _claim_listing(
             "ok": False,
         }
 
-    from backend.app import SessionLocal, pending_confirmations, send_sms, generate_reset_code, auto_release_claim
+    from backend.app import (
+        SessionLocal, pending_confirmations, send_sms, generate_reset_code, auto_release_claim,
+        _listing_visible_clause,
+    )
     from backend.models import User, FoodResource
     from threading import Timer
 
@@ -3431,12 +3439,14 @@ async def _claim_listing(
             # 'available' -> 'pending_confirmation'. Prevents the read-then-
             # update race that could let two users both "win" a listing.
             now = _utcnow()
+            visible = _listing_visible_clause(db, caller)
             updated = (
                 db.query(FoodResource)
                 .filter(
                     FoodResource.id == lid,
                     FoodResource.status == "available",
                     FoodResource.donor_id != uid,
+                    visible,
                 )
                 .update(
                     {
@@ -3449,7 +3459,7 @@ async def _claim_listing(
             )
             if not updated:
                 # Figure out why the update matched nothing.
-                item = db.query(FoodResource).filter(FoodResource.id == lid).first()
+                item = db.query(FoodResource).filter(FoodResource.id == lid, visible).first()
                 db.rollback()
                 if not item:
                     return {"error": "Listing not found"}

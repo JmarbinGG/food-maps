@@ -1,10 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends, Request, Response
+from fastapi import FastAPI, HTTPException, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func, case, or_, inspect as sa_inspect
+from sqlalchemy import text, func, case, or_, true, inspect as sa_inspect
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
@@ -40,7 +40,7 @@ from backend.models import (
     DonationReminder, RecurrenceFrequency, ReminderStatus, Feedback,
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
-    ApprovalCode, PlatformSetting, UserCommunity,
+    ApprovalCode, PlatformSetting, UserCommunity, public_listing_clause,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -765,6 +765,16 @@ def _private_maps_for_user(db: Session, user: Optional[User]) -> List[Distributi
     return query.order_by(DistributionCenter.name).all()
 
 
+def _listing_visible_clause(db: Session, user: Optional[User]):
+    """Listings the user may see or claim: public ones plus private ones on maps they can open."""
+    if user is not None and _user_is_admin(user):
+        return true()
+    map_ids = [c.id for c in _private_maps_for_user(db, user)]
+    if not map_ids:
+        return public_listing_clause()
+    return or_(public_listing_clause(), FoodResource.community_id.in_(map_ids))
+
+
 def _user_memberships(db: Session, user: User) -> List[Dict[str, Any]]:
     ids = _user_community_ids(db, user)
     if not ids:
@@ -930,6 +940,7 @@ def serialize_listing(item: FoodResource, include_donor: bool = True, include_do
         "coords_lat": getattr(item, "coords_lat", None),
         "coords_lng": getattr(item, "coords_lng", None),
         "community_id": getattr(item, "community_id", None),
+        "is_private": bool(getattr(item, "is_private", False)),
         "pickup_window_start": item.pickup_window_start.isoformat() if getattr(item, "pickup_window_start", None) else None,
         "pickup_window_end": item.pickup_window_end.isoformat() if getattr(item, "pickup_window_end", None) else None,
         "status": getattr(item, "status", None),
@@ -1919,6 +1930,7 @@ async def admin_bulk_update_listing_categories(
 @app.get("/api/listings/get")
 def get_listings(
     limit: int = 100,
+    map_key: str = Query("public", alias="map"),
     db: Session = Depends(get_db),
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)
 ):
@@ -1927,6 +1939,10 @@ def get_listings(
     - Recipients see: all available + their claimed listings
     - Donors see: all their listings (available, claimed, expired)
     - Unauthenticated: only available listings
+
+    `map` picks the map: "public" (default) excludes private listings, except
+    the viewer's own; a community id returns only that community's private
+    listings and requires access to its private map.
     """
     payload = None
     if credentials is not None:
@@ -1941,6 +1957,16 @@ def get_listings(
         except Exception as e:
             print(f"JWT decode error: {e}")
             raise HTTPException(status_code=401, detail="Invalid token")
+
+    private_map_id: Optional[int] = None
+    if map_key and map_key != "public":
+        try:
+            private_map_id = int(map_key)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Unknown map")
+        viewer = _optional_viewer(credentials, db)
+        if private_map_id not in {c.id for c in _private_maps_for_user(db, viewer)}:
+            raise HTTPException(status_code=403, detail="You don't have access to this map")
     try:
         user_id = None
         user_role = None
@@ -1952,11 +1978,17 @@ def get_listings(
 
         # Return ALL listings - let frontend filter
         # This allows proper filtering for donors to see expired/claimed items
-        listings = (
-            db.query(FoodResource)
-            .order_by(FoodResource.created_at.desc())
-            .limit(limit)
-        ).all()
+        query = db.query(FoodResource)
+        if private_map_id is not None:
+            query = query.filter(
+                FoodResource.is_private == True,  # noqa: E712
+                FoodResource.community_id == private_map_id,
+            )
+        elif user_id is not None:
+            query = query.filter(or_(public_listing_clause(), FoodResource.donor_id == int(user_id)))
+        else:
+            query = query.filter(public_listing_clause())
+        listings = query.order_by(FoodResource.created_at.desc()).limit(limit).all()
 
         def _to_timestamp(value):
             if not value:
@@ -2167,7 +2199,10 @@ async def get_recommended_listings(
             pass
         
         # Get all available listings
-        listings = db.query(FoodResource).filter(FoodResource.status == "available").all()
+        listings = db.query(FoodResource).filter(
+            FoodResource.status == "available",
+            public_listing_clause(),
+        ).all()
         
         # Score each listing based on dietary compatibility
         scored_listings = []
@@ -3782,6 +3817,8 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
 
         uid_int = int(user_id)
         now = datetime.utcnow()
+        claimant = db.query(User).filter(User.id == uid_int).first()
+        visible = _listing_visible_clause(db, claimant)
 
         # Atomic claim: only one concurrent caller can transition
         # 'available' -> 'pending_confirmation'. Prevents the read-then-
@@ -3793,6 +3830,7 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
                 FoodResource.id == listing_id,
                 FoodResource.status == "available",
                 FoodResource.donor_id != uid_int,
+                visible,
             )
             .update(
                 {
@@ -3804,7 +3842,7 @@ async def claim_listing(listing_id: int, db: Session = Depends(get_db), credenti
             )
         )
         if not updated:
-            item = db.query(FoodResource).filter(FoodResource.id == listing_id).first()
+            item = db.query(FoodResource).filter(FoodResource.id == listing_id, visible).first()
             db.rollback()
             if not item:
                 raise HTTPException(status_code=404, detail="Listing not found")
@@ -4443,13 +4481,16 @@ async def update_trust_score(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/listings/create")
-async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, db: Session = Depends(get_db), credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)):
+async def create_listing(donor_id: int, title: str, desc: str, category: FoodCategory, qty: float, unit: str, perishability: PerishabilityLevel, address: str,  pickup_start: str, pickup_end: str, est_w: float = 0, images: Optional[str] = None, is_private: bool = False, map_community_id: Optional[int] = None, db: Session = Depends(get_db), credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security)):
     """
     Create a FoodResource and attempt server-side geocoding using Mapbox when an address is provided
     and coords are not supplied. Returns the created listing as JSON.
 
     `images` may be a JSON-encoded array of URL strings (e.g. paths returned by
     /api/ai/upload_image) to attach as listing photos.
+
+    `is_private` posts the listing only to the private map of
+    `map_community_id`, which must be a private map the donor can open.
 
     SECURITY: the authoritative donor_id is taken from the JWT (Authorization
     header). The legacy `donor_id` URL parameter is kept for backward
@@ -4486,6 +4527,13 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             raise HTTPException(status_code=404, detail="Donor not found")
         if not donor.phone or len(str(donor.phone).strip()) < 7:
             raise HTTPException(status_code=400, detail="A valid phone number is required to create a listing")
+
+        listing_community_id = None
+        if is_private:
+            allowed = {c.id for c in _private_maps_for_user(db, donor)}
+            if map_community_id is None or int(map_community_id) not in allowed:
+                raise HTTPException(status_code=403, detail="You can't post to that private map")
+            listing_community_id = int(map_community_id)
 
         # Validate and normalize the optional images parameter. We store a
         # JSON-encoded array of URL strings; reject anything else to avoid
@@ -4534,6 +4582,8 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
             address=address,
             images=images_json,
             status=listing_status,
+            is_private=bool(is_private),
+            community_id=listing_community_id,
             created_at=datetime.utcnow()
         )
 
@@ -4581,6 +4631,8 @@ async def create_listing(donor_id: int, title: str, desc: str, category: FoodCat
                 else "Listing created successfully."
             ),
         }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -6917,7 +6969,8 @@ async def get_recent_listings(
         # Get recent listings
         listings = db.query(FoodResource).filter(
             FoodResource.created_at >= time_threshold,
-            FoodResource.available == True
+            FoodResource.available == True,
+            public_listing_clause(),
         ).all()
         
         # Serialize listings

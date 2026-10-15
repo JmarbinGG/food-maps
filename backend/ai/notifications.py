@@ -228,7 +228,7 @@ async def _draft_message(user, food, donor_name: str) -> tuple[str, str]:
 def _collect_candidates() -> list[dict]:
     """DB work: find new listings + matching users. Returns plain dicts."""
     from backend.app import SessionLocal
-    from backend.models import User, FoodResource, UserRole
+    from backend.models import User, FoodResource, UserRole, public_listing_clause
     from backend.ai.models import AIBroadcast
 
     out: list[dict] = []
@@ -239,6 +239,7 @@ def _collect_candidates() -> list[dict]:
             db.query(FoodResource)
             .filter(FoodResource.created_at >= since)
             .filter(FoodResource.status == "available")
+            .filter(public_listing_clause())
             .order_by(FoodResource.created_at.asc())
             .all()
         )

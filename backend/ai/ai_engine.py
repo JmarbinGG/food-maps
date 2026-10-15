@@ -2132,7 +2132,7 @@ class ConversationEngine:
             return []
 
         from backend.app import SessionLocal
-        from backend.models import FoodResource
+        from backend.models import FoodResource, public_listing_clause
 
         def _sync() -> list[str]:
             out: list[str] = []
@@ -2147,6 +2147,7 @@ class ConversationEngine:
                             db.query(FoodResource)
                             .filter(FoodResource.status == "available")
                             .filter(FoodResource.created_at >= two_hours_ago)
+                            .filter(public_listing_clause())
                             .filter(FoodResource.donor_id != int(uid))
                             .filter(FoodResource.coords_lat.isnot(None))
                             .filter(FoodResource.coords_lng.isnot(None))

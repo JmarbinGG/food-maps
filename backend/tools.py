@@ -2677,6 +2677,8 @@ def _listing_in_community_scope(listing: dict, allowed_ids: Optional[set]) -> bo
     """True when listing.community_id is in the viewer's allowed set."""
     if allowed_ids is None:
         return True
+    if listing.get("is_private"):
+        return False
     cid = listing.get("community_id")
     if cid is None or str(cid).strip() == "":
         return False

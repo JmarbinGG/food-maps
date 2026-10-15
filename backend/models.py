@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SQLEnum
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SQLEnum, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -154,6 +154,8 @@ class FoodResource(Base):
     coords_lng = Column(Float, nullable=True)
     # Per-listing community (nullable; mirrors users.community_id / DistributionCenter id)
     community_id = Column(Integer, nullable=True, index=True)
+    # Private listings show only on community_id's private map, never publicly.
+    is_private = Column(Boolean, default=False, index=True)
     status = Column(String(255), default="available")
     claimed_at = Column(DateTime, nullable=True)
     images = Column(Text, nullable=True)  # JSON array of image URLs
@@ -194,6 +196,14 @@ class FoodResource(Base):
     # Relationships
     donor = relationship("User", foreign_keys=[donor_id], back_populates="donations")
     consumption_logs = relationship("ConsumptionLog", back_populates="food_resource")
+
+def public_listing_clause():
+    """Filter for listings that may appear outside a private map.
+
+    Rows that predate the is_private column read back as NULL, so they count
+    as public."""
+    return or_(FoodResource.is_private == False, FoodResource.is_private.is_(None))  # noqa: E712
+
 
 class FoodRequest(Base):
     __tablename__ = "food_requests"
