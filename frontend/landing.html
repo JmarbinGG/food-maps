@@ -1133,10 +1133,28 @@
             }
         }
 
-        // Shared server content wins; localStorage supports legacy and offline visits.
-        async function loadSlideshowPhotos() {
-            slideshowPhotos = [...defaultPhotos];
+        function sameSlideshowPhotos(a, b) {
+            return JSON.stringify(a) === JSON.stringify(b);
+        }
+
+        function showSlideshowPhotos(photos) {
+            if (sameSlideshowPhotos(photos, slideshowPhotos)) return;
+            slideshowPhotos = photos;
+            if (currentSlide >= slideshowPhotos.length) currentSlide = 0;
             renderSlideshow();
+        }
+
+        // Shared server content wins. The localStorage copy of the last shared
+        // photos renders first so the hero never flashes the built-in defaults;
+        // the defaults only show when nothing else is available.
+        async function loadSlideshowPhotos() {
+            let cachedPhotos = null;
+            try {
+                cachedPhotos = parseSlideshowPhotos(localStorage.getItem('slideshowPhotos'));
+            } catch (error) {
+                console.warn('Local slideshow cache unavailable:', error);
+            }
+            if (cachedPhotos?.length) showSlideshowPhotos(cachedPhotos);
 
             try {
                 const response = await fetch('/api/pages/landing/content', {
@@ -1146,23 +1164,20 @@
 
                 const data = await response.json();
                 const sharedPhotos = parseSlideshowPhotos(data.content?.slideshowPhotos);
-                if (sharedPhotos !== null) {
-                    slideshowPhotos = sharedPhotos.length ? sharedPhotos : [...defaultPhotos];
-                    localStorage.setItem('slideshowPhotos', JSON.stringify(slideshowPhotos));
-                    renderSlideshow();
-                    return;
+                // No saved slideshow (or an empty one) means the defaults.
+                const photos = sharedPhotos?.length ? sharedPhotos : [...defaultPhotos];
+                try {
+                    localStorage.setItem('slideshowPhotos', JSON.stringify(photos));
+                } catch (error) {
+                    // Caching is best-effort.
                 }
+                showSlideshowPhotos(photos);
+                return;
             } catch (error) {
                 console.warn('Shared slideshow load failed; using local fallback:', error);
             }
 
-            try {
-                const localPhotos = parseSlideshowPhotos(localStorage.getItem('slideshowPhotos'));
-                if (localPhotos?.length) slideshowPhotos = localPhotos;
-            } catch (error) {
-                console.warn('Local slideshow fallback failed:', error);
-            }
-            renderSlideshow();
+            if (!slideshowPhotos.length) showSlideshowPhotos([...defaultPhotos]);
         }
 
         // Render slideshow
@@ -1422,8 +1437,7 @@
             checkSlideshowAdminAccess();
 
             // Load and render slideshow
-            loadSlideshowPhotos();
-            startSlideshow();
+            loadSlideshowPhotos().finally(startSlideshow);
 
             // Event listeners
             const prevBtn = document.getElementById('prev-slide');
