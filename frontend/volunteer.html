@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Become a Volunteer — Do Good Food Maps</title>
+  <meta name="description" content="Sign up to volunteer with Do Good Food Maps. Help verify food listings, deliver groceries, and share the map with East Bay neighbors.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/i18n_platform.css?v=20261002-display-scale">
+  <script src="js/lib/i18n_platform.js?v=20260812d"></script>
+  <style>
+    .volunteer-page {
+      --support-ink: #183d32;
+      --support-paper: #f4f5ee;
+      color: var(--support-ink);
+      background: var(--support-paper);
+    }
+    .skip-form {
+      position: absolute;
+      left: 1rem;
+      top: -3rem;
+      z-index: 80;
+      background: #fff;
+      color: var(--support-ink);
+      padding: 0.6rem 0.9rem;
+      border-radius: 0.5rem;
+      font-weight: 700;
+    }
+    .skip-form:focus { top: 5.5rem; }
+    .volunteer-wrap {
+      max-width: 46rem;
+      margin: 0 auto;
+      padding: 2.5rem 1rem 4rem;
+    }
+    .volunteer-intro {
+      margin: 0 0 1.25rem;
+    }
+    .volunteer-intro h1 {
+      margin: 0;
+      font-family: "Source Serif 4", Georgia, serif;
+      font-size: clamp(2.2rem, 4vw, 3.2rem);
+      font-weight: 500;
+      letter-spacing: 0;
+      line-height: 1.05;
+    }
+    .volunteer-intro p {
+      margin: 0.75rem 0 0;
+      max-width: 36rem;
+      color: #43594e;
+    }
+    .volunteer-card {
+      background: #1a2620;
+      color: #f4f7f4;
+      border: 1px solid #2c3b33;
+      border-radius: 1.35rem;
+      padding: 1.6rem 1.35rem 1.4rem;
+      box-shadow: 0 18px 40px rgba(16, 28, 22, 0.18);
+    }
+    .volunteer-card h2 {
+      margin: 0 0 1rem;
+      font-size: 1.55rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .volunteer-card h2 + .field-grid,
+    .help-grid,
+    .availability-row { margin-bottom: 1.35rem; }
+    .section-gap { margin-top: 1.6rem; }
+    .req { color: #8ddea4; }
+    .field-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.95rem 1rem;
+    }
+    .field { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; }
+    .field.span-2 { grid-column: 1 / -1; }
+    .field label,
+    .block-label {
+      font-size: 0.95rem;
+      font-weight: 650;
+    }
+    .volunteer-card input[type="text"],
+    .volunteer-card input[type="email"],
+    .volunteer-card input[type="tel"],
+    .volunteer-card select,
+    .volunteer-card textarea {
+      width: 100%;
+      background: #121c18;
+      color: #f4f7f4;
+      border: 1px solid #314239;
+      border-radius: 0.85rem;
+      padding: 0.85rem 0.95rem;
+      font: inherit;
+      font-size: 1rem;
+    }
+    .volunteer-card textarea { min-height: 7.5rem; resize: vertical; }
+    .volunteer-card input::placeholder,
+    .volunteer-card textarea::placeholder { color: #8b978f; }
+    .volunteer-card select {
+      appearance: none;
+      background-image: linear-gradient(45deg, transparent 50%, #c5d0c8 50%), linear-gradient(135deg, #c5d0c8 50%, transparent 50%);
+      background-position: calc(100% - 1.15rem) 1.15rem, calc(100% - 0.75rem) 1.15rem;
+      background-size: 0.4rem 0.4rem, 0.4rem 0.4rem;
+      background-repeat: no-repeat;
+      padding-right: 2.2rem;
+    }
+    .hint {
+      margin: 0.45rem 0 0;
+      color: #b7c4bb;
+      font-size: 0.92rem;
+    }
+    .help-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.75rem;
+    }
+    .help-card,
+    .pill {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: #16211c;
+      border: 1px solid #314239;
+      cursor: pointer;
+    }
+    .help-card {
+      border-radius: 0.95rem;
+      padding: 0.9rem 0.95rem;
+    }
+    .help-card strong { display: block; font-size: 0.98rem; }
+    .help-card span { display: block; margin-top: 0.2rem; color: #c5d0c8; font-size: 0.9rem; line-height: 1.35; }
+    .pill {
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.55rem 0.9rem 0.55rem 0.7rem;
+      font-weight: 650;
+    }
+    .availability-row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+    .help-card input,
+    .pill input { margin-top: 0.15rem; accent-color: #7ddea3; width: 1rem; height: 1rem; flex: none; }
+    .stack { display: flex; flex-direction: column; gap: 0.45rem; margin-top: 0.35rem; }
+    .submit {
+      margin-top: 1.15rem;
+      background: #7ddea3;
+      color: #10241c;
+      border: 0;
+      border-radius: 999px;
+      padding: 0.85rem 1.35rem;
+      font: inherit;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .submit:hover { background: #8ee6b0; }
+    .submit:disabled { opacity: 0.7; cursor: wait; }
+    .form-error {
+      margin: 0.85rem 0 0;
+      color: #ffb4a8;
+      font-weight: 650;
+    }
+    .thanks {
+      margin: 0;
+      font-size: 1.15rem;
+      line-height: 1.5;
+    }
+    .volunteer-card :focus-visible {
+      outline: 3px solid #7ddea3;
+      outline-offset: 2px;
+    }
+    @media (max-width: 700px) {
+      .field-grid, .help-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+
+<body class="volunteer-page">
+  <a class="skip-form" href="#volunteer-form">Skip to the volunteer form</a>
+
+  <nav class="bg-white/90 backdrop-blur-lg shadow-lg border-b border-gray-200 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between items-center h-20">
+        <div class="flex items-center">
+          <a href="landing.html" class="cursor-pointer">
+            <img src="/assets/logos/foodmaps-logo.png" alt="Do Good Food Maps" class="w-16 h-16 rounded-full object-cover shadow-lg">
+          </a>
+        </div>
+        <div class="hidden lg:flex items-center gap-5 xl:gap-7">
+          <a href="index.html?tutorial=1" class="text-gray-600 hover:text-green-600 font-medium transition-colors">How It Works</a>
+          <a href="impactStory.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Impact Story</a>
+          <a href="partners.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Partners</a>
+          <a href="providers.html" class="text-gray-600 hover:text-green-600 font-medium transition-colors">Providers</a>
+          <a href="nutrition.html" class="hidden text-gray-600 hover:text-green-600 font-medium transition-colors">Nutrition</a>
+          <div data-language-picker></div>
+          <a href="donate.html"
+            class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold hover:from-orange-600 hover:to-orange-700 transition-all shadow-lg">
+            Donate
+          </a>
+          <a href="index.html"
+            class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold hover:from-green-700 hover:to-green-800 transition-all shadow-lg">
+            Get Started
+          </a>
+        </div>
+        <div class="lg:hidden">
+          <button id="mobile-menu-btn" type="button" class="text-gray-600 hover:text-green-600 p-2 rounded-lg hover:bg-gray-100 transition-colors" aria-expanded="false" aria-controls="mobile-menu">
+            <div class="icon-menu text-2xl"></div>
+          </button>
+        </div>
+      </div>
+      <div id="mobile-menu" class="lg:hidden hidden bg-white/95 backdrop-blur-lg border-t border-gray-200 pb-4">
+        <div class="flex flex-col space-y-4 pt-4">
+          <a href="index.html?tutorial=1" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">How It Works</a>
+          <a href="impactStory.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Impact Story</a>
+          <a href="partners.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Partners</a>
+          <a href="providers.html" class="text-gray-600 hover:text-green-600 font-medium px-2 py-2 rounded-lg hover:bg-gray-50">Providers</a>
+          <div data-language-picker="mobile" class="px-2"></div>
+          <a href="donate.html" class="bg-gradient-to-r from-orange-500 to-orange-600 text-white px-6 py-3 rounded-xl font-semibold text-center mx-2">Donate</a>
+          <a href="index.html" class="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl font-semibold text-center mx-2">Get Started</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <main>
+    <div class="volunteer-wrap">
+      <div class="volunteer-intro">
+        <h1>Become a Volunteer</h1>
+        <p>Tell us how you can help. We’ll match you with families, food sites, and events around the East Bay.</p>
+      </div>
+
+      <form class="volunteer-card" id="volunteer-form" novalidate>
+        <h2>About you</h2>
+        <div class="field-grid">
+          <div class="field">
+            <label for="full-name">Full name <span class="req">*</span></label>
+            <input id="full-name" name="full_name" type="text" autocomplete="name" required>
+          </div>
+          <div class="field">
+            <label for="email">Email <span class="req">*</span></label>
+            <input id="email" name="email" type="email" autocomplete="email" required>
+          </div>
+          <div class="field">
+            <label for="phone">Phone</label>
+            <input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="(510) 555-0123">
+          </div>
+          <div class="field">
+            <label for="city">City</label>
+            <select id="city" name="city">
+              <option value="">Select...</option>
+              <option>Alameda</option>
+              <option>Oakland</option>
+              <option>Berkeley</option>
+              <option>San Leandro</option>
+              <option>Hayward</option>
+              <option>Fremont</option>
+              <option>Other East Bay</option>
+              <option>Outside the East Bay</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="languages">Languages you speak</label>
+            <input id="languages" name="languages" type="text" placeholder="e.g. English, Spanish, Cantonese">
+            <p class="hint">Helps us match you with families and food sites.</p>
+          </div>
+        </div>
+
+        <h2 class="section-gap">How would you like to help? <span class="req">*</span></h2>
+        <div class="help-grid">
+          <label class="help-card">
+            <input type="checkbox" name="help" value="verify_listings">
+            <span><strong>Verify food listings</strong><span>Call or visit pantries to confirm hours, locations, and what they offer.</span></span>
+          </label>
+          <label class="help-card">
+            <input type="checkbox" name="help" value="delivery_driver">
+            <span><strong>Home delivery driver</strong><span>Bring groceries to homebound and housing-insecure families.</span></span>
+          </label>
+          <label class="help-card">
+            <input type="checkbox" name="help" value="outreach">
+            <span><strong>Community outreach</strong><span>Recruit food distributors and share the map with schools and neighbors.</span></span>
+          </label>
+          <label class="help-card">
+            <input type="checkbox" name="help" value="data_entry">
+            <span><strong>Data entry &amp; site updates</strong><span>Add and update map listings from home.</span></span>
+          </label>
+          <label class="help-card">
+            <input type="checkbox" name="help" value="translation">
+            <span><strong>Translation</strong><span>Translate listings and flyers for non-English speakers.</span></span>
+          </label>
+          <label class="help-card">
+            <input type="checkbox" name="help" value="events">
+            <span><strong>Events &amp; tabling</strong><span>Staff food distributions and community events.</span></span>
+          </label>
+        </div>
+
+        <h2 class="section-gap">Availability</h2>
+        <div class="availability-row">
+          <label class="pill"><input type="checkbox" name="availability" value="weekday_mornings"> Weekday mornings</label>
+          <label class="pill"><input type="checkbox" name="availability" value="weekday_afternoons"> Weekday afternoons</label>
+          <label class="pill"><input type="checkbox" name="availability" value="evenings"> Evenings</label>
+          <label class="pill"><input type="checkbox" name="availability" value="weekends"> Weekends</label>
+        </div>
+
+        <div class="stack">
+          <label class="block-label" for="has-car">Do you have a car you can use for deliveries?</label>
+          <select id="has-car" name="has_car">
+            <option value="">Select...</option>
+            <option>Yes</option>
+            <option>No</option>
+            <option>Sometimes</option>
+          </select>
+        </div>
+
+        <div class="stack">
+          <label class="block-label" for="notes">Anything else we should know?</label>
+          <textarea id="notes" name="notes" placeholder="Skills, experience, questions, or how you heard about us"></textarea>
+        </div>
+
+        <p class="form-error" id="form-error" hidden></p>
+        <button class="submit" type="submit">Sign up to volunteer</button>
+      </form>
+    </div>
+  </main>
+
+  <footer class="bg-gradient-to-br from-gray-900 via-slate-900 to-gray-900 text-gray-300 py-16">
+    <div class="max-w-7xl mx-auto px-4">
+      <div class="flex space-x-4 mb-8">
+        <a href="https://www.instagram.com/dogoodfoodmaps/" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Instagram" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+        </a>
+        <a href="https://www.facebook.com/profile.php?id=61594695751036" target="_blank" rel="noopener noreferrer" aria-label="Follow Do Good Food Maps on Facebook" class="w-10 h-10 bg-emerald-600/20 hover:bg-emerald-600 rounded-full flex items-center justify-center transition-colors text-emerald-400 hover:text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+        </a>
+      </div>
+      <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+        <p class="text-gray-400 mb-0">&copy; 2026 Do Good Food Maps. All rights reserved. Built to help communities share food.</p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <a href="impactStory.html" class="text-gray-400 hover:text-emerald-400">Impact Story</a>
+          <a href="privacy.html" class="text-gray-400 hover:text-emerald-400">Privacy Policy</a>
+          <a href="terms.html" class="text-gray-400 hover:text-emerald-400">Terms of Service</a>
+          <a href="cookies.html" class="text-gray-400 hover:text-emerald-400">Cookie Policy</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      var mobileMenuBtn = document.getElementById('mobile-menu-btn');
+      var mobileMenu = document.getElementById('mobile-menu');
+      if (mobileMenuBtn && mobileMenu) {
+        function setMenu(open) {
+          mobileMenu.classList.toggle('hidden', !open);
+          mobileMenuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+          mobileMenuBtn.innerHTML = open
+            ? '<div class="icon-x text-2xl"></div>'
+            : '<div class="icon-menu text-2xl"></div>';
+        }
+        mobileMenuBtn.addEventListener('click', function (event) {
+          event.preventDefault();
+          setMenu(mobileMenu.classList.contains('hidden'));
+        });
+        mobileMenu.querySelectorAll('a').forEach(function (link) {
+          link.addEventListener('click', function () { setMenu(false); });
+        });
+      }
+
+      var form = document.getElementById('volunteer-form');
+      var error = document.getElementById('form-error');
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        error.hidden = true;
+        var data = new FormData(form);
+        var help = data.getAll('help');
+        var name = String(data.get('full_name') || '').trim();
+        var email = String(data.get('email') || '').trim();
+        if (!name || !email || !help.length) {
+          error.textContent = !help.length
+            ? 'Choose at least one way you would like to help.'
+            : 'Enter your name and email.';
+          error.hidden = false;
+          return;
+        }
+        var button = form.querySelector('button[type="submit"]');
+        button.disabled = true;
+        fetch('/api/volunteer-signups', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            full_name: name,
+            email: email,
+            phone: String(data.get('phone') || '').trim(),
+            city: data.get('city') || '',
+            languages: String(data.get('languages') || '').trim(),
+            help: help,
+            availability: data.getAll('availability'),
+            has_car: data.get('has_car') || '',
+            notes: String(data.get('notes') || '').trim()
+          })
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            return { ok: response.ok, body: body };
+          });
+        }).then(function (result) {
+          if (!result.ok) {
+            error.textContent = (result.body && result.body.detail) || 'Something went wrong. Please try again.';
+            error.hidden = false;
+            button.disabled = false;
+            return;
+          }
+          form.innerHTML = '<h2>Thank you</h2><p class="thanks">Your volunteer signup is in. An admin will follow up at the email you gave us.</p>';
+        }).catch(function () {
+          error.textContent = 'Something went wrong. Please try again.';
+          error.hidden = false;
+          button.disabled = false;
+        });
+      });
+    });
+  </script>
+</body>
+
+</html>

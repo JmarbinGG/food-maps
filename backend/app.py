@@ -21,6 +21,7 @@ from passlib.context import CryptContext
 from backend.email_service import (
     send_reset_email,
     send_verification_email as send_verification_email_message,
+    send_volunteer_signup_email,
 )
 from backend.schemas import (
     DistributionCenterResponse,
@@ -42,6 +43,7 @@ from backend.models import (
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
     ApprovalCode, PlatformSetting, UserCommunity, public_listing_clause,
+    VolunteerSignup,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -6107,6 +6109,138 @@ async def deactivate_newsletter_subscriber(
     row.updated_at = datetime.utcnow()
     db.commit()
     return {"success": True, "message": "Subscriber deactivated"}
+
+
+# -----------------------------
+# Volunteer signups
+# -----------------------------
+
+VOLUNTEER_HELP = {
+    "verify_listings": "Verify food listings",
+    "delivery_driver": "Home delivery driver",
+    "outreach": "Community outreach",
+    "data_entry": "Data entry & site updates",
+    "translation": "Translation",
+    "events": "Events & tabling",
+}
+VOLUNTEER_AVAILABILITY = {
+    "weekday_mornings": "Weekday mornings",
+    "weekday_afternoons": "Weekday afternoons",
+    "evenings": "Evenings",
+    "weekends": "Weekends",
+}
+VOLUNTEER_CITIES = {
+    "Alameda",
+    "Oakland",
+    "Berkeley",
+    "San Leandro",
+    "Hayward",
+    "Fremont",
+    "Other East Bay",
+    "Outside the East Bay",
+}
+VOLUNTEER_CAR = {"Yes", "No", "Sometimes"}
+
+
+def _volunteer_choices(raw, allowed: dict, label: str) -> list:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise HTTPException(status_code=400, detail=f"Choose {label} from the list.")
+    cleaned = []
+    for item in raw:
+        value = str(item or "").strip()
+        if not value:
+            continue
+        if value not in allowed:
+            raise HTTPException(status_code=400, detail=f"Choose {label} from the list.")
+        if value not in cleaned:
+            cleaned.append(value)
+    return cleaned
+
+
+def _notify_volunteer_admins(db: Session, fields: dict) -> None:
+    admins = db.query(User).filter(
+        or_(User.is_admin.is_(True), User.role == UserRole.ADMIN)
+    ).all()
+    seen = set()
+    for admin in admins:
+        address = (admin.email or "").strip()
+        key = address.lower()
+        if not address or key in seen:
+            continue
+        seen.add(key)
+        try:
+            send_volunteer_signup_email(address, fields)
+        except Exception as exc:
+            print(f"Volunteer signup email failed for {address}: {exc}")
+
+
+@app.post("/api/volunteer-signups")
+async def create_volunteer_signup(request: Request, db: Session = Depends(get_db)):
+    """Public volunteer form. Saves the signup, then emails admins."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    full_name = str(data.get("full_name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    if not full_name:
+        raise HTTPException(status_code=400, detail="Please enter your full name.")
+    if not email or not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+
+    phone = str(data.get("phone") or "").strip()[:50] or None
+    languages = str(data.get("languages") or "").strip()[:255] or None
+    notes = str(data.get("notes") or "").strip()[:4000] or None
+    city = str(data.get("city") or "").strip() or None
+    has_car = str(data.get("has_car") or "").strip() or None
+    if city and city not in VOLUNTEER_CITIES:
+        raise HTTPException(status_code=400, detail="Please choose a city from the list.")
+    if has_car and has_car not in VOLUNTEER_CAR:
+        raise HTTPException(status_code=400, detail="Please choose whether you have a car.")
+
+    help_ids = _volunteer_choices(data.get("help"), VOLUNTEER_HELP, "a way to help")
+    if not help_ids:
+        raise HTTPException(status_code=400, detail="Choose at least one way you'd like to help.")
+    availability_ids = _volunteer_choices(
+        data.get("availability"), VOLUNTEER_AVAILABILITY, "your availability"
+    )
+
+    row = VolunteerSignup(
+        full_name=full_name[:255],
+        email=email[:255],
+        phone=phone,
+        city=city,
+        languages=languages,
+        help_choices=json.dumps(help_ids),
+        availability=json.dumps(availability_ids),
+        has_car=has_car,
+        notes=notes,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    _notify_volunteer_admins(db, {
+        "full_name": row.full_name,
+        "email": row.email,
+        "phone": row.phone or "",
+        "city": row.city or "",
+        "languages": row.languages or "",
+        "help": ", ".join(VOLUNTEER_HELP[item] for item in help_ids),
+        "availability": ", ".join(VOLUNTEER_AVAILABILITY[item] for item in availability_ids),
+        "has_car": row.has_car or "",
+        "notes": row.notes or "",
+    })
+    return {
+        "success": True,
+        "message": "Thanks for signing up to volunteer.",
+        "id": row.id,
+    }
 
 
 # -----------------------------

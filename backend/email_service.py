@@ -162,3 +162,51 @@ The Do Good Food Maps Team
         text_content=text_content,
         html_content=html_content,
     )
+
+
+def send_volunteer_signup_email(to_email: str, fields: dict) -> None:
+    """Tell an admin about a new volunteer signup."""
+    lines = [
+        f"Name: {fields.get('full_name') or ''}",
+        f"Email: {fields.get('email') or ''}",
+        f"Phone: {fields.get('phone') or ''}",
+        f"City: {fields.get('city') or ''}",
+        f"Languages: {fields.get('languages') or ''}",
+        f"How they can help: {fields.get('help') or ''}",
+        f"Availability: {fields.get('availability') or ''}",
+        f"Car for deliveries: {fields.get('has_car') or ''}",
+        f"Notes: {fields.get('notes') or ''}",
+    ]
+    text_content = "New volunteer signup\n\n" + "\n".join(lines)
+    html_rows = "".join(
+        f"<tr><td style=\"padding:4px 12px 4px 0;vertical-align:top;color:#43594e;\"><strong>{_html_escape(label)}</strong></td>"
+        f"<td style=\"padding:4px 0;\">{_html_escape(value)}</td></tr>"
+        for label, value in (
+            ("Name", fields.get("full_name") or ""),
+            ("Email", fields.get("email") or ""),
+            ("Phone", fields.get("phone") or ""),
+            ("City", fields.get("city") or ""),
+            ("Languages", fields.get("languages") or ""),
+            ("How they can help", fields.get("help") or ""),
+            ("Availability", fields.get("availability") or ""),
+            ("Car for deliveries", fields.get("has_car") or ""),
+            ("Notes", fields.get("notes") or ""),
+        )
+    )
+    html_content = f"""
+    <html>
+      <body>
+        <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+          <h2 style="color: #183d32;">New volunteer signup</h2>
+          <table style="border-collapse: collapse;">{html_rows}</table>
+        </div>
+      </body>
+    </html>
+    """
+    name = fields.get("full_name") or "New volunteer"
+    _send_email(
+        to_email=to_email,
+        subject=f"New volunteer signup — {name}",
+        text_content=text_content,
+        html_content=html_content,
+    )

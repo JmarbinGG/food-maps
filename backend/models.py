@@ -618,6 +618,23 @@ class NewsletterSubscription(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class VolunteerSignup(Base):
+    """Public volunteer form submissions. This is not a user account."""
+    __tablename__ = "volunteer_signups"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    phone = Column(String(50), nullable=True)
+    city = Column(String(100), nullable=True)
+    languages = Column(String(255), nullable=True)
+    help_choices = Column(Text, nullable=False)  # JSON array of choice ids
+    availability = Column(Text, nullable=True)  # JSON array of availability ids
+    has_car = Column(String(20), nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class PlatformSetting(Base):
     """Key/value platform toggles (e.g. require_listing_approval)."""
     __tablename__ = "platform_settings"
