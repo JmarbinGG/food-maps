@@ -286,6 +286,8 @@ class DistributionCenter(Base):
     logo_url = Column(String(512), nullable=True)
     # Members get a private map of this community's private listings.
     private_map_enabled = Column(Boolean, default=False)
+    # Map-only community (e.g. the general hidden map): no public pin.
+    hide_from_public = Column(Boolean, default=False)
 
     # Community Trust Signals
     verified_by_aglf = Column(Boolean, default=False)  # Verified by All Good Living Foundation

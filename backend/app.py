@@ -3594,10 +3594,20 @@ def auto_release_claim(listing_id: int):
 # ============================================
 
 @app.get("/api/centers", response_model=List[DistributionCenterResponse])
-async def get_distribution_centers(db: Session = Depends(get_db)):
-    """Get all distribution centers"""
+async def get_distribution_centers(
+    db: Session = Depends(get_db),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(optional_security),
+):
+    """Get all distribution centers (map-only communities are admin-only)."""
     try:
-        centers = db.query(DistributionCenter).all()
+        query = db.query(DistributionCenter)
+        viewer = _optional_viewer(credentials, db)
+        if not (viewer and _user_is_admin(viewer)):
+            query = query.filter(or_(
+                DistributionCenter.hide_from_public == False,  # noqa: E712
+                DistributionCenter.hide_from_public.is_(None),
+            ))
+        centers = query.all()
         return centers
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
