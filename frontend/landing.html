@@ -138,13 +138,16 @@
         inset: 0;
         opacity: 0;
         z-index: 0;
-        transition: opacity 0.7s ease;
+        /* The outgoing slide waits until the incoming one has faded in on
+           top, so nothing behind the slideshow shows through mid-fade. */
+        transition: opacity 0s linear 0.7s;
         pointer-events: none;
     }
 
     .slide.active {
         opacity: 1;
         z-index: 1;
+        transition: opacity 0.7s ease;
     }
 
     .slide img {
@@ -511,16 +514,6 @@
         <!-- Slide Indicators -->
         <div id="slide-indicators" class="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-30">
             <!-- Indicators will be dynamically inserted here -->
-        </div>
-
-        <!-- Floating Food Icons -->
-        <div class="absolute inset-0 pointer-events-none overflow-hidden">
-            <div class="floating absolute top-20 left-10 w-16 h-16 rounded-full bg-emerald-200/20"></div>
-            <div class="floating-delayed absolute top-40 right-20 w-14 h-14 rounded-full bg-green-200/20"></div>
-            <div class="floating absolute bottom-40 left-20 w-12 h-12 rounded-full bg-teal-200/20"></div>
-            <div class="floating-delayed absolute top-60 left-1/3 w-20 h-20 rounded-full bg-lime-200/15"></div>
-            <div class="floating absolute bottom-60 right-10 w-14 h-14 rounded-full bg-cyan-200/20"></div>
-            <div class="floating-delayed absolute top-1/3 right-1/3 w-12 h-12 rounded-full bg-emerald-100/20"></div>
         </div>
 
         <!-- Main Content -->
