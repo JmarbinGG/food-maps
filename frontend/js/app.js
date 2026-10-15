@@ -133,6 +133,10 @@ function App() {
   });
   const [listings, setListings] = React.useState([]);
   const [filteredListings, setFilteredListings] = React.useState([]);
+  const [availableMaps, setAvailableMaps] = React.useState([{ key: 'public', label: 'Public map' }]);
+  const [activeMap, setActiveMap] = React.useState(() => (
+    (window.databaseService && window.databaseService.activeMap) || 'public'
+  ));
   const [showAuthModal, setShowAuthModal] = React.useState(false);
   const [showForgotPasswordModal, setShowForgotPasswordModal] = React.useState(false);
   const [selectedListing, setSelectedListing] = React.useState(null);
@@ -320,6 +324,53 @@ function App() {
     } catch (error) {
       console.error('App initialization error:', error);
     }
+  }, []);
+
+  // Maps the viewer can switch between (public + private community maps).
+  // Reloaded on sign-in/out and after joining a community.
+  React.useEffect(() => {
+    let cancelled = false;
+    const loadMaps = async () => {
+      try {
+        const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+        const response = await fetch('/api/maps', {
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (!response.ok || cancelled) return;
+        const data = await response.json();
+        const maps = Array.isArray(data.maps) && data.maps.length
+          ? data.maps
+          : [{ key: 'public', label: 'Public map' }];
+        if (cancelled) return;
+        setAvailableMaps(maps);
+        const current = (window.databaseService && window.databaseService.activeMap) || 'public';
+        if (!maps.some((m) => m.key === current)) {
+          window.databaseService?.setActiveMap('public');
+          setActiveMap('public');
+          initializeApp();
+        }
+      } catch (e) {
+        console.warn('Failed to load maps:', e);
+      }
+    };
+    const handleReset = () => setActiveMap('public');
+    loadMaps();
+    window.addEventListener('foodmaps:communities_changed', loadMaps);
+    window.addEventListener('foodmaps:auth_changed', loadMaps);
+    window.addEventListener('foodmaps:active_map_reset', handleReset);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('foodmaps:communities_changed', loadMaps);
+      window.removeEventListener('foodmaps:auth_changed', loadMaps);
+      window.removeEventListener('foodmaps:active_map_reset', handleReset);
+    };
+  }, [user?.id]);
+
+  const handleMapChange = React.useCallback((key) => {
+    window.databaseService?.setActiveMap(key);
+    setActiveMap(key);
+    setSelectedListing(null);
+    initializeApp();
   }, []);
 
   // Auto-show tutorial for new users on login/signup
@@ -2169,6 +2220,14 @@ function App() {
 
             {/* Map - Full width on mobile, shared on desktop */}
             <div className="map-full-width flex-1 min-w-0 relative">
+              {typeof MapSwitcher !== 'undefined' && (
+                <MapSwitcher
+                  maps={availableMaps}
+                  activeMap={activeMap}
+                  onChange={handleMapChange}
+                />
+              )}
+
               {/* View Toggle */}
               <div className="absolute top-4 right-4 z-10 bg-white rounded-lg shadow-md border border-gray-200 p-1 flex">
                 <button

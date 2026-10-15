@@ -172,6 +172,14 @@ class TestListingFeed:
                          headers=_headers(world["member"]))
         assert res.status_code == 403
 
+    def test_all_maps_is_admin_only(self, client, world):
+        res = client.get("/api/listings/get", params={"map": "all"}, headers=_headers(world["admin"]))
+        assert _titles(res) == {"Public apples", "Hidden bread"}
+        for who in ("member", "donor"):
+            res = client.get("/api/listings/get", params={"map": "all"}, headers=_headers(world[who]))
+            assert res.status_code == 403, who
+        assert client.get("/api/listings/get", params={"map": "all"}).status_code == 403
+
     def test_unknown_map_key(self, client, world):
         assert client.get("/api/listings/get", params={"map": "nope"}).status_code == 400
 

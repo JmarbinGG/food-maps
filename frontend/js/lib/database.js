@@ -3,6 +3,16 @@ window.databaseService = {
   listings: [],
   isConnected: true,
 
+  // Which map the listings feed shows: 'public' or a private community id.
+  activeMap: (() => {
+    try { return localStorage.getItem('foodmaps_active_map') || 'public'; } catch (_) { return 'public'; }
+  })(),
+
+  setActiveMap(key) {
+    this.activeMap = key ? String(key) : 'public';
+    try { localStorage.setItem('foodmaps_active_map', this.activeMap); } catch (_) { /* ignore */ }
+  },
+
   getAuthToken() {
     return localStorage.getItem('auth_token') || localStorage.getItem('token');
   },
@@ -12,6 +22,7 @@ window.databaseService = {
       const params = new URLSearchParams();
       params.append('limit', limit);
       params.append('include_claimed_for_me', include_claimed_for_me);
+      if (this.activeMap && this.activeMap !== 'public') params.append('map', this.activeMap);
 
       const token = this.getAuthToken();
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
@@ -39,6 +50,13 @@ window.databaseService = {
           window.location.reload();
         }
         return { success: false, error: 'Session expired' };
+      }
+
+      if (response.status === 403 && this.activeMap !== 'public') {
+        // Lost access to the private map (left it, signed out): fall back to public.
+        this.setActiveMap('public');
+        try { window.dispatchEvent(new CustomEvent('foodmaps:active_map_reset')); } catch (_) { /* ignore */ }
+        return this.getListings(limit, include_claimed_for_me);
       }
 
       if (!response.ok) {

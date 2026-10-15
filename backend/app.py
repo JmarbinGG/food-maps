@@ -1942,7 +1942,8 @@ def get_listings(
 
     `map` picks the map: "public" (default) excludes private listings, except
     the viewer's own; a community id returns only that community's private
-    listings and requires access to its private map.
+    listings and requires access to its private map; "all" (admins only)
+    returns public and private listings together for moderation.
     """
     payload = None
     if credentials is not None:
@@ -1959,7 +1960,13 @@ def get_listings(
             raise HTTPException(status_code=401, detail="Invalid token")
 
     private_map_id: Optional[int] = None
-    if map_key and map_key != "public":
+    all_maps = False
+    if map_key == "all":
+        viewer = _optional_viewer(credentials, db)
+        if not (viewer and _user_is_admin(viewer)):
+            raise HTTPException(status_code=403, detail="You don't have access to this map")
+        all_maps = True
+    elif map_key and map_key != "public":
         try:
             private_map_id = int(map_key)
         except ValueError:
@@ -1979,7 +1986,9 @@ def get_listings(
         # Return ALL listings - let frontend filter
         # This allows proper filtering for donors to see expired/claimed items
         query = db.query(FoodResource)
-        if private_map_id is not None:
+        if all_maps:
+            pass
+        elif private_map_id is not None:
             query = query.filter(
                 FoodResource.is_private == True,  # noqa: E712
                 FoodResource.community_id == private_map_id,

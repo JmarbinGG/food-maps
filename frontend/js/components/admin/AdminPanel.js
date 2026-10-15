@@ -785,7 +785,8 @@ function AdminPanel({ onClose }) {
       try {
         setListingsError('');
         const token = localStorage.getItem('auth_token');
-        const response = await fetch('/api/listings/get', {
+        // map=all: moderation needs private-map listings too (admin only).
+        const response = await fetch('/api/listings/get?map=all', {
           headers: {
             'Authorization': `Bearer ${token}`
           }
