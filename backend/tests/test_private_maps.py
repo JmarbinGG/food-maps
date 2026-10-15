@@ -168,6 +168,19 @@ class TestListingFeed:
             assert res.status_code == 403, who
         assert client.get("/api/listings/get", params={"map": "all"}).status_code == 403
 
+    def test_admin_gets_donor_name_others_do_not(self, client, world):
+        res = client.get("/api/listings/get", params={"map": "all"}, headers=_headers(world["admin"]))
+        assert {r["donor"]["name"] for r in res.json()} == {"donor"}
+        res = client.get("/api/listings/get", headers=_headers(world["member"]))
+        assert all(set(r["donor"]) == {"id"} for r in res.json())
+
+    def test_pending_queue_includes_donor_name(self, client, world, db_session):
+        world["secret"].status = "pending"
+        db_session.commit()
+        res = client.get("/api/admin/listings/pending", headers=_headers(world["admin"]))
+        assert res.status_code == 200, res.text
+        assert [r["donor"]["name"] for r in res.json()["listings"]] == ["donor"]
+
     def test_unknown_map_key(self, client, world):
         assert client.get("/api/listings/get", params={"map": "nope"}).status_code == 400
 

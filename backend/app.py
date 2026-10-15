@@ -2063,7 +2063,8 @@ def get_listings(
 
         for listing in listings:
             try:
-                serialized = serialize_listing(listing, include_donor=True, include_donor_contact=False)
+                # Admins get the donor's details (the admin panel shows "Posted by").
+                serialized = serialize_listing(listing, include_donor=True, include_donor_contact=viewer_is_admin)
 
                 effective_status = _effective_status(serialized)
                 serialized['status'] = effective_status
@@ -3354,7 +3355,7 @@ async def admin_pending_listings(
         .all()
     )
     listings = [
-        serialize_listing(r, include_donor=True, include_donor_contact=False) for r in rows
+        serialize_listing(r, include_donor=True, include_donor_contact=True) for r in rows
     ]
     return {"count": len(listings), "listings": listings}
 
