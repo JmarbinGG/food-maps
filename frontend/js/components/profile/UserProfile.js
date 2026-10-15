@@ -41,6 +41,75 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
     approval_number: user?.approval_number || '',
     community_name: ''
   });
+  const [communities, setCommunities] = React.useState(
+    Array.isArray(user?.communities) ? user.communities : []
+  );
+  const [joinCode, setJoinCode] = React.useState('');
+  const [joining, setJoining] = React.useState(false);
+  const [joinStatus, setJoinStatus] = React.useState({ type: '', text: '' });
+
+  const handleJoinCommunity = async () => {
+    const code = joinCode.trim();
+    if (!/^[A-Z]{3}\d{6}$/.test(code)) {
+      setJoinStatus({ type: 'error', text: 'Enter a code like RBE123456 (3 letters + 6 digits).' });
+      return;
+    }
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      setJoinStatus({ type: 'error', text: 'Please sign in again to join a community.' });
+      return;
+    }
+    setJoining(true);
+    setJoinStatus({ type: '', text: '' });
+    try {
+      const response = await fetch('/api/user/communities/join', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ approval_code: code })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setJoinStatus({
+          type: 'error',
+          text: typeof data.detail === 'string' ? data.detail : 'Could not join that community.'
+        });
+        return;
+      }
+      const joined = data.community || {};
+      setCommunities(data.communities || []);
+      setJoinCode('');
+      setJoinStatus({
+        type: 'success',
+        text: joined.private_map_enabled
+          ? `You joined ${joined.community_name}. Its private map is now in the map switcher.`
+          : `You joined ${joined.community_name}.`
+      });
+      const home = (data.communities || []).find((c) => c.is_home);
+      if (home) {
+        setCommunityInfo((prev) => ({
+          ...prev,
+          community_id: home.community_id,
+          community_name: home.community_name,
+        }));
+      }
+      if (typeof onUserUpdate === 'function') {
+        onUserUpdate({
+          ...user,
+          community_id: home ? home.community_id : (user?.community_id ?? null),
+          communities: data.communities || [],
+        });
+      }
+      try { window.dispatchEvent(new CustomEvent('foodmaps:communities_changed')); } catch (_) { /* ignore */ }
+    } catch (error) {
+      console.error('Join community error:', error);
+      setJoinStatus({ type: 'error', text: 'Network error. Please try again.' });
+    } finally {
+      setJoining(false);
+    }
+  };
   const formDirtyRef = React.useRef(false);
 
   const markAccountDirty = React.useCallback((updater) => {
@@ -145,6 +214,7 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
           approval_number: userData.approval_number || '',
           community_name: userData.community_name || '',
         });
+        if (Array.isArray(userData.communities)) setCommunities(userData.communities);
         // Stamp missing durable privilege once — never loop on every /me.
         if (
           userData.is_admin === true
@@ -492,32 +562,83 @@ function UserProfile({ user, onClose, onUserUpdate, initialTab = 'account' }) {
               </div>
 
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Community</label>
-                {communityInfo.community_id != null || communityInfo.approval_number ? (
-                  <div className="space-y-1 text-sm text-gray-800">
-                    <p className="font-medium">
-                      {communityInfo.community_name
-                        || (communityInfo.community_id != null
-                          ? `Community #${communityInfo.community_id}`
-                          : 'Not assigned')}
-                    </p>
-                    {communityInfo.approval_number && (
-                      <p className="text-gray-600">
-                        Approval code:{' '}
-                        <code className="bg-white border px-1.5 py-0.5 rounded text-xs">
-                          {communityInfo.approval_number}
-                        </code>
-                      </p>
-                    )}
-                    <p className="text-xs text-gray-500">
-                      Set by your signup approval code. Contact a Do Good Food Maps admin to change it.
-                    </p>
-                  </div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Communities</label>
+                {communities.length > 0 ? (
+                  <ul className="divide-y divide-gray-200 bg-white border border-gray-200 rounded-md">
+                    {communities.map((c) => (
+                      <li key={c.community_id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm text-gray-800">
+                        <span className="font-medium">{c.community_name}</span>
+                        {c.is_home && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-800">Home</span>
+                        )}
+                        {c.private_map_enabled && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">Private map</span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : communityInfo.community_id != null ? (
+                  <p className="text-sm font-medium text-gray-800">
+                    {communityInfo.community_name || `Community #${communityInfo.community_id}`}
+                  </p>
                 ) : (
-                  <p className="text-sm text-gray-500">
-                    No community assigned yet. An admin can place you in a school or hub group.
+                  <p className="text-sm text-gray-500">You're not in a community yet.</p>
+                )}
+                {communityInfo.approval_number && (
+                  <p className="text-xs text-gray-600 mt-2">
+                    Signup approval code:{' '}
+                    <code className="bg-white border px-1.5 py-0.5 rounded">{communityInfo.approval_number}</code>
                   </p>
                 )}
+
+                <div className="mt-4">
+                  <label htmlFor="join-community-code" className="block text-sm font-medium text-gray-700 mb-1">
+                    Join another community
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      id="join-community-code"
+                      type="text"
+                      inputMode="text"
+                      autoComplete="off"
+                      maxLength={9}
+                      placeholder="ABC123456"
+                      value={joinCode}
+                      onChange={(e) => {
+                        setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''));
+                        if (joinStatus.text) setJoinStatus({ type: '', text: '' });
+                      }}
+                      onKeyDown={(e) => {
+                        // Enter would otherwise submit the surrounding profile form.
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleJoinCommunity();
+                        }
+                      }}
+                      className="flex-1 min-w-[10rem] px-3 py-2 border border-gray-300 rounded-md font-mono tracking-wider focus:outline-none focus:ring-2 focus:ring-green-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleJoinCommunity}
+                      disabled={joining || !joinCode}
+                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {joining ? 'Joining…' : 'Join'}
+                    </button>
+                  </div>
+                  {joinStatus.text ? (
+                    <p
+                      role="status"
+                      className={`text-xs mt-1 ${joinStatus.type === 'error' ? 'text-red-600' : 'text-green-700'}`}
+                    >
+                      {joinStatus.text}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter an approval code from the community you want to join.
+                    </p>
+                  )}
+                </div>
               </div>
 
               <div>

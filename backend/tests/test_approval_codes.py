@@ -375,7 +375,9 @@ class TestFrontendParity:
     def test_user_profile_shows_community(self):
         text = USER_PROFILE.read_text(encoding="utf-8")
         assert "communityInfo" in text
-        assert "Set by your signup approval code" in text
+        assert "Signup approval code" in text
+        assert "Join another community" in text
+        assert "/api/user/communities/join" in text
         assert "data?.token" in text or "data.token" in text
 
 
