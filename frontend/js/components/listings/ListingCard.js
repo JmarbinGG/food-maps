@@ -37,6 +37,20 @@ function dispatchFavoritesUpdated(detail = {}) {
   }
 }
 
+// "Private · <map name>" tag for listings on a private community map.
+function PrivateListingTag({ listing, className = '' }) {
+  if (!listing || !listing.is_private) return null;
+  const maps = Array.isArray(window.foodmapsAvailableMaps) ? window.foodmapsAvailableMaps : [];
+  const map = maps.find((m) => String(m.community_id) === String(listing.community_id));
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 text-xs font-medium ${className}`}>
+      <span className="icon-lock text-xs" aria-hidden="true"></span>
+      {map ? `Private · ${map.label}` : 'Private'}
+    </span>
+  );
+}
+window.PrivateListingTag = PrivateListingTag;
+
 function ListingCard({ listing, onClaim, onSelect, user }) {
   const [contactInfo, setContactInfo] = React.useState(null);
   const [loadingContact, setLoadingContact] = React.useState(false);
@@ -551,6 +565,7 @@ function ListingCard({ listing, onClaim, onSelect, user }) {
       )}
 
       <h4 className="font-semibold">{listing.title}</h4>
+      <PrivateListingTag listing={listing} className="mb-1" />
 
       {/* Donor Trust Badges */}
       {listing.donor && (

@@ -606,6 +606,9 @@ function ListingDetailModal({ listing, onClose, onClaim, user }) {
             <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(listingStatus)}`}>
               {getDisplayStatus(listingStatus)}
             </span>
+            {typeof PrivateListingTag !== 'undefined' && (
+              <PrivateListingTag listing={listing} className="ml-2 align-middle" />
+            )}
           </div>
 
           {isEditing && canEdit ? (

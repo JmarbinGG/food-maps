@@ -14,6 +14,32 @@ function CreateListing({ user, onCancel, onSuccess }) {
     images: []
   });
   const [safetyData, setSafetyData] = React.useState(null);
+  // Private maps this donor can post to (from /api/maps, minus the public map).
+  const [privateMaps, setPrivateMaps] = React.useState([]);
+  const [isPrivate, setIsPrivate] = React.useState(false);
+  const [privateMapId, setPrivateMapId] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        if (!token) return;
+        const response = await fetch('/api/maps', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (!response.ok) return;
+        const data = await response.json();
+        const maps = (Array.isArray(data.maps) ? data.maps : []).filter((m) => m.key !== 'public');
+        if (cancelled) return;
+        setPrivateMaps(maps);
+        if (maps.length) setPrivateMapId((prev) => prev || String(maps[0].community_id));
+      } catch (e) {
+        console.warn('Could not load private maps:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const selectedPrivateMap = privateMaps.find((m) => String(m.community_id) === String(privateMapId)) || null;
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
   const [errors, setErrors] = React.useState({});
@@ -470,8 +496,13 @@ function CreateListing({ user, onCancel, onSuccess }) {
         address: finalAddress,
         pickup_start: pickupStartUtc,
         pickup_end: pickupEndUtc,
-        images: Array.isArray(formData.images) ? formData.images : []
+        images: Array.isArray(formData.images) ? formData.images : [],
+        is_private: Boolean(isPrivate && selectedPrivateMap),
+        map_community_id: isPrivate && selectedPrivateMap ? selectedPrivateMap.community_id : null
       };
+      const privateNote = payload.is_private
+        ? ` It will only appear on the ${selectedPrivateMap.label} private map.`
+        : '';
 
       let res = await (window.databaseService ? window.databaseService.createListing(payload) : { success: false, error: 'No DB service' });
       if (res && res.success) {
@@ -513,9 +544,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
         if (typeof window.showAlert === 'function') {
           const awaiting = !!(res.awaiting_approval || (res.listing && res.listing.status === 'pending'));
           window.showAlert(
-            awaiting
+            (awaiting
               ? (res.message || 'Listing submitted — waiting for admin approval before it appears on Find Food.')
-              : (res.message || 'Listing created successfully!'),
+              : (res.message || 'Listing created successfully!')) + privateNote,
             { title: awaiting ? 'Awaiting approval' : 'Success', variant: 'success' }
           );
         }
@@ -534,9 +565,9 @@ function CreateListing({ user, onCancel, onSuccess }) {
                 if (typeof window.showAlert === 'function') {
                   const awaiting = !!(res.awaiting_approval || (res.listing && res.listing.status === 'pending'));
                   window.showAlert(
-                    awaiting
+                    (awaiting
                       ? (res.message || 'Listing submitted — waiting for admin approval before it appears on Find Food.')
-                      : (res.message || 'Listing created successfully!'),
+                      : (res.message || 'Listing created successfully!')) + privateNote,
                     { title: awaiting ? 'Awaiting approval' : 'Success', variant: 'success' }
                   );
                 }
@@ -856,6 +887,51 @@ function CreateListing({ user, onCancel, onSuccess }) {
                     {errors.pickup_window_end && <p className="text-red-500 text-sm mt-1">{errors.pickup_window_end}</p>}
                   </div>
                 </div>
+
+                {privateMaps.length > 0 && (
+                  <div className={`rounded-lg border p-4 ${isPrivate ? 'border-indigo-300 bg-indigo-50' : 'border-[var(--border-color)]'}`}>
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isPrivate}
+                        onChange={(e) => setIsPrivate(e.target.checked)}
+                        className="mt-1 h-4 w-4 accent-indigo-600"
+                      />
+                      <span>
+                        <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--text-primary)]">
+                          <span className="icon-lock text-base text-indigo-600" aria-hidden="true"></span>
+                          Post privately
+                        </span>
+                        <span className="block text-xs text-[var(--text-secondary)] mt-0.5">
+                          Only members of the chosen community will see this listing. It won't appear on the public map.
+                        </span>
+                      </span>
+                    </label>
+                    {isPrivate && (
+                      privateMaps.length > 1 ? (
+                        <div className="mt-3 pl-7">
+                          <label htmlFor="private-map-select" className="block text-xs font-medium text-[var(--text-secondary)] mb-1">
+                            Private map
+                          </label>
+                          <select
+                            id="private-map-select"
+                            value={privateMapId}
+                            onChange={(e) => setPrivateMapId(e.target.value)}
+                            className="w-full p-2.5 border border-[var(--border-color)] rounded-lg bg-white"
+                          >
+                            {privateMaps.map((m) => (
+                              <option key={m.key} value={String(m.community_id)}>{m.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <p className="mt-2 pl-7 text-xs text-indigo-800">
+                          Posting to <span className="font-semibold">{privateMaps[0].label}</span>
+                        </p>
+                      )
+                    )}
+                  </div>
+                )}
 
                 <div className="flex space-x-4 pt-4">
                   <button

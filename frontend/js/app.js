@@ -343,6 +343,7 @@ function App() {
           : [{ key: 'public', label: 'Public map' }];
         if (cancelled) return;
         setAvailableMaps(maps);
+        window.foodmapsAvailableMaps = maps;
         const current = (window.databaseService && window.databaseService.activeMap) || 'public';
         if (!maps.some((m) => m.key === current)) {
           window.databaseService?.setActiveMap('public');
