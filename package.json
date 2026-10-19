@@ -7,7 +7,8 @@
   "scripts": {
     "build:nouri": "npm --prefix frontend/nouri run build",
     "smoke:nouri": "node backend/scripts/browser_nouri_role_smoke.mjs",
-    "smoke:links": "node frontend/nouri/utils/socialMediaLinks.smoke.mjs"
+    "smoke:links": "node frontend/nouri/utils/socialMediaLinks.smoke.mjs",
+    "smoke:voice": "node frontend/nouri/utils/voiceActivity.smoke.mjs"
   },
   "devDependencies": {
     "playwright": "1.63.0"

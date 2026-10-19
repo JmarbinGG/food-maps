@@ -36,6 +36,7 @@ import {
 } from '../../utils/chatI18n.js'
 import { aiHealth, aiLinkTone } from '../../utils/services/aiSelfHealing.js'
 import { createMediaRecorder } from '../../utils/mediaRecorder.js'
+import { createVoiceActivityDetector, rmsOf } from '../../utils/voiceActivity.js'
 import RecipeCard from './RecipeCard.jsx'
 import StorageTipCard from './StorageTipCard.jsx'
 
@@ -3571,10 +3572,12 @@ function AIChatPanel() {
 
       // Set up audio analyser for VAD (voice activity detection)
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+      // Created after an await, so iOS/Safari may start it suspended; a
+      // suspended context feeds the analyser zeros and VAD never hears speech.
+      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
       const source = audioCtx.createMediaStreamSource(stream)
       const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 512
-      analyser.smoothingTimeConstant = 0.3
+      analyser.fftSize = 2048
       source.connect(analyser)
       analyserRef.current = analyser
 
@@ -3637,53 +3640,27 @@ function AIChatPanel() {
       mediaRecorderRef.current = recorder
       setIsVoiceListening(true)
 
-      // Voice Activity Detection — stop recording after silence
-      let speechDetected = false
-      let silenceStart = 0
-      const SILENCE_THRESHOLD = 12  // RMS level below which = silence
-      const SILENCE_DURATION = 2200 // ms of silence before auto-stop
-      const MAX_DURATION = 30000    // max recording duration
-      // If the user never starts speaking (e.g. a hands-free re-arm where they
-      // had nothing to add), don't hold the mic for the full MAX_DURATION —
-      // give up after a short grace window so we can stand down to standby.
-      const NO_SPEECH_TIMEOUT = 9000
-      const dataArray = new Uint8Array(analyser.frequencyBinCount)
-      const startTime = Date.now()
+      // Voice Activity Detection — stop recording after the user stops
+      // talking. Speech/silence are judged against this room's measured noise
+      // floor (see utils/voiceActivity.js); a fixed threshold never saw
+      // silence over real mic noise, so every turn ran to the 30s cap.
+      // No speech within 9s (e.g. a hands-free re-arm with nothing to add)
+      // also stops, so we can stand down to standby.
+      const vad = createVoiceActivityDetector()
+      const samples = new Float32Array(analyser.fftSize)
 
       const checkAudio = () => {
         if (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording') return
 
-        // Auto-stop at max duration
-        if (Date.now() - startTime > MAX_DURATION) {
+        analyser.getFloatTimeDomainData(samples)
+        const rms = rmsOf(samples)
+        // Normalized 0..1 level for the orb meter; conversational speech
+        // sits around 0.02–0.15 RMS.
+        setAudioLevel(Math.min(1, Math.sqrt(rms / 0.15)))
+
+        if (vad.update(rms, performance.now()).stop) {
           stopRecording()
           return
-        }
-
-        // Auto-stop if no speech ever started within the grace window.
-        if (!speechDetected && Date.now() - startTime > NO_SPEECH_TIMEOUT) {
-          stopRecording()
-          return
-        }
-
-        analyser.getByteFrequencyData(dataArray)
-        let sum = 0
-        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i]
-        const avg = sum / dataArray.length
-
-        // Publish a normalized 0..1 level for the UI. The VAD threshold sits
-        // around 15 and most speech peaks well under 80, so /80 keeps the
-        // meter responsive without clipping immediately on loud sounds.
-        setAudioLevel(Math.min(1, avg / 80))
-
-        if (avg > SILENCE_THRESHOLD) {
-          speechDetected = true
-          silenceStart = 0
-        } else if (speechDetected) {
-          if (!silenceStart) silenceStart = Date.now()
-          if (Date.now() - silenceStart > SILENCE_DURATION) {
-            stopRecording()
-            return
-          }
         }
 
         vadFrameRef.current = requestAnimationFrame(checkAudio)
