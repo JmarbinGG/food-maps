@@ -32,7 +32,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, Tool
 from backend.agent.state import AgentState, Message, PlanStep, ProactiveSuggestion
 from backend.agent.prompts import build_system_prompt, ERROR_RESPONSES
 from backend.agent.planner import create_plan, execute_plan_step
-from backend.agent.proactive import generate_proactive_suggestions
+from backend.agent.proactive import get_proactive_suggestions as generate_proactive_suggestions
 from backend.agent.learning import update_user_preferences
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 def _get_model(temperature: float = 0.7) -> ChatOpenAI:
     import os
     return ChatOpenAI(
-        model="gpt-4-1106-preview",  # GPT-4 Turbo (latest)
+        model=os.getenv("AI_CHAT_MODEL", "gpt-4.1"),
         temperature=temperature,
         streaming=True,
         api_key=os.getenv("OPENAI_API_KEY"),

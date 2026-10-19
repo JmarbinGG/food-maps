@@ -8,7 +8,8 @@ from sqlalchemy import text, func, case, or_, true, inspect as sa_inspect
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from backend.aws_secrets import load_aws_secrets
-from dotenv import load_dotenv
+from backend.env_loader import load_project_env
+from backend.ai.errors import AIError
 import hmac
 import jwt
 import json
@@ -59,11 +60,19 @@ def generate_referral_code():
     alphabet = string.ascii_uppercase + string.digits
     return ''.join(secrets.choice(alphabet) for _ in range(8))
 
-app = FastAPI(title="Do Good Food Maps Agentic API", version="1.0.0")
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'), override=True)
-if os.getenv("USE_RDS", "").strip().lower() not in {"1", "true", "yes", "on"}:
-    load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env.local'), override=True)
+load_project_env()
 load_aws_secrets()
+
+# Interactive API docs expose every route and schema; keep them off in
+# production unless explicitly enabled.
+_api_docs_enabled = (os.getenv("ENABLE_API_DOCS") or "").strip().lower() in {"1", "true", "yes", "on"}
+app = FastAPI(
+    title="Do Good Food Maps Agentic API",
+    version="1.0.0",
+    docs_url="/docs" if _api_docs_enabled else None,
+    redoc_url="/redoc" if _api_docs_enabled else None,
+    openapi_url="/openapi.json" if _api_docs_enabled else None,
+)
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 # The document root. Only frontend/ is web-reachable; keeping it separate from
@@ -82,10 +91,34 @@ TWILIO_PHONE_NUMBER = os.getenv("TWILIO_PHONE_NUMBER")  # Default Twilio number
 
 
 
+DEFAULT_CORS_ORIGINS = (
+    "https://dogoodfoodmaps.com",
+    "https://www.dogoodfoodmaps.com",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+)
+
+
+def _cors_origins() -> List[str]:
+    """Origins allowed to call the API cross-site (CORS_ORIGINS, comma-separated).
+
+    The site itself is same-origin and unaffected; this only limits other
+    websites. CORS_ORIGINS=* restores the old allow-all behaviour.
+    """
+    raw = os.getenv("CORS_ORIGINS")
+    if raw and raw.strip():
+        return [o.strip().rstrip("/") for o in raw.split(",") if o.strip()]
+    origins = list(DEFAULT_CORS_ORIGINS)
+    public = (os.getenv("PUBLIC_BASE_URL") or "").strip().rstrip("/")
+    if public and public not in origins:
+        origins.append(public)
+    return origins
+
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -93,7 +126,14 @@ app.add_middleware(
 
 
 def _http_exception_response(exc: HTTPException) -> JSONResponse:
-    """Render an HTTPException without leaking internals on a 5xx."""
+    """Render an HTTPException without leaking internals on a 5xx.
+
+    AIError bodies are built from canned, localized text (never exception
+    strings), and the chat UI branches on their error_code/retryable, so
+    they pass through intact.
+    """
+    if isinstance(exc, AIError):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
     if exc.status_code >= 500:
         return JSONResponse(status_code=exc.status_code, content={"detail": "Internal server error"})
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
@@ -162,6 +202,13 @@ MAX_API_BODY_BYTES = 64 * 1024
 UPLOAD_PATH_LIMITS = {
     "/api/ai/voice": 26 * 1024 * 1024,        # handler caps at 25MB
     "/api/ai/upload_image": 9 * 1024 * 1024,  # handler caps at 8MB
+    "/api/ai/vision-listing": 9 * 1024 * 1024,  # handler caps at 8MB
+    "/api/ai/transcribe": 26 * 1024 * 1024,   # handler caps at 25MB
+    # JSON routes that legitimately carry more than 64KB: a pasted CSV
+    # inventory in chat (message max 200k chars) and up to 100 bulk rows.
+    "/api/ai/chat": 512 * 1024,
+    "/api/ai/bulk-listings": 512 * 1024,
+    "/api/ai/enrich-listings": 512 * 1024,
 }
 
 
@@ -181,6 +228,8 @@ MAX_JSON_STRING_CHARS = 5000
 # sanitizes every field (see _sanitize_page_field_value).
 LONG_JSON_STRING_PATH_PREFIXES = (
     ("/api/pages/", 60_000),
+    # Matches AIChatRequest.message max_length (pasted CSV inventories).
+    ("/api/ai/chat", 200_000),
 )
 
 
@@ -440,7 +489,9 @@ def _ensure_local_sqlite_users(db: Session) -> None:
     """Seed known local accounts so role switching works without a prod sync."""
     db_url = (os.getenv("DATABASE_URL") or "").lower()
     allow = (os.getenv("ALLOW_SQLITE") or "").lower() in ("1", "true", "yes")
-    if not (db_url.startswith("sqlite") or allow):
+    # Both conditions, never either: these accounts have a known password,
+    # so they must never be seeded into a real (MySQL/RDS) database.
+    if not (db_url.startswith("sqlite") and allow) or os.getenv("AWS_SECRET_NAME"):
         return
     password = os.getenv("LOCAL_DEV_PASSWORD") or "password123"
     seeds = [
@@ -586,10 +637,13 @@ def _backfill_user_communities() -> None:
 
 
 def _client_ip(request: Request) -> str:
-    """Best-effort client IP extraction with proxy header fallback."""
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    """Client IP for rate limiting.
+
+    Uvicorn runs with --proxy-headers (Dockerfile, start_server.sh), which
+    rewrites request.client from X-Forwarded-For only for trusted proxies
+    (FORWARDED_ALLOW_IPS). Reading the raw header here would let any client
+    spoof it and dodge the login/signup limits.
+    """
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

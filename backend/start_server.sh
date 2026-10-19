@@ -24,25 +24,23 @@ fi
 export PYTHONUNBUFFERED=1
 export PYTHONPATH="$PROJECT_ROOT:$PYTHONPATH"
 
-# Load .env if present (systemd also uses EnvironmentFile)
-if [ -f "../.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "../.env"
-    set +a
-elif [ -f ".env" ]; then
+# Load .env if present (systemd also uses EnvironmentFile). We're in the
+# project root here, so only ./.env belongs to this checkout.
+if [ -f ".env" ]; then
     set -a
     # shellcheck disable=SC1091
     source ".env"
     set +a
 fi
 
-# Preflight: refuse SQLite — production must use RDS MySQL
-if [ -z "${DATABASE_URL:-}" ]; then
-    echo "ERROR: DATABASE_URL is not set. Configure RDS MySQL in .env" >&2
+# Preflight: refuse SQLite — production must use RDS MySQL.
+# With AWS_SECRET_NAME set, DATABASE_URL comes from Secrets Manager at app
+# start (backend/aws_secrets.py), so it is legitimately absent here.
+if [ -z "${DATABASE_URL:-}" ] && [ -z "${AWS_SECRET_NAME:-}" ]; then
+    echo "ERROR: DATABASE_URL is not set. Configure RDS MySQL in .env or set AWS_SECRET_NAME" >&2
     exit 1
 fi
-case "$DATABASE_URL" in
+case "${DATABASE_URL:-}" in
     sqlite:*)
         if [ "${ALLOW_SQLITE:-}" != "true" ]; then
             echo "ERROR: SQLite DATABASE_URL is not allowed. Use production RDS MySQL." >&2
@@ -51,14 +49,14 @@ case "$DATABASE_URL" in
         ;;
 esac
 
-# Optional preflight (validates RDS + required env keys)
-if [ -f "scripts/verify_production_env.py" ]; then
-    python3 scripts/verify_production_env.py || exit 1
+# Preflight: validates RDS + required env keys (after loading AWS secrets).
+# Paths are relative to the project root we cd'd into above.
+if [ -f "backend/scripts/verify_production_env.py" ]; then
+    python3 backend/scripts/verify_production_env.py || exit 1
 fi
 
-# Start server with uvicorn and auto-reload on file changes
+# No --reload in production; systemd restarts the process if it crashes.
 echo "Starting Food Maps API server..."
-echo "Server will auto-restart on crashes and code changes"
 
 # Find uvicorn
 UVICORN=$(which uvicorn 2>/dev/null || echo "/home/ec2-user/.local/bin/uvicorn")

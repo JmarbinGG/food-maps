@@ -22,6 +22,8 @@ await esbuild.build({
   define: {
     'process.env.NODE_ENV': '"production"',
   },
+  // ~800KB readable -> a fraction of that; this ships to every page view.
+  minify: true,
   logLevel: 'info',
 });
 

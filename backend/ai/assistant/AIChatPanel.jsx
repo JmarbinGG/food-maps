@@ -202,7 +202,23 @@ function WelcomeHero({ language, userName, onPromptClick, communityRole }) {
   )
 }
 
+// Photo messages are sent as "caption\n\nimage: url" (one image: line per
+// photo). Upload URLs are site-relative (/uploads/ai/...) or absolute.
+const IMAGE_LINE_RE = /^image:\s*((?:https?:\/\/|\/)\S+)\s*$/i
+
+function splitPhotoMessage(message) {
+  const images = []
+  const rest = []
+  for (const line of String(message || '').split('\n')) {
+    const m = line.match(IMAGE_LINE_RE)
+    if (m) images.push(m[1])
+    else rest.push(line)
+  }
+  return { caption: images.length ? rest.join('\n').trim() : '', images }
+}
+
 // ─── Date separator — "Today" / "Yesterday" / "Mon, May 22" ────────
+
 function formatSeparator(iso, language) {
   if (!iso) return null
   const d = new Date(iso)
@@ -1300,10 +1316,11 @@ function MessageBubble({
   }, [msg.suggestions, msg.suggestedActions, language, communityRole])
   const isVoiceMessage = msg.source === 'voice'
   const timeLabel = formatChatTime(msg.timestamp)
+  const photoParts = useMemo(() => splitPhotoMessage(msg.message), [msg.message])
 
   const handleFeedback = (rating) => {
     setFeedbackGiven(rating)
-    onFeedback?.(msg.id, rating)
+    Promise.resolve(onFeedback?.(msg.id, rating)).catch(() => {})
   }
 
   const handleCopy = useCallback(() => {
@@ -1337,7 +1354,7 @@ function MessageBubble({
   const userAvatarUrl = !avatarBroken ? currentUser?.avatar_url : null
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}>
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`} data-nouri-role={msg.role}>
       <div className={`max-w-[85%] flex items-start gap-2 ${isUser ? 'flex-row-reverse' : ''}`}>
         {/* Nouri avatar (assistant) */}
         {!isUser && (
@@ -1381,16 +1398,24 @@ function MessageBubble({
                   : 'bg-white text-gray-900 rounded-bl-md border border-gray-200 shadow-sm'
             }`}
           >
-            {/* Inline photo message: show thumbnail instead of raw URL */}
-            {/^image:\s*https?:\/\//i.test(msg.message) ? (
-              <div className="flex items-center gap-2">
-                <img
-                  src={msg.message.replace(/^image:\s*/i, '')}
-                  alt="uploaded"
-                  className="max-h-32 max-w-[200px] rounded-lg object-cover ring-1 ring-white/20"
-                  onError={(e) => { e.currentTarget.style.display = 'none' }}
-                />
-                <span className="text-[11px] opacity-70">📷</span>
+            {/* Inline photo message: show thumbnails instead of raw URLs */}
+            {photoParts.images.length > 0 ? (
+              <div className="space-y-2">
+                {photoParts.caption && (
+                  <p className="whitespace-pre-wrap">{photoParts.caption}</p>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {photoParts.images.map((src) => (
+                    <img
+                      key={src}
+                      src={src}
+                      alt="uploaded"
+                      className="max-h-32 max-w-[200px] rounded-lg object-cover ring-1 ring-white/20"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  ))}
+                  <span className="text-[11px] opacity-70">📷</span>
+                </div>
               </div>
             ) : (
               // Defensive: if the model emits markdown image syntax
@@ -2397,7 +2422,13 @@ function AIChatPanel() {
   // Surface backend AI errors as a toast so the user sees what went wrong,
   // not just an error bubble inside the chat (which can be missed when scrolled).
   useEffect(() => {
-    if (!error || error === lastSurfacedErrorRef.current) return
+    // Each send clears error first, so the same failure on a later message
+    // still toasts; the ref only stops re-toasting one error on re-render.
+    if (!error) {
+      lastSurfacedErrorRef.current = null
+      return
+    }
+    if (error === lastSurfacedErrorRef.current) return
     lastSurfacedErrorRef.current = error
     toast.error(
       language === 'es'
@@ -3191,11 +3222,16 @@ function AIChatPanel() {
       // Kick off the storage upload and the vision call in parallel so the
       // user sees the preview faster. Storage upload is optional; if it fails
       // (no auth, bucket missing) we fall back to a category-based image.
+      // .catch: if vision fails or finds no food we return before awaiting
+      // this, and a rejected upload would otherwise be unhandled.
       const uploadPromise = (async () => {
         if (!authUser?.id) return null
         const res = await aiChatService.uploadImage(uploadFile, authUser.id)
         return res?.url || null
-      })()
+      })().catch((err) => {
+        console.warn('Photo upload failed:', err?.message || err)
+        return null
+      })
 
       const { draft, confidence } = await aiChatService.visionListing(uploadFile, { userId: authUser?.id })
       if (sessionId !== uploadSessionRef.current) return  // user cancelled / new upload
@@ -3528,6 +3564,10 @@ function AIChatPanel() {
         mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true })
       }
       const stream = mediaStreamRef.current
+      // Tracks are muted before Nouri speaks and unmuted when speech ends.
+      // If the reply never played (guide muted, form hint active) they stay
+      // muted, so recording would capture silence. The user is talking now.
+      stream.getAudioTracks().forEach((t) => { t.enabled = true })
 
       // Set up audio analyser for VAD (voice activity detection)
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
@@ -3836,25 +3876,25 @@ function AIChatPanel() {
   useEffect(() => { endHandsFreeTurnRef.current = endHandsFreeTurn }, [endHandsFreeTurn])
 
   // Toggle handler — flips the feature and starts/stops the recognizer.
+  // Side effects live outside the state updater: React may call updaters
+  // twice (StrictMode), which would double-start the recognizer.
   const toggleWakeWord = useCallback(() => {
-    setWakeWordEnabled((prev) => {
-      const next = !prev
-      wakeWordEnabledRef.current = next
-      try {
-        localStorage.setItem('fm.ai.wakeword', next ? '1' : '0')
-        localStorage.removeItem('dg.ai.wakeword')
-      } catch { /* private mode */ }
-      if (next) {
-        if (!voiceModeRef.current
-            && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording')) {
-          setTimeout(() => startWakeListeningRef.current?.(), 100)
-        }
-      } else {
-        handsFreeRef.current = false
-        stopWakeListening()
+    const next = !wakeWordEnabledRef.current
+    wakeWordEnabledRef.current = next
+    setWakeWordEnabled(next)
+    try {
+      localStorage.setItem('fm.ai.wakeword', next ? '1' : '0')
+      localStorage.removeItem('dg.ai.wakeword')
+    } catch { /* private mode */ }
+    if (next) {
+      if (!voiceModeRef.current
+          && (!mediaRecorderRef.current || mediaRecorderRef.current.state !== 'recording')) {
+        setTimeout(() => startWakeListeningRef.current?.(), 100)
       }
-      return next
-    })
+    } else {
+      handsFreeRef.current = false
+      stopWakeListening()
+    }
   }, [stopWakeListening])
 
   // Restore the saved preference on mount and arm the recognizer.
@@ -4222,7 +4262,8 @@ function AIChatPanel() {
               if (newLang === chatLang(language)) return
               setLanguage(newLang)
               updateSetting('preferredLanguage', newLang)
-              sendMessage(languageSwitchPrompt(newLang))
+              // Pass lang: setLanguage() hasn't reached sendMessage's closure yet.
+              sendMessage(languageSwitchPrompt(newLang), { lang: newLang })
             }}
             className="text-emerald-600 hover:text-emerald-700 text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 border border-emerald-200 hover:border-emerald-300 max-w-[5.5rem] truncate"
             aria-label={chatT(language, 'chatLanguage')}

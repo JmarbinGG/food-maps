@@ -1,5 +1,5 @@
 from backend.aws_secrets import load_aws_secrets
-from dotenv import load_dotenv
+from backend.env_loader import load_project_env
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 import logging
@@ -8,10 +8,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = os.path.join(os.path.dirname(__file__), '..')
-load_dotenv(os.path.join(_PROJECT_ROOT, '.env'), override=True)
-if os.getenv("USE_RDS", "").strip().lower() not in {"1", "true", "yes", "on"}:
-    load_dotenv(os.path.join(_PROJECT_ROOT, '.env.local'), override=True)
+load_project_env()
 load_aws_secrets()
 
 DATABASE_URL = os.getenv("DATABASE_URL")

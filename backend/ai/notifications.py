@@ -42,6 +42,12 @@ BROADCAST_INTERVAL = int(os.getenv("AI_BROADCAST_INTERVAL", "3600"))
 # Lookback window when searching for "new" listings.  Slightly larger than
 # the interval so we never miss one on the boundary.
 BROADCAST_LOOKBACK_MIN = int(os.getenv("AI_BROADCAST_LOOKBACK_MIN", "75"))
+# After a restart (or before the first successful scan) look further back so
+# listings created while the server was down or the job was backing off still
+# get drafted. Already-broadcast listings are skipped, so this can't duplicate.
+BROADCAST_CATCHUP_HOURS = int(os.getenv("AI_BROADCAST_CATCHUP_HOURS", "24"))
+# Start time of the last scan that completed; the next scan covers from here.
+_last_successful_scan_start: Optional[datetime] = None
 # Safety cap so a runaway job can't spam thousands of rows.
 BROADCAST_MAX_PER_RUN = int(os.getenv("AI_BROADCAST_MAX_PER_RUN", "500"))
 # If True, approved broadcasts auto-send without a human click.  Default False
@@ -172,7 +178,7 @@ def _template_es(user_name: str, food, donor_name: str) -> str:
 async def _ai_personalize(base_text: str, user, food, lang: str) -> str:
     """Ask the LLM to lightly personalise the template. Falls back on error."""
     try:
-        from backend.ai.ai_engine import conversation_engine, OPENAI_API_KEY
+        from backend.ai.ai_engine import CANNED_RESPONSES, conversation_engine, OPENAI_API_KEY
     except Exception:
         return base_text
     if not OPENAI_API_KEY:
@@ -206,7 +212,12 @@ async def _ai_personalize(base_text: str, user, food, lang: str) -> str:
             lang=lang,
         )
         reply = (reply or "").strip()
-        if 10 <= len(reply) <= 500:
+        # public_chat_reply returns a canned apology instead of raising when
+        # OpenAI fails; never let that become the SMS sent to users.
+        canned = {text for by_lang in CANNED_RESPONSES.values() for text in by_lang.values()}
+        if reply in canned:
+            logger.warning("AI personalisation returned a fallback message, using template")
+        elif 10 <= len(reply) <= 500:
             return reply
     except Exception as exc:  # pragma: no cover - network-ish path
         logger.warning("AI personalisation failed, using template: %s", exc)
@@ -225,6 +236,14 @@ async def _draft_message(user, food, donor_name: str) -> tuple[str, str]:
 # Core job
 # ---------------------------------------------------------------------------
 
+def _scan_window_start(now: datetime) -> datetime:
+    lookback = now - timedelta(minutes=BROADCAST_LOOKBACK_MIN)
+    if _last_successful_scan_start is None:
+        return now - timedelta(hours=BROADCAST_CATCHUP_HOURS)
+    # Small overlap guards against clock skew between app and DB rows.
+    return min(lookback, _last_successful_scan_start - timedelta(minutes=5))
+
+
 def _collect_candidates() -> list[dict]:
     """DB work: find new listings + matching users. Returns plain dicts."""
     from backend.app import SessionLocal
@@ -234,7 +253,7 @@ def _collect_candidates() -> list[dict]:
     out: list[dict] = []
     db = SessionLocal()
     try:
-        since = _utcnow() - timedelta(minutes=BROADCAST_LOOKBACK_MIN)
+        since = _scan_window_start(_utcnow())
         listings = (
             db.query(FoodResource)
             .filter(FoodResource.created_at >= since)
@@ -334,9 +353,12 @@ def _persist_drafts(batch_id: str, drafts: list[dict]) -> int:
 
 async def scan_and_draft_new_listings() -> dict:
     """One pass of the hourly job.  Returns stats dict."""
+    global _last_successful_scan_start
+    scan_start = _utcnow()
     loop = asyncio.get_event_loop()
     candidates = await loop.run_in_executor(None, _collect_candidates)
     if not candidates:
+        _last_successful_scan_start = scan_start
         logger.info("Broadcast job: no new listings needing notification")
         return {"listings": 0, "drafts": 0, "batch_id": None}
 
@@ -353,6 +375,10 @@ async def scan_and_draft_new_listings() -> dict:
         })
 
     inserted = await loop.run_in_executor(None, _persist_drafts, batch_id, drafts)
+    # Only move the window forward when everything found was stored; a failed
+    # insert or a run cut short by the per-run cap must be rescanned.
+    if inserted and len(candidates) < BROADCAST_MAX_PER_RUN:
+        _last_successful_scan_start = scan_start
 
     if AI_BROADCAST_AUTO_APPROVE:
         await auto_send_pending(batch_id=batch_id)

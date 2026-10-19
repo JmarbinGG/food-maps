@@ -13,9 +13,12 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from dotenv import load_dotenv
+from backend.aws_secrets import load_aws_secrets  # noqa: E402
+from backend.env_loader import load_project_env  # noqa: E402
 
-load_dotenv(os.path.join(ROOT, ".env"), override=True)
+# Same resolution as the app: real env > .env.local > .env > AWS secret.
+load_project_env()
+load_aws_secrets()
 
 REQUIRED = (
     "DATABASE_URL",

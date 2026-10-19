@@ -51,3 +51,26 @@ def _reset_rate_limiter():
     ai_engine._rate_store.clear()
     yield
     ai_engine._rate_store.clear()
+
+
+@pytest.fixture(autouse=True)
+def _default_role_lookup(request):
+    """Most tool tests run without a users table, so the strict role lookup
+    used by the post/claim guard would fail closed. Treat unknown users as a
+    plain member unless a test opts in with @pytest.mark.strict_role_lookup."""
+    if request.node.get_closest_marker("strict_role_lookup"):
+        yield
+        return
+    from unittest.mock import patch
+    from backend.ai import role_guards
+
+    real = role_guards._lookup_role_strict
+
+    async def _lenient(uid):
+        try:
+            return await real(uid)
+        except role_guards.RoleLookupError:
+            return "member"
+
+    with patch.object(role_guards, "_lookup_role_strict", _lenient):
+        yield

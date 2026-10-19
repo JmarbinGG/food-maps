@@ -4,12 +4,10 @@ DoGoods Agentic AI System
 
 LangGraph-based agentic architecture for Nouri AI.
 
-This module replaces the rigid 15k-token prescriptive prompt system with:
-- State machine-driven conversation flows
-- Autonomous multi-step planning
-- Proactive suggestions and reminders
-- Preference learning
-- Minimal prompts (~2k tokens)
+The live chat path is backend.ai.ai_engine; it only uses the light modules
+here (suggestion_chips, user_guidance, learning). The LangGraph runtime
+(graph / planner) needs langgraph + langchain_openai, so it is imported
+lazily on first attribute access instead of on every `import backend.agent.*`.
 
 Core components:
 - state.py: Conversation state definitions
@@ -20,58 +18,37 @@ Core components:
 - learning.py: User preference tracking
 """
 
-from backend.agent.state import AgentState, ConversationState, Message, PlanStep, ProactiveSuggestion, UserContext
-# Heavy runtime imports (graph / planner / proactive / learning) depend on
-# langgraph + langchain_openai. Guard so slim test environments can still
-# import lighter agent modules without the full runtime stack.
-try:
-    from backend.agent.graph import create_agent_graph, invoke_agent
-    from backend.agent.planner import create_plan, execute_plan_step, plan_to_text
-    from backend.agent.proactive import generate_proactive_suggestions, should_show_suggestion
-    from backend.agent.learning import update_user_preferences, get_user_preferences, get_preferred_search_params
-    _AGENT_RUNTIME_AVAILABLE = True
-except ImportError as _exc:  # langgraph / langchain_openai missing
-    import logging as _logging
-    _logging.getLogger(__name__).info(
-        "backend.agent runtime deps unavailable (%s); lighter agent modules still importable.",
-        _exc,
-    )
-    create_agent_graph = invoke_agent = None  # type: ignore[assignment]
-    create_plan = execute_plan_step = plan_to_text = None  # type: ignore[assignment]
-    generate_proactive_suggestions = should_show_suggestion = None  # type: ignore[assignment]
-    update_user_preferences = get_user_preferences = get_preferred_search_params = None  # type: ignore[assignment]
-    _AGENT_RUNTIME_AVAILABLE = False
+from importlib import import_module
 
-from backend.agent.prompts import build_system_prompt, ERROR_RESPONSES
+from backend.agent.state import AgentState, ConversationState, Message, PlanStep, ProactiveSuggestion, UserContext
+
+_LAZY = {
+    "create_agent_graph": "backend.agent.graph",
+    "invoke_agent": "backend.agent.graph",
+    "create_plan": "backend.agent.planner",
+    "execute_plan_step": "backend.agent.planner",
+    "plan_to_text": "backend.agent.planner",
+    "get_proactive_suggestions": "backend.agent.proactive",
+    "update_user_preferences": "backend.agent.learning",
+    "get_user_preferences": "backend.agent.learning",
+    "build_system_prompt": "backend.agent.prompts",
+    "ERROR_RESPONSES": "backend.agent.prompts",
+}
+
+
+def __getattr__(name):
+    module = _LAZY.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return getattr(import_module(module), name)
+
 
 __all__ = [
-    # State
     "AgentState",
     "ConversationState",
     "Message",
     "PlanStep",
     "ProactiveSuggestion",
     "UserContext",
-    
-    # Graph
-    "create_agent_graph",
-    "invoke_agent",
-    
-    # Prompts
-    "build_system_prompt",
-    "ERROR_RESPONSES",
-    
-    # Planning
-    "create_plan",
-    "execute_plan_step",
-    "plan_to_text",
-    
-    # Proactive
-    "generate_proactive_suggestions",
-    "should_show_suggestion",
-    
-    # Learning
-    "update_user_preferences",
-    "get_user_preferences",
-    "get_preferred_search_params",
+    *_LAZY,
 ]

@@ -30,6 +30,7 @@ function VoiceOutput({ text, language = 'en', autoSpeak = false, onSpeakingChang
   const [isMuted, setIsMuted] = useState(false)
   const [supported, setSupported] = useState(false)
   const utteranceRef = useRef(null)
+  const ownSpeakingRef = useRef(false)
   const prevTextRef = useRef('')
   // Chromium fires `voiceschanged` once voices are ready; the first
   // synchronous `getVoices()` after page load often returns []. Cache the
@@ -48,12 +49,15 @@ function VoiceOutput({ text, language = 'en', autoSpeak = false, onSpeakingChang
       synth.removeEventListener?.('voiceschanged', refreshVoices)
       // Null out callbacks before cancel so a queued onend/onerror from this
       // utterance doesn't fire setState on an unmounted component.
-      if (utteranceRef.current) {
-        utteranceRef.current.onstart = null
-        utteranceRef.current.onend = null
-        utteranceRef.current.onerror = null
+      const own = utteranceRef.current
+      if (own) {
+        own.onstart = null
+        own.onend = null
+        own.onerror = null
       }
-      synth.cancel()
+      // speechSynthesis is global: only stop speech this bubble started, so
+      // clearing or re-rendering other bubbles doesn't cut Nouri off.
+      if (own && ownSpeakingRef.current) synth.cancel()
     }
   }, [])
 
@@ -94,9 +98,9 @@ function VoiceOutput({ text, language = 'en', autoSpeak = false, onSpeakingChang
 
     if (preferredVoice) utterance.voice = preferredVoice
 
-    utterance.onstart = () => { setIsSpeaking(true); onSpeakingChange?.(true) }
-    utterance.onend   = () => { setIsSpeaking(false); onSpeakingChange?.(false) }
-    utterance.onerror = () => { setIsSpeaking(false); onSpeakingChange?.(false) }
+    utterance.onstart = () => { ownSpeakingRef.current = true; setIsSpeaking(true); onSpeakingChange?.(true) }
+    utterance.onend   = () => { ownSpeakingRef.current = false; setIsSpeaking(false); onSpeakingChange?.(false) }
+    utterance.onerror = () => { ownSpeakingRef.current = false; setIsSpeaking(false); onSpeakingChange?.(false) }
 
     utteranceRef.current = utterance
     synth.speak(utterance)

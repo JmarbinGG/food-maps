@@ -1,6 +1,23 @@
 import { resilientFetch } from './aiSelfHealing.js';
 import { parseAiErrorResponse } from './aiRequest.js';
 
+/**
+ * Turn a non-typed error body into a sentence a user can read. FastAPI sends
+ * {"detail": "..."} for HTTPException and {"detail": [{msg, loc}, ...]} for
+ * validation errors; showing that JSON raw in a toast is meaningless.
+ */
+function readableErrorText(text, status) {
+  try {
+    const detail = JSON.parse(text)?.detail;
+    if (typeof detail === 'string' && detail) return detail;
+    if (Array.isArray(detail) && detail.length) {
+      return detail.map((d) => d?.msg).filter(Boolean).join('; ') || `Request failed (${status})`;
+    }
+  } catch { /* not JSON */ }
+  if (text && text.length < 300 && !/^\s*</.test(text)) return text;
+  return `Request failed (${status})`;
+}
+
 async function resilientJson(path, options = {}, fetchOpts = {}) {
   const headers = { ...(options.headers || {}) };
   if (options.body && !headers['Content-Type'] && !(options.body instanceof FormData)) {
@@ -9,7 +26,7 @@ async function resilientJson(path, options = {}, fetchOpts = {}) {
   const res = await resilientFetch(
     path,
     { ...options, headers },
-    { timeout: fetchOpts.timeout || 45000, retries: fetchOpts.retries ?? 2, label: fetchOpts.label || path },
+    { timeout: fetchOpts.timeout || 45000, retries: fetchOpts.retries, label: fetchOpts.label || path },
   );
   if (!res.ok) {
     const typed = await parseAiErrorResponse(res);
@@ -19,8 +36,8 @@ async function resilientJson(path, options = {}, fetchOpts = {}) {
       e.status = typed.status;
       throw e;
     }
-    const text = await res.text();
-    const err = new Error(text || `${res.status}`);
+    const text = await res.text().catch(() => '');
+    const err = new Error(readableErrorText(text, res.status));
     err.status = res.status;
     throw err;
   }
@@ -66,7 +83,8 @@ const aiChatService = {
   async confirm(userId, payload = {}) {
     return resilientJson('/api/ai/confirm', {
       method: 'POST',
-      body: JSON.stringify({ user_id: userId, ...payload }),
+      // Backend model is AIConfirmRequest{user_id, confirmed}.
+      body: JSON.stringify({ user_id: userId, confirmed: payload.confirm !== false }),
     }, { timeout: 45000, label: 'ai/confirm' });
   },
 
@@ -126,7 +144,7 @@ const aiChatService = {
         e.status = 400;
         throw e;
       }
-      const err = new Error(text || `${res.status}`);
+      const err = new Error(readableErrorText(text, res.status));
       err.status = res.status;
       throw err;
     }
@@ -136,7 +154,7 @@ const aiChatService = {
   async uploadImage(file, userId) {
     const fd = new FormData();
     fd.append('image', file);
-    if (userId) fd.append('user_id', userId);
+    if (userId) fd.append('user_id', String(userId));
     const res = await resilientFetch(
       '/api/ai/upload_image',
       { method: 'POST', body: fd },
@@ -150,16 +168,17 @@ const aiChatService = {
         e.status = typed.status;
         throw e;
       }
-      throw new Error(await res.text());
+      throw new Error(readableErrorText(await res.text().catch(() => ''), res.status));
     }
     return res.json();
   },
 
+  // user_id is a string on the backend; host pages pass the numeric MySQL id.
   async enrichListings(rows, opts = {}) {
     return resilientJson('/api/ai/enrich-listings', {
       method: 'POST',
       body: JSON.stringify({
-        user_id: opts.userId,
+        user_id: String(opts.userId ?? ''),
         rows,
         language: opts.language || 'en',
       }),
@@ -170,7 +189,7 @@ const aiChatService = {
     return resilientJson('/api/ai/bulk-listings', {
       method: 'POST',
       body: JSON.stringify({
-        user_id: opts.userId,
+        user_id: String(opts.userId ?? ''),
         listings: rows,
       }),
     });
@@ -179,7 +198,7 @@ const aiChatService = {
   async visionListing(file, opts = {}) {
     const fd = new FormData();
     fd.append('image', file);
-    if (opts.userId) fd.append('user_id', opts.userId);
+    if (opts.userId) fd.append('user_id', String(opts.userId));
     const res = await resilientFetch(
       '/api/ai/vision-listing',
       { method: 'POST', body: fd },
@@ -193,7 +212,7 @@ const aiChatService = {
         e.status = typed.status;
         throw e;
       }
-      throw new Error(await res.text());
+      throw new Error(readableErrorText(await res.text().catch(() => ''), res.status));
     }
     return res.json();
   },

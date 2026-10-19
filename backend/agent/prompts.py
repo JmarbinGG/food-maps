@@ -100,15 +100,21 @@ Don't suggest when:
 - User explicitly dismissed similar suggestions recently
 """
 
+def _format_user_context(user_context: dict, language: str) -> str:
+    """Plain key/value summary of the user context for the prompt."""
+    lines = [f"**User Context** (language: {language})"]
+    for key, value in (user_context or {}).items():
+        if value in (None, "", [], {}):
+            continue
+        lines.append(f"- {key}: {value}")
+    return "\n".join(lines)
+
+
 def build_system_prompt(user_context: dict, language: str = "en") -> str:
     """Build complete system prompt with platform rules + user context."""
     from backend.ai.ai_engine import get_platform_system_rules
-    from backend.conversation_context import format_rich_user_context
 
-    user_id = str(user_context.get("user_id") or user_context.get("id") or "")
-    rich_context = format_rich_user_context(
-        user_context, user_id, language=language,
-    )
+    rich_context = _format_user_context(user_context, language)
     platform_rules = get_platform_system_rules()
 
     return f"""{AGENT_IDENTITY}

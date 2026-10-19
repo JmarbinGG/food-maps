@@ -28,8 +28,10 @@ for (const folder of folders) {
     if (!name.endsWith('.jsx')) continue;
     const from = path.join(fromDir, name);
     const to = path.join(toDir, name);
-    const content = fs.readFileSync(from, 'utf8');
-    const existing = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : null;
+    // Normalize to LF so CRLF checkouts of backend/ai don't rewrite
+    // otherwise-identical files on every build.
+    const content = fs.readFileSync(from, 'utf8').replace(/\r\n/g, '\n');
+    const existing = fs.existsSync(to) ? fs.readFileSync(to, 'utf8').replace(/\r\n/g, '\n') : null;
     if (existing === content) {
       skipped += 1;
       continue;

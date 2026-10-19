@@ -29,13 +29,11 @@ from backend.ai.response_polish import (
     tool_result_ok,
 )
 from backend.aws_secrets import load_aws_secrets
-from dotenv import load_dotenv
+from backend.env_loader import load_project_env
 
 # Load .env from project root
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-load_dotenv(os.path.join(_PROJECT_ROOT, ".env"), override=True)
-if os.getenv("USE_RDS", "").strip().lower() not in {"1", "true", "yes", "on"}:
-    load_dotenv(os.path.join(_PROJECT_ROOT, ".env.local"), override=True)
+load_project_env()
 load_aws_secrets()
 
 logging.basicConfig(level=logging.INFO)
@@ -52,9 +50,6 @@ def _utcnow() -> datetime:
     """
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
-
-def _tone_debug_log(hypothesis_id: str, location: str, message: str, data: dict | None = None) -> None:
-    return
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -74,10 +69,27 @@ TTS_MODEL = os.getenv("AI_TTS_MODEL", "tts-1")
 TTS_VOICE_EN = os.getenv("AI_TTS_VOICE", "nova")
 TTS_VOICE_ES = os.getenv("AI_TTS_VOICE_ES", "nova")
 
+# If the account can't use the primary model (404 / model_not_found), retry
+# the same request on the next model instead of failing the user's turn.
+CHAT_MODEL_FALLBACKS: list[str] = [
+    m.strip() for m in os.getenv("AI_CHAT_MODEL_FALLBACKS", "gpt-4o,gpt-4o-mini").split(",") if m.strip()
+]
+FOLLOWUP_MODEL_FALLBACKS: list[str] = [
+    m.strip() for m in os.getenv("AI_FOLLOWUP_MODEL_FALLBACKS", "gpt-4o-mini").split(",") if m.strip()
+]
+_MODEL_FALLBACKS: dict[str, list[str]] = {
+    CHAT_MODEL: [m for m in CHAT_MODEL_FALLBACKS if m != CHAT_MODEL],
+    FOLLOWUP_MODEL: [m for m in FOLLOWUP_MODEL_FALLBACKS if m != FOLLOWUP_MODEL],
+}
+
 MAX_RETRIES = int(os.getenv("AI_MAX_RETRIES", "2"))
+# Agentic tool-calling rounds per user turn.
+MAX_TOOL_ROUNDS = max(1, int(os.getenv("AI_MAX_TOOL_ROUNDS", "8")))
 TIMEOUT_SECONDS = int(os.getenv("AI_TIMEOUT", "30"))
 
 RATE_LIMIT_DEFAULT = int(os.getenv("AI_RATE_LIMIT", "50"))
+# Anonymous landing-page chat: no login, so keep it tighter than signed-in use.
+PUBLIC_RATE_LIMIT = int(os.getenv("AI_PUBLIC_RATE_LIMIT", "15"))
 RATE_LIMIT_WINDOW = 60
 
 TRAINING_DATA_PATH = os.path.join(os.path.dirname(__file__), "ai_training_data.json")
@@ -87,10 +99,23 @@ _http_client: Optional[httpx.AsyncClient] = None
 
 
 def _get_http_client(timeout: float = TIMEOUT_SECONDS) -> httpx.AsyncClient:
+    """Shared client. It is created once, so pass timeout= on each request
+    when a call needs something other than the default."""
     global _http_client
     if _http_client is None or _http_client.is_closed:
-        _http_client = httpx.AsyncClient(timeout=timeout)
+        _http_client = httpx.AsyncClient(timeout=TIMEOUT_SECONDS)
     return _http_client
+
+
+_background_tasks: set[asyncio.Task] = set()
+
+
+def _spawn_background(coro) -> asyncio.Task:
+    """Fire-and-forget without the task being garbage-collected mid-run."""
+    task = asyncio.create_task(coro)
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
+    return task
 
 
 async def close_http_client() -> None:
@@ -196,10 +221,17 @@ def get_canned_response(error_type: str, lang: str = "en") -> str:
 # ---------------------------------------------------------------------------
 
 _rate_store: dict[str, list[float]] = {}
+_rate_last_sweep = 0.0
 
 
 def check_rate_limit(client_ip: str, limit: int = RATE_LIMIT_DEFAULT) -> bool:
+    global _rate_last_sweep
     now = time.time()
+    # Drop idle keys now and then so the store doesn't grow with every IP seen.
+    if now - _rate_last_sweep > RATE_LIMIT_WINDOW:
+        _rate_last_sweep = now
+        for key in [k for k, ts in _rate_store.items() if not ts or now - ts[-1] >= RATE_LIMIT_WINDOW]:
+            _rate_store.pop(key, None)
     timestamps = _rate_store.setdefault(client_ip, [])
     _rate_store[client_ip] = [t for t in timestamps if now - t < RATE_LIMIT_WINDOW]
     if len(_rate_store[client_ip]) >= limit:
@@ -265,13 +297,22 @@ async def _openai_with_retry(
     timeout: float = TIMEOUT_SECONDS,
     retries: int = MAX_RETRIES,
 ) -> httpx.Response:
-    NON_RETRYABLE = {401, 403, 404, 422}
-    last_exc: Exception | None = None
+    NON_RETRYABLE = {400, 401, 403, 404, 422}
+    retries = max(1, int(retries))
+    last_error: str = "no attempt made"
 
-    for attempt in range(retries):
+    if not _circuit.allow_request():
+        raise RuntimeError("OpenAI circuit breaker is open; skipping request")
+
+    fallback_models = list(_MODEL_FALLBACKS.get((json_payload or {}).get("model"), []))
+
+    attempt = 0
+    while attempt < retries:
+        is_last = attempt == retries - 1
+        delay = min(2 ** attempt + 1, 10)
         try:
-            client = _get_http_client(timeout)
-            kwargs: dict = {"headers": headers}
+            client = _get_http_client()
+            kwargs: dict = {"headers": headers, "timeout": timeout}
             if json_payload is not None:
                 kwargs["json"] = json_payload
             if files is not None:
@@ -281,29 +322,58 @@ async def _openai_with_retry(
 
             resp = await client.request(method, url, **kwargs)
 
+            if resp.status_code in (403, 404) and fallback_models and _is_model_access_error(resp):
+                next_model = fallback_models.pop(0)
+                logger.warning(
+                    "Model %s unavailable (%s); falling back to %s",
+                    json_payload.get("model"), resp.status_code, next_model,
+                )
+                json_payload = {**json_payload, "model": next_model}
+                continue  # does not consume a retry
             if resp.status_code == 429:
                 _circuit.record_failure()
-                await asyncio.sleep(min(2 ** attempt + 1, 10))
-                continue
-            if resp.status_code in NON_RETRYABLE:
+                last_error = "HTTP 429 (rate limited)"
+                delay = _retry_after_seconds(resp, delay)
+            elif resp.status_code in NON_RETRYABLE:
                 resp.raise_for_status()
-            if resp.status_code >= 500:
+            elif resp.status_code >= 500:
                 _circuit.record_failure()
-                await asyncio.sleep(min(2 ** attempt + 1, 10))
-                continue
-
-            resp.raise_for_status()
-            _circuit.record_success()
-            return resp
+                last_error = f"HTTP {resp.status_code}"
+            else:
+                resp.raise_for_status()
+                _circuit.record_success()
+                return resp
         except httpx.HTTPStatusError:
             raise
         except (httpx.TimeoutException, httpx.RequestError) as exc:
-            last_exc = exc
             _circuit.record_failure()
-            if attempt < retries - 1:
-                await asyncio.sleep(min(2 ** attempt + 1, 10))
+            if is_last:
+                raise
+            last_error = f"{type(exc).__name__}: {exc}"
 
-    raise RuntimeError(f"OpenAI request failed after {retries} attempts: {last_exc}")
+        attempt += 1
+        if not is_last:
+            await asyncio.sleep(delay)
+
+    raise RuntimeError(f"OpenAI request failed after {retries} attempts: {last_error}")
+
+
+def _retry_after_seconds(resp: httpx.Response, default: float) -> float:
+    """Honor OpenAI's Retry-After header (seconds), capped so a turn can't hang."""
+    try:
+        return max(0.0, min(float(resp.headers.get("retry-after", default)), 20.0))
+    except (TypeError, ValueError):
+        return default
+
+
+def _is_model_access_error(resp: httpx.Response) -> bool:
+    try:
+        err = (resp.json() or {}).get("error") or {}
+    except ValueError:
+        return False
+    code = str(err.get("code") or "")
+    message = str(err.get("message") or "").lower()
+    return code == "model_not_found" or "model" in message
 
 
 def _extract_content(response: dict) -> str:
@@ -1971,7 +2041,7 @@ class ConversationEngine:
 
     async def clear_history(self, user_id: str) -> int:
         from backend.app import SessionLocal
-        from backend.ai.models import AIConversation
+        from backend.ai.models import AIConversation, AIFeedback
         from backend.ai.conversation_flow import clear_user_ai_caches
 
         uid = str(user_id or "").strip()
@@ -1991,6 +2061,16 @@ class ConversationEngine:
                 ids = {uid}
                 if uid.isdigit():
                     ids.add(str(int(uid)))
+                conv_ids = (
+                    db.query(AIConversation.id)
+                    .filter(AIConversation.user_id.in_(list(ids)))
+                    .subquery()
+                )
+                # ai_feedback.conversation_id is a plain FK (no cascade), so on
+                # MySQL the conversation delete fails while feedback rows exist.
+                db.query(AIFeedback).filter(
+                    AIFeedback.conversation_id.in_(db.query(conv_ids.c.id))
+                ).delete(synchronize_session=False)
                 n = (
                     db.query(AIConversation)
                     .filter(AIConversation.user_id.in_(list(ids)))
@@ -2001,7 +2081,8 @@ class ConversationEngine:
             except Exception as exc:
                 logger.error("clear_history failed: %s", exc)
                 db.rollback()
-                return 0
+                # Let the route report the failure instead of "cleared: true".
+                raise
             finally:
                 db.close()
 
@@ -2232,25 +2313,14 @@ class ConversationEngine:
         stored_a11y = await load_accessibility_profile(user_id)
         effective_a11y = merge_accessibility_profiles(stored_a11y, accessibility_profile)
         if accessibility_profile and effective_a11y:
-            asyncio.create_task(save_accessibility_profile(user_id, effective_a11y))
+            # Keep a reference: the loop only holds weak refs to tasks.
+            _spawn_background(save_accessibility_profile(user_id, effective_a11y))
 
         from backend.ai.tone import CONVERSATION_TONE_KEY, normalize_tone, tone_system_prompt, tone_temperature
         memories = [m for m in memories if m.get("key") != CONVERSATION_TONE_KEY]
         active_tone = normalize_tone(tone) if tone else stored_tone
         if tone and normalize_tone(tone) != stored_tone:
             active_tone = await self.set_conversation_tone(user_id, tone)
-        # #region agent log
-        _tone_debug_log(
-            "A_B", "ai_engine.py:chat_tone_resolved",
-            "tone resolved for chat turn",
-            {
-                "request_tone": tone,
-                "stored_tone": stored_tone,
-                "active_tone": active_tone,
-                "user_id_prefix": str(user_id)[:8],
-            },
-        )
-        # #endregion
 
         # Sticky language: use the message, then profile preference, then
         # recent history. Prevents short replies like 'sí' / 'ok' from
@@ -2613,22 +2683,6 @@ class ConversationEngine:
         tone_msg = {"role": "system", "content": tone_system_prompt(active_tone, lang=lang)}
         messages.append(tone_msg)
 
-        # #region agent log
-        sys_count = sum(1 for m in messages if m.get("role") == "system")
-        _tone_debug_log(
-            "C", "ai_engine.py:tone_injection",
-            "tone system message appended before user turn",
-            {
-                "active_tone": active_tone,
-                "lang": lang,
-                "system_message_count": sys_count,
-                "tone_prompt_prefix": tone_msg["content"][:80],
-                "placement": "last_system_before_user",
-                "temperature": tone_temperature(active_tone),
-                "runId": "post-fix-v2",
-            },
-        )
-        # #endregion
 
         from backend.ai.conversation_flow import build_repeat_action_reminder
         repeat_reminder = build_repeat_action_reminder(
@@ -3274,7 +3328,6 @@ class ConversationEngine:
         #   • Chain multiple independent tools in a single turn
         #   • Execute a multi-step plan end-to-end (post 3 listings, remind, etc.)
         #   • Call save_user_memory / mark_goal_done as finishing touches
-        MAX_TOOL_ROUNDS = 8
         round_idx = 0
         posted_listing_id: Optional[str] = None
         updated_listing_ids: set[str] = set()
@@ -3648,19 +3701,6 @@ class ConversationEngine:
                     )
                     resolve_err = fn_args.pop("_resolve_error", None)
                     resolved_from = fn_args.pop("_resolved_from_index", None)
-                    # #region agent log
-                    _tone_debug_log(
-                        "R1", "ai_engine.py:claim_listing_enrich",
-                        "claim_listing args enriched",
-                        {
-                            "listing_id_prefix": str(fn_args.get("listing_id", ""))[:8],
-                            "quantity": fn_args.get("quantity"),
-                            "resolved_from_index": bool(resolved_from),
-                            "resolve_error": resolve_err,
-                            "runId": "claim-qty-v2",
-                        },
-                    )
-                    # #endregion
                     if resolve_err:
                         tool_messages.append({
                             "role": "tool",

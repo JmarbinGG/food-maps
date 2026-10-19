@@ -2,6 +2,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef } from '
 
 const UIControlContext = createContext({
   registerHandler: () => () => {},
+  invokeHandler: () => false,
   executeUIAction: () => 0,
   executeUIActionsFromToolResults: () => 0,
 });
@@ -56,27 +57,47 @@ function dispatchUIAction(action) {
 }
 
 export function UIControlProvider({ children }) {
-  const handlersRef = useRef([]);
+  // Named handlers: registerHandler('setLanguage', fn). Listeners (no name)
+  // receive every executed action: registerHandler(fn).
+  const namedRef = useRef(new Map());
+  const listenersRef = useRef(new Set());
 
-  const registerHandler = useCallback((fn) => {
-    handlersRef.current.push(fn);
+  const registerHandler = useCallback((nameOrFn, maybeFn) => {
+    if (typeof nameOrFn === 'function') {
+      const fn = nameOrFn;
+      listenersRef.current.add(fn);
+      return () => { listenersRef.current.delete(fn); };
+    }
+    const name = String(nameOrFn);
+    const fn = maybeFn;
+    if (typeof fn !== 'function') return () => {};
+    namedRef.current.set(name, fn);
     return () => {
-      handlersRef.current = handlersRef.current.filter((h) => h !== fn);
+      if (namedRef.current.get(name) === fn) namedRef.current.delete(name);
     };
   }, []);
 
-  const executeUIAction = useCallback((action) => {
-    dispatchUIAction(action);
-    handlersRef.current.forEach((h) => { try { h(action); } catch (_) { /* */ } });
-    return 1;
+  const invokeHandler = useCallback((name, ...args) => {
+    const fn = namedRef.current.get(name);
+    if (!fn) return false;
+    try { fn(...args); } catch (err) { console.warn(`[UIControl] ${name} failed:`, err); }
+    return true;
   }, []);
+
+  const executeUIAction = useCallback((action) => {
+    // { handler: 'setLanguage', value: 'es' } targets a registered handler.
+    if (action?.handler && invokeHandler(action.handler, action.value)) return 1;
+    dispatchUIAction(action);
+    listenersRef.current.forEach((h) => { try { h(action); } catch (_) { /* */ } });
+    return 1;
+  }, [invokeHandler]);
 
   const executeUIActionsFromToolResults = useCallback((toolResults) => {
     if (!Array.isArray(toolResults)) return 0;
     let count = 0;
     for (const tr of toolResults) {
       const result = tr.result ?? tr;
-      if (UI_CONTROL_TOOLS.has(tr.tool) && (result.ok || result.success !== false)) {
+      if (UI_CONTROL_TOOLS.has(tr.tool) && result.ok !== false && result.success !== false && !result.error) {
         dispatchUIAction({ ...result, tool: tr.tool });
         count += 1;
       }
@@ -90,9 +111,10 @@ export function UIControlProvider({ children }) {
 
   const value = useMemo(() => ({
     registerHandler,
+    invokeHandler,
     executeUIAction,
     executeUIActionsFromToolResults,
-  }), [registerHandler, executeUIAction, executeUIActionsFromToolResults]);
+  }), [registerHandler, invokeHandler, executeUIAction, executeUIActionsFromToolResults]);
 
   return <UIControlContext.Provider value={value}>{children}</UIControlContext.Provider>;
 }

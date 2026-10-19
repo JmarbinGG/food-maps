@@ -25,12 +25,20 @@ export default function FormVoiceGuideHost({
   className = '',
 }) {
   const defaults = DEFAULTS_BY_FORM[formId] || DEFAULTS_BY_FORM['share-food'];
+  // Host pages pass a fresh fieldHints object on every mountPanel() call;
+  // key on its content so the hints identity is stable across renders.
+  const hintsKey = JSON.stringify(fieldHints || null);
+  const mergedHints = React.useMemo(
+    () => ((fieldHints && Object.keys(fieldHints).length)
+      ? { ...defaults.hints, ...fieldHints }
+      : defaults.hints),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [defaults, hintsKey],
+  );
   const { guide } = useFormVoiceGuide({
     formId,
     welcomeMessage: welcomeMessage || defaults.welcome,
-    fieldHints: (fieldHints && Object.keys(fieldHints).length)
-      ? { ...defaults.hints, ...fieldHints }
-      : defaults.hints,
+    fieldHints: mergedHints,
   });
   return <FormVoiceGuide guide={guide} className={className} />;
 }

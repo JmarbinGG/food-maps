@@ -151,7 +151,10 @@ const EMPTY_STATE = {
   updatedAt: 0,
 }
 
-let state = { ...EMPTY_STATE }
+// Start from this tab's saved progress; otherwise the first subscriber gets
+// an empty state and the next notify() overwrites what was saved. Speech
+// never survives a reload.
+let state = { ...EMPTY_STATE, ...(loadPersistedGuideState() || {}), isSpeaking: false }
 let speakGeneration = 0
 let activeStop = null
 /** @type {((replay: Function|null) => void) | null} */

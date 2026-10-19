@@ -866,11 +866,12 @@ function App() {
     window.requestPhone = requestPhone;
     return () => { delete window.requestPhone; };
   }, [requestPhone]);
-  var logout = false;
+  // Set when an alert logs the user out; closing that alert reloads the page.
+  const logoutOnCloseRef = React.useRef(false);
   // Alert helper
   const showAlert = React.useCallback((message, opts = {}, logout) => {
-    logout = logout;
     if (logout) {
+      logoutOnCloseRef.current = true;
       localStorage.removeItem('auth_token');
       localStorage.removeItem('current_user');
       dispatchFoodmapsAuthChanged();
@@ -885,7 +886,8 @@ function App() {
 
   const handleAlertClose = React.useCallback(() => {
     setAlertOpen(false);
-    if (logout) {
+    if (logoutOnCloseRef.current) {
+      logoutOnCloseRef.current = false;
       localStorage.removeItem('auth_token');
       localStorage.removeItem('current_user');
       dispatchFoodmapsAuthChanged();

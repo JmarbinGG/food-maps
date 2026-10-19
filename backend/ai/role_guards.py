@@ -29,17 +29,33 @@ CLAIM_BLOCKED_ROLES = frozenset({
 })
 
 
+class RoleLookupError(RuntimeError):
+    """The user's role could not be determined (profile lookup failed)."""
+
+
+async def _lookup_role_strict(uid: str) -> str:
+    from backend.ai.tools import _get_user_profile
+    try:
+        raw = await _get_user_profile(uid)
+    except Exception as exc:
+        raise RoleLookupError(f"profile lookup failed for user {uid}") from exc
+    if not raw or raw.get("error"):
+        raise RoleLookupError(f"no profile for user {uid}")
+    return _role_from_profile(raw)
+
+
 async def resolve_user_community_role(user_id: str) -> str:
+    """Best-effort role for prompt/context use; falls back to "member"."""
     uid = str(user_id or "").strip()
     if not uid:
         return "member"
     try:
-        from backend.ai.tools import _get_user_profile
-        raw = await _get_user_profile(uid)
-    except Exception:
+        return await _lookup_role_strict(uid)
+    except RoleLookupError:
         return "member"
-    if not raw or raw.get("error"):
-        return "member"
+
+
+def _role_from_profile(raw: dict) -> str:
     nested = raw.get("profile")
     if isinstance(nested, dict):
         role = nested.get("community_role") or nested.get("role")
@@ -58,7 +74,14 @@ async def check_role_allows_tool(
     uid = str(user_id or "").strip()
     if not uid or not name:
         return None
-    role = (role_hint or await resolve_user_community_role(uid)).lower().strip()
+    if role_hint:
+        role = role_hint.lower().strip()
+    elif name in POST_TOOLS or name in CLAIM_TOOLS:
+        # Fail closed: an unknown role must not pass as an allowed one.
+        # Callers turn RoleLookupError into a "try again" response.
+        role = await _lookup_role_strict(uid)
+    else:
+        return None
     if name in POST_TOOLS and role in POST_BLOCKED_ROLES:
         if role == "recipient":
             msg = (

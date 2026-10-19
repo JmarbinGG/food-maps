@@ -7,7 +7,6 @@
     "prebuild": "node scripts/sync-from-ai.mjs",
     "build": "node build.mjs",
     "sync": "node scripts/sync-from-ai.mjs",
-    "build:vite": "vite build",
     "dev": "vite"
   },
   "dependencies": {

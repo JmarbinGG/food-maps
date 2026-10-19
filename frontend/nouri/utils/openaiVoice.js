@@ -35,7 +35,7 @@ export async function transcribeAudio(audioBlob) {
   const response = await resilientFetch(
     '/api/ai/transcribe',
     { method: 'POST', body: formData },
-    { timeout: 45000, label: 'ai/transcribe' },
+    { timeout: 45000, retries: 2, label: 'ai/transcribe' },
   );
 
   if (!response.ok) {
@@ -64,7 +64,7 @@ export async function textToSpeech(text, options = {}) {
         lang: options.lang || 'en',
       }),
     },
-    { timeout: 30000, label: 'ai/tts' },
+    { timeout: 30000, retries: 2, label: 'ai/tts' },
   );
 
   if (!response.ok) {

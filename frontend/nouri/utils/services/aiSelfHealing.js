@@ -99,17 +99,28 @@ function isRetryableStatus(status) {
   return status === 408 || status === 429 || status >= 500;
 }
 
+// Only server-side trouble means the AI link is unhealthy. A 401/403/422 or
+// "no pending confirmation" 400 is a normal answer from a working server.
+function isOutageStatus(status) {
+  return status === 408 || status >= 500;
+}
+
 /**
  * Fetch with Do Good Food Maps auth headers, AbortController timeout, and retries.
+ *
+ * Retries default to 2 for GET and 0 for everything else: re-sending a chat
+ * turn, claim confirmation, or bulk create after a timeout can perform the
+ * action twice. Pass `retries` explicitly for POSTs that are safe to repeat.
  * @param {string} url
  * @param {RequestInit} init
  * @param {{ timeout?: number, signal?: AbortSignal, label?: string, retries?: number, backoff?: number[] }} [opts]
  */
 export async function resilientFetch(url, init = {}, opts = {}) {
+  const isGet = String(init.method || 'GET').toUpperCase() === 'GET';
   const {
     signal: callerSignal = null,
     timeout = 30000,
-    retries = 2,
+    retries = isGet ? 2 : 0,
     backoff = [400, 1200],
   } = opts;
 
@@ -133,13 +144,13 @@ export async function resilientFetch(url, init = {}, opts = {}) {
       clearTimeout(timer);
 
       if (!response.ok && isRetryableStatus(response.status) && attempt < attempts - 1) {
-        aiHealth.recordFailure();
+        if (isOutageStatus(response.status)) aiHealth.recordFailure();
         await sleep(backoff[Math.min(attempt, backoff.length - 1)] || 800);
         continue;
       }
 
-      if (response.ok) aiHealth.recordSuccess();
-      else aiHealth.recordFailure();
+      if (isOutageStatus(response.status)) aiHealth.recordFailure();
+      else if (response.ok || response.status < 429) aiHealth.recordSuccess();
       return response;
     } catch (err) {
       clearTimeout(timer);

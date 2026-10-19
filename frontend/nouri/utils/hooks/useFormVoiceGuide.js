@@ -57,8 +57,10 @@ export default function useFormVoiceGuide({
     if (settings.preferTextOverVoice && preferText) {
       /* captions still register form */
     }
-    welcomedRef.current = true;
+    // Mark welcomed only once it actually runs: a re-render inside the 80ms
+    // clears this timer, and marking early would block the retry.
     const timer = setTimeout(() => {
+      welcomedRef.current = true;
       registerForm({ formId, welcomeMessage, hints: resolvedHints }, guideLang);
     }, 80);
     return () => clearTimeout(timer);

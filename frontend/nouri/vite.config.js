@@ -9,7 +9,10 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: path.resolve(__dirname, '../assets/nouri'),
-    emptyOutDir: true,
+    // Never wipe assets/nouri: the committed bundle is what production serves.
+    // `npm run build` (esbuild + sync) is the supported build; this config is
+    // for `npm run dev` only.
+    emptyOutDir: false,
     rollupOptions: {
       input: path.resolve(__dirname, 'src/main.jsx'),
       output: {

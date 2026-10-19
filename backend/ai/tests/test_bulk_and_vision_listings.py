@@ -266,6 +266,14 @@ class TestBulkListingsRoute:
             "backend.tools._resolve_community",
             new=AsyncMock(return_value=("12", "Alameda High")),
         ), patch(
+            # The MySQL path resolves names against DistributionCenter rows;
+            # stub it so the test does not depend on whatever DB is configured.
+            "backend.ai.bulk_mysql.resolve_community_mysql",
+            return_value=("12", "Alameda High"),
+        ), patch(
+            "backend.ai.bulk_mysql.fetch_community_location_mysql",
+            return_value=None,
+        ), patch(
             "backend.tools._resolve_create_listing_status",
             new=AsyncMock(return_value="available"),
         ):

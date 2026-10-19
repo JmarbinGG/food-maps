@@ -12,6 +12,9 @@ export const AI_TONE_LABELS = {
   empathetic: 'Empathetic',
 };
 
+// Matches AIPublicChatRequest.message max_length on the backend.
+const PUBLIC_CHAT_MAX_CHARS = 1500;
+
 const LISTINGS_MUTATING_TOOLS = new Set([
   'claim_listing', 'confirm_claim', 'cancel_claim',
   'post_food_listing', 'post_food_request', 'bulk_import_listings',
@@ -45,6 +48,9 @@ function normalizeAssistantMessage(data) {
   }));
   return {
     id: `a-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    // Server row id; /api/ai/feedback needs this, not the client id above.
+    conversationId: data.conversation_id || null,
+    timestamp: data.timestamp || new Date().toISOString(),
     role: 'assistant',
     message: data.text || '',
     toolResults,
@@ -111,6 +117,8 @@ export function useAIChat() {
             const actions = meta.actions || [];
             return {
               id: `h-${i}`,
+              conversationId: m.id || null,
+              timestamp: m.created_at || m.timestamp || undefined,
               role: m.role,
               message: m.message || m.text || '',
               fromHistory: true,
@@ -145,29 +153,42 @@ export function useAIChat() {
   const sendMessage = useCallback(async (text, opts = {}) => {
     const trimmed = (text || '').trim();
     if (!trimmed) return;
+    // opts.lang lets a caller switch language and send in the same tick,
+    // before the setLanguage() state update has reached this closure.
+    const lang = opts.lang || language;
     setError(null);
-    lastUserMessageRef.current = trimmed;
-    setMessages((m) => [...m, {
-      id: `u-${Date.now()}`,
-      role: 'user',
-      message: opts.displayText || trimmed,
-    }]);
+    if (!opts.silent) {
+      lastUserMessageRef.current = trimmed;
+      setMessages((m) => [...m, {
+        id: `u-${Date.now()}`,
+        role: 'user',
+        message: opts.displayText || trimmed,
+        timestamp: new Date().toISOString(),
+      }]);
+    }
     setIsLoading(true);
     try {
       let data;
       if (!isAuthenticated || !user?.id) {
-        data = await aiChatService.publicChat(trimmed, language);
+        if (trimmed.length > PUBLIC_CHAT_MAX_CHARS) {
+          setError(lang === 'es'
+            ? `El mensaje es demasiado largo (máximo ${PUBLIC_CHAT_MAX_CHARS} caracteres). Inicia sesión para mensajes más largos.`
+            : `That message is too long (max ${PUBLIC_CHAT_MAX_CHARS} characters). Sign in to send longer messages.`);
+          return;
+        }
+        data = await aiChatService.publicChat(trimmed, lang);
         setMessages((m) => [...m, {
           id: `a-${Date.now()}`,
           role: 'assistant',
           message: data.text || '',
           suggestions: data.suggestions || [],
+          timestamp: new Date().toISOString(),
         }]);
         return;
       }
       data = await aiChatService.chat(user.id, trimmed, {
         tone,
-        lang: language,
+        lang,
         accessibilityProfile: a11ySettings,
         guideState,
         includeAudio: opts.includeAudio,
@@ -184,7 +205,12 @@ export function useAIChat() {
     }
   }, [user?.id, isAuthenticated, language, tone, a11ySettings, guideState]);
 
-  const sendSilentMessage = sendMessage;
+  // System-generated follow-ups (e.g. "bulk create already done"): the
+  // instruction text goes to the model but never shows as a user bubble.
+  const sendSilentMessage = useCallback(
+    (text, opts = {}) => sendMessage(text, { ...opts, silent: true }),
+    [sendMessage],
+  );
 
   const sendVoice = useCallback(async (blob) => {
     if (!user?.id) {
@@ -209,6 +235,7 @@ export function useAIChat() {
           role: 'user',
           message: data.transcript,
           source: 'voice',
+          timestamp: new Date().toISOString(),
         }]);
       }
       const assistant = {
@@ -259,14 +286,28 @@ export function useAIChat() {
     setMessages([]);
   }, [user?.id]);
 
-  const submitFeedback = useCallback(async (conversationId, rating, comment) => {
-    if (!user?.id) return;
-    await aiChatService.submitFeedback({
-      user_id: user.id,
-      conversation_id: String(conversationId),
-      rating,
-      comment,
-    });
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
+  // Accepts either a client message id (what the panel passes) or a server
+  // conversation id. Never rejects: feedback is best-effort.
+  const submitFeedback = useCallback(async (messageOrConversationId, rating, comment) => {
+    if (!user?.id) return false;
+    const msg = messagesRef.current.find((m) => m.id === messageOrConversationId);
+    const conversationId = msg ? msg.conversationId : messageOrConversationId;
+    if (!/^\d+$/.test(String(conversationId ?? ''))) return false;
+    try {
+      await aiChatService.submitFeedback({
+        user_id: user.id,
+        conversation_id: String(conversationId),
+        rating,
+        comment,
+      });
+      return true;
+    } catch (err) {
+      console.warn('[Nouri] feedback not saved:', err?.message || err);
+      return false;
+    }
   }, [user?.id]);
 
   const appendLocalMessage = useCallback((msg) => {

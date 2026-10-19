@@ -8,6 +8,6 @@ cd "$ROOT/frontend/nouri"
 if [ ! -d node_modules ]; then
   npm ci
 fi
-npm run sync
+# prebuild syncs backend/ai/{assistant,common,food} into src/ first.
 npm run build
 echo "Done. Output: frontend/assets/nouri/nouri-ai.js and nouri-ai.css"

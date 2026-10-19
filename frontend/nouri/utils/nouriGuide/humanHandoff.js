@@ -40,7 +40,10 @@ export function clearGuideFailures() {
 export function recordGuideFailure(reason = '') {
   const next = getGuideFailureCount() + 1
   setGuideFailureCount(next)
-  if (typeof window !== 'undefined' && next >= FAILURE_THRESHOLD) {
+  // Suggest a person once, when the count crosses the threshold. Firing on
+  // every later failure (e.g. during an AI outage) popped an alert and
+  // overwrote the chat input on each message. A success resets the count.
+  if (typeof window !== 'undefined' && next === FAILURE_THRESHOLD) {
     window.dispatchEvent(new CustomEvent('nouri:handoff-suggested', {
       detail: { reason, count: next },
     }))

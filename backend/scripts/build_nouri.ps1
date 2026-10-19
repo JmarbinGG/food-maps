@@ -2,7 +2,8 @@
 # Usage (from repo root):
 #   .\backend\scripts\build_nouri.ps1
 #
-# After build, bump ?v=20260902-nouri in index.html, landing.html, voice-search.html if you change the tag.
+# After build, bump the ?v= cache-bust tag on nouri-ai.js / nouri-ai.css in
+# frontend/index.html, landing.html and voice-search.html (all six must match).
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
@@ -13,9 +14,7 @@ if (-not (Test-Path "node_modules")) {
     Write-Host "Installing npm dependencies..."
     npm ci
 }
-Write-Host "Syncing Nouri sources from backend/ai..."
-npm run sync
-Write-Host "Building Nouri bundle..."
+Write-Host "Building Nouri bundle (prebuild syncs sources from backend/ai)..."
 npm run build
 Write-Host ""
 Write-Host "Done. Output: frontend/assets/nouri/nouri-ai.js and nouri-ai.css"

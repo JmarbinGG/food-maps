@@ -2,7 +2,11 @@
 
 ## Nouri AI bundle (before every deploy)
 
-The chat FAB and `/api/ai/*` UI are served from static files under `frontend/assets/nouri/`. Rebuild after any change to `frontend/nouri/src/` or `backend/ai/assistant/`:
+The chat FAB and `/api/ai/*` UI are served from static files under `frontend/assets/nouri/`.
+
+**Where to edit:** the JSX in `backend/ai/assistant/`, `backend/ai/common/` and `backend/ai/food/` is the source of truth. Every build copies those folders over `frontend/nouri/src/{assistant,common,food}/`, so an edit made only in `frontend/nouri/src/` there is overwritten. Everything else under `frontend/nouri/` (`src/main.jsx`, `src/nouri.css`, `src/common/` files that have no `backend/ai/common/` counterpart, and all of `utils/`) is edited in place.
+
+Rebuild after any change to those files:
 
 ```bash
 # Linux / EC2
@@ -15,18 +19,20 @@ The chat FAB and `/api/ai/*` UI are served from static files under `frontend/ass
 Or manually:
 
 ```bash
-cd frontend/nouri && npm ci && npm run sync && npm run build
+cd frontend/nouri && npm ci && npm run build   # build runs the sync first
 ```
 
 Then bump the cache-bust `?v=` tag in `frontend/index.html`, `frontend/landing.html`, and `frontend/voice-search.html` (JS + CSS), commit the built assets, and deploy.
 
 ### Deploy checklist (EC2)
 
+The built bundle is committed, so the server does not need Node or a build
+step. Rebuilding on the server would modify tracked files and make the next
+`git pull` conflict.
+
 ```bash
 cd /home/ec2-user/project
 git pull
-cd frontend/nouri && npm ci && npm run sync && npm run build
-cd /home/ec2-user/project
 python3 backend/scripts/verify_production_env.py
 sudo systemctl restart foodmaps
 ```
@@ -36,10 +42,16 @@ sudo systemctl restart foodmaps
 ```bash
 curl -s https://YOUR_DOMAIN/api/ai/health
 curl -s https://YOUR_DOMAIN/api/system/status
-curl -I "https://YOUR_DOMAIN/assets/nouri/nouri-ai.js?v=20260902-nouri"
+curl -I "https://YOUR_DOMAIN/assets/nouri/nouri-ai.js?v=20261019-prod-hardening"
 ```
 
 In the browser: hard-refresh `/index.html` and `/landing.html` — Nouri FAB visible, chat responds, share/claim flows work.
+
+Role smoke test (needs `npm install` at the repo root for Playwright, then `npx playwright install chromium`):
+
+```bash
+SMOKE_BASE_URL=https://YOUR_DOMAIN SMOKE_EMAIL=... SMOKE_PASSWORD=...   SMOKE_HEADED=0 node backend/scripts/browser_nouri_role_smoke.mjs
+```
 
 ---
 
@@ -150,9 +162,11 @@ For development or quick deployment:
 # Start a new screen session
 screen -S foodmaps
 
-# Run the server
-cd /home/ec2-user/project/backend
-uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+# Run the server (from the project root, as backend.app, one worker; see
+# the note in backend/start_server.sh for why app:app and --workers >1 break
+# claim confirmation)
+cd /home/ec2-user/project
+python3 -m uvicorn backend.app:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers
 
 # Detach: Press Ctrl+A then D
 # Reattach: screen -r foodmaps
@@ -163,9 +177,9 @@ uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 # Start a new tmux session
 tmux new -s foodmaps
 
-# Run the server
-cd /home/ec2-user/project/backend
-uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+# Run the server (see the Screen note above)
+cd /home/ec2-user/project
+python3 -m uvicorn backend.app:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers
 
 # Detach: Press Ctrl+B then D
 # Reattach: tmux attach -t foodmaps
@@ -185,8 +199,8 @@ docker compose -f docker-compose.prod.yml up -d
 
 Do **not** deploy the `docker-compose.yml` at the repository root. It is a
 local development stack: it bind-mounts source over the image, runs uvicorn
-with `--reload`, and starts a throwaway Postgres with a hardcoded password
-while production runs MySQL on RDS. It also declares no restart policy, so
+with `--reload`, and starts a throwaway MySQL container with a hardcoded
+password while production runs MySQL on RDS. It also declares no restart policy, so
 nothing comes back after a reboot.
 
 ---

@@ -29,8 +29,13 @@ def test_page_content_routes_allow_long_strings():
 
 
 def test_other_routes_keep_the_generic_cap():
-    for path in ("/api/user/login", "/api/ai/chat", "/api/listings", "/api/pagesomething"):
+    for path in ("/api/user/login", "/api/ai/public_chat", "/api/listings", "/api/pagesomething"):
         assert _max_json_string_chars_for(path) == MAX_JSON_STRING_CHARS
+
+
+def test_ai_chat_allows_pasted_csv_inventories():
+    # AIChatRequest.message allows 200k chars so donors can paste a CSV.
+    assert _max_json_string_chars_for("/api/ai/chat") == 200_000
 
 
 def test_generic_cap_still_rejects_a_long_string():

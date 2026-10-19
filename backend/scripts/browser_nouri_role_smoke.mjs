@@ -21,7 +21,15 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "..", "..");
 const BASE = (process.env.SMOKE_BASE_URL || "http://localhost:8000").replace(/\/$/, "");
-const PASSWORD = process.env.SMOKE_PASSWORD || "password123";
+const IS_LOCAL = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(BASE);
+// The seeded local smoke accounts use LOCAL_DEV_PASSWORD (default password123,
+// see _ensure_local_sqlite_users). Anywhere else the password must be given.
+const PASSWORD = process.env.SMOKE_PASSWORD
+  || (IS_LOCAL ? process.env.LOCAL_DEV_PASSWORD || "password123" : "");
+if (!PASSWORD) {
+  console.error("SMOKE_PASSWORD is required for non-local targets");
+  process.exit(2);
+}
 const SWITCH_ROLES = process.env.SMOKE_SWITCH_ROLES === "1";
 const SMOKE_EMAIL = process.env.SMOKE_EMAIL || "";
 const ADMIN_SECRET = process.env.SMOKE_ADMIN_SECRET || "";
@@ -57,6 +65,10 @@ const ROLE_PROMPTS = [
     forbidAny: [/claimed for you|successfully claimed|claim confirmed/i],
   },
 ];
+
+// Canned fallbacks the backend sends when a tool or OpenAI fails. A reply
+// like this is a failure even if it happens to contain role keywords.
+const FAILURE_REPLY = /hiccup|try again (later|in a moment)|couldn'?t (get|fetch|look|reach|load)|can'?t reach my ai|something went wrong|taking longer than usual/i;
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
@@ -157,26 +169,33 @@ async function prepareTokenForRole(spec) {
   return { token, me, email };
 }
 
-function collectText(dialog) {
-  return dialog.innerText().catch(() => "");
+// Assistant bubbles carry data-nouri-role="assistant" (AIChatPanel MessageBubble).
+function assistantBubbles(dialog) {
+  return dialog.locator('[data-nouri-role="assistant"]');
 }
 
-async function waitForAssistantReply(dialog, previousText, timeoutMs = 90000) {
+/**
+ * Wait for a NEW assistant bubble and return only its text, once it stops
+ * changing. Scoring the whole panel let the user's own prompt (which contains
+ * the expected keywords) or old history fake a pass.
+ */
+async function waitForAssistantReply(dialog, countBefore, timeoutMs = 90000) {
+  const bubbles = assistantBubbles(dialog);
   const start = Date.now();
-  let last = previousText;
   while (Date.now() - start < timeoutMs) {
     await sleep(1500);
-    const text = await collectText(dialog);
-    if (text && text.length > previousText.length + 40 && text !== last) {
-      await sleep(2500);
-      const settled = await collectText(dialog);
-      if (settled.length >= text.length) return settled;
-      last = settled;
-      continue;
+    const count = await bubbles.count().catch(() => 0);
+    if (count <= countBefore) continue;
+    const latest = bubbles.nth(count - 1);
+    let text = await latest.innerText().catch(() => "");
+    for (;;) {
+      await sleep(2000);
+      const again = await latest.innerText().catch(() => text);
+      if (again === text) return text;
+      text = again;
     }
-    last = text;
   }
-  return last;
+  return "";
 }
 
 async function openNouri(page) {
@@ -263,15 +282,29 @@ async function runRole(browser, spec) {
     let dialog = await openNouri(page);
 
     // Clear prior server-side chat history so role replies aren't polluted.
+    // This is required: a leftover donor conversation answered the recipient
+    // prompt in an earlier production run.
     const chatMenu = dialog.locator('button[aria-label="Chat menu"]');
     if (await chatMenu.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await chatMenu.click({ force: true });
-      await page.waitForTimeout(400);
-      const clearBtn = page.getByText(/Clear conversation/i).first();
-      if (await clearBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-        await clearBtn.click({ force: true });
-        await page.waitForTimeout(2000);
+      // No force: the panel's Tailwind classes are generated at runtime by
+      // the CDN script, and until they land the backdrop sits on top of the
+      // header. A forced click hit the backdrop and closed the chat; a normal
+      // click waits until the button really receives pointer events.
+      await chatMenu.click({ timeout: 15000 });
+      const clearBtn = dialog.getByRole("button", { name: /Clear conversation/i });
+      if (!(await clearBtn.isVisible({ timeout: 2000 }).catch(() => false))) {
+        throw new Error("Clear conversation option not found in chat menu");
       }
+      const clearResponse = page.waitForResponse(
+        (res) => res.url().includes("/api/ai/history/") && res.request().method() === "DELETE",
+        { timeout: 15000 },
+      );
+      await clearBtn.click();
+      const res = await clearResponse.catch(() => null);
+      if (!res || !res.ok()) {
+        throw new Error(`Clear conversation failed: ${res ? res.status() : "no DELETE request"}`);
+      }
+      await page.waitForTimeout(1000);
     }
     // Re-open if clear/menu flow closed the panel.
     if (!(await dialog.isVisible().catch(() => false))) {
@@ -281,7 +314,7 @@ async function runRole(browser, spec) {
     const textarea = dialog.locator("textarea").first();
     await textarea.waitFor({ state: "visible", timeout: 15000 });
     await textarea.click({ force: true });
-    const before = await collectText(dialog);
+    const countBefore = await assistantBubbles(dialog).count();
 
     await textarea.pressSequentially(spec.prompt, { delay: 8 });
 
@@ -304,34 +337,33 @@ async function runRole(browser, spec) {
       );
     }
 
-    const after = await waitForAssistantReply(dialog, before, 60000);
-    // Score only new panel text so prior chat history / the user prompt cannot fake a pass.
-    const delta = (after || "").slice((before || "").length);
-    result.replySnippet = (delta || after || "").replace(/\s+/g, " ").trim().slice(-800);
+    // Only the newest assistant bubble is scored.
+    const reply = await waitForAssistantReply(dialog, countBefore, 60000);
+    result.replySnippet = reply.replace(/\s+/g, " ").trim().slice(0, 800);
 
     const shot = path.join(ARTIFACTS, `${spec.role}.png`);
     await page.screenshot({ path: shot, fullPage: true });
     result.screenshot = shot;
 
-    const matchedExpect = spec.expectAny.some((re) => re.test(delta || ""));
-    const hitForbid = spec.forbidAny.some((re) => re.test(delta || ""));
-    const hasAssistant =
-      delta.length > 40 &&
-      /sorry|happy|great|help|food|listing|share|stat|member|claim|search|donat|request|scoop|platform|health/i.test(
-        delta
-      );
+    const hasAssistant = reply.trim().length > 20;
+    const matchedExpect = spec.expectAny.some((re) => re.test(reply));
+    const hitForbid = spec.forbidAny.some((re) => re.test(reply));
+    const isFailureReply = FAILURE_REPLY.test(reply);
 
+    if (!hasAssistant) {
+      result.reasons.push("no assistant reply within timeout");
+    }
+    if (isFailureReply) {
+      result.reasons.push("assistant replied with an error/fallback message");
+    }
     if (!matchedExpect) {
       result.reasons.push("assistant reply missing expected role keywords");
     }
     if (hitForbid) {
       result.reasons.push("assistant reply hit forbidden success phrase for this role");
     }
-    if (!hasAssistant) {
-      result.reasons.push("no meaningful assistant reply within timeout");
-    }
 
-    result.pass = matchedExpect && !hitForbid && result.reasons.length === 0;
+    result.pass = result.reasons.length === 0;
     if (result.pass) result.reasons.push("ok");
   } catch (err) {
     result.reasons.push(String(err && err.message ? err.message : err));
@@ -351,6 +383,10 @@ async function runRole(browser, spec) {
 
 async function main() {
   fs.mkdirSync(ARTIFACTS, { recursive: true });
+  // Stale screenshots from earlier runs make a clean run look like it failed.
+  for (const name of fs.readdirSync(ARTIFACTS)) {
+    if (name.endsWith(".png") || name === "summary.json") fs.rmSync(path.join(ARTIFACTS, name));
+  }
   console.log(`Target: ${BASE}`);
   console.log(`Switch roles: ${SWITCH_ROLES} email=${SMOKE_EMAIL || "(per-role)"}`);
 

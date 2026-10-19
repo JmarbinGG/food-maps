@@ -49,3 +49,6 @@ node_modules/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Browser smoke-test output (screenshots of live accounts, emails)
+artifacts/

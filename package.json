@@ -1,0 +1,19 @@
+{
+  "name": "food-maps",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Do Good Food Maps repo tooling (browser smoke tests). The Nouri bundle has its own package in frontend/nouri.",
+  "type": "module",
+  "scripts": {
+    "build:nouri": "npm --prefix frontend/nouri run build",
+    "smoke:nouri": "node backend/scripts/browser_nouri_role_smoke.mjs",
+    "smoke:links": "node frontend/nouri/utils/socialMediaLinks.smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JmarbinGG/food-maps.git"
+  }
+}

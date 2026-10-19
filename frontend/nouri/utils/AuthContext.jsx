@@ -25,6 +25,16 @@ function clearStoredUser() {
   }
 }
 
+// JWT segments are base64url (RFC 7515): '-'/'_' instead of '+'/'/', no
+// padding, and UTF-8 bytes. Plain atob() throws on the former and garbles
+// non-ASCII names.
+function decodeJwtPayload(token) {
+  const seg = String(token).split('.')[1] || '';
+  const b64 = seg.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(seg.length / 4) * 4, '=');
+  const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 function readAuth() {
   const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
   const stored = readStoredUser();
@@ -34,7 +44,12 @@ function readAuth() {
     return { user: null, isAuthenticated: false, isAdmin: false };
   }
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const payload = decodeJwtPayload(token);
+    // Expired token: every AI call would 401. Show signed-out state; the
+    // host app owns the actual logout and storage cleanup.
+    if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+      return { user: null, isAuthenticated: false, isAdmin: false };
+    }
     const jwtUser = {
       id: String(payload.sub || payload.user_id || payload.id || ''),
       email: payload.email || stored?.email,

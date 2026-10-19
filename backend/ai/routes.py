@@ -25,7 +25,7 @@ import asyncio
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from typing import Optional, List, Union
 
@@ -289,6 +289,8 @@ class TTSRequest(BaseModel):
 
 class AIPublicChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=1500)
+    # The visitor's chosen UI language; used when the text itself is ambiguous.
+    lang: Optional[str] = Field(default=None, max_length=8)
 
 
 class AIPublicChatResponse(BaseModel):
@@ -626,6 +628,7 @@ async def ai_enrich_listings(
             f"{OPENAI_BASE_URL}/chat/completions",
             headers=headers,
             json=payload,
+            timeout=45,
         )
         resp.raise_for_status()
         data = resp.json()
@@ -732,8 +735,12 @@ async def ai_bulk_listings(
     uid = _parse_user_id(body.user_id)
     await _require_owner(credentials, uid)
 
-    from backend.ai.role_guards import check_role_allows_tool
-    role_block = await check_role_allows_tool(str(uid), "post_food_listing")
+    from backend.ai.role_guards import RoleLookupError, check_role_allows_tool
+    try:
+        role_block = await check_role_allows_tool(str(uid), "post_food_listing")
+    except RoleLookupError as exc:
+        logger.warning("bulk-listings role check failed: %s", exc)
+        raise AIServiceUnavailable(resolve_lang(request)) from exc
     if role_block:
         raise HTTPException(403, role_block.get("error") or "Cannot post listings with this account role")
 
@@ -881,11 +888,12 @@ async def ai_vision_listing(
             f"{OPENAI_BASE_URL}/chat/completions",
             headers=headers,
             json=payload,
+            timeout=45,
         )
         resp.raise_for_status()
     except Exception as exc:  # noqa: BLE001
         logger.exception("vision-listing OpenAI call failed")
-        raise HTTPException(status_code=502, detail=f"Vision call failed: {exc}") from exc
+        raise HTTPException(status_code=502, detail="Could not read the photo right now. Please try again.") from exc
 
     data = resp.json()
     content_str = (data.get("choices") or [{}])[0].get("message", {}).get("content") or "{}"
@@ -1014,10 +1022,11 @@ async def ai_recipes(
         raise AIServiceUnavailable("en") from exc
     except Exception as exc:
         logger.exception("AI recipes error")
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise AIError("en") from exc
 
     if result.get("error"):
-        raise HTTPException(status_code=502, detail=result["error"])
+        logger.warning("AI recipes upstream error: %s", result["error"])
+        raise AIUpstreamError("en")
 
     return result
 
@@ -1032,13 +1041,16 @@ async def ai_public_chat(
     - No authentication required
     - No conversation history stored
     - No tools / user-specific data access
-    - IP-based rate limited
+    - IP-based rate limited, in its own stricter bucket (it spends tokens
+      without a login)
     """
-    _enforce_rate_limit(request)
+    from backend.ai.ai_engine import PUBLIC_RATE_LIMIT, detect_spanish
 
-    from backend.ai.ai_engine import detect_spanish
+    if not check_rate_limit(f"public:{_client_ip(request)}", limit=PUBLIC_RATE_LIMIT):
+        raise HTTPException(429, "Rate limit exceeded. Try again later.")
 
-    lang = "es" if detect_spanish(body.message) else "en"
+    ui_lang = (body.lang or "").strip().lower()[:2]
+    lang = "es" if detect_spanish(body.message) or ui_lang == "es" else "en"
     messages = [
         {"role": "system", "content": conversation_engine.system_prompt},
         {
@@ -1372,7 +1384,7 @@ async def ai_upload_image(
             fh.write(data)
     except OSError as exc:
         logger.exception("Failed to write upload")
-        raise HTTPException(500, f"Could not save image: {exc}") from exc
+        raise HTTPException(500, "Could not save image") from exc
 
     url = f"/uploads/ai/{filename}"
     return {"url": url, "size": len(data), "content_type": base_type}
@@ -1385,12 +1397,14 @@ async def ai_voice(
     user_id: str = Form(..., min_length=1, max_length=64),
     include_audio: bool = Form(default=True),
     tone: Optional[str] = Form(default=None),
+    lang: Optional[str] = Form(default=None, max_length=8),
     accessibility_profile: Optional[str] = Form(default=None),
     guide_state: Optional[str] = Form(default=None),
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict:
     _enforce_rate_limit(request)
     uid = _parse_user_id(user_id)
+    ui_lang = str(lang or "").lower()[:2]
     # Voice is a real-user only surface (recording audio requires an
     # active session). Accept Do Good Food Maps numeric IDs or UUIDs; reject
     # garbled input with 400 before ownership checks.
@@ -1426,7 +1440,7 @@ async def ai_voice(
     except Exception:
         guide_payload = None
 
-    lang = resolve_lang(request)
+    lang = ui_lang if ui_lang in ("en", "es") else resolve_lang(request)
     whisper_name = _audio_filename_for_whisper(audio.filename, audio.content_type)
     try:
         transcript = await conversation_engine.transcribe_audio(
@@ -1442,6 +1456,7 @@ async def ai_voice(
             message=transcript,
             include_audio=include_audio,
             tone=tone,
+            lang=ui_lang if ui_lang in ("en", "es") else None,
             accessibility_profile=a11y_payload,
             guide_state=guide_payload,
             role_hint=_auth_role_from_credentials(credentials),
@@ -1822,9 +1837,15 @@ async def ai_feedback(
 
     def _save():
         from backend.app import SessionLocal
-        from backend.ai.models import AIFeedback
+        from backend.ai.models import AIConversation, AIFeedback
         db = SessionLocal()
         try:
+            owner_ids = {str(uid)}
+            if str(uid).isdigit():
+                owner_ids.add(str(int(uid)))
+            conv = db.query(AIConversation.user_id).filter(AIConversation.id == conv_id).first()
+            if conv is None or str(conv.user_id) not in owner_ids:
+                return "not_found"
             row = AIFeedback(
                 conversation_id=conv_id,
                 user_id=uid,
@@ -1843,6 +1864,8 @@ async def ai_feedback(
             db.close()
 
     feedback_id = await asyncio.get_event_loop().run_in_executor(None, _save)
+    if feedback_id == "not_found":
+        raise HTTPException(404, "Conversation not found")
     if feedback_id is None:
         raise HTTPException(500, "Failed to save feedback")
     return {"success": True, "feedback_id": feedback_id}
@@ -2017,6 +2040,10 @@ async def _send_sms_via_main_app(to_phone: str, message: str) -> bool:
         return False
 
 
+# A reminder whose SMS fails is retried every 15 min for this long.
+REMINDER_RETRY_WINDOW = timedelta(hours=2)
+
+
 async def process_pending_reminders() -> int:
     """Find due AIReminders, look up user phone, send SMS, mark sent."""
     from backend.app import SessionLocal
@@ -2045,7 +2072,11 @@ async def process_pending_reminders() -> int:
                     "sms_consent": user.sms_consent_given if user else False,
                     "message": r.message,
                     "reminder_type": r.reminder_type,
+                    # sent_at on an unsent row marks a previous failed attempt.
+                    "first_attempt_at": r.sent_at,
                 })
+                # Claim the row before sending so a slow send can't be picked
+                # up twice; _requeue_failed() releases it if the SMS fails.
                 r.sent = True
                 r.sent_at = now
             db.commit()
@@ -2066,14 +2097,42 @@ async def process_pending_reminders() -> int:
         "general": "📋 Reminder",
     }
     sent = 0
+    failed: list[dict] = []
     for t in tasks:
         if t["phone"] and t["sms_consent"]:
             prefix = prefix_map.get(t["reminder_type"], "📋 Reminder")
             body = f"[Do Good Food Maps] {prefix}: {t['message']}"
             if await _send_sms_via_main_app(t["phone"], body):
                 sent += 1
+            else:
+                failed.append(t)
         else:
             logger.info("Skipping SMS for reminder %s (no phone or no consent)", t["id"])
+
+    def _requeue_failed() -> None:
+        db = SessionLocal()
+        try:
+            now = _utcnow()
+            for t in failed:
+                first = t["first_attempt_at"] or now
+                if now - first > REMINDER_RETRY_WINDOW:
+                    logger.error("Giving up on reminder %s after SMS failures since %s", t["id"], first)
+                    continue
+                r = db.query(AIReminder).filter(AIReminder.id == t["id"]).first()
+                if r is None:
+                    continue
+                r.sent = False
+                r.sent_at = first
+                r.trigger_time = now + timedelta(minutes=15)
+            db.commit()
+        except Exception as exc:
+            logger.error("Reminder requeue failed: %s", exc)
+            db.rollback()
+        finally:
+            db.close()
+
+    if failed:
+        await asyncio.get_event_loop().run_in_executor(None, _requeue_failed)
 
     if tasks:
         logger.info("Processed %d reminder(s), sent %d SMS", len(tasks), sent)
