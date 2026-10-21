@@ -1704,7 +1704,7 @@ async def startup_event():
     )
     _add_missing_model_columns(
         User, FoodResource, DistributionCenter, FavoriteLocation, ListingCategory,
-        ApprovalCode, PlatformSetting, UserCommunity,
+        ApprovalCode, PlatformSetting, UserCommunity, ImpactEntry,
         AIConversation, AIReminder, AIFeedback, AIUserPreference, AIGoal, AIBroadcast,
     )
     _backfill_user_is_admin()

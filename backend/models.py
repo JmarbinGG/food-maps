@@ -661,6 +661,9 @@ class ImpactEntry(Base):
     food_given_lb = Column(Float, nullable=False, default=0)
     notes = Column(Text, nullable=True)
     created_by = Column(Integer, nullable=True)
+    # Set on rows copied from another system (e.g. "dogoods:<uuid>") so an
+    # import can be re-run without creating duplicates. Null for manual entries.
+    source_ref = Column(String(64), nullable=True, unique=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
