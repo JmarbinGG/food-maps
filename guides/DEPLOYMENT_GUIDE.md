@@ -42,7 +42,7 @@ sudo systemctl restart foodmaps
 ```bash
 curl -s https://YOUR_DOMAIN/api/ai/health
 curl -s https://YOUR_DOMAIN/api/system/status
-curl -I "https://YOUR_DOMAIN/assets/nouri/nouri-ai.js?v=20261019-prod-hardening"
+curl -I "https://YOUR_DOMAIN/assets/nouri/nouri-ai.js?v=20261019-voice-prod"
 ```
 
 In the browser: hard-refresh `/index.html` and `/landing.html` — Nouri FAB visible, chat responds, share/claim flows work.

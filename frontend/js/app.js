@@ -306,6 +306,12 @@ function App() {
         window.history.replaceState(null, null, nextUrl);
       }
 
+      // Admin deep link: /?tab=impact&dateFilter=current-week opens the admin
+      // panel on Impact Data (openAdminPanel verifies admin access first).
+      if (params.get('tab') === 'impact' && localStorage.getItem('auth_token')) {
+        setTimeout(() => window.openAdminPanel && window.openAdminPanel(), 600);
+      }
+
       // Public share links: /?center=<id> works for guests and signed-in users.
       const sharedCenterId = params.get('center');
       if (sharedCenterId) {

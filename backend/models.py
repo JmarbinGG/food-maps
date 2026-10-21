@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SQLEnum, or_
+from sqlalchemy import Column, Integer, String, Float, Date, DateTime, Boolean, Text, ForeignKey, UniqueConstraint, Enum as SQLEnum, or_
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -633,6 +633,36 @@ class VolunteerSignup(Base):
     has_car = Column(String(20), nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ImpactEntry(Base):
+    """Admin-entered impact log (ported from DoGoods /admin/impact).
+
+    One row is either an organization entry (organization + food saved /
+    donated) or a community entry (community + families / school staff
+    helped + food given). Per-community and per-organization totals are
+    computed from these rows on read, so there is nothing to sync.
+    """
+    __tablename__ = "impact_data"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    date = Column(Date, nullable=False, index=True)
+    # Organization entries
+    organization = Column(String(255), nullable=True, index=True)
+    food_saved_from_waste_lb = Column(Float, nullable=False, default=0)
+    food_donated_lb = Column(Float, nullable=False, default=0)
+    # Community entries: community_id points at distribution_centers.id (plain
+    # Integer like users.community_id); the name is kept so a row still reads
+    # correctly if the center is later renamed or removed.
+    community_id = Column(Integer, nullable=True, index=True)
+    community_name = Column(String(255), nullable=True)
+    families_helped = Column(Integer, nullable=False, default=0)
+    school_staff_helped = Column(Integer, nullable=False, default=0)
+    food_given_lb = Column(Float, nullable=False, default=0)
+    notes = Column(Text, nullable=True)
+    created_by = Column(Integer, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class PlatformSetting(Base):

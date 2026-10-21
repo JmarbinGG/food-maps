@@ -338,3 +338,39 @@ def test_retry_after_header_is_honored_and_capped():
     assert ai_engine._retry_after_seconds(_response(429, headers={"retry-after": "3"}), 1) == 3
     assert ai_engine._retry_after_seconds(_response(429, headers={"retry-after": "999"}), 1) == 20
     assert ai_engine._retry_after_seconds(_response(429), 2) == 2
+
+
+# ---------------------------------------------------------------------------
+# Voice: undecodable audio
+# ---------------------------------------------------------------------------
+
+def test_voice_with_audio_whisper_cannot_decode_says_didnt_catch_that(owner_18):
+    whisper_400 = httpx.HTTPStatusError(
+        "bad audio", request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"),
+        response=_response(400, {"error": {"message": "Invalid file format."}}),
+    )
+    client = TestClient(app_module.app, raise_server_exceptions=False)
+    with patch.object(ai_engine.conversation_engine, "transcribe_audio", new=AsyncMock(side_effect=whisper_400)):
+        resp = client.post(
+            "/api/ai/voice",
+            data={"user_id": "18", "include_audio": "false"},
+            files={"audio": ("voice.webm", b"\x1a\x45\xdf\xa3garbage", "audio/webm")},
+        )
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["error_code"] == "invalid_input"
+
+
+def test_voice_upstream_5xx_is_still_an_outage(owner_18):
+    whisper_503 = httpx.HTTPStatusError(
+        "down", request=httpx.Request("POST", "https://api.openai.com/v1/audio/transcriptions"),
+        response=_response(503),
+    )
+    client = TestClient(app_module.app, raise_server_exceptions=False)
+    with patch.object(ai_engine.conversation_engine, "transcribe_audio", new=AsyncMock(side_effect=whisper_503)):
+        resp = client.post(
+            "/api/ai/voice",
+            data={"user_id": "18", "include_audio": "false"},
+            files={"audio": ("voice.webm", b"\x1a\x45\xdf\xa3garbage", "audio/webm")},
+        )
+    assert resp.status_code == 502
+    assert resp.json()["detail"]["error_code"] == "upstream_error"

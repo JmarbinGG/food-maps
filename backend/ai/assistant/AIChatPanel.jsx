@@ -3559,6 +3559,21 @@ function AIChatPanel() {
     setVoiceTranscript('')
     audioChunksRef.current = []
 
+    // Say why up front instead of recording and then failing: /api/ai/voice
+    // needs a signed-in user, and browsers only expose the mic on https.
+    if (!isAuthenticated) {
+      setVoiceError(language === 'es'
+        ? 'Inicia sesión para usar el chat de voz.'
+        : 'Sign in to use voice chat.')
+      return
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setVoiceError(!window.isSecureContext
+        ? (language === 'es' ? 'El chat de voz necesita una conexión segura (https).' : 'Voice chat needs a secure (https) connection.')
+        : (language === 'es' ? 'Este navegador no admite el chat de voz. Prueba Chrome, Edge, Firefox o Safari.' : "This browser doesn't support voice chat. Try Chrome, Edge, Firefox or Safari."))
+      return
+    }
+
     try {
       // Get mic stream (reuse existing or request new)
       if (!mediaStreamRef.current || !mediaStreamRef.current.active) {
@@ -3570,15 +3585,27 @@ function AIChatPanel() {
       // muted, so recording would capture silence. The user is talking now.
       stream.getAudioTracks().forEach((t) => { t.enabled = true })
 
-      // Set up audio analyser for VAD (voice activity detection)
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-      // Created after an await, so iOS/Safari may start it suspended; a
-      // suspended context feeds the analyser zeros and VAD never hears speech.
-      if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
-      const source = audioCtx.createMediaStreamSource(stream)
-      const analyser = audioCtx.createAnalyser()
-      analyser.fftSize = 2048
-      source.connect(analyser)
+      // Set up audio analyser for VAD (voice activity detection). Optional:
+      // without Web Audio we still record, and the user taps to send.
+      let audioCtx = null
+      let source = null
+      let analyser = null
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+        // Created after an await, so iOS/Safari may start it suspended; a
+        // suspended context feeds the analyser zeros and VAD never hears speech.
+        if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {})
+        source = audioCtx.createMediaStreamSource(stream)
+        analyser = audioCtx.createAnalyser()
+        analyser.fftSize = 2048
+        source.connect(analyser)
+      } catch (err) {
+        console.warn('[Voice] Web Audio unavailable; auto-stop disabled:', err?.message || err)
+        audioCtx?.close?.().catch(() => {})
+        audioCtx = null
+        source = null
+        analyser = null
+      }
       analyserRef.current = analyser
 
       // Prefer formats Whisper accepts reliably. Safari often lacks webm;
@@ -3594,8 +3621,8 @@ function AIChatPanel() {
       recorder.onstop = async () => {
         // Clean up analyser
         if (vadFrameRef.current) { cancelAnimationFrame(vadFrameRef.current); vadFrameRef.current = null }
-        source.disconnect()
-        audioCtx.close().catch(() => {})
+        source?.disconnect()
+        audioCtx?.close().catch(() => {})
         setAudioLevel(0)
 
         const chunks = audioChunksRef.current
@@ -3646,6 +3673,11 @@ function AIChatPanel() {
       // silence over real mic noise, so every turn ran to the 30s cap.
       // No speech within 9s (e.g. a hands-free re-arm with nothing to add)
       // also stops, so we can stand down to standby.
+      if (!analyser) {
+        // No level meter: rely on the user's tap, with the usual 30s cap.
+        silenceTimerRef.current = setTimeout(() => stopRecording(), 30000)
+        return
+      }
       const vad = createVoiceActivityDetector()
       const samples = new Float32Array(analyser.fftSize)
 
@@ -3676,7 +3708,7 @@ function AIChatPanel() {
           : (language === 'es' ? 'No se pudo acceder al micrófono' : 'Could not access microphone')
       )
     }
-  }, [language, stopRecording])
+  }, [language, stopRecording, isAuthenticated])
 
   const enterVoiceMode = useCallback(() => {
     setVoiceMode(true)

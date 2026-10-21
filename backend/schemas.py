@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, field_validator
-from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from datetime import date as date_type, datetime
 from typing import Optional, List
 from enum import Enum
 
@@ -270,3 +270,53 @@ class DistributionCenterWithInventory(DistributionCenterResponse):
 
     class Config:
         from_attributes = True
+
+# ---- Impact data entry (admin) ----
+# Upper bounds catch typos (an extra few zeros) without limiting real use.
+MAX_IMPACT_POUNDS = 10_000_000
+MAX_IMPACT_PEOPLE = 1_000_000
+
+
+def _clean_optional_text(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    value = value.strip()
+    return value or None
+
+
+class ImpactEntryCreate(BaseModel):
+    """An organization entry (organization set) or a community entry
+    (community_id set), never both."""
+    date: date_type
+    organization: Optional[str] = Field(default=None, max_length=255)
+    food_saved_from_waste_lb: float = Field(default=0, ge=0, le=MAX_IMPACT_POUNDS)
+    food_donated_lb: float = Field(default=0, ge=0, le=MAX_IMPACT_POUNDS)
+    community_id: Optional[int] = Field(default=None, ge=1)
+    families_helped: int = Field(default=0, ge=0, le=MAX_IMPACT_PEOPLE)
+    school_staff_helped: int = Field(default=0, ge=0, le=MAX_IMPACT_PEOPLE)
+    food_given_lb: float = Field(default=0, ge=0, le=MAX_IMPACT_POUNDS)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+    _strip = field_validator("organization", "notes")(_clean_optional_text)
+
+    @model_validator(mode="after")
+    def _one_kind(self):
+        if bool(self.organization) == bool(self.community_id):
+            raise ValueError("Choose either an organization or a community")
+        return self
+
+
+class ImpactEntryUpdate(BaseModel):
+    """Partial update; only fields that belong to the row's kind are allowed
+    (enforced by the endpoint)."""
+    date: Optional[date_type] = None
+    organization: Optional[str] = Field(default=None, max_length=255)
+    food_saved_from_waste_lb: Optional[float] = Field(default=None, ge=0, le=MAX_IMPACT_POUNDS)
+    food_donated_lb: Optional[float] = Field(default=None, ge=0, le=MAX_IMPACT_POUNDS)
+    community_id: Optional[int] = Field(default=None, ge=1)
+    families_helped: Optional[int] = Field(default=None, ge=0, le=MAX_IMPACT_PEOPLE)
+    school_staff_helped: Optional[int] = Field(default=None, ge=0, le=MAX_IMPACT_PEOPLE)
+    food_given_lb: Optional[float] = Field(default=None, ge=0, le=MAX_IMPACT_POUNDS)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+    _strip = field_validator("organization", "notes")(_clean_optional_text)

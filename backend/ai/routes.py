@@ -1282,6 +1282,24 @@ def _is_whisper_noise(text: str) -> bool:
     return False
 
 
+async def _transcribe(audio_bytes: bytes, filename: str, base_type: str, lang: str) -> str:
+    """Whisper transcription. A 400 from OpenAI means it could not decode the
+    audio (corrupt / truncated recording), so answer "didn't catch that"
+    instead of claiming the AI service is down."""
+    try:
+        return await conversation_engine.transcribe_audio(
+            audio_bytes=audio_bytes,
+            filename=filename,
+            content_type=base_type or None,
+        )
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 400:
+            logger.info("Whisper rejected audio (%s bytes, %s): %s",
+                        len(audio_bytes), base_type, exc.response.text[:200])
+            raise AIInvalidInput(lang) from exc
+        raise
+
+
 _ALLOWED_AUDIO_TYPES = {
     "audio/webm", "audio/wav", "audio/x-wav", "audio/mpeg", "audio/mp4",
     "audio/ogg", "audio/x-m4a", "audio/mp3", "audio/aac", "audio/flac",
@@ -1443,11 +1461,7 @@ async def ai_voice(
     lang = ui_lang if ui_lang in ("en", "es") else resolve_lang(request)
     whisper_name = _audio_filename_for_whisper(audio.filename, audio.content_type)
     try:
-        transcript = await conversation_engine.transcribe_audio(
-            audio_bytes=audio_bytes,
-            filename=whisper_name,
-            content_type=base_type or None,
-        )
+        transcript = await _transcribe(audio_bytes, whisper_name, base_type, lang)
         if _is_whisper_noise(transcript):
             raise AIInvalidInput(lang)
 
@@ -1549,11 +1563,7 @@ async def ai_transcribe(
     lang = resolve_lang(request)
     whisper_name = _audio_filename_for_whisper(audio.filename, audio.content_type)
     try:
-        transcript = await conversation_engine.transcribe_audio(
-            audio_bytes=audio_bytes,
-            filename=whisper_name,
-            content_type=base_type or None,
-        )
+        transcript = await _transcribe(audio_bytes, whisper_name, base_type, lang)
         transcript = (transcript or "").strip()
         if _is_whisper_noise(transcript):
             return {"transcript": "", "filtered": True}

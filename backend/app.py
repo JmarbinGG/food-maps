@@ -17,7 +17,7 @@ import os
 import re
 import secrets
 import string
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from passlib.context import CryptContext
 from backend.email_service import (
     send_reset_email,
@@ -36,6 +36,8 @@ from backend.schemas import (
     CommunityPrivateMapUpdate,
     ForgotPasswordRequest,
     ResetPasswordRequest,
+    ImpactEntryCreate,
+    ImpactEntryUpdate,
 )
 from backend.models import (
     Base, FoodResource, User, UserRole, FoodCategory, PerishabilityLevel,
@@ -44,7 +46,7 @@ from backend.models import (
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
     ApprovalCode, PlatformSetting, UserCommunity, public_listing_clause,
-    VolunteerSignup,
+    VolunteerSignup, ImpactEntry,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -1189,6 +1191,21 @@ async def serve_terms():
 @app.get("/impactStory.html", response_class=HTMLResponse)
 async def serve_impact_story():
     return get_html_content("impactStory.html")
+
+@app.get("/admin/impact")
+async def admin_impact_link(request: Request):
+    """Same URL shape as DoGoods (/admin/impact?dateFilter=current-week).
+
+    The app is a single page at /index.html; ?tab=impact makes it open the
+    admin panel on Impact Data Entry once admin access is confirmed.
+    """
+    params = {"tab": "impact"}
+    for key, allowed in (("dateFilter", {"current-week", "current-month", "all"}),
+                         ("view", {"organizations", "communities"})):
+        value = request.query_params.get(key)
+        if value in allowed:
+            params[key] = value
+    return RedirectResponse(url=f"/index.html?{urlencode(params)}", status_code=302)
 
 @app.get("/nutrition.html")
 async def serve_nutrition():
@@ -6294,6 +6311,244 @@ async def create_volunteer_signup(request: Request, db: Session = Depends(get_db
         "success": True,
         "message": "Thanks for signing up to volunteer.",
         "id": row.id,
+    }
+
+
+# -----------------------------
+# Impact Data Entry (admin)
+# -----------------------------
+# Port of DoGoods /admin/impact. Organization rows log food saved / donated
+# by a partner; community rows log families and school staff helped and food
+# given at a distribution center. Totals are aggregated on read
+# (/api/admin/impact/summary) instead of DoGoods' "Sync Metrics" copy step.
+
+# Organizations offered in the entry form before any have been used here
+# (DoGoods utils/organizations.js). Names already entered are added on top.
+DEFAULT_IMPACT_ORGANIZATIONS = (
+    "The Cheese Board Collective",
+    "Alameda County Community Food Bank",
+    "Semifreddi's",
+    "Alameda Food Bank",
+    "Community Kitchen",
+    "Berkeley Pizza Collective",
+    "Food Shift",
+    "Food Recovery",
+)
+
+_IMPACT_ORG_FIELDS = {"organization", "food_saved_from_waste_lb", "food_donated_lb"}
+_IMPACT_COMMUNITY_FIELDS = {"community_id", "families_helped", "school_staff_helped", "food_given_lb"}
+
+
+def _impact_entry_dict(row: ImpactEntry) -> dict:
+    return {
+        "id": row.id,
+        "date": row.date.isoformat() if row.date else None,
+        "kind": "organization" if row.organization else "community",
+        "organization": row.organization,
+        "food_saved_from_waste_lb": row.food_saved_from_waste_lb or 0,
+        "food_donated_lb": row.food_donated_lb or 0,
+        "community_id": row.community_id,
+        "community_name": row.community_name,
+        "families_helped": row.families_helped or 0,
+        "school_staff_helped": row.school_staff_helped or 0,
+        "food_given_lb": row.food_given_lb or 0,
+        "notes": row.notes,
+        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+    }
+
+
+def _impact_community_or_400(db: Session, community_id: int) -> DistributionCenter:
+    center = db.query(DistributionCenter).filter(DistributionCenter.id == community_id).first()
+    if center is None:
+        raise HTTPException(status_code=400, detail="Unknown community")
+    return center
+
+
+def _impact_date_range(start: Optional[str], end: Optional[str]):
+    def parse(value, name):
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"{name} must be YYYY-MM-DD")
+    return parse(start, "start"), parse(end, "end")
+
+
+@app.get("/api/admin/impact")
+async def list_impact_entries(
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """All impact entries, newest first; optional inclusive date range."""
+    start_d, end_d = _impact_date_range(start, end)
+    query = db.query(ImpactEntry)
+    if start_d:
+        query = query.filter(ImpactEntry.date >= start_d)
+    if end_d:
+        query = query.filter(ImpactEntry.date <= end_d)
+    rows = query.order_by(ImpactEntry.date.desc(), ImpactEntry.id.desc()).all()
+    return {
+        "entries": [_impact_entry_dict(r) for r in rows],
+        "total": db.query(func.count(ImpactEntry.id)).scalar() or 0,
+    }
+
+
+@app.get("/api/admin/impact/options")
+async def impact_entry_options(
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Choices for the entry form: active communities and known organizations."""
+    centers = (
+        db.query(DistributionCenter.id, DistributionCenter.name)
+        .filter(DistributionCenter.is_active == True)  # noqa: E712
+        .order_by(DistributionCenter.name.asc())
+        .all()
+    )
+    used = [
+        name for (name,) in db.query(ImpactEntry.organization)
+        .filter(ImpactEntry.organization.isnot(None)).distinct().all()
+        if name
+    ]
+    seen, organizations = set(), []
+    for name in [*DEFAULT_IMPACT_ORGANIZATIONS, *used]:
+        if name.lower() not in seen:
+            seen.add(name.lower())
+            organizations.append(name)
+    return {
+        "communities": [{"id": c.id, "name": c.name} for c in centers if c.name],
+        "organizations": sorted(organizations, key=str.lower),
+    }
+
+
+@app.post("/api/admin/impact")
+async def create_impact_entry(
+    payload: ImpactEntryCreate,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    data = payload.model_dump()
+    if payload.organization:
+        # Organization rows carry no community metrics, and vice versa.
+        for field in _IMPACT_COMMUNITY_FIELDS:
+            data.pop(field, None)
+        row = ImpactEntry(**data, created_by=admin_user.id)
+    else:
+        center = _impact_community_or_400(db, payload.community_id)
+        for field in _IMPACT_ORG_FIELDS:
+            data.pop(field, None)
+        row = ImpactEntry(**data, community_name=center.name, created_by=admin_user.id)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _impact_entry_dict(row)
+
+
+@app.patch("/api/admin/impact/{entry_id}")
+async def update_impact_entry(
+    entry_id: int,
+    payload: ImpactEntryUpdate,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(ImpactEntry).filter(ImpactEntry.id == entry_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Impact entry not found")
+    changes = payload.model_dump(exclude_unset=True)
+    is_org = bool(row.organization)
+    wrong_kind = changes.keys() & (_IMPACT_COMMUNITY_FIELDS if is_org else _IMPACT_ORG_FIELDS)
+    if wrong_kind:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{'Organization' if is_org else 'Community'} entries have no {sorted(wrong_kind)[0]} field",
+        )
+    for field in ("date", "organization", "community_id"):
+        if field in changes and changes[field] is None:
+            raise HTTPException(status_code=400, detail=f"{field} cannot be empty")
+    if "community_id" in changes:
+        row.community_name = _impact_community_or_400(db, changes["community_id"]).name
+    for field, value in changes.items():
+        setattr(row, field, value)
+    db.commit()
+    db.refresh(row)
+    return _impact_entry_dict(row)
+
+
+@app.delete("/api/admin/impact/{entry_id}")
+async def delete_impact_entry(
+    entry_id: int,
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    row = db.query(ImpactEntry).filter(ImpactEntry.id == entry_id).first()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Impact entry not found")
+    db.delete(row)
+    db.commit()
+    return {"deleted": entry_id}
+
+
+@app.get("/api/admin/impact/summary")
+async def impact_summary(
+    start: Optional[str] = Query(None),
+    end: Optional[str] = Query(None),
+    admin_user: User = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    """Totals per community, per organization and overall for a date range."""
+    start_d, end_d = _impact_date_range(start, end)
+
+    def scoped(query):
+        if start_d:
+            query = query.filter(ImpactEntry.date >= start_d)
+        if end_d:
+            query = query.filter(ImpactEntry.date <= end_d)
+        return query
+
+    community_rows = scoped(
+        db.query(
+            ImpactEntry.community_id,
+            func.max(ImpactEntry.community_name),
+            func.coalesce(func.sum(ImpactEntry.food_given_lb), 0),
+            func.coalesce(func.sum(ImpactEntry.families_helped), 0),
+            func.coalesce(func.sum(ImpactEntry.school_staff_helped), 0),
+            func.count(ImpactEntry.id),
+        ).filter(ImpactEntry.community_id.isnot(None))
+    ).group_by(ImpactEntry.community_id).all()
+    org_rows = scoped(
+        db.query(
+            ImpactEntry.organization,
+            func.coalesce(func.sum(ImpactEntry.food_saved_from_waste_lb), 0),
+            func.coalesce(func.sum(ImpactEntry.food_donated_lb), 0),
+            func.count(ImpactEntry.id),
+        ).filter(ImpactEntry.organization.isnot(None))
+    ).group_by(ImpactEntry.organization).all()
+
+    communities = [
+        {"community_id": cid, "community_name": name, "food_given_lb": float(food),
+         "families_helped": int(fam), "school_staff_helped": int(staff), "entries": n}
+        for cid, name, food, fam, staff, n in community_rows
+    ]
+    organizations = [
+        {"organization": org, "food_saved_from_waste_lb": float(saved),
+         "food_donated_lb": float(donated), "entries": n}
+        for org, saved, donated, n in org_rows
+    ]
+    communities.sort(key=lambda c: (c["community_name"] or "").lower())
+    organizations.sort(key=lambda o: o["organization"].lower())
+    return {
+        "communities": communities,
+        "organizations": organizations,
+        "totals": {
+            "food_saved_from_waste_lb": sum(o["food_saved_from_waste_lb"] for o in organizations),
+            "food_donated_lb": sum(o["food_donated_lb"] for o in organizations),
+            "food_given_lb": sum(c["food_given_lb"] for c in communities),
+            "families_helped": sum(c["families_helped"] for c in communities),
+            "school_staff_helped": sum(c["school_staff_helped"] for c in communities),
+        },
     }
 
 

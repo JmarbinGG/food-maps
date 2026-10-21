@@ -43,6 +43,16 @@ for (const roomDb of [-70, -50, -40, -35]) {
   assert(r.stopAt > 1000 + 3000, `room ${roomDb} dBFS: stopped before speech ended (${r.stopAt}ms)`);
 }
 
+// Mics often deliver a few all-zero frames while starting up (seen in
+// mobile Chromium). They must not become the noise floor, or every room
+// noise frame afterwards looks like speech and the turn runs to the cap.
+for (const roomDb of [-50, -40]) {
+  const room = dbfs(roomDb);
+  const r = run([[50, 0], [1000, room], [3000, SPEECH], [30000, room]]);
+  assert(r && r.reason === 'silence' && r.stopAt < 50 + 1000 + 3000 + 2500,
+    `leading digital silence, room ${roomDb} dBFS: ${JSON.stringify(r)}`);
+}
+
 // Pauses between words shorter than the silence window keep recording.
 {
   const room = dbfs(-45);

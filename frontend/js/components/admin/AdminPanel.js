@@ -1,7 +1,11 @@
 function AdminPanel({ onClose }) {
   try {
     const inputClass = 'w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-200';
-    const [activeTab, setActiveTab] = React.useState('overview');
+    // ?tab=impact deep-links a section (e.g. /admin?tab=impact&dateFilter=current-week).
+    const [activeTab, setActiveTab] = React.useState(() => {
+      const tab = new URLSearchParams(window.location.search).get('tab');
+      return tab === 'impact' ? tab : 'overview';
+    });
     const [dbStats, setDbStats] = React.useState({});
     const [centers, setCenters] = React.useState([]);
     const [showCenterForm, setShowCenterForm] = React.useState(false);
@@ -1272,6 +1276,7 @@ function AdminPanel({ onClose }) {
                 { id: 'listing_approvals', label: pendingCount > 0 ? `Listing Approvals (${pendingCount})` : 'Listing Approvals', icon: 'check-circle' },
                 { id: 'listings', label: 'Listings', icon: 'package' },
                 { id: 'categories', label: 'Categories', icon: 'tags' },
+                { id: 'impact', label: 'Impact Data', icon: 'chart-column' },
                 { id: 'referrals', label: 'Referrals', icon: 'user-plus' },
                 { id: 'feedback', label: 'Feedback', icon: 'message-square' },
                 { id: 'newsletter', label: 'Newsletter', icon: 'mail' },
@@ -2801,6 +2806,10 @@ function AdminPanel({ onClose }) {
 
           {activeTab === 'ai_broadcasts' && (
             <AIBroadcastsPanel />
+          )}
+
+          {activeTab === 'impact' && (
+            <ImpactDataEntry />
           )}
 
           {activeTab === 'ai_query' && (

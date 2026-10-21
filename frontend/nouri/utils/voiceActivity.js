@@ -21,6 +21,9 @@ const DEFAULTS = {
   floorRise: 0.02,       // floor creeps up this fraction per frame in silence
 };
 
+// Below this a frame is digital silence (zeros), not a real room.
+const DIGITAL_SILENCE = 1e-5;
+
 /** RMS (0..1) of a Float32 time-domain buffer from AnalyserNode. */
 export function rmsOf(samples) {
   let sum = 0;
@@ -52,9 +55,16 @@ export function createVoiceActivityDetector(options = {}) {
 
       // Floor follows quiet levels down immediately and drifts up slowly,
       // so a word spoken right at the start doesn't become the "floor".
-      if (floor === null || rms < floor) floor = rms;
-      else if (rms < floor * o.speechRatio) floor += (rms - floor) * o.floorRise;
-      const base = Math.max(floor, 1e-4);
+      // All-zero frames (mic warming up, track just unmuted) are not room
+      // noise: a floor of 0 would make every later noise frame "speech".
+      if (rms > DIGITAL_SILENCE) {
+        if (floor === null || rms < floor) floor = rms;
+        else if (rms < floor * o.speechRatio) floor += (rms - floor) * o.floorRise;
+        // Sustained level well above the floor with no gaps creeps it up too,
+        // so a floor that started too low recovers instead of sticking.
+        else floor += (rms - floor) * o.floorRise * 0.1;
+      }
+      const base = Math.max(floor ?? 0, 1e-4);
 
       const loud = rms > base * o.speechRatio && rms > o.minSpeechRms;
       if (loud) {
