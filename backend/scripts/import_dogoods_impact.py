@@ -19,6 +19,9 @@ communities that have no matching center (address, hours and contact from
 the DoGoods export) in the same transaction as the entries. Without it, or
 for a community the export doesn't describe, the run stops before writing
 anything (map a name with --alias "DoGoods name=Center name").
+A few DoGoods names already exist on this map under a different spelling;
+those are mapped in DEFAULT_COMMUNITY_ALIASES so a re-import attaches the
+rows to the existing center instead of creating a second one.
 Rows with neither an organization nor a community are skipped, as the
 DoGoods page hides them too.
 """
@@ -39,6 +42,16 @@ if ROOT not in sys.path:
 DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
 DEFAULT_FILE = os.path.join(DATA_DIR, "dogoods_impact_data_2026-10-21.json")
 DEFAULT_COMMUNITIES_FILE = os.path.join(DATA_DIR, "dogoods_communities_2026-10-22.json")
+# Same place, different spelling. The destination is the distribution center
+# already on the map. Youth Spirit Art Works (633 Hegenberger, Oakland) is a
+# different site from Youth Spirit Artworks (1740 Alcatraz, Berkeley).
+DEFAULT_COMMUNITY_ALIASES = {
+    "Island HS CC": "Island High School",
+    "Lodestar Charter School": "Lodestar A Light House Community Public School",
+    "Markham Elementary": "Markham Elementary School",
+    "Garfield Elementary": "Garfield Elementary School",
+    "NEA/ACLC CC": "Nea / ACLC Schools",
+}
 MAX_POUNDS = 10_000_000
 MAX_PEOPLE = 1_000_000
 
@@ -105,8 +118,12 @@ def plan_import(source_rows: list[dict], centers: list[tuple[int, str]], aliases
                     food_donated_lb=_num(raw.get("food_donated"), float, MAX_POUNDS, "food_donated", ref),
                 )
             else:
-                target = aliases.get(_norm(community), community)
-                matches = by_name.get(_norm(target), [])
+                # Prefer the alias only when that center exists. A database that
+                # already uses the DoGoods spelling keeps matching on the name.
+                aliased = aliases.get(_norm(community))
+                matches = by_name.get(_norm(aliased), []) if aliased else []
+                if not matches:
+                    matches = by_name.get(_norm(community), [])
                 if not matches:
                     unmatched[community] += 1
                     continue
@@ -204,7 +221,7 @@ def main(argv=None) -> int:
     if args.apply:
         _require_confirmed_host(parser, _db_url(), args.confirm_host)
 
-    aliases = {}
+    aliases = {_norm(src): dst for src, dst in DEFAULT_COMMUNITY_ALIASES.items()}
     for item in args.alias:
         if "=" not in item:
             parser.error(f"--alias needs 'DoGoods name=Center name', got {item!r}")

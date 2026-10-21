@@ -38,6 +38,28 @@ def test_plan_maps_both_kinds_and_skips_blank_rows():
     assert by_ref["dogoods:a2"]["community_name"] == "Island HS CC"
 
 
+def test_builtin_aliases_attach_dogoods_names_to_existing_centers():
+    centers = [(17, "Island High School"), (14, "Nea / ACLC Schools"), (25, "Youth Spirit Artworks")]
+    aliases = {importer._norm(src): dst for src, dst in importer.DEFAULT_COMMUNITY_ALIASES.items()}
+    rows = [
+        {"id": "i", "date": "2026-05-01", "communities_served": "Island HS CC", "families_helped": 3},
+        {"id": "n", "date": "2026-05-01", "communities_served": "NEA/ACLC CC", "families_helped": 2},
+        {"id": "y", "date": "2026-05-01", "communities_served": "Youth Spirit Art Works", "families_helped": 1},
+    ]
+    plan = importer.plan_import(rows, centers, aliases)
+    by_ref = {e["source_ref"]: e for e in plan["entries"]}
+    assert by_ref["dogoods:i"]["community_id"] == 17
+    assert by_ref["dogoods:i"]["community_name"] == "Island High School"
+    assert by_ref["dogoods:n"]["community_id"] == 14
+    assert plan["unmatched"] == {"Youth Spirit Art Works": 1}
+    assert "Youth Spirit Art Works" not in importer.DEFAULT_COMMUNITY_ALIASES
+    # Both spellings present: rows attach to the center already on the map.
+    both = centers + [(158, "Island HS CC")]
+    plan = importer.plan_import(rows[:1], both, aliases)
+    assert plan["entries"][0]["community_id"] == 17
+    assert not plan["unmatched"]
+
+
 def test_plan_reports_unmatched_and_accepts_alias():
     rows = [{"id": "x", "date": "2026-05-01", "communities_served": "Madison Park Academy", "families_helped": 1}]
     assert importer.plan_import(rows, CENTERS, {})["unmatched"] == {"Madison Park Academy": 1}
