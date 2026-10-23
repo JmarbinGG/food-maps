@@ -341,10 +341,9 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec nginx nginx -t
 docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
-# Renew certificates (only renews those within 30 days of expiry; add
-# --dry-run to test against Let's Encrypt staging first)
-docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot renew
-docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
+# Renew certificates and reload nginx (only renews those within 30 days of
+# expiry; add --dry-run to test against Let's Encrypt staging first)
+scripts/renew-certs.sh
 
 # List certificates, their domains and expiry dates
 docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot certificates
@@ -353,14 +352,29 @@ docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot cer
 docker run --rm -v foodmaps_uploads:/u alpine ls -la /u
 ```
 
-When TLS terminates here, schedule renewal in the host's crontab
-(`crontab -e`). Weekly is safe because `renew` does nothing until a
-certificate is within 30 days of expiry; `-T` stops `exec` from asking cron
-for a terminal it does not have:
+When TLS terminates here, schedule `deploy/scripts/renew-certs.sh` in the
+crontab of a user who can run `docker` without sudo (`crontab -e`). It finds
+`deploy/` from its own location, so only the paths in the cron line need
+filling in. Weekly is safe because `renew` does nothing until a certificate
+is within 30 days of expiry. The same script and line work on staging.
 
 ```
-0 3 * * 1  cd /path/to/food-maps/deploy && docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot renew --quiet && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload
+0 3 * * 1  /path/to/food-maps/deploy/scripts/renew-certs.sh >> /path/to/cert-renew.log 2>&1
 ```
+
+Before relying on it, run it once under an environment as bare as cron's,
+which is where "works in my shell" jobs usually fail:
+
+```bash
+env -i HOME="$HOME" PATH=/usr/bin:/bin deploy/scripts/renew-certs.sh --dry-run
+```
+
+To confirm cron itself fires it, temporarily set the schedule to
+`*/2 * * * *`, `tail -f` the log until a `=== starting` / `=== done` pair
+appears, then set it back. If nothing appears, check cron's own log
+(`grep CRON /var/log/syslog` on Ubuntu, `journalctl -u crond` on Amazon
+Linux). Amazon Linux 2023 ships without cron: `sudo dnf install -y cronie &&
+sudo systemctl enable --now crond`.
 
 Container logs rotate through the `json-file` driver at 10 MB by 5 files, set
 per service. The `logrotate` configuration in `guides/DEPLOYMENT_GUIDE.md`
