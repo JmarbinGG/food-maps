@@ -24,6 +24,10 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 COMPOSE=(docker compose -f docker-compose.prod.yml)
 
 echo "=== $(date -Is) starting renewal in $PWD"
-"${COMPOSE[@]}" --profile certbot run --rm -T certbot renew "$@"
+status=0
+"${COMPOSE[@]}" --profile certbot run --rm -T certbot renew "$@" || status=$?
+# Reload even when certbot failed: it exits non-zero if any one certificate
+# failed, and the others it did renew still need nginx to pick them up.
 "${COMPOSE[@]}" exec -T nginx nginx -s reload
-echo "=== $(date -Is) done"
+echo "=== $(date -Is) done (certbot exit status $status)"
+exit "$status"
