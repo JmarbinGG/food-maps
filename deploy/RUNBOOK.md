@@ -204,10 +204,14 @@ docker run --rm -v foodmaps_letsencrypt:/etc/letsencrypt alpine sh -c \
      -out /etc/letsencrypt/live/$DOMAIN/fullchain.pem -subj '/CN=$DOMAIN'"
 ```
 
-Then start, issue the real certificate, and reload:
+Then start, delete the placeholder, issue the real certificate, and reload.
+The placeholder has to go first: certbot refuses to create a lineage whose
+`live/` directory already exists. The running nginx keeps the placeholder in
+memory, so run these back to back and do not restart nginx in between:
 
 ```bash
 docker compose -f docker-compose.prod.yml -f docker-compose.staging.yml up -d
+docker run --rm -v foodmaps_letsencrypt:/etc/letsencrypt alpine rm -rf /etc/letsencrypt/live/$DOMAIN
 docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot
 docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 ```
@@ -337,12 +341,25 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml exec nginx nginx -t
 docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
-# Renew certificates (cron this monthly when TLS terminates here)
+# Renew certificates (only renews those within 30 days of expiry; add
+# --dry-run to test against Let's Encrypt staging first)
 docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot renew
 docker compose -f docker-compose.prod.yml exec nginx nginx -s reload
 
+# List certificates, their domains and expiry dates
+docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot certificates
+
 # Inspect the uploads volume
 docker run --rm -v foodmaps_uploads:/u alpine ls -la /u
+```
+
+When TLS terminates here, schedule renewal in the host's crontab
+(`crontab -e`). Weekly is safe because `renew` does nothing until a
+certificate is within 30 days of expiry; `-T` stops `exec` from asking cron
+for a terminal it does not have:
+
+```
+0 3 * * 1  cd /path/to/food-maps/deploy && docker compose -f docker-compose.prod.yml --profile certbot run --rm certbot renew --quiet && docker compose -f docker-compose.prod.yml exec -T nginx nginx -s reload
 ```
 
 Container logs rotate through the `json-file` driver at 10 MB by 5 files, set

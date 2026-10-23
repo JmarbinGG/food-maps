@@ -102,8 +102,12 @@ services:
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot-webroot:/var/www/certbot
-    entrypoint: >
-      certbot certonly --webroot --webroot-path=/var/www/certbot
+    # The image's entrypoint is `certbot`; these are only its default
+    # arguments. Anything passed after the service name replaces them, so
+    # `run --rm certbot renew` runs `certbot renew`. (As an `entrypoint:` they
+    # were appended to instead, turning that into `certbot certonly ... renew`.)
+    command: >
+      certonly --webroot --webroot-path=/var/www/certbot
       --email ${CERTBOT_EMAIL:-} --agree-tos --no-eff-email
       -d ${CERTBOT_DOMAIN:-}
 
