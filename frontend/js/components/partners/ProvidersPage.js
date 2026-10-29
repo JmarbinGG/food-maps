@@ -299,11 +299,12 @@ function ProviderCard({ center }) {
   const socialApi = (typeof window !== 'undefined' && window.FoodMapsSocialMedia)
     ? window.FoodMapsSocialMedia
     : null;
-  const socialItems = socialApi
+  const socialItems = (socialApi
     ? socialApi.socialLinkItems(center)
     : (websiteHref
       ? [{ network: 'website', url: websiteHref, iconClass: 'fas fa-globe', label: 'Website' }]
-      : []);
+      : [])
+  ).filter((item) => item && item.network !== 'website');
 
   const hasDetails = Boolean(
     center.description ||
@@ -411,6 +412,16 @@ function ProviderCard({ center }) {
               Directions
             </a>
           )}
+          {websiteHref && (
+            <a
+              href={websiteHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-lg border-2 border-green-700 text-green-800 hover:bg-green-800 hover:text-white text-sm font-semibold transition-colors bg-white"
+            >
+              Website
+            </a>
+          )}
           {hasDetails && (
             <button
               type="button"
@@ -463,7 +474,7 @@ function ProviderCard({ center }) {
                 <p className="text-gray-800">{center.coverage_areas}</p>
               </div>
             )}
-            {websiteHref && socialItems.length === 0 && (
+            {websiteHref && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-0.5">Website</p>
                 <a href={websiteHref} target="_blank" rel="noopener noreferrer" className="text-green-800 hover:underline break-all">
@@ -473,7 +484,7 @@ function ProviderCard({ center }) {
             )}
             {socialItems.length > 0 && (
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-1.5">Links</p>
+                <p className="text-xs font-semibold uppercase tracking-wide text-green-800 mb-1.5">Social</p>
                 <div className="flex flex-wrap items-center gap-3">
                   {socialItems.map((item) => (
                     <a
@@ -481,11 +492,9 @@ function ProviderCard({ center }) {
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      aria-label={item.label}
-                      title={item.label}
-                      className="text-green-800 hover:text-green-950 text-xl leading-none"
+                      className="text-green-800 hover:text-green-950 hover:underline text-sm font-semibold"
                     >
-                      <i className={item.iconClass} aria-hidden="true"></i>
+                      {item.label}
                     </a>
                   ))}
                 </div>
