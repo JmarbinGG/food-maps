@@ -23,6 +23,7 @@ from backend.email_service import (
     send_reset_email,
     send_verification_email as send_verification_email_message,
     send_volunteer_signup_email,
+    send_contact_message_email,
 )
 from backend.schemas import (
     DistributionCenterResponse,
@@ -46,7 +47,7 @@ from backend.models import (
     FeedbackType, FeedbackStatus, SafetyReport, ReportType,
     FavoriteLocation, ListingCategory, PageContent, NewsletterSubscription,
     ApprovalCode, PlatformSetting, UserCommunity, public_listing_clause,
-    VolunteerSignup, ImpactEntry,
+    VolunteerSignup, ContactMessage, ImpactEntry,
 )
 # Register AI models on the shared Base so create_all() picks them up
 from backend.ai import models as ai_models  # noqa: F401
@@ -6310,6 +6311,90 @@ async def create_volunteer_signup(request: Request, db: Session = Depends(get_db
     return {
         "success": True,
         "message": "Thanks for signing up to volunteer.",
+        "id": row.id,
+    }
+
+
+# -----------------------------
+# Contact messages
+# -----------------------------
+
+CONTACT_TOPICS = {
+    "story": "Share a local story",
+    "question": "General question",
+    "partner": "Partner with us",
+    "listing": "Update a food listing",
+    "other": "Something else",
+}
+
+
+def _notify_contact_admins(db: Session, fields: dict) -> None:
+    admins = db.query(User).filter(
+        or_(User.is_admin.is_(True), User.role == UserRole.ADMIN)
+    ).all()
+    seen = set()
+    for admin in admins:
+        address = (admin.email or "").strip()
+        key = address.lower()
+        if not address or key in seen:
+            continue
+        seen.add(key)
+        try:
+            send_contact_message_email(address, fields)
+        except Exception as exc:
+            print(f"Contact message email failed for {address}: {exc}")
+
+
+@app.post("/api/contact-messages")
+async def create_contact_message(request: Request, db: Session = Depends(get_db)):
+    """Public contact form. Saves the message, then emails admins."""
+    try:
+        data = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    full_name = str(data.get("full_name") or "").strip()
+    email = str(data.get("email") or "").strip().lower()
+    message = str(data.get("message") or "").strip()
+    topic = str(data.get("topic") or "").strip()
+    if not full_name:
+        raise HTTPException(status_code=400, detail="Please enter your full name.")
+    if not email or not _EMAIL_RE.match(email):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address.")
+    if topic not in CONTACT_TOPICS:
+        raise HTTPException(status_code=400, detail="Please choose a topic from the list.")
+    if not message:
+        raise HTTPException(status_code=400, detail="Please write a message.")
+
+    city = str(data.get("city") or "").strip() or None
+    if city and city not in VOLUNTEER_CITIES:
+        raise HTTPException(status_code=400, detail="Please choose a city from the list.")
+
+    row = ContactMessage(
+        full_name=full_name[:255],
+        email=email[:255],
+        phone=str(data.get("phone") or "").strip()[:50] or None,
+        city=city,
+        topic=topic,
+        message=message[:8000],
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    _notify_contact_admins(db, {
+        "full_name": row.full_name,
+        "email": row.email,
+        "phone": row.phone or "",
+        "city": row.city or "",
+        "topic": CONTACT_TOPICS[topic],
+        "message": row.message,
+    })
+    return {
+        "success": True,
+        "message": "Thanks for reaching out.",
         "id": row.id,
     }
 

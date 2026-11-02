@@ -49,7 +49,13 @@ def _get_email_settings() -> tuple[str, Optional[str]]:
     return sender_email, sender_password
 
 
-def _send_email(to_email: str, subject: str, text_content: str, html_content: Optional[str] = None) -> None:
+def _send_email(
+    to_email: str,
+    subject: str,
+    text_content: str,
+    html_content: Optional[str] = None,
+    reply_to: Optional[str] = None,
+) -> None:
     sender_email, sender_password = _get_email_settings()
     host, port, use_starttls, use_auth = _smtp_config()
 
@@ -57,6 +63,8 @@ def _send_email(to_email: str, subject: str, text_content: str, html_content: Op
     message["Subject"] = subject
     message["From"] = sender_email
     message["To"] = to_email
+    if reply_to:
+        message["Reply-To"] = reply_to
     message.attach(MIMEText(text_content, "plain"))
     if html_content:
         message.attach(MIMEText(html_content, "html"))
@@ -209,4 +217,41 @@ def send_volunteer_signup_email(to_email: str, fields: dict) -> None:
         subject=f"New volunteer signup — {name}",
         text_content=text_content,
         html_content=html_content,
+    )
+
+
+def send_contact_message_email(to_email: str, fields: dict) -> None:
+    """Tell an admin about a new contact form message."""
+    rows = (
+        ("Name", fields.get("full_name") or ""),
+        ("Email", fields.get("email") or ""),
+        ("Phone", fields.get("phone") or ""),
+        ("City", fields.get("city") or ""),
+        ("Topic", fields.get("topic") or ""),
+        ("Message", fields.get("message") or ""),
+    )
+    text_content = "New contact message\n\n" + "\n".join(f"{label}: {value}" for label, value in rows)
+    html_rows = "".join(
+        f"<tr><td style=\"padding:4px 12px 4px 0;vertical-align:top;color:#43594e;\"><strong>{_html_escape(label)}</strong></td>"
+        f"<td style=\"padding:4px 0;white-space:pre-wrap;\">{_html_escape(value)}</td></tr>"
+        for label, value in rows
+    )
+    html_content = f"""
+    <html>
+      <body>
+        <div style="font-family: Arial, sans-serif; max-width: 640px; margin: 0 auto;">
+          <h2 style="color: #183d32;">New contact message</h2>
+          <table style="border-collapse: collapse;">{html_rows}</table>
+        </div>
+      </body>
+    </html>
+    """
+    topic = fields.get("topic") or "Contact"
+    name = fields.get("full_name") or "Someone"
+    _send_email(
+        to_email=to_email,
+        subject=f"{topic} — {name}",
+        text_content=text_content,
+        html_content=html_content,
+        reply_to=fields.get("email") or None,
     )

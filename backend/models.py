@@ -635,6 +635,20 @@ class VolunteerSignup(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ContactMessage(Base):
+    """Public contact form submissions, including shared local stories."""
+    __tablename__ = "contact_messages"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    phone = Column(String(50), nullable=True)
+    city = Column(String(100), nullable=True)
+    topic = Column(String(50), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ImpactEntry(Base):
     """Admin-entered impact log (ported from DoGoods /admin/impact).
 
