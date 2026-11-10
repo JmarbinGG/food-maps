@@ -5,8 +5,9 @@
 # Read-only: it inspects and prints, and changes nothing. Values that look like
 # credentials are masked, but skim the output before pasting it anywhere.
 #
-#   scp deploy/scripts/discover-prod.sh ec2-user@<prod>:/tmp/
-#   ssh ec2-user@<prod> 'sudo bash /tmp/discover-prod.sh' | tee prod-topology.txt
+#   aws ssm start-session --target <prod-instance-id>
+#   # on the host, from the deployed checkout:
+#   sudo bash /home/ec2-user/project/deploy/scripts/discover-prod.sh | tee /tmp/prod-topology.txt
 
 set -uo pipefail
 

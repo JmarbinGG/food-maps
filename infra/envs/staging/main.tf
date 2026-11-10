@@ -7,21 +7,16 @@ resource "aws_secretsmanager_secret" "env" {
 module "app_host" {
   source = "../../modules/app_host"
 
-  name                       = "foodmaps-staging"
-  environment                = "staging"
-  instance_type              = "t3.medium"
-  ami_id                     = "ami-0de449e6d2e49c030"
-  user_data                  = file("${path.module}/user_data.sh")
-  vpc_id                     = data.aws_vpc.default.id
-  subnet_id                  = data.aws_subnet.app.id
-  secret_arn                 = aws_secretsmanager_secret.env.arn
+  name          = "foodmaps-staging"
+  environment   = "staging"
+  instance_type = "t3.medium"
+  ami_id        = "ami-0de449e6d2e49c030"
+  user_data     = file("${path.module}/user_data.sh")
+  vpc_id        = data.aws_vpc.default.id
+  subnet_id     = data.aws_subnet.app.id
+  secret_arn    = aws_secretsmanager_secret.env.arn
+  # No SSH: shell access goes through Session Manager (aws ssm start-session).
   security_group_description = "Food Maps staging: public 80/443, no SSH ingress (SSM only)"
-
-  ssh_cidrs = [
-    "41.210.144.216/32",
-    "99.155.36.252/32",
-    "212.88.98.191/32",
-  ]
 }
 
 module "database" {

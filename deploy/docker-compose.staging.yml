@@ -50,8 +50,10 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      # Bound to loopback: reach the inbox over an SSH tunnel
-      #   ssh -L 8025:localhost:8025 ec2-user@<staging-host>
+      # Bound to loopback: reach the inbox with a Session Manager port forward
+      #   aws ssm start-session --target <staging-instance-id> \
+      #     --document-name AWS-StartPortForwardingSession \
+      #     --parameters '{"portNumber":["8025"],"localPortNumber":["8025"]}'
       # then open http://localhost:8025. Publishing this publicly would expose
       # every password reset code staging generates.
       - "127.0.0.1:8025:8025"

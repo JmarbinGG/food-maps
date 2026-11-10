@@ -55,9 +55,13 @@ Do this before changing anything. The reverse proxy configuration currently
 exists only on the production instance and is not in version control, so it
 cannot be reproduced from this repository.
 
+Open a shell on the host through Session Manager (no SSH), then run the copy
+of the script in the deployed checkout and capture its output:
+
 ```bash
-scp deploy/scripts/discover-prod.sh ec2-user@<prod-host>:/tmp/
-ssh ec2-user@<prod-host> 'sudo bash /tmp/discover-prod.sh' | tee prod-topology.txt
+aws ssm start-session --target <prod-instance-id>
+# on the host:
+sudo bash /home/ec2-user/project/deploy/scripts/discover-prod.sh | tee /tmp/prod-topology.txt
 ```
 
 The script is read-only and masks credentials. From its output, settle:
@@ -77,8 +81,11 @@ The script is read-only and masks credentials. From its output, settle:
 ## Phase 1 — Provision the staging instance
 
 Match the production instance type and place it in the same VPC. Give it its
-own security group: 80 and 443 as needed, 22 from your address, and **never**
-8000 from anywhere but the proxy.
+own security group: 80 and 443 as needed, **no** 22, and **never** 8000 from
+anywhere but the proxy. Shell access goes through Session Manager
+(`aws ssm start-session --target <instance-id>`), which needs the
+`AmazonSSMManagedInstanceCore` policy on the instance role and the Session
+Manager plugin for the AWS CLI on your machine.
 
 ```bash
 sudo bash deploy/scripts/bootstrap-instance.sh
@@ -241,8 +248,15 @@ its own proves very little.
       and load it again. A failure means the `uploads` volume is not mounted
       and every user photo is one deploy away from deletion.
 - [ ] **Password reset links point at staging.** Trigger a reset, open mailpit
-      through an SSH tunnel (`ssh -L 8025:localhost:8025 <staging-host>`), and
-      read the link. If it names the production host, `PUBLIC_BASE_URL` is
+      at http://localhost:8025 through a Session Manager port forward:
+
+      ```bash
+      aws ssm start-session --target <staging-instance-id> \
+        --document-name AWS-StartPortForwardingSession \
+        --parameters '{"portNumber":["8025"],"localPortNumber":["8025"]}'
+      ```
+
+      Read the link. If it names the production host, `PUBLIC_BASE_URL` is
       wrong and production users would receive staging codes.
 - [ ] **No mail escaped.** Confirm mailpit captured it and no SMTP connection
       was attempted to Gmail.
