@@ -1,0 +1,10 @@
+# State and plans can hold resource attributes and secrets.
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+.terraform/
+crash.log
+# Committed: .terraform.lock.hcl
+*.auto.tfvars
+secrets.tfvars
