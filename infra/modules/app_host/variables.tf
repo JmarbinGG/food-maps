@@ -54,6 +54,7 @@ variable "subnet_id" {
 variable "user_data" {
   type        = string
   description = "First-boot script. Ignored after creation; see lifecycle in main.tf."
+  default     = null
 }
 
 variable "vpc_id" {

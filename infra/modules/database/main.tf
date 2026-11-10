@@ -7,15 +7,17 @@ resource "aws_db_instance" "this" {
   instance_class = var.instance_class
   username       = var.username
 
-  allocated_storage = var.allocated_storage
-  storage_type      = var.storage_type
-  storage_encrypted = true
+  allocated_storage     = var.allocated_storage
+  max_allocated_storage = var.max_allocated_storage
+  storage_type          = var.storage_type
+  storage_encrypted     = true
 
   db_subnet_group_name   = var.db_subnet_group_name
   vpc_security_group_ids = var.vpc_security_group_ids
   publicly_accessible    = var.publicly_accessible
   parameter_group_name   = var.parameter_group_name
 
+  copy_tags_to_snapshot    = var.copy_tags_to_snapshot
   backup_retention_period  = var.backup_retention_period
   backup_window            = var.backup_window
   maintenance_window       = var.maintenance_window

@@ -14,6 +14,12 @@ variable "backup_window" {
   description = "Daily backup window, UTC."
 }
 
+variable "copy_tags_to_snapshot" {
+  type        = bool
+  description = "Whether the instance's tags are copied onto its snapshots."
+  default     = false
+}
+
 variable "db_subnet_group_name" {
   type        = string
   description = "DB subnet group the instance lives in."
@@ -49,6 +55,12 @@ variable "instance_class" {
 variable "maintenance_window" {
   type        = string
   description = "Weekly maintenance window, UTC."
+}
+
+variable "max_allocated_storage" {
+  type        = number
+  description = "Storage autoscaling ceiling in GiB; 0 turns autoscaling off."
+  default     = 0
 }
 
 variable "monitoring_interval" {
