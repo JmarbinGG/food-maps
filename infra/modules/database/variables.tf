@@ -3,6 +3,12 @@ variable "allocated_storage" {
   description = "Storage in GiB."
 }
 
+variable "app_security_group_id" {
+  type        = string
+  description = "Security group of the app host allowed to reach MySQL. When set, the module creates the database's own security group, named <identifier>-db."
+  default     = null
+}
+
 variable "backup_retention_period" {
   type        = number
   description = "Days of automated backups to keep."
@@ -104,7 +110,14 @@ variable "username" {
   default     = "admin"
 }
 
+variable "vpc_id" {
+  type        = string
+  description = "VPC for the database's own security group. Required with app_security_group_id."
+  default     = null
+}
+
 variable "vpc_security_group_ids" {
   type        = list(string)
-  description = "Security groups attached to the instance."
+  description = "Other security groups attached to the instance, alongside the module's own."
+  default     = []
 }

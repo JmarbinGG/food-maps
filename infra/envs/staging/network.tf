@@ -9,9 +9,3 @@ data "aws_subnet" "app" {
   availability_zone = "us-west-1a"
   default_for_az    = true
 }
-
-# The VPC's default security group, which staging's database is attached to.
-data "aws_security_group" "vpc_default" {
-  vpc_id = data.aws_vpc.default.id
-  name   = "default"
-}

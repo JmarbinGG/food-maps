@@ -1,5 +1,40 @@
 # A MySQL RDS instance. The master password is managed outside Terraform and
 # never set here, so it stays out of state.
+
+locals {
+  manage_security_group = var.app_security_group_id != null
+}
+
+# The database's own firewall: MySQL from the app host, nothing else.
+resource "aws_security_group" "this" {
+  count = local.manage_security_group ? 1 : 0
+
+  name        = "${var.identifier}-db"
+  description = "MySQL access to ${var.identifier} from its app host only"
+  vpc_id      = var.vpc_id
+
+  tags = {
+    Name = "${var.identifier}-db"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = var.vpc_id != null
+      error_message = "vpc_id is required when app_security_group_id is set."
+    }
+  }
+}
+
+resource "aws_vpc_security_group_ingress_rule" "mysql_from_app" {
+  count = local.manage_security_group ? 1 : 0
+
+  security_group_id            = aws_security_group.this[0].id
+  ip_protocol                  = "tcp"
+  from_port                    = 3306
+  to_port                      = 3306
+  referenced_security_group_id = var.app_security_group_id
+}
+
 resource "aws_db_instance" "this" {
   identifier     = var.identifier
   engine         = "mysql"
@@ -13,7 +48,7 @@ resource "aws_db_instance" "this" {
   storage_encrypted     = true
 
   db_subnet_group_name   = var.db_subnet_group_name
-  vpc_security_group_ids = var.vpc_security_group_ids
+  vpc_security_group_ids = concat(aws_security_group.this[*].id, var.vpc_security_group_ids)
   publicly_accessible    = var.publicly_accessible
   parameter_group_name   = var.parameter_group_name
 

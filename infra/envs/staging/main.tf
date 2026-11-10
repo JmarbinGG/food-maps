@@ -31,15 +31,8 @@ module "database" {
   backup_window        = "07:07-07:37"
   maintenance_window   = "wed:08:49-wed:09:19"
 
-  vpc_security_group_ids = [data.aws_security_group.vpc_default.id]
-}
-
-# The app reaches MySQL through the VPC default group, which is shared and
-# not managed here. Only this one rule on it belongs to staging.
-resource "aws_vpc_security_group_ingress_rule" "db_from_app" {
-  security_group_id            = data.aws_security_group.vpc_default.id
-  ip_protocol                  = "tcp"
-  from_port                    = 3306
-  to_port                      = 3306
-  referenced_security_group_id = module.app_host.security_group_id
+  # MySQL is reachable only from the staging app host, through the
+  # database's own foodmaps-staging-db group.
+  vpc_id                = data.aws_vpc.default.id
+  app_security_group_id = module.app_host.security_group_id
 }
