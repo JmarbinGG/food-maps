@@ -22,13 +22,13 @@ variable "db_subnet_group_name" {
 variable "delete_automated_backups" {
   type        = bool
   description = "Whether automated backups are deleted along with the instance."
-  default     = true
+  default     = false
 }
 
 variable "deletion_protection" {
   type        = bool
   description = "Whether AWS refuses to delete the instance."
-  default     = false
+  default     = true
 }
 
 variable "engine_version" {
@@ -77,7 +77,7 @@ variable "publicly_accessible" {
 variable "skip_final_snapshot" {
   type        = bool
   description = "Whether deleting the instance skips the final snapshot."
-  default     = true
+  default     = false
 }
 
 variable "storage_type" {

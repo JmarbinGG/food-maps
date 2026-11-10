@@ -23,6 +23,9 @@ resource "aws_db_instance" "this" {
   deletion_protection      = var.deletion_protection
   skip_final_snapshot      = var.skip_final_snapshot
 
+  # Used only if the instance is ever deleted. Must not already exist.
+  final_snapshot_identifier = var.skip_final_snapshot ? null : "${var.identifier}-final"
+
   monitoring_interval = var.monitoring_interval
   monitoring_role_arn = var.monitoring_role_arn
 
